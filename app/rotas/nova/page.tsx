@@ -13,8 +13,9 @@ export default function NovaRotaPage() {
   
   const [name, setName] = useState('');
   const [motoboyName, setMotoboyName] = useState('');
+  const [changeMoney, setChangeMoney] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !motoboyName) return;
 
@@ -24,12 +25,12 @@ export default function NovaRotaPage() {
       status: 'aberta',
       motoboy_name: motoboyName,
       departure_time: new Date().toISOString(),
-      change_money: 0,
+      change_money: changeMoney ? parseFloat(changeMoney) : 0,
       drinks_summary: ''
     };
 
-    addRoute(novaRota);
-    toast.success('Rota aberta com sucesso!');
+    await addRoute(novaRota);
+    toast.success('Rota aberta e salva na nuvem!');
     router.push('/');
   };
 
@@ -67,6 +68,17 @@ export default function NovaRotaPage() {
             onChange={(e) => setMotoboyName(e.target.value)}
             className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
             required
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold text-zinc-400">Troco Inicial da Rota (R$ - Opcional)</label>
+          <input
+            type="number"
+            placeholder="Ex: 50"
+            value={changeMoney}
+            onChange={(e) => setChangeMoney(e.target.value)}
+            className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
           />
         </div>
 
