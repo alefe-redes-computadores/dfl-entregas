@@ -1,9 +1,10 @@
 'use client';
 
-import { Copy, MapPin, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2 } from 'lucide-react';
+import { Copy, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Delivery, Customer } from '@/types';
 import { copyDeliveryToClipboard } from '@/lib/whatsapp';
+import { MiniMap } from '@/components/deliveries/MiniMap';
 
 interface DeliveryCardProps {
   delivery: Delivery;
@@ -36,35 +37,31 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
 
   return (
     <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/60 backdrop-blur-sm">
-      <div className="flex gap-3 p-4">
-        {/* Mini-mapa placeholder */}
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[16px] bg-zinc-800">
-          <MapPin size={22} className="text-zinc-600" />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex flex-col">
-              <p className="font-heading text-3xl font-bold tracking-tight text-zinc-50">
-                #{delivery.confirmation_code}
-              </p>
-              <p className="mt-0.5 text-[11px] font-mono tracking-wider text-zinc-500">
-                ID: {delivery.order_id}
-              </p>
-            </div>
-            {delivery.is_paid && (
-              <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-500">
-                <CheckCircle2 size={12} />
-                Pago
-              </span>
-            )}
+      <div className="flex flex-col p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-col">
+            <p className="font-heading text-3xl font-bold tracking-tight text-zinc-50">
+              #{delivery.confirmation_code}
+            </p>
+            <p className="mt-0.5 text-[11px] font-mono tracking-wider text-zinc-500">
+              ID: {delivery.order_id}
+            </p>
           </div>
-
-          {customer && (
-            <p className="truncate text-sm font-medium text-zinc-300">{customer.name}</p>
+          {delivery.is_paid && (
+            <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-500">
+              <CheckCircle2 size={12} />
+              Pago
+            </span>
           )}
-          <p className="truncate text-xs text-zinc-500">{delivery.address_string}</p>
         </div>
+
+        {customer && (
+          <p className="mt-2 truncate text-sm font-medium text-zinc-300">{customer.name}</p>
+        )}
+        <p className="truncate text-xs text-zinc-500">{delivery.address_string}</p>
+
+        {/* Mini-mapa integrado ao card */}
+        <MiniMap address={delivery.address_string} mapsLink={delivery.maps_link} />
       </div>
 
       {delivery.observation && (
