@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { PwaInstallPrompt } from '@/components/pwa/PwaInstallPrompt';
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -17,7 +18,6 @@ export function Header() {
 
   useEffect(() => {
     setGreeting(getGreeting());
-    // Inicia a sincronização com o Firebase assim que o app carrega
     initData();
   }, [initData]);
 
@@ -52,6 +52,9 @@ export function Header() {
             </div>
           </div>
         </div>
+
+        {/* Botão inteligente de instalação do PWA */}
+        <PwaInstallPrompt />
       </div>
     </header>
   );
