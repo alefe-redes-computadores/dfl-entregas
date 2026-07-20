@@ -1,14 +1,19 @@
 import { create } from 'zustand';
-import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { collection, doc, setDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, User as FirebaseUser } from 'firebase/auth';
+import { db, auth, googleProvider } from '@/lib/firebase';
 import type { Route, Delivery, Customer } from '@/types';
 
 interface AppState {
+  user: FirebaseUser | null;
+  authLoaded: boolean;
   routes: Route[];
   deliveries: Delivery[];
   customers: Customer[];
   selectedDate: Date;
   isSyncing: boolean;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
   initData: () => Promise<void>;
   goToPreviousDay: () => void;
   goToNextDay: () => void;
@@ -16,14 +21,40 @@ interface AppState {
   getCustomerById: (customerId: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
   addDelivery: (delivery: Delivery) => Promise<void>;
+  closeRoute: (routeId: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
+  user: null,
+  authLoaded: false,
   routes: [],
   deliveries: [],
   customers: [],
   selectedDate: new Date(),
   isSyncing: false,
+
+  loginWithGoogle: async () => {
+    try {
+      // Se estiver em ambiente mobile nativo (Capacitor), o redirect evita travamentos de popup
+      const isMobileApp = typeof window !== 'undefined' && (window as any).Capacitor;
+      if (isMobileApp) {
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
+    } catch (error) {
+      console.error('Erro no login com Google:', error);
+    }
+  },
+
+  logout: async () => {
+    try {
+      await signOut(auth);
+      set({ routes: [], deliveries: [], customers: [], user: null });
+    } catch (error) {
+      console.error('Erro no logout:', error);
+    }
+  },
 
   initData: async () => {
     set({ isSyncing: true });
@@ -41,7 +72,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         isSyncing: false
       });
     } catch (error) {
-      console.error('Erro ao buscar dados do Firebase:', error);
+      console.error('Erro ao sincronizar com Firebase:', error);
       set({ isSyncing: false });
     }
   },
@@ -71,7 +102,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await setDoc(doc(db, 'routes', route.id), route);
     } catch (error) {
-      console.error('Erro ao salvar rota no Firebase:', error);
+      console.error('Erro ao salvar rota:', error);
     }
   },
 
@@ -80,7 +111,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await setDoc(doc(db, 'deliveries', delivery.id), delivery);
     } catch (error) {
-      console.error('Erro ao salvar entrega no Firebase:', error);
+      console.error('Erro ao salvar entrega:', error);
     }
   },
+
+  closeRoute: async (routeId) => {
+    const endTime = new Date().toISOString();
+    set((state) => ({
+      routes: state.routes.map((r) =>
+        r.id === routeId ? { ...r, status: 'fechada', end_time: endTime } : r
+      ),
+    }));
+    try {
+      await updateDoc(doc(db, 'routes', routeId), {
+        status: 'fechada',
+        end_time: endTime
+      });
+    } catch (error) {
+      console.error('Erro ao fechar rota:', error);
+    }
+  }
 }));
