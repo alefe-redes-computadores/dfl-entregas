@@ -6,6 +6,7 @@ Fundação do app: tipagens, store Zustand (mock), layout (Header + BottomNav) e
 ## Como rodar
 
 ```bash
+
 npm install
 
 npm run dev
