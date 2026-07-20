@@ -1,0 +1,6 @@
+{
+  "appId": "com.dfllanches.entregas",
+  "appName": "DFL Entregas",
+  "webDir": "out",
+  "bundledWebRuntime": false
+}
