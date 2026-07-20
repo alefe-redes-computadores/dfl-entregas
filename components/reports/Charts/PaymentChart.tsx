@@ -1,4 +1,4 @@
-// app/components/reports/Charts/PaymentChart.tsx
+// components/reports/Charts/PaymentChart.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
