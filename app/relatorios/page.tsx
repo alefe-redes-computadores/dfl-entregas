@@ -12,7 +12,7 @@ import {
 import { toast } from 'sonner';
 
 // Importar hooks e componentes com caminhos corrigidos
-import { useReportsData } from '@/app/hooks/useReportsData';
+import { useReportsData } from '@/hooks/useReportsData';
 import { MonthSelector } from '@/components/reports/MonthSelector';
 import { SummaryCard } from '@/components/reports/SummaryCard';
 import { DailyEvolutionChart } from '@/components/reports/Charts/DailyEvolutionChart';
