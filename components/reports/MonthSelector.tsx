@@ -1,4 +1,4 @@
-// app/components/reports/MonthSelector.tsx
+// components/reports/MonthSelector.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
