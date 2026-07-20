@@ -1,110 +1,201 @@
+// app/relatorios/page.tsx
 'use client';
 
-import { useAppStore } from '@/store/useAppStore';
-import { PackageCheck, Bike, TrendingUp } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { useState, useMemo, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { 
+  Package, 
+  DollarSign, 
+  User, 
+  Calendar, 
+  TrendingUp,
+  Download 
+} from 'lucide-react';
 
-export default function RelatoriosPage() {
-  const deliveries = useAppStore((state) => state.deliveries);
-  const routes = useAppStore((state) => state.routes);
+// Importar hooks e componentes
+import { useReportsData } from '@/app/hooks/useReportsData';
+import { MonthSelector } from '@/app/components/reports/MonthSelector';
+import { SummaryCard } from '@/app/components/reports/SummaryCard';
+import { DailyEvolutionChart } from '@/app/components/reports/Charts/DailyEvolutionChart';
+import { MotoboyChart } from '@/app/components/reports/Charts/MotoboyChart';
+import { NeighborhoodChart } from '@/app/components/reports/Charts/NeighborhoodChart';
+import { PaymentChart } from '@/app/components/reports/Charts/PaymentChart';
+import { DayOfWeekChart } from '@/app/components/reports/Charts/DayOfWeekChart';
 
-  // Cálculos Básicos
-  const totalEntregas = deliveries.length;
-  const rotasFinalizadas = routes.filter(r => r.status === 'fechada').length;
+// Adicionar animações customizadas
+const fadeInUpAnimation = `
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fadeInUp {
+    animation: fadeInUp 0.6s ease-out forwards;
+  }
+`;
 
-  // Contagem de formas de pagamento
-  const paymentCounts = deliveries.reduce((acc, curr) => {
-    acc[curr.payment_method] = (acc[curr.payment_method] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+export default function ReportsPage() {
+  const [selectedMonth, setSelectedMonth] = useState('all');
+  const { 
+    getFilteredDeliveries,
+    getDailyEvolution,
+    getMotoboyStats,
+    getNeighborhoodStats,
+    getPaymentStats,
+    getDayOfWeekStats,
+    getMainMetrics
+  } = useReportsData();
 
-  const dataPie = [
-    { name: 'Dinheiro', value: paymentCounts['dinheiro'] || 0, color: '#f59e0b' }, // Amber-500
-    { name: 'Pix', value: paymentCounts['pix'] || 0, color: '#10b981' }, // Emerald-500
-    { name: 'Crédito', value: paymentCounts['cartao_credito'] || 0, color: '#38bdf8' }, // Sky-400
-    { name: 'Débito', value: paymentCounts['cartao_debito'] || 0, color: '#818cf8' }, // Indigo-400
-  ].filter(d => d.value > 0);
+  // Memorizar dados filtrados
+  const filteredDeliveries = useMemo(() => {
+    return getFilteredDeliveries({ month: selectedMonth });
+  }, [selectedMonth, getFilteredDeliveries]);
+
+  // Memorizar todos os dados de entregas para comparação
+  const allDeliveries = useMemo(() => {
+    return getFilteredDeliveries({ month: 'all' });
+  }, [getFilteredDeliveries]);
+
+  // Calcular métricas
+  const metrics = useMemo(() => {
+    return getMainMetrics(filteredDeliveries, allDeliveries);
+  }, [filteredDeliveries, allDeliveries, getMainMetrics]);
+
+  // Dados dos gráficos
+  const dailyEvolutionData = useMemo(() => {
+    return getDailyEvolution(filteredDeliveries, selectedMonth);
+  }, [filteredDeliveries, selectedMonth, getDailyEvolution]);
+
+  const motoboyData = useMemo(() => {
+    return getMotoboyStats(filteredDeliveries);
+  }, [filteredDeliveries, getMotoboyStats]);
+
+  const neighborhoodData = useMemo(() => {
+    return getNeighborhoodStats(filteredDeliveries);
+  }, [filteredDeliveries, getNeighborhoodStats]);
+
+  const paymentData = useMemo(() => {
+    return getPaymentStats(filteredDeliveries);
+  }, [filteredDeliveries, getPaymentStats]);
+
+  const dayOfWeekData = useMemo(() => {
+    return getDayOfWeekStats(filteredDeliveries);
+  }, [filteredDeliveries, getDayOfWeekStats]);
+
+  // Função para exportar (placeholder)
+  const handleExport = useCallback(() => {
+    // TODO: Implementar exportação
+    console.log('Exportando relatório...');
+  }, []);
 
   return (
-    <div className="flex flex-col gap-6 pb-10">
-      <div className="flex flex-col gap-2">
-        <h1 className="font-heading text-2xl font-bold text-zinc-50">Relatórios</h1>
-        <p className="text-sm text-zinc-500">Análise logística do período.</p>
-      </div>
+    <>
+      <style>{fadeInUpAnimation}</style>
+      
+      <div className="min-h-screen bg-zinc-950 p-4 pb-20">
+        {/* Cabeçalho */}
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
+                <TrendingUp className="w-6 h-6 text-emerald-500" />
+                Relatórios
+              </h1>
+              <p className="text-sm text-zinc-400 mt-1">
+                Análise completa das entregas e faturamento
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <MonthSelector 
+                selectedMonth={selectedMonth}
+                onMonthChange={setSelectedMonth}
+              />
+              
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/20 transition-all duration-200 text-sm font-medium"
+              >
+                <Download className="w-4 h-4" />
+                Exportar
+              </button>
+            </div>
+          </div>
 
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/40 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
-            <PackageCheck size={20} />
+          {/* Cards de Resumo */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <SummaryCard
+              title="Total de Entregas"
+              value={metrics.totalDeliveries}
+              subtitle={`${filteredDeliveries.length} entregas`}
+              icon={<Package className="w-5 h-5" />}
+              variation={metrics.variation}
+              accentColor="emerald"
+              delay={0}
+            />
+            
+            <SummaryCard
+              title="Ticket Médio"
+              value={`R$ ${metrics.averageTicket.toFixed(2)}`}
+              subtitle={`Total: R$ ${metrics.totalRevenue.toFixed(2)}`}
+              icon={<DollarSign className="w-5 h-5" />}
+              accentColor="amber"
+              delay={100}
+            />
+            
+            <SummaryCard
+              title="Motoboy Destaque"
+              value={metrics.topMotoboy?.name || 'N/A'}
+              subtitle={`${metrics.topMotoboy?.deliveries || 0} entregas`}
+              icon={<User className="w-5 h-5" />}
+              accentColor="blue"
+              delay={200}
+            />
+            
+            <SummaryCard
+              title="Melhor Dia"
+              value={metrics.bestDay?.day || 'N/A'}
+              subtitle={`${metrics.bestDay?.deliveries || 0} entregas`}
+              icon={<Calendar className="w-5 h-5" />}
+              accentColor="purple"
+              delay={300}
+            />
           </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Entregas</p>
-            <p className="font-heading text-2xl font-bold text-zinc-50">{totalEntregas}</p>
-          </div>
-        </div>
 
-        <div className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/40 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
-            <Bike size={20} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Rotas Fechadas</p>
-            <p className="font-heading text-2xl font-bold text-zinc-50">{rotasFinalizadas}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Gráfico de Pagamentos */}
-      <div className="flex flex-col gap-4 rounded-[28px] border border-zinc-800 bg-zinc-900/40 p-5">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-zinc-100">Formas de Pagamento</h2>
-          <TrendingUp size={16} className="text-zinc-500" />
-        </div>
-
-        {totalEntregas === 0 ? (
-          <div className="flex h-[200px] items-center justify-center text-sm text-zinc-600">
-            Sem dados para exibir
-          </div>
-        ) : (
-          <>
-            <div className="h-[220px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={dataPie}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={5}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {dataPie.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '16px', color: '#fafafa' }}
-                    itemStyle={{ color: '#fafafa' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+          {/* Gráficos - Grid 2x2 em desktop, 1x1 em mobile */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Gráfico 1: Evolução Diária */}
+            <div className="animate-fadeInUp" style={{ animationDelay: '100ms' }}>
+              <DailyEvolutionChart data={dailyEvolutionData} />
             </div>
 
-            {/* Legenda customizada */}
-            <div className="flex flex-wrap justify-center gap-4 pt-2">
-              {dataPie.map((item) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-xs text-zinc-400">{item.name} ({item.value})</span>
-                </div>
-              ))}
+            {/* Gráfico 2: Motoboys */}
+            <div className="animate-fadeInUp" style={{ animationDelay: '200ms' }}>
+              <MotoboyChart data={motoboyData} />
             </div>
-          </>
-        )}
+
+            {/* Gráfico 3: Bairros */}
+            <div className="animate-fadeInUp" style={{ animationDelay: '300ms' }}>
+              <NeighborhoodChart data={neighborhoodData} />
+            </div>
+
+            {/* Gráfico 4: Pagamentos */}
+            <div className="animate-fadeInUp" style={{ animationDelay: '400ms' }}>
+              <PaymentChart data={paymentData} />
+            </div>
+
+            {/* Gráfico 5: Dias da Semana (ocupa largura total) */}
+            <div className="col-span-1 lg:col-span-2 animate-fadeInUp" style={{ animationDelay: '500ms' }}>
+              <DayOfWeekChart data={dayOfWeekData} />
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
