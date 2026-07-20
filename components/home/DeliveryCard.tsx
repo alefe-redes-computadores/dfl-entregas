@@ -23,10 +23,9 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
 
   async function handleCopy() {
     const success = await copyDeliveryToClipboard(delivery);
-
     if (success) {
       toast.success('Entrega copiada!', {
-        description: `Pedido ${delivery.order_id} pronto pra colar no WhatsApp.`,
+        description: `Pedido ${delivery.confirmation_code} pronto pra colar no WhatsApp.`,
       });
     } else {
       toast.error('Não foi possível copiar', {
@@ -38,16 +37,21 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
   return (
     <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/60 backdrop-blur-sm">
       <div className="flex gap-3 p-4">
-        {/* Mini-mapa placeholder — futuramente Google Static Maps API a partir de maps_link */}
+        {/* Mini-mapa placeholder */}
         <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[16px] bg-zinc-800">
           <MapPin size={22} className="text-zinc-600" />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="font-heading text-2xl font-bold tracking-tight text-zinc-50">
-              {delivery.order_id}
-            </p>
+            <div className="flex flex-col">
+              <p className="font-heading text-3xl font-bold tracking-tight text-zinc-50">
+                #{delivery.confirmation_code}
+              </p>
+              <p className="mt-0.5 text-[11px] font-mono tracking-wider text-zinc-500">
+                ID: {delivery.order_id}
+              </p>
+            </div>
             {delivery.is_paid && (
               <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-500">
                 <CheckCircle2 size={12} />
