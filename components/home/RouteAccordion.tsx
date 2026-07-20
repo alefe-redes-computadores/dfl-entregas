@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Bike, Wallet, PackageCheck } from 'lucide-react';
+import { ChevronDown, Bike, Wallet, PackageCheck, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
 import clsx from 'clsx';
 import type { Route } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
@@ -16,9 +17,18 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
+  const closeRoute = useAppStore((state) => state.closeRoute);
 
   const deliveries = getDeliveriesByRoute(route.id);
   const pendingCount = deliveries.filter((d) => !d.is_paid).length;
+
+  const handleCloseRoute = () => {
+    closeRoute(route.id);
+    toast.success('Rota finalizada!', {
+      description: 'Ela foi enviada para o histórico do dia.',
+    });
+    setIsOpen(false);
+  };
 
   return (
     <div className="overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-900/40">
@@ -101,6 +111,17 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 customer={getCustomerById(delivery.customer_id)}
               />
             ))
+          )}
+
+          {/* Botão de Finalizar Rota */}
+          {route.status === 'aberta' && (
+            <button
+              onClick={handleCloseRoute}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-800/80 py-3.5 text-sm font-semibold text-zinc-300 transition-colors active:bg-zinc-800"
+            >
+              <CheckCircle2 size={18} className="text-emerald-500" />
+              Finalizar Rota
+            </button>
           )}
         </div>
       )}
