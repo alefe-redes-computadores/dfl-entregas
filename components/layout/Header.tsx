@@ -12,11 +12,14 @@ function getGreeting(): string {
 
 export function Header() {
   const isSyncing = useAppStore((state) => state.isSyncing);
+  const initData = useAppStore((state) => state.initData);
   const [greeting, setGreeting] = useState('Boa noite');
 
   useEffect(() => {
     setGreeting(getGreeting());
-  }, []);
+    // Inicia a sincronização com o Firebase assim que o app carrega
+    initData();
+  }, [initData]);
 
   return (
     <header className="safe-top sticky top-0 z-40 border-b border-zinc-800/80 bg-zinc-950/90 px-5 pb-4 pt-4 backdrop-blur-md">
@@ -39,12 +42,12 @@ export function Header() {
                 )}
                 <span
                   className={`relative inline-flex h-2 w-2 rounded-full ${
-                    isSyncing ? 'bg-emerald-500' : 'bg-zinc-600'
+                    isSyncing ? 'bg-emerald-500' : 'bg-emerald-500/30'
                   }`}
                 />
               </span>
               <span className="text-xs text-zinc-500">
-                {isSyncing ? 'Sincronizado' : 'Offline'}
+                {isSyncing ? 'Sincronizando...' : 'Online'}
               </span>
             </div>
           </div>
