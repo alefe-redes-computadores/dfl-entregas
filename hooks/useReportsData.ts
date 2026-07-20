@@ -2,26 +2,11 @@
 import { useMemo, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 
+// Importar tipos reais da sua store
+import type { Delivery, Route, PaymentMethod } from '@/store/types';
+
 interface ReportFilters {
   month: string; // Formato: '2026-07'
-}
-
-interface Delivery {
-  id: string;
-  routeId: string;
-  status: string;
-  totalPrice: number;
-  paymentMethod: string;
-  address: string;
-  createdAt: any; // Timestamp do Firebase
-  motoboyName?: string;
-}
-
-interface Route {
-  id: string;
-  name: string;
-  motoboyName: string;
-  deliveries: string[]; // IDs das entregas
 }
 
 interface DayData {
@@ -58,59 +43,48 @@ export function useReportsData() {
   const routes = useAppStore(state => state.routes);
   const deliveries = useAppStore(state => state.deliveries);
   
-  // Extrair bairro do endereço (função auxiliar)
+  // Extrair bairro do endereço
   const extractNeighborhood = useCallback((address: string): string => {
     if (!address) return 'Não informado';
     
-    // Tenta extrair bairro de padrões comuns
-    const patterns = [
-      /bairro\s*[:]?\s*([^,;]+)/i,
-      /,\s*([^,]+?)\s*-\s*[A-Z]{2}/,
-      /,\s*([^,]+?)\s*,\s*[A-Z]{2}/i,
-    ];
-    
-    for (const pattern of patterns) {
-      const match = address.match(pattern);
-      if (match && match[1]) {
-        return match[1].trim();
-      }
-    }
-    
-    // Se não encontrar padrão, tenta pegar o último segmento antes do estado
+    // Como agora temos address_string, podemos usar diretamente
+    // ou extrair de forma mais simples
     const parts = address.split(',').map(p => p.trim());
-    if (parts.length >= 2) {
-      const possibleNeighborhood = parts[parts.length - 2];
-      if (possibleNeighborhood && possibleNeighborhood.length > 0) {
-        return possibleNeighborhood;
-      }
+    if (parts.length >= 3) {
+      // Ex: "Rua, Número, Bairro" -> pega o terceiro elemento
+      return parts[2] || 'Não informado';
     }
     
-    return 'Outros';
+    return 'Não informado';
   }, []);
 
-  // Formatar data do Firebase
+  // Formatar data - ajustado para lidar com string ISO
   const formatDate = useCallback((timestamp: any): Date => {
-    if (timestamp?.toDate) {
-      return timestamp.toDate();
-    }
-    if (timestamp?.seconds) {
-      return new Date(timestamp.seconds * 1000);
-    }
+    if (!timestamp) return new Date();
+    
+    // Se for string ISO
     if (typeof timestamp === 'string') {
       return new Date(timestamp);
+    }
+    // Se for objeto Firebase com toDate
+    if (timestamp?.toDate && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    // Se for objeto com seconds (Firestore)
+    if (timestamp?.seconds !== undefined) {
+      return new Date(timestamp.seconds * 1000);
     }
     return new Date();
   }, []);
 
   // Filtrar entregas por mês
-  const getFilteredDeliveries = useCallback((filters: ReportFilters) => {
+  const getFilteredDeliveries = useCallback((filters: ReportFilters): Delivery[] => {
     if (filters.month === 'all') {
-      return deliveries.filter(d => d.status === 'delivered');
+      return deliveries;
     }
     
     const [year, month] = filters.month.split('-').map(Number);
     return deliveries.filter(d => {
-      if (d.status !== 'delivered') return false;
       const date = formatDate(d.createdAt);
       return date.getMonth() === month - 1 && date.getFullYear() === year;
     });
@@ -139,14 +113,15 @@ export function useReportsData() {
       const existing = dailyMap.get(day) || { deliveries: 0, revenue: 0 };
       dailyMap.set(day, {
         deliveries: existing.deliveries + 1,
-        revenue: existing.revenue + delivery.totalPrice
+        revenue: existing.revenue + (delivery.value || 0) // Usando 'value' ao invés de 'totalPrice'
       });
     });
     
     // Converter para array
+    const monthNum = month === 'all' ? '01' : month.split('-')[1];
     return Array.from(dailyMap.entries()).map(([day, data]) => ({
       day,
-      date: `${day.toString().padStart(2, '0')}/${month.split('-')[1]}`,
+      date: `${day.toString().padStart(2, '0')}/${monthNum}`,
       deliveries: data.deliveries,
       revenue: Number(data.revenue.toFixed(2))
     }));
@@ -154,14 +129,18 @@ export function useReportsData() {
 
   // Calcular estatísticas dos motoboys
   const getMotoboyStats = useCallback((filteredDeliveries: Delivery[]): MotoboyStats[] => {
+    // Precisamos associar entregas a motoboys através das rotas
     const motoboyMap = new Map<string, { deliveries: number; revenue: number }>();
     
     filteredDeliveries.forEach(delivery => {
-      const name = delivery.motoboyName || 'Não atribuído';
-      const existing = motoboyMap.get(name) || { deliveries: 0, revenue: 0 };
-      motoboyMap.set(name, {
+      // Encontrar a rota associada a esta entrega
+      const route = routes.find(r => r.id === delivery.route_id);
+      const motoboyName = route?.motoboy_name || 'Não atribuído';
+      
+      const existing = motoboyMap.get(motoboyName) || { deliveries: 0, revenue: 0 };
+      motoboyMap.set(motoboyName, {
         deliveries: existing.deliveries + 1,
-        revenue: existing.revenue + delivery.totalPrice
+        revenue: existing.revenue + (delivery.value || 0)
       });
     });
     
@@ -172,14 +151,14 @@ export function useReportsData() {
         revenue: Number(stats.revenue.toFixed(2))
       }))
       .sort((a, b) => b.deliveries - a.deliveries);
-  }, []);
+  }, [routes]);
 
   // Calcular estatísticas dos bairros
   const getNeighborhoodStats = useCallback((filteredDeliveries: Delivery[]): NeighborhoodStats[] => {
     const neighborhoodMap = new Map<string, number>();
     
     filteredDeliveries.forEach(delivery => {
-      const neighborhood = extractNeighborhood(delivery.address);
+      const neighborhood = extractNeighborhood(delivery.address_string || '');
       neighborhoodMap.set(neighborhood, (neighborhoodMap.get(neighborhood) || 0) + 1);
     });
     
@@ -194,11 +173,19 @@ export function useReportsData() {
     const paymentMap = new Map<string, { count: number; total: number }>();
     
     filteredDeliveries.forEach(delivery => {
-      const method = delivery.paymentMethod || 'Não informado';
+      // Mapear os métodos de pagamento para nomes amigáveis
+      const methodMap: Record<string, string> = {
+        'dinheiro': 'Dinheiro',
+        'pix': 'PIX',
+        'cartao_credito': 'Cartão Crédito',
+        'cartao_debito': 'Cartão Débito'
+      };
+      
+      const method = methodMap[delivery.payment_method] || delivery.payment_method || 'Não informado';
       const existing = paymentMap.get(method) || { count: 0, total: 0 };
       paymentMap.set(method, {
         count: existing.count + 1,
-        total: existing.total + delivery.totalPrice
+        total: existing.total + (delivery.value || 0)
       });
     });
     
@@ -227,7 +214,7 @@ export function useReportsData() {
       const existing = dayMap.get(dayOfWeek) || { deliveries: 0, revenue: 0 };
       dayMap.set(dayOfWeek, {
         deliveries: existing.deliveries + 1,
-        revenue: existing.revenue + delivery.totalPrice
+        revenue: existing.revenue + (delivery.value || 0)
       });
     });
     
@@ -242,7 +229,7 @@ export function useReportsData() {
   // Calcular métricas principais
   const getMainMetrics = useCallback((filteredDeliveries: Delivery[], allDeliveries: Delivery[]) => {
     const totalDeliveries = filteredDeliveries.length;
-    const totalRevenue = filteredDeliveries.reduce((sum, d) => sum + d.totalPrice, 0);
+    const totalRevenue = filteredDeliveries.reduce((sum, d) => sum + (d.value || 0), 0);
     const averageTicket = totalDeliveries > 0 ? totalRevenue / totalDeliveries : 0;
     
     // Motoboy destaque
@@ -258,23 +245,20 @@ export function useReportsData() {
     // Variação com mês anterior
     let variation = 0;
     if (filteredDeliveries.length > 0) {
-      // Filtrar entregas do mês anterior (entregas não filtradas - todas entregues)
-      const currentMonth = filteredDeliveries;
-      const currentDate = formatDate(currentMonth[0]?.createdAt || new Date());
+      const currentDate = formatDate(filteredDeliveries[0]?.createdAt || new Date());
       
       const previousMonth = new Date(currentDate);
       previousMonth.setMonth(previousMonth.getMonth() - 1);
       
       const previousMonthDeliveries = allDeliveries.filter(d => {
-        if (d.status !== 'delivered') return false;
         const date = formatDate(d.createdAt);
         return date.getMonth() === previousMonth.getMonth() && 
                date.getFullYear() === previousMonth.getFullYear();
       });
       
       if (previousMonthDeliveries.length > 0) {
-        variation = ((currentMonth.length - previousMonthDeliveries.length) / previousMonthDeliveries.length) * 100;
-      } else {
+        variation = ((filteredDeliveries.length - previousMonthDeliveries.length) / previousMonthDeliveries.length) * 100;
+      } else if (filteredDeliveries.length > 0) {
         variation = 100; // Primeiro mês com entregas
       }
     }
