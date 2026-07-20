@@ -1,4 +1,4 @@
-// app/components/reports/Charts/NeighborhoodChart.tsx
+// components/reports/Charts/NeighborhoodChart.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -53,7 +53,6 @@ export function NeighborhoodChart({ data }: NeighborhoodChartProps) {
     return null;
   };
 
-  // Ordenar e limitar a top 10
   const sortedData = [...data].sort((a, b) => b.count - a.count).slice(0, 10);
 
   return (
