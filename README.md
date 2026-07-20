@@ -8,7 +8,6 @@ Fundação do app: tipagens, store Zustand (mock), layout (Header + BottomNav) e
 ```bash
 
 npm install
-
 npm run dev
 ```
 
