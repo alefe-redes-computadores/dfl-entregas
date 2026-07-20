@@ -1,4 +1,4 @@
-// app/components/reports/Charts/MotoboyChart.tsx
+// components/reports/Charts/MotoboyChart.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -59,7 +59,6 @@ export function MotoboyChart({ data }: MotoboyChartProps) {
     return null;
   };
 
-  // Ordenar por entregas para melhor visualização
   const sortedData = [...data].sort((a, b) => b.deliveries - a.deliveries);
 
   return (
