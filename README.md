@@ -1,5 +1,6 @@
 # DFL Entregas — Fase 1
 
+
 Fundação do app: tipagens, store Zustand (mock), layout (Header + BottomNav) e a tela Início com Accordions de rotas + DeliveryCard funcional.
 
 ## Como rodar
