@@ -1,4 +1,3 @@
-// app/relatorios/page.tsx
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
@@ -10,6 +9,7 @@ import {
   TrendingUp,
   Download 
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 // Importar hooks e componentes
 import { useReportsData } from '@/app/hooks/useReportsData';
@@ -47,7 +47,8 @@ export default function ReportsPage() {
     getNeighborhoodStats,
     getPaymentStats,
     getDayOfWeekStats,
-    getMainMetrics
+    getMainMetrics,
+    extractNeighborhood
   } = useReportsData();
 
   // Memorizar dados filtrados
@@ -86,18 +87,75 @@ export default function ReportsPage() {
     return getDayOfWeekStats(filteredDeliveries);
   }, [filteredDeliveries, getDayOfWeekStats]);
 
-  // Função para exportar (placeholder)
+  // Lógica inteligente para exportar planilha CSV
   const handleExport = useCallback(() => {
-    // TODO: Implementar exportação
-    console.log('Exportando relatório...');
-  }, []);
+    if (filteredDeliveries.length === 0) {
+      toast.error('Nenhum dado para exportar', {
+        description: 'Não há entregas registradas neste período.',
+      });
+      return;
+    }
+
+    try {
+      // Cabeçalhos da planilha
+      const headers = ['ID', 'Data', 'Motoboy', 'Pagamento', 'Valor', 'Bairro', 'Endereço'];
+
+      // Processa as linhas da planilha
+      const csvRows = filteredDeliveries.map(d => {
+        // Tenta pegar a data de forma segura
+        let dateStr = 'Data inválida';
+        if (d.createdAt) {
+          const dateObj = d.createdAt.seconds 
+            ? new Date(d.createdAt.seconds * 1000) 
+            : new Date(d.createdAt);
+          dateStr = dateObj.toLocaleDateString('pt-BR');
+        }
+
+        const neighborhood = extractNeighborhood(d.address);
+        
+        return [
+          d.id,
+          dateStr,
+          d.motoboyName || 'Geral',
+          d.paymentMethod || 'N/A',
+          d.totalPrice.toFixed(2).replace('.', ','), // Formato R$ (vírgula)
+          `"${neighborhood}"`, // Aspas protegem textos com vírgulas/ponto-e-vírgulas
+          `"${d.address.replace(/"/g, '""')}"` 
+        ].join(';'); // Ponto e vírgula separa as colunas nativamente no Excel BR
+      });
+
+      // Junta tudo em uma única string
+      const csvContent = [headers.join(';'), ...csvRows].join('\n');
+      
+      // Cria o arquivo virtual forçando UTF-8 com BOM para não quebrar acentos no Excel
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      // Cria um link temporário, clica nele e destroi (simula o download)
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `dfl-relatorio-${selectedMonth}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url); // Limpa a memória
+
+      toast.success('Relatório exportado!', {
+        description: 'A planilha foi baixada no seu dispositivo.',
+      });
+    } catch (error) {
+      console.error('Erro ao exportar:', error);
+      toast.error('Erro ao exportar', {
+        description: 'Não foi possível gerar a planilha.',
+      });
+    }
+  }, [filteredDeliveries, selectedMonth, extractNeighborhood]);
 
   return (
     <>
       <style>{fadeInUpAnimation}</style>
       
       <div className="min-h-screen bg-zinc-950 p-4 pb-20">
-        {/* Cabeçalho */}
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
@@ -118,7 +176,7 @@ export default function ReportsPage() {
               
               <button
                 onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/20 transition-all duration-200 text-sm font-medium"
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/20 transition-all duration-200 text-sm font-medium active:scale-95"
               >
                 <Download className="w-4 h-4" />
                 Exportar
@@ -126,7 +184,6 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* Cards de Resumo */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <SummaryCard
               title="Total de Entregas"
@@ -140,8 +197,8 @@ export default function ReportsPage() {
             
             <SummaryCard
               title="Ticket Médio"
-              value={`R$ ${metrics.averageTicket.toFixed(2)}`}
-              subtitle={`Total: R$ ${metrics.totalRevenue.toFixed(2)}`}
+              value={`R$ ${metrics.averageTicket.toFixed(2).replace('.', ',')}`}
+              subtitle={`Total: R$ ${metrics.totalRevenue.toFixed(2).replace('.', ',')}`}
               icon={<DollarSign className="w-5 h-5" />}
               accentColor="amber"
               delay={100}
@@ -166,29 +223,23 @@ export default function ReportsPage() {
             />
           </div>
 
-          {/* Gráficos - Grid 2x2 em desktop, 1x1 em mobile */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Gráfico 1: Evolução Diária */}
             <div className="animate-fadeInUp" style={{ animationDelay: '100ms' }}>
               <DailyEvolutionChart data={dailyEvolutionData} />
             </div>
 
-            {/* Gráfico 2: Motoboys */}
             <div className="animate-fadeInUp" style={{ animationDelay: '200ms' }}>
               <MotoboyChart data={motoboyData} />
             </div>
 
-            {/* Gráfico 3: Bairros */}
             <div className="animate-fadeInUp" style={{ animationDelay: '300ms' }}>
               <NeighborhoodChart data={neighborhoodData} />
             </div>
 
-            {/* Gráfico 4: Pagamentos */}
             <div className="animate-fadeInUp" style={{ animationDelay: '400ms' }}>
               <PaymentChart data={paymentData} />
             </div>
 
-            {/* Gráfico 5: Dias da Semana (ocupa largura total) */}
             <div className="col-span-1 lg:col-span-2 animate-fadeInUp" style={{ animationDelay: '500ms' }}>
               <DayOfWeekChart data={dayOfWeekData} />
             </div>
