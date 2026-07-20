@@ -23,8 +23,15 @@ export default function HomePage() {
   const goToPreviousDay = useAppStore((state) => state.goToPreviousDay);
   const goToNextDay = useAppStore((state) => state.goToNextDay);
 
-  const openRoutes = routes.filter((r) => r.status === 'aberta');
-  const closedRoutes = routes.filter((r) => r.status === 'fechada');
+  // Filtra as rotas para mostrar APENAS as do dia selecionado
+  const selectedDateStr = selectedDate.toDateString();
+  const routesDoDia = routes.filter((r) => {
+    const routeDate = new Date(r.departure_time).toDateString();
+    return routeDate === selectedDateStr;
+  });
+
+  const openRoutes = routesDoDia.filter((r) => r.status === 'aberta');
+  const closedRoutes = routesDoDia.filter((r) => r.status === 'fechada');
 
   return (
     <div className="flex flex-col gap-5">
@@ -64,7 +71,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Rotas fechadas */}
+      {/* Rotas fechadas (vão caindo pra cá) */}
       {closedRoutes.length > 0 && (
         <div className="flex flex-col gap-3">
           <h2 className="px-1 font-heading text-sm font-bold uppercase tracking-wide text-zinc-500">
@@ -76,9 +83,9 @@ export default function HomePage() {
         </div>
       )}
 
-      {routes.length === 0 && (
+      {routesDoDia.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-16 text-center">
-          <p className="text-sm text-zinc-500">Nenhuma rota criada para este dia.</p>
+          <p className="text-sm text-zinc-500">Nenhuma rota aberta neste dia.</p>
           <p className="text-xs text-zinc-600">Toque no + para abrir a primeira rota.</p>
         </div>
       )}
