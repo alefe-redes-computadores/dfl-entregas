@@ -1,15 +1,21 @@
 import { create } from 'zustand';
 import { collection, doc, setDoc, getDocs, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
+import { db, auth, googleProvider } from '@/lib/firebase';
 import type { Route, Delivery, Customer } from '@/types';
 
 interface AppState {
+  user: FirebaseUser | null;
+  authLoaded: boolean;
   routes: Route[];
   deliveries: Delivery[];
   customers: Customer[];
   selectedDate: Date;
   isSyncing: boolean;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
   initData: () => Promise<void>;
+  // ... (mantenha o resto das tipagens iguais: goToPreviousDay, getDeliveriesByRoute, etc)
   goToPreviousDay: () => void;
   goToNextDay: () => void;
   getDeliveriesByRoute: (routeId: string) => Delivery[];
@@ -20,11 +26,30 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
+  user: null,
+  authLoaded: false,
   routes: [],
   deliveries: [],
   customers: [],
   selectedDate: new Date(),
   isSyncing: false,
+
+  loginWithGoogle: async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error('Erro no login', error);
+    }
+  },
+
+  logout: async () => {
+    try {
+      await signOut(auth);
+      set({ routes: [], deliveries: [], customers: [], user: null });
+    } catch (error) {
+      console.error('Erro no logout', error);
+    }
+  },
 
   initData: async () => {
     set({ isSyncing: true });
@@ -47,60 +72,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  goToPreviousDay: () =>
-    set((state) => {
-      const prev = new Date(state.selectedDate);
-      prev.setDate(prev.getDate() - 1);
-      return { selectedDate: prev };
-    }),
-
-  goToNextDay: () =>
-    set((state) => {
-      const next = new Date(state.selectedDate);
-      next.setDate(next.getDate() + 1);
-      return { selectedDate: next };
-    }),
-
-  getDeliveriesByRoute: (routeId) =>
-    get().deliveries.filter((d) => d.route_id === routeId),
-
-  getCustomerById: (customerId) =>
-    get().customers.find((c) => c.id === customerId),
-
-  addRoute: async (route) => {
-    set((state) => ({ routes: [route, ...state.routes] }));
-    try {
-      await setDoc(doc(db, 'routes', route.id), route);
-    } catch (error) {
-      console.error('Erro ao salvar rota:', error);
-    }
-  },
-
-  addDelivery: async (delivery) => {
-    set((state) => ({ deliveries: [delivery, ...state.deliveries] }));
-    try {
-      await setDoc(doc(db, 'deliveries', delivery.id), delivery);
-    } catch (error) {
-      console.error('Erro ao salvar entrega:', error);
-    }
-  },
-
-  closeRoute: async (routeId) => {
-    const endTime = new Date().toISOString();
-    // Atualiza a tela primeiro (otimista)
-    set((state) => ({
-      routes: state.routes.map((r) =>
-        r.id === routeId ? { ...r, status: 'fechada', end_time: endTime } : r
-      ),
-    }));
-    // Envia a atualização para o Firebase
-    try {
-      await updateDoc(doc(db, 'routes', routeId), {
-        status: 'fechada',
-        end_time: endTime
-      });
-    } catch (error) {
-      console.error('Erro ao fechar rota:', error);
-    }
-  }
+  // ... (MANTENHA AQUI O RESTANTE DAS SUAS FUNÇÕES EXATAMENTE COMO ESTAVAM: goToPreviousDay, addRoute, closeRoute, etc.)
+  goToPreviousDay: () => set((state) => { const prev = new Date(state.selectedDate); prev.setDate(prev.getDate() - 1); return { selectedDate: prev }; }),
+  goToNextDay: () => set((state) => { const next = new Date(state.selectedDate); next.setDate(next.getDate() + 1); return { selectedDate: next }; }),
+  getDeliveriesByRoute: (routeId) => get().deliveries.filter((d) => d.route_id === routeId),
+  getCustomerById: (customerId) => get().customers.find((c) => c.id === customerId),
+  addRoute: async (route) => { set((state) => ({ routes: [route, ...state.routes] })); try { await setDoc(doc(db, 'routes', route.id), route); } catch (error) { console.error(error); } },
+  addDelivery: async (delivery) => { set((state) => ({ deliveries: [delivery, ...state.deliveries] })); try { await setDoc(doc(db, 'deliveries', delivery.id), delivery); } catch (error) { console.error(error); } },
+  closeRoute: async (routeId) => { const endTime = new Date().toISOString(); set((state) => ({ routes: state.routes.map((r) => r.id === routeId ? { ...r, status: 'fechada', end_time: endTime } : r) })); try { await updateDoc(doc(db, 'routes', routeId), { status: 'fechada', end_time: endTime }); } catch (error) { console.error(error); } }
 }));
