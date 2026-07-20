@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import type { Route, Delivery, Customer } from '@/types';
 
 interface AppState {
@@ -7,21 +9,43 @@ interface AppState {
   customers: Customer[];
   selectedDate: Date;
   isSyncing: boolean;
+  initData: () => Promise<void>;
   goToPreviousDay: () => void;
   goToNextDay: () => void;
   getDeliveriesByRoute: (routeId: string) => Delivery[];
   getCustomerById: (customerId: string) => Customer | undefined;
-  addRoute: (route: Route) => void;
-  addDelivery: (delivery: Delivery) => void;
+  addRoute: (route: Route) => Promise<void>;
+  addDelivery: (delivery: Delivery) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  // Começamos com arrays vazios para você cadastrar dados reais!
   routes: [],
   deliveries: [],
   customers: [],
   selectedDate: new Date(),
-  isSyncing: true, // Bolinha verde pulsando simulando local-first
+  isSyncing: false,
+
+  initData: async () => {
+    set({ isSyncing: true });
+    try {
+      // Busca tudo do Firebase simultaneamente para ser rápido
+      const [routesSnap, deliveriesSnap, customersSnap] = await Promise.all([
+        getDocs(collection(db, 'routes')),
+        getDocs(collection(db, 'deliveries')),
+        getDocs(collection(db, 'customers'))
+      ]);
+
+      set({
+        routes: routesSnap.docs.map(d => d.data() as Route),
+        deliveries: deliveriesSnap.docs.map(d => d.data() as Delivery),
+        customers: customersSnap.docs.map(d => d.data() as Customer),
+        isSyncing: false
+      });
+    } catch (error) {
+      console.error('Erro ao sincronizar com Firebase:', error);
+      set({ isSyncing: false });
+    }
+  },
 
   goToPreviousDay: () =>
     set((state) => {
@@ -43,9 +67,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   getCustomerById: (customerId) =>
     get().customers.find((c) => c.id === customerId),
 
-  addRoute: (route) =>
-    set((state) => ({ routes: [route, ...state.routes] })),
+  addRoute: async (route) => {
+    // 1. Atualiza a tela instantaneamente
+    set((state) => ({ routes: [route, ...state.routes] }));
+    // 2. Salva no banco de dados
+    try {
+      await setDoc(doc(db, 'routes', route.id), route);
+    } catch (error) {
+      console.error('Erro ao salvar rota:', error);
+    }
+  },
 
-  addDelivery: (delivery) =>
-    set((state) => ({ deliveries: [delivery, ...state.deliveries] })),
+  addDelivery: async (delivery) => {
+    set((state) => ({ deliveries: [delivery, ...state.deliveries] }));
+    try {
+      await setDoc(doc(db, 'deliveries', delivery.id), delivery);
+    } catch (error) {
+      console.error('Erro ao salvar entrega:', error);
+    }
+  },
 }));
