@@ -1,6 +1,7 @@
+// app/relatorios/page.tsx
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Package, 
   DollarSign, 
@@ -9,10 +10,9 @@ import {
   TrendingUp,
   Download 
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 // Importar hooks e componentes com caminhos corrigidos
-import { useReportsData } from '@/hooks/useReportsData';
+import { useReportsData } from '@/app/hooks/useReportsData';
 import { MonthSelector } from '@/components/reports/MonthSelector';
 import { SummaryCard } from '@/components/reports/SummaryCard';
 import { DailyEvolutionChart } from '@/components/reports/Charts/DailyEvolutionChart';
@@ -47,8 +47,7 @@ export default function ReportsPage() {
     getNeighborhoodStats,
     getPaymentStats,
     getDayOfWeekStats,
-    getMainMetrics,
-    extractNeighborhood
+    getMainMetrics
   } = useReportsData();
 
   // Memorizar dados filtrados
@@ -87,65 +86,11 @@ export default function ReportsPage() {
     return getDayOfWeekStats(filteredDeliveries);
   }, [filteredDeliveries, getDayOfWeekStats]);
 
-  // Função inteligente para exportar planilha CSV real
-  const handleExport = useCallback(() => {
-    if (filteredDeliveries.length === 0) {
-      toast.error('Nenhum dado para exportar', {
-        description: 'Não há entregas registradas neste período.',
-      });
-      return;
-    }
-
-    try {
-      // Cabeçalhos da planilha
-      const headers = ['ID', 'Data', 'Motoboy', 'Pagamento', 'Valor', 'Bairro', 'Endereço'];
-
-      // Processa as linhas da planilha
-      const csvRows = filteredDeliveries.map(d => {
-        let dateStr = 'Data inválida';
-        if (d.createdAt) {
-          const dateObj = d.createdAt.seconds 
-            ? new Date(d.createdAt.seconds * 1000) 
-            : new Date(d.createdAt);
-          dateStr = dateObj.toLocaleDateString('pt-BR');
-        }
-
-        const neighborhood = extractNeighborhood(d.address);
-        
-        return [
-          d.id,
-          dateStr,
-          d.motoboyName || 'Geral',
-          d.paymentMethod || 'N/A',
-          d.totalPrice.toFixed(2).replace('.', ','), 
-          `"${neighborhood}"`, 
-          `"${d.address.replace(/"/g, '""')}"` 
-        ].join(';'); 
-      });
-
-      const csvContent = [headers.join(';'), ...csvRows].join('\n');
-      
-      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `dfl-relatorio-${selectedMonth}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url); 
-
-      toast.success('Relatório exportado!', {
-        description: 'A planilha foi baixada no seu dispositivo.',
-      });
-    } catch (error) {
-      console.error('Erro ao exportar:', error);
-      toast.error('Erro ao exportar', {
-        description: 'Não foi possível gerar a planilha.',
-      });
-    }
-  }, [filteredDeliveries, selectedMonth, extractNeighborhood]);
+  // Função para exportar (placeholder)
+  const handleExport = () => {
+    // TODO: Implementar exportação
+    console.log('Exportando relatório...');
+  };
 
   return (
     <>
@@ -173,7 +118,7 @@ export default function ReportsPage() {
               
               <button
                 onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/20 transition-all duration-200 text-sm font-medium active:scale-95"
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/20 transition-all duration-200 text-sm font-medium"
               >
                 <Download className="w-4 h-4" />
                 Exportar
@@ -195,8 +140,8 @@ export default function ReportsPage() {
             
             <SummaryCard
               title="Ticket Médio"
-              value={`R$ ${metrics.averageTicket.toFixed(2).replace('.', ',')}`}
-              subtitle={`Total: R$ ${metrics.totalRevenue.toFixed(2).replace('.', ',')}`}
+              value={`R$ ${metrics.averageTicket.toFixed(2)}`}
+              subtitle={`Total: R$ ${metrics.totalRevenue.toFixed(2)}`}
               icon={<DollarSign className="w-5 h-5" />}
               accentColor="amber"
               delay={100}
