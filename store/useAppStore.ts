@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Route, Delivery, Customer } from '@/types';
 
@@ -16,6 +16,7 @@ interface AppState {
   getCustomerById: (customerId: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
   addDelivery: (delivery: Delivery) => Promise<void>;
+  closeRoute: (routeId: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -28,7 +29,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   initData: async () => {
     set({ isSyncing: true });
     try {
-      // Busca tudo do Firebase simultaneamente para ser rápido
       const [routesSnap, deliveriesSnap, customersSnap] = await Promise.all([
         getDocs(collection(db, 'routes')),
         getDocs(collection(db, 'deliveries')),
@@ -68,9 +68,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().customers.find((c) => c.id === customerId),
 
   addRoute: async (route) => {
-    // 1. Atualiza a tela instantaneamente
     set((state) => ({ routes: [route, ...state.routes] }));
-    // 2. Salva no banco de dados
     try {
       await setDoc(doc(db, 'routes', route.id), route);
     } catch (error) {
@@ -86,4 +84,23 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error('Erro ao salvar entrega:', error);
     }
   },
+
+  closeRoute: async (routeId) => {
+    const endTime = new Date().toISOString();
+    // Atualiza a tela primeiro (otimista)
+    set((state) => ({
+      routes: state.routes.map((r) =>
+        r.id === routeId ? { ...r, status: 'fechada', end_time: endTime } : r
+      ),
+    }));
+    // Envia a atualização para o Firebase
+    try {
+      await updateDoc(doc(db, 'routes', routeId), {
+        status: 'fechada',
+        end_time: endTime
+      });
+    } catch (error) {
+      console.error('Erro ao fechar rota:', error);
+    }
+  }
 }));
