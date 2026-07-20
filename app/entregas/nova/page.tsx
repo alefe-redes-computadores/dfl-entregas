@@ -25,7 +25,7 @@ export default function NovaEntregaPage() {
   const [observation, setObservation] = useState('');
   const [drinks, setDrinks] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!routeId || !confirmationCode || !orderId || !address) {
       toast.error('Preencha os campos obrigatórios');
@@ -37,7 +37,7 @@ export default function NovaEntregaPage() {
       route_id: routeId,
       order_id: orderId,
       confirmation_code: confirmationCode,
-      customer_id: 'temp-id', // Na fase 3 faremos a busca real de clientes
+      customer_id: 'temp-id',
       value: 0, 
       is_paid: isPaid,
       payment_method: paymentMethod,
@@ -48,20 +48,20 @@ export default function NovaEntregaPage() {
       drinks
     };
 
-    addDelivery(novaEntrega);
-    toast.success('Entrega adicionada na rota!');
+    await addDelivery(novaEntrega);
+    toast.success('Entrega adicionada e salva na nuvem!');
     router.push('/');
   };
 
   if (openRoutes.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-        <p className="text-zinc-400">Você precisa abrir uma rota primeiro.</p>
+      <div className="flex flex-col items-center justify-center gap-4 py-20 text-center px-4">
+        <p className="text-zinc-400">Você precisa abrir uma rota primeiro para lançar entregas.</p>
         <button 
           onClick={() => router.push('/rotas/nova')}
           className="rounded-xl bg-emerald-500 px-6 py-3 font-bold text-zinc-950"
         >
-          Criar Rota
+          Criar Rota Agora
         </button>
       </div>
     );
@@ -101,7 +101,7 @@ export default function NovaEntregaPage() {
             <label className="text-sm font-semibold text-zinc-400">Cód. Confirmação</label>
             <input
               type="text"
-              placeholder="Ex: 8945"
+              placeholder="Ex: 4821"
               maxLength={4}
               value={confirmationCode}
               onChange={(e) => setConfirmationCode(e.target.value)}
@@ -188,7 +188,7 @@ export default function NovaEntregaPage() {
           <label className="text-sm font-semibold text-zinc-400">Bebidas (Opcional)</label>
           <input
             type="text"
-            placeholder="Ex: 1 Coca 2L, 1 Guaraná lata"
+            placeholder="Ex: 1 Coca 2L"
             value={drinks}
             onChange={(e) => setDrinks(e.target.value)}
             className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
@@ -199,7 +199,7 @@ export default function NovaEntregaPage() {
           <label className="text-sm font-semibold text-zinc-400">Observação (Opcional)</label>
           <input
             type="text"
-            placeholder="Ex: Portão azul, casa dos fundos"
+            placeholder="Ex: Portão azul"
             value={observation}
             onChange={(e) => setObservation(e.target.value)}
             className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
@@ -210,7 +210,7 @@ export default function NovaEntregaPage() {
           type="submit"
           className="mt-6 h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98]"
         >
-          Adicionar Entrega
+          Salvar Entrega
         </button>
       </form>
     </div>
