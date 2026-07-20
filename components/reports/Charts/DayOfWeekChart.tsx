@@ -1,4 +1,4 @@
-// app/components/reports/Charts/DayOfWeekChart.tsx
+// components/reports/Charts/DayOfWeekChart.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
