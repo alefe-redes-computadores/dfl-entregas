@@ -11,15 +11,15 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Importar hooks e componentes
+// Importar hooks e componentes com caminhos corrigidos
 import { useReportsData } from '@/app/hooks/useReportsData';
-import { MonthSelector } from '@/app/components/reports/MonthSelector';
-import { SummaryCard } from '@/app/components/reports/SummaryCard';
-import { DailyEvolutionChart } from '@/app/components/reports/Charts/DailyEvolutionChart';
-import { MotoboyChart } from '@/app/components/reports/Charts/MotoboyChart';
-import { NeighborhoodChart } from '@/app/components/reports/Charts/NeighborhoodChart';
-import { PaymentChart } from '@/app/components/reports/Charts/PaymentChart';
-import { DayOfWeekChart } from '@/app/components/reports/Charts/DayOfWeekChart';
+import { MonthSelector } from '@/components/reports/MonthSelector';
+import { SummaryCard } from '@/components/reports/SummaryCard';
+import { DailyEvolutionChart } from '@/components/reports/Charts/DailyEvolutionChart';
+import { MotoboyChart } from '@/components/reports/Charts/MotoboyChart';
+import { NeighborhoodChart } from '@/components/reports/Charts/NeighborhoodChart';
+import { PaymentChart } from '@/components/reports/Charts/PaymentChart';
+import { DayOfWeekChart } from '@/components/reports/Charts/DayOfWeekChart';
 
 // Adicionar animações customizadas
 const fadeInUpAnimation = `
@@ -87,7 +87,7 @@ export default function ReportsPage() {
     return getDayOfWeekStats(filteredDeliveries);
   }, [filteredDeliveries, getDayOfWeekStats]);
 
-  // Lógica inteligente para exportar planilha CSV
+  // Função inteligente para exportar planilha CSV real
   const handleExport = useCallback(() => {
     if (filteredDeliveries.length === 0) {
       toast.error('Nenhum dado para exportar', {
@@ -102,7 +102,6 @@ export default function ReportsPage() {
 
       // Processa as linhas da planilha
       const csvRows = filteredDeliveries.map(d => {
-        // Tenta pegar a data de forma segura
         let dateStr = 'Data inválida';
         if (d.createdAt) {
           const dateObj = d.createdAt.seconds 
@@ -118,27 +117,24 @@ export default function ReportsPage() {
           dateStr,
           d.motoboyName || 'Geral',
           d.paymentMethod || 'N/A',
-          d.totalPrice.toFixed(2).replace('.', ','), // Formato R$ (vírgula)
-          `"${neighborhood}"`, // Aspas protegem textos com vírgulas/ponto-e-vírgulas
+          d.totalPrice.toFixed(2).replace('.', ','), 
+          `"${neighborhood}"`, 
           `"${d.address.replace(/"/g, '""')}"` 
-        ].join(';'); // Ponto e vírgula separa as colunas nativamente no Excel BR
+        ].join(';'); 
       });
 
-      // Junta tudo em uma única string
       const csvContent = [headers.join(';'), ...csvRows].join('\n');
       
-      // Cria o arquivo virtual forçando UTF-8 com BOM para não quebrar acentos no Excel
       const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       
-      // Cria um link temporário, clica nele e destroi (simula o download)
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `dfl-relatorio-${selectedMonth}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url); // Limpa a memória
+      URL.revokeObjectURL(url); 
 
       toast.success('Relatório exportado!', {
         description: 'A planilha foi baixada no seu dispositivo.',
@@ -156,6 +152,7 @@ export default function ReportsPage() {
       <style>{fadeInUpAnimation}</style>
       
       <div className="min-h-screen bg-zinc-950 p-4 pb-20">
+        {/* Cabeçalho */}
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
@@ -184,6 +181,7 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* Cards de Resumo */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <SummaryCard
               title="Total de Entregas"
@@ -223,23 +221,29 @@ export default function ReportsPage() {
             />
           </div>
 
+          {/* Gráficos - Grid 2x2 em desktop, 1x1 em mobile */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Gráfico 1: Evolução Diária */}
             <div className="animate-fadeInUp" style={{ animationDelay: '100ms' }}>
               <DailyEvolutionChart data={dailyEvolutionData} />
             </div>
 
+            {/* Gráfico 2: Motoboys */}
             <div className="animate-fadeInUp" style={{ animationDelay: '200ms' }}>
               <MotoboyChart data={motoboyData} />
             </div>
 
+            {/* Gráfico 3: Bairros */}
             <div className="animate-fadeInUp" style={{ animationDelay: '300ms' }}>
               <NeighborhoodChart data={neighborhoodData} />
             </div>
 
+            {/* Gráfico 4: Pagamentos */}
             <div className="animate-fadeInUp" style={{ animationDelay: '400ms' }}>
               <PaymentChart data={paymentData} />
             </div>
 
+            {/* Gráfico 5: Dias da Semana (ocupa largura total) */}
             <div className="col-span-1 lg:col-span-2 animate-fadeInUp" style={{ animationDelay: '500ms' }}>
               <DayOfWeekChart data={dayOfWeekData} />
             </div>
