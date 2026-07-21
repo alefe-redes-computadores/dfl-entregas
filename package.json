@@ -8,10 +8,10 @@
     "start": "next start",
     "lint": "next lint"
   },
-  "dependencies": {
+  "  "dependencies": {
     "@capacitor/android": "^6.0.0",
     "@capacitor/core": "^6.0.0",
-    "@codetrix-studio/capacitor-google-auth": "^3.4.0",
+    "@codetrix-studio/capacitor-google-auth": "latest",
     "firebase": "^10.12.2",
     "next": "14.2.5",
     "react": "^18.3.1",
