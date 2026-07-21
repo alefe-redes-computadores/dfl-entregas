@@ -52,18 +52,18 @@ export function Header() {
               <span className="font-heading text-lg font-bold leading-tight text-zinc-50">
                 {greeting}, {firstName}
               </span>
-              <div className="flex items-center gap-1.5">
-                <span className="relative flex h-2 w-2">
-                  {isSyncing && (
-                    <span className="absolute inline-flex h-full w-full animate-pulse-sync rounded-full bg-emerald-500 opacity-75" />
-                  )}
-                  <span
-                    className={`relative inline-flex h-2 w-2 rounded-full ${
-                      isSyncing ? 'bg-emerald-500' : 'bg-emerald-500/30'
-                    }`}
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {/* A Mágica da Bolinha Pulsante (Radar) */}
+                <span className="relative flex h-2.5 w-2.5">
+                  <span 
+                    className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                      isSyncing ? 'animate-pulse-sync bg-emerald-500' : 'animate-ping bg-emerald-400'
+                    }`} 
                   />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                 </span>
-                <span className="text-xs text-zinc-500">
+                
+                <span className="text-[11px] font-medium tracking-wide text-zinc-400">
                   {isSyncing ? 'Sincronizando...' : 'Online'}
                 </span>
               </div>
