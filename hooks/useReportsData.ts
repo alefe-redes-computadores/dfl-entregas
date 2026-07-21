@@ -2,11 +2,39 @@
 import { useMemo, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 
-// Importar tipos reais da sua store
-import type { Delivery, Route, PaymentMethod } from '@/store/types';
-
+// Definir interfaces localmente baseadas nos tipos reais da sua store
 interface ReportFilters {
   month: string; // Formato: '2026-07'
+}
+
+// Interface Delivery baseada nos seus tipos reais
+interface Delivery {
+  id: string;
+  route_id: string;
+  order_id: string;
+  confirmation_code: string;
+  customer_id: string;
+  value: number;
+  is_paid: boolean;
+  payment_method: string;
+  change_for?: number;
+  address_string: string;
+  maps_link: string;
+  observation?: string;
+  drinks?: string;
+  createdAt: any;
+}
+
+// Interface Route baseada nos seus tipos reais
+interface Route {
+  id: string;
+  name: string;
+  status: string;
+  motoboy_name: string;
+  departure_time: string;
+  end_time?: string;
+  change_money: number;
+  drinks_summary?: string;
 }
 
 interface DayData {
@@ -40,25 +68,28 @@ interface DayOfWeekStats {
 }
 
 export function useReportsData() {
-  const routes = useAppStore(state => state.routes);
-  const deliveries = useAppStore(state => state.deliveries);
+  const routes = useAppStore(state => state.routes) as Route[];
+  const deliveries = useAppStore(state => state.deliveries) as Delivery[];
   
   // Extrair bairro do endereço
   const extractNeighborhood = useCallback((address: string): string => {
     if (!address) return 'Não informado';
     
-    // Como agora temos address_string, podemos usar diretamente
-    // ou extrair de forma mais simples
+    // address_string vem como "Rua, Número, Bairro"
     const parts = address.split(',').map(p => p.trim());
     if (parts.length >= 3) {
-      // Ex: "Rua, Número, Bairro" -> pega o terceiro elemento
       return parts[2] || 'Não informado';
+    }
+    
+    // Se não tiver 3 partes, tenta pegar a última parte
+    if (parts.length > 0) {
+      return parts[parts.length - 1] || 'Não informado';
     }
     
     return 'Não informado';
   }, []);
 
-  // Formatar data - ajustado para lidar com string ISO
+  // Formatar data
   const formatDate = useCallback((timestamp: any): Date => {
     if (!timestamp) return new Date();
     
@@ -113,7 +144,7 @@ export function useReportsData() {
       const existing = dailyMap.get(day) || { deliveries: 0, revenue: 0 };
       dailyMap.set(day, {
         deliveries: existing.deliveries + 1,
-        revenue: existing.revenue + (delivery.value || 0) // Usando 'value' ao invés de 'totalPrice'
+        revenue: existing.revenue + (delivery.value || 0)
       });
     });
     
@@ -129,7 +160,6 @@ export function useReportsData() {
 
   // Calcular estatísticas dos motoboys
   const getMotoboyStats = useCallback((filteredDeliveries: Delivery[]): MotoboyStats[] => {
-    // Precisamos associar entregas a motoboys através das rotas
     const motoboyMap = new Map<string, { deliveries: number; revenue: number }>();
     
     filteredDeliveries.forEach(delivery => {
@@ -165,22 +195,22 @@ export function useReportsData() {
     return Array.from(neighborhoodMap.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 10); // Top 10
+      .slice(0, 10);
   }, [extractNeighborhood]);
 
   // Calcular estatísticas de pagamento
   const getPaymentStats = useCallback((filteredDeliveries: Delivery[]): PaymentStats[] => {
     const paymentMap = new Map<string, { count: number; total: number }>();
     
+    // Mapear métodos de pagamento para nomes amigáveis
+    const methodMap: Record<string, string> = {
+      'dinheiro': 'Dinheiro',
+      'pix': 'PIX',
+      'cartao_credito': 'Cartão Crédito',
+      'cartao_debito': 'Cartão Débito'
+    };
+    
     filteredDeliveries.forEach(delivery => {
-      // Mapear os métodos de pagamento para nomes amigáveis
-      const methodMap: Record<string, string> = {
-        'dinheiro': 'Dinheiro',
-        'pix': 'PIX',
-        'cartao_credito': 'Cartão Crédito',
-        'cartao_debito': 'Cartão Débito'
-      };
-      
       const method = methodMap[delivery.payment_method] || delivery.payment_method || 'Não informado';
       const existing = paymentMap.get(method) || { count: 0, total: 0 };
       paymentMap.set(method, {
@@ -259,7 +289,7 @@ export function useReportsData() {
       if (previousMonthDeliveries.length > 0) {
         variation = ((filteredDeliveries.length - previousMonthDeliveries.length) / previousMonthDeliveries.length) * 100;
       } else if (filteredDeliveries.length > 0) {
-        variation = 100; // Primeiro mês com entregas
+        variation = 100;
       }
     }
     
