@@ -32,3 +32,15 @@ body {
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Libera o "Puxar para Atualizar" nativo do celular */
+html, body {
+  overscroll-behavior-y: auto; 
+}
+
+/* O resto do seu CSS continua aqui para baixo... */
