@@ -1,6 +1,7 @@
+// app/relatorios/page.tsx
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Package, 
   DollarSign, 
@@ -9,9 +10,8 @@ import {
   TrendingUp,
   Download 
 } from 'lucide-react';
-import { toast } from 'sonner';
 
-import { useReportsData } from '@/hooks/useReportsData';
+import { useReportsData } from '@/app/hooks/useReportsData';
 import { MonthSelector } from '@/components/reports/MonthSelector';
 import { SummaryCard } from '@/components/reports/SummaryCard';
 import { DailyEvolutionChart } from '@/components/reports/Charts/DailyEvolutionChart';
@@ -45,22 +45,25 @@ export default function ReportsPage() {
     getNeighborhoodStats,
     getPaymentStats,
     getDayOfWeekStats,
-    getMainMetrics,
-    extractNeighborhood
+    getMainMetrics
   } = useReportsData();
 
+  // Memorizar dados filtrados
   const filteredDeliveries = useMemo(() => {
     return getFilteredDeliveries({ month: selectedMonth });
   }, [selectedMonth, getFilteredDeliveries]);
 
+  // Memorizar todos os dados de entregas para comparação
   const allDeliveries = useMemo(() => {
     return getFilteredDeliveries({ month: 'all' });
   }, [getFilteredDeliveries]);
 
+  // Calcular métricas
   const metrics = useMemo(() => {
     return getMainMetrics(filteredDeliveries, allDeliveries);
   }, [filteredDeliveries, allDeliveries, getMainMetrics]);
 
+  // Dados dos gráficos
   const dailyEvolutionData = useMemo(() => {
     return getDailyEvolution(filteredDeliveries, selectedMonth);
   }, [filteredDeliveries, selectedMonth, getDailyEvolution]);
@@ -81,68 +84,15 @@ export default function ReportsPage() {
     return getDayOfWeekStats(filteredDeliveries);
   }, [filteredDeliveries, getDayOfWeekStats]);
 
-  const handleExport = useCallback(() => {
-    if (filteredDeliveries.length === 0) {
-      toast.error('Nenhum dado para exportar', {
-        description: 'Não há entregas registradas neste período.',
-      });
-      return;
-    }
-
-    try {
-      const headers = ['ID', 'Data', 'Motoboy', 'Pagamento', 'Valor', 'Bairro', 'Endereço'];
-
-      const csvRows = filteredDeliveries.map(d => {
-        let dateStr = 'Data inválida';
-        if (d.createdAt) {
-          const dateObj = d.createdAt.seconds 
-            ? new Date(d.createdAt.seconds * 1000) 
-            : new Date(d.createdAt);
-          dateStr = dateObj.toLocaleDateString('pt-BR');
-        }
-
-        const neighborhood = extractNeighborhood(d.address);
-        
-        return [
-          d.id,
-          dateStr,
-          d.motoboyName || 'Geral',
-          d.paymentMethod || 'N/A',
-          d.totalPrice.toFixed(2).replace('.', ','), 
-          `"${neighborhood}"`, 
-          `"${d.address.replace(/"/g, '""')}"` 
-        ].join(';'); 
-      });
-
-      const csvContent = [headers.join(';'), ...csvRows].join('\n');
-      
-      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `dfl-relatorio-${selectedMonth}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url); 
-
-      toast.success('Relatório exportado!', {
-        description: 'A planilha foi baixada no seu dispositivo.',
-      });
-    } catch (error) {
-      console.error('Erro ao exportar:', error);
-      toast.error('Erro ao exportar', {
-        description: 'Não foi possível gerar a planilha.',
-      });
-    }
-  }, [filteredDeliveries, selectedMonth, extractNeighborhood]);
+  const handleExport = () => {
+    console.log('Exportando relatório...');
+  };
 
   return (
     <>
       <style>{fadeInUpAnimation}</style>
       
-      <div className="min-h-screen bg-zinc-950 pb-20">
+      <div className="min-h-screen bg-zinc-950 p-4 pb-20">
         <div className="max-w-7xl mx-auto">
           {/* Cabeçalho */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -164,7 +114,7 @@ export default function ReportsPage() {
               
               <button
                 onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/20 transition-all duration-200 text-sm font-medium active:scale-95"
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/20 transition-all duration-200 text-sm font-medium"
               >
                 <Download className="w-4 h-4" />
                 Exportar
@@ -186,8 +136,8 @@ export default function ReportsPage() {
             
             <SummaryCard
               title="Ticket Médio"
-              value={`R$ ${metrics.averageTicket.toFixed(2).replace('.', ',')}`}
-              subtitle={`Total: R$ ${metrics.totalRevenue.toFixed(2).replace('.', ',')}`}
+              value={`R$ ${metrics.averageTicket.toFixed(2)}`}
+              subtitle={`Total: R$ ${metrics.totalRevenue.toFixed(2)}`}
               icon={<DollarSign className="w-5 h-5" />}
               accentColor="amber"
               delay={100}
