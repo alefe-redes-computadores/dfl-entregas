@@ -50,6 +50,10 @@ jobs:
           # Gera os ícones e telas de carregamento nativas sem falhas
           npx @capacitor/assets generate --android
 
+          # Extrai a chave fixa do GitHub Secrets e salva no local padrão do Android
+          mkdir -p ~/.android
+          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > ~/.android/debug.keystore
+
       - name: Compilar APK (Gradle)
         run: |
           cd android
