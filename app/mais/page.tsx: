@@ -3,9 +3,18 @@
 import { useRouter } from 'next/navigation';
 import { RefreshCw, Trash2, CheckSquare, Moon, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAppStore } from '@/store/useAppStore';
 
 export default function MaisPage() {
   const router = useRouter();
+  
+  // Puxando os dados reais do usuário logado via Zustand
+  const user = useAppStore((state) => state.user);
+  const logout = useAppStore((state) => state.logout);
+
+  // Tratamento para o nome e inicial
+  const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Álefe';
+  const fullName = user?.displayName || 'Álefe Jôhsefe';
 
   const handleSync = () => {
     toast.success('Sincronizado com sucesso!', {
@@ -19,20 +28,35 @@ export default function MaisPage() {
     });
   };
 
+  // Função real de deslogar
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success('Desconectado com sucesso!');
+      // O AuthGuard automaticamente vai jogar para a tela de login assim que o usuário sumir
+    } catch (error) {
+      toast.error('Erro ao sair da conta');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 pb-6">
       <h1 className="font-heading text-2xl font-bold text-zinc-50">Mais</h1>
 
-      {/* Perfil (Mockado) */}
+      {/* Perfil Real do Google */}
       <div className="flex flex-col items-center justify-center gap-3 rounded-[28px] border border-zinc-800 bg-zinc-900/40 p-6">
         <div className="relative h-20 w-20 overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 ring-4 ring-zinc-800">
-          <div className="flex h-full w-full items-center justify-center font-heading text-2xl font-bold text-white">
-            A
-          </div>
+          {user?.photoURL ? (
+            <img src={user.photoURL} alt="Perfil" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center font-heading text-2xl font-bold text-white">
+              {firstName.charAt(0)}
+            </div>
+          )}
         </div>
         <div className="text-center">
-          <h2 className="font-heading text-lg font-bold text-zinc-50">Álefe Jôhsefe</h2>
-          <p className="text-sm text-zinc-500">Administrador</p>
+          <h2 className="font-heading text-lg font-bold text-zinc-50">{fullName}</h2>
+          <p className="text-sm text-zinc-500">{user?.email || 'Administrador'}</p>
         </div>
       </div>
 
@@ -103,7 +127,10 @@ export default function MaisPage() {
         </div>
       </div>
 
-      <button className="mx-auto mt-4 flex items-center gap-2 text-sm font-semibold text-zinc-600">
+      <button 
+        onClick={handleLogout}
+        className="mx-auto mt-4 flex items-center gap-2 text-sm font-semibold text-red-500 hover:text-red-400 active:scale-95 transition-all"
+      >
         <LogOut size={16} />
         Sair da conta
       </button>
