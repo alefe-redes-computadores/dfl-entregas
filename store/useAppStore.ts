@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { collection, doc, setDoc, getDocs, updateDoc } from 'firebase/firestore';
-import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, User as FirebaseUser } from 'firebase/auth';
+import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from '@/lib/firebase';
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import type { Route, Delivery, Customer } from '@/types';
 
 interface AppState {
@@ -35,11 +37,23 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   loginWithGoogle: async () => {
     try {
-      // Se estiver em ambiente mobile nativo (Capacitor), o redirect evita travamentos de popup
-      const isMobileApp = typeof window !== 'undefined' && (window as any).Capacitor;
-      if (isMobileApp) {
-        await signInWithRedirect(auth, googleProvider);
+      if (Capacitor.isNativePlatform()) {
+        // 1. Inicializa o plugin do Capacitor com a sua chave Web
+        // IMPORTANTE: Substitua o ID abaixo pelo Client ID da Web lá do painel do Firebase
+        GoogleAuth.initialize({
+          clientId: 'COLOQUE_SEU_CLIENT_ID_WEB_AQUI.apps.googleusercontent.com',
+          scopes: ['profile', 'email'],
+          grantOfflineAccess: true,
+        });
+
+        // 2. Abre a interface nativa do Android para o usuário escolher a conta
+        const googleUser = await GoogleAuth.signIn();
+
+        // 3. Pega o token seguro e loga no Firebase silenciosamente
+        const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+        await signInWithCredential(auth, credential);
       } else {
+        // Mantém funcionando normalmente quando testar pelo navegador na Vercel
         await signInWithPopup(auth, googleProvider);
       }
     } catch (error) {
