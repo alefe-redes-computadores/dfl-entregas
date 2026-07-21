@@ -50,17 +50,17 @@ jobs:
           # Gera os ícones e telas de carregamento nativas sem falhas
           npx @capacitor/assets generate --android
 
-      - name: Descobrir SHA-1 (Assinatura do App)
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew signingReport
-
       - name: Compilar APK (Gradle)
         run: |
           cd android
           chmod +x gradlew
           ./gradlew clean assembleDebug
+
+      - name: Descobrir SHA-1 (Assinatura do App)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew signingReport
 
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
