@@ -41,7 +41,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         // 1. Inicializa o plugin do Capacitor com a sua chave Web
         // IMPORTANTE: Substitua o ID abaixo pelo Client ID da Web lá do painel do Firebase
         GoogleAuth.initialize({
-          clientId: 'COLOQUE_SEU_CLIENT_ID_WEB_AQUI.apps.googleusercontent.com',
+          clientId: '773967662232-pjodqa7f4c4drrhl80439amdp27u31ha.apps.googleusercontent.com',
           scopes: ['profile', 'email'],
           grantOfflineAccess: true,
         });
