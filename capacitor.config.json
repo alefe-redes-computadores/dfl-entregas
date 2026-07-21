@@ -1,6 +1,17 @@
-{
-  "appId": "com.dfllanches.entregas",
-  "appName": "DFL Entregas",
-  "webDir": "out",
-  "bundledWebRuntime": false
-}
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.dfl.entregas', // Mantenha o ID e o Nome que você já configurou
+  appName: 'DFL Entregas',
+  webDir: 'out',
+  bundledWebRuntime: false,
+  plugins: {
+    GoogleAuth: {
+      scopes: ["profile", "email"],
+      serverClientId: "773967662232-pjodqa7f4c4drrhl80439amdp27u31ha.apps.googleusercontent.com",
+      forceCodeForRefreshToken: true
+    }
+  }
+};
+
+export default config;
