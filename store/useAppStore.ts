@@ -56,8 +56,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         // Mantém funcionando normalmente quando testar pelo navegador na Vercel
         await signInWithPopup(auth, googleProvider);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro no login com Google:', error);
+      alert(`Erro no login: ${error?.message || 'Erro desconhecido'}`);
     }
   },
 
