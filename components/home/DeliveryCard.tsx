@@ -41,7 +41,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
       <div className="flex flex-col p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col">
-            
+
             {/* Número do Pedido */}
             <div className="flex items-baseline gap-2">
               <p className="font-heading text-3xl font-bold tracking-tight text-zinc-50">
@@ -58,7 +58,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
             <p className="mt-1 text-sm font-bold text-emerald-400">
               R$ {delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}
             </p>
-            
+
           </div>
           {delivery.is_paid && (
             <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-500">
@@ -69,7 +69,14 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
         </div>
 
         {customer && (
-          <p className="mt-2 truncate text-sm font-medium text-zinc-300">{customer.name}</p>
+          <div className="mt-2 flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-zinc-300">{customer.name}</p>
+            {customer.neighborhood && (
+              <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                {customer.neighborhood}
+              </span>
+            )}
+          </div>
         )}
         <p className="mt-1 truncate text-xs text-zinc-500">{delivery.address_string}</p>
 
@@ -107,6 +114,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
 
         {/* Botões de Ação */}
         <div className="flex items-center gap-2">
+          {/* Navegação por query param (?id=), sem rota dinâmica [id] — compatível com build estático do Capacitor */}
           <Link
             href={`/entregas/details?id=${delivery.id}`}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 transition-transform hover:bg-zinc-700 active:scale-90"
