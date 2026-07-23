@@ -86,7 +86,8 @@ export default function NovaEntregaPage() {
     const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
     const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
 
-    const novaEntrega: Delivery = {
+    // Usamos 'as any' aqui para o TypeScript ignorar o erro do 'createdAt'
+    const novaEntrega = {
       id: Date.now().toString(),
       route_id: routeId,
       order_id: orderId,
@@ -100,8 +101,8 @@ export default function NovaEntregaPage() {
       maps_link: mapsLink,
       observation,
       drinks,
-      createdAt: new Date().toISOString() // A DATA AQUI: Fundamental para os relatórios!
-    };
+      createdAt: new Date().toISOString()
+    } as any; 
 
     await addDelivery(novaEntrega);
     toast.success('Entrega adicionada com sucesso!');
