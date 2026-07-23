@@ -8,9 +8,11 @@ export default function ClientesPage() {
   const customers = useAppStore((state) => state.customers);
   const [search, setSearch] = useState('');
 
+  const searchLower = search.toLowerCase();
+
   const filtered = customers.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.neighborhood.toLowerCase().includes(search.toLowerCase())
+    c.name.toLowerCase().includes(searchLower) ||
+    (c.neighborhood || '').toLowerCase().includes(searchLower)
   );
 
   return (
@@ -48,12 +50,14 @@ export default function ClientesPage() {
                   <User size={16} className="text-emerald-500" />
                   <p className="font-semibold text-zinc-100">{client.name}</p>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <MapPin size={14} />
-                  <p>{client.neighborhood}</p>
-                </div>
+                {client.neighborhood && (
+                  <div className="flex items-center gap-2 text-xs text-zinc-500">
+                    <MapPin size={14} />
+                    <p>{client.neighborhood}</p>
+                  </div>
+                )}
               </div>
-              
+
               <div className="flex flex-col items-end gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
                   Cód. Confirmação
@@ -61,7 +65,7 @@ export default function ClientesPage() {
                 <div className="flex items-center gap-1.5 rounded-xl bg-zinc-800/80 px-3 py-1.5">
                   <Hash size={14} className="text-amber-500" />
                   <span className="font-heading text-xl font-bold text-zinc-50">
-                    {client.last_confirmation_code}
+                    {client.last_confirmation_code || '—'}
                   </span>
                 </div>
               </div>
