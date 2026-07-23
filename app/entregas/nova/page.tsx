@@ -99,7 +99,8 @@ export default function NovaEntregaPage() {
       address_string: address,
       maps_link: mapsLink,
       observation,
-      drinks
+      drinks,
+      createdAt: new Date().toISOString() // A DATA AQUI: Fundamental para os relatórios!
     };
 
     await addDelivery(novaEntrega);
