@@ -26,7 +26,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
     const success = await copyDeliveryToClipboard(delivery);
     if (success) {
       toast.success('Entrega copiada!', {
-        description: `Pedido ${delivery.confirmation_code} pronto pra colar no WhatsApp.`,
+        description: `Pedido ${delivery.order_id} pronto pra colar no WhatsApp.`,
       });
     } else {
       toast.error('Não foi possível copiar', {
@@ -40,11 +40,20 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
       <div className="flex flex-col p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col">
-            <p className="font-heading text-3xl font-bold tracking-tight text-zinc-50">
-              #{delivery.confirmation_code}
-            </p>
-            <p className="mt-0.5 text-[11px] font-mono tracking-wider text-zinc-500">
-              ID: {delivery.order_id}
+            {/* AGORA O NÚMERO DO PEDIDO É O DESTAQUE PRINCIPAL */}
+            <div className="flex items-baseline gap-2">
+              <p className="font-heading text-3xl font-bold tracking-tight text-zinc-50">
+                #{delivery.order_id}
+              </p>
+              {delivery.confirmation_code && (
+                <p className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-mono tracking-wider text-zinc-400">
+                  Conf: {delivery.confirmation_code}
+                </p>
+              )}
+            </div>
+            {/* MOSTRANDO O VALOR DO PEDIDO */}
+            <p className="mt-1 text-sm font-bold text-emerald-400">
+              R$ {delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}
             </p>
           </div>
           {delivery.is_paid && (
