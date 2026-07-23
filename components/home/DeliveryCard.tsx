@@ -1,10 +1,11 @@
 'use client';
 
-import { Copy, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2 } from 'lucide-react';
+import Link from 'next/link';
+import { Copy, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Delivery, Customer } from '@/types';
 import { copyDeliveryToClipboard } from '@/lib/whatsapp';
-import { MiniMap } from '@/components/deliveries/MiniMap'; // Se o caminho do MiniMap der erro, ajuste para o seu caminho real
+import { MiniMap } from '@/components/deliveries/MiniMap'; // Ajuste o caminho se necessário
 
 interface DeliveryCardProps {
   delivery: Delivery;
@@ -19,7 +20,7 @@ const PAYMENT_CONFIG = {
 } as const;
 
 export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
-  const payment = PAYMENT_CONFIG[delivery.payment_method];
+  const payment = PAYMENT_CONFIG[delivery.payment_method] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
 
   async function handleCopy() {
@@ -41,7 +42,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col">
             
-            {/* DESTAQUE: Número do Pedido grandão */}
+            {/* Número do Pedido */}
             <div className="flex items-baseline gap-2">
               <p className="font-heading text-3xl font-bold tracking-tight text-zinc-50">
                 #{delivery.order_id}
@@ -53,7 +54,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
               )}
             </div>
 
-            {/* MOSTRANDO O VALOR DO PEDIDO (Em verde pra dar destaque) */}
+            {/* Valor do Pedido */}
             <p className="mt-1 text-sm font-bold text-emerald-400">
               R$ {delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}
             </p>
@@ -104,13 +105,23 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
           )}
         </div>
 
-        <button
-          onClick={handleCopy}
-          aria-label="Copiar dados da entrega"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-zinc-950 transition-transform active:scale-90"
-        >
-          <Copy size={16} strokeWidth={2.5} />
-        </button>
+        {/* Botões de Ação */}
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/entregas/details?id=${delivery.id}`}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 transition-transform hover:bg-zinc-700 active:scale-90"
+          >
+            <Pencil size={15} />
+          </Link>
+
+          <button
+            onClick={handleCopy}
+            aria-label="Copiar dados da entrega"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-zinc-950 transition-transform active:scale-90"
+          >
+            <Copy size={16} strokeWidth={2.5} />
+          </button>
+        </div>
       </div>
     </div>
   );
