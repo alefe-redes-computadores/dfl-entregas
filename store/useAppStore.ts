@@ -85,15 +85,11 @@ export const useAppStore = create<AppState>()(
 
           set((state) => {
             // 2. A MÁGICA DA SINCRONIZAÇÃO: Mescla os dados da Nuvem com os dados Físicos do Celular
-            // Se o Firebase apagou ou rejeitou, o celular restaura as entregas pendentes
-            
             const mergedDeliveries = [...fbDeliveries];
             state.deliveries.forEach(localDelivery => {
-              // Se a entrega local não existir no Firebase, adiciona ela de volta e tenta reenviar silenciosamente
               if (!mergedDeliveries.find(fbD => fbD.id === localDelivery.id)) {
                 mergedDeliveries.push(localDelivery);
                 
-                // Tenta reenviar pra nuvem para reparar o erro anterior
                 const safeDelivery = Object.fromEntries(
                   Object.entries(localDelivery).filter(([_, v]) => v !== undefined)
                 ) as Delivery;
@@ -144,7 +140,6 @@ export const useAppStore = create<AppState>()(
         get().customers.find((c) => c.id === customerId),
 
       addRoute: async (route) => {
-        // Salva fisicamente no celular na mesma hora
         set((state) => ({ routes: [route, ...state.routes] }));
         try {
           await setDoc(doc(db, 'routes', route.id), route);
@@ -154,15 +149,11 @@ export const useAppStore = create<AppState>()(
       },
 
       addDelivery: async (delivery) => {
-        // Salva fisicamente no celular ANTES de falar com a nuvem
         set((state) => ({ deliveries: [delivery, ...state.deliveries] }));
-        
         try {
-          // Filtro que impede o Firebase de recusar o envio
           const safeDelivery = Object.fromEntries(
             Object.entries(delivery).filter(([_, v]) => v !== undefined)
           ) as Delivery;
-
           await setDoc(doc(db, 'deliveries', delivery.id), safeDelivery);
         } catch (error) {
           console.error('Falha no Firebase, mas a entrega está segura offline:', error);
@@ -204,12 +195,12 @@ export const useAppStore = create<AppState>()(
       }
     }),
     {
-      name: 'dfl-entregas-cofre-offline', // Nome do banco de dados no celular
+      name: 'dfl-entregas-cofre-offline',
       partialize: (state) => ({ 
         routes: state.routes, 
         deliveries: state.deliveries, 
         customers: state.customers 
-      }), // Garante que as entregas fiquem grudadas na memória
+      }),
     }
   )
 );
