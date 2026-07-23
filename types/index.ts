@@ -15,6 +15,7 @@ export interface Route {
   end_time?: string; // ISO datetime, preenchido ao fechar a rota
   change_money: number; // troco inicial que o motoboy saiu com
   drinks_summary?: string; // ex: "3 coca lata, 1 guaraná 2L"
+  updated_at?: string; // ISO datetime — usado para decidir quem vence no merge local x nuvem
 }
 
 export interface Delivery {
@@ -31,6 +32,7 @@ export interface Delivery {
   maps_link: string;
   observation?: string;
   drinks?: string; // ex: "2 coca lata"
+  updated_at?: string; // ISO datetime — usado para decidir quem vence no merge local x nuvem
 }
 
 export interface Customer {
@@ -42,5 +44,5 @@ export interface Customer {
   observation?: string; // última observação registrada
   last_confirmation_code?: string;
   createdAt?: string;
-  updatedAt?: string;
+  updated_at?: string; // ISO datetime — usado para decidir quem vence no merge local x nuvem
 }
