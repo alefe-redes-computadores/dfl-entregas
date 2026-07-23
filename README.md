@@ -10,7 +10,6 @@ Fundação do app: tipagens, store Zustand (mock), layout (Header + BottomNav) e
 npm install
 npm run dev
 ```
-
 Abre em `http://localhost:3000`.
 
 ## O que já funciona nesta fase
