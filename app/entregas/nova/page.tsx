@@ -15,33 +15,87 @@ export default function NovaEntregaPage() {
   const openRoutes = routes.filter(r => r.status === 'aberta');
 
   const [routeId, setRouteId] = useState('');
-  const [confirmationCode, setConfirmationCode] = useState('');
   const [orderId, setOrderId] = useState('');
+  const [value, setValue] = useState(''); // Usa string para manter a máscara "0,00"
   const [address, setAddress] = useState('');
   const [mapsLink, setMapsLink] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<Delivery['payment_method']>('dinheiro');
   const [isPaid, setIsPaid] = useState(false);
   const [changeFor, setChangeFor] = useState('');
-  const [observation, setObservation] = useState('');
   const [drinks, setDrinks] = useState('');
+  const [observation, setObservation] = useState('');
+  const [confirmationCode, setConfirmationCode] = useState('');
+
+  // Função que cria a máscara de dinheiro (começa dos centavos)
+  const formatCurrencyInput = (inputValue: string) => {
+    // Remove tudo que não for número
+    const onlyDigits = inputValue.replace(/\D/g, '');
+    if (!onlyDigits) return '';
+    
+    // Transforma em número decimal (divide por 100)
+    const numberValue = parseInt(onlyDigits, 10) / 100;
+    
+    // Formata para o padrão brasileiro: "63,25" ou "1.234,56"
+    return numberValue.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  // Função inteligente que limpa o texto do iFood na hora que você cola
+  const handleAddressPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text');
+    
+    if (!text) return;
+
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    const addressParts = [];
+    
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      // Ignora cabeçalhos do iFood
+      if (lower.includes('endereço de entrega')) continue;
+      // Ignora linhas com CEP
+      if (line.match(/\d{5}-\d{3}/) || lower.includes('cep')) continue;
+      // Ignora a cidade/estado para encurtar
+      if (lower.includes('patos de minas') || lower.includes('- mg')) continue;
+      // Para de ler assim que chegar na observação
+      if (lower.startsWith('obs') || lower.includes('observação')) break;
+      
+      addressParts.push(line);
+    }
+    
+    // Junta as partes válidas com vírgula e preenche o campo
+    const cleanAddress = addressParts.join(', ');
+    setAddress(cleanAddress);
+    
+    if (lines.length > 1) {
+      toast.success('Endereço do iFood limpo e formatado!');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!routeId || !confirmationCode || !orderId || !address) {
-      toast.error('Preencha os campos obrigatórios');
+    if (!routeId || !orderId || !value || !address) {
+      toast.error('Preencha os campos obrigatórios (Rota, Pedido, Valor e Endereço)');
       return;
     }
+
+    // Limpa a máscara de R$ para converter em número para o banco de dados
+    const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
+    const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
 
     const novaEntrega: Delivery = {
       id: Date.now().toString(),
       route_id: routeId,
       order_id: orderId,
-      confirmation_code: confirmationCode,
+      confirmation_code: confirmationCode || undefined,
       customer_id: 'temp-id',
-      value: 0, 
+      value: cleanValue,
       is_paid: isPaid,
       payment_method: paymentMethod,
-      change_for: changeFor ? parseFloat(changeFor) : undefined,
+      change_for: cleanChangeFor,
       address_string: address,
       maps_link: mapsLink,
       observation,
@@ -49,7 +103,7 @@ export default function NovaEntregaPage() {
     };
 
     await addDelivery(novaEntrega);
-    toast.success('Entrega adicionada e salva na nuvem!');
+    toast.success('Entrega adicionada com sucesso!');
     router.push('/');
   };
 
@@ -96,40 +150,47 @@ export default function NovaEntregaPage() {
           </select>
         </div>
 
+        {/* DESTAQUE: Número do Pedido e Valor (AGORA COM MÁSCARA) */}
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-zinc-400">Cód. Confirmação</label>
+            <label className="text-sm font-bold text-emerald-400">Número do Pedido</label>
             <input
               type="text"
+              inputMode="numeric"
               placeholder="Ex: 4821"
               maxLength={4}
-              value={confirmationCode}
-              onChange={(e) => setConfirmationCode(e.target.value)}
-              className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+              value={orderId}
+              onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ''))} // Só aceita números
+              className="h-16 rounded-2xl border-2 border-emerald-500/50 bg-zinc-900/80 px-4 text-xl font-bold text-zinc-50 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
               required
             />
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-zinc-400">ID Pedido</label>
+            <label className="text-sm font-bold text-zinc-300">Valor (R$)</label>
             <input
               type="text"
-              placeholder="8 dígitos"
-              maxLength={8}
-              value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
-              className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+              inputMode="numeric"
+              placeholder="0,00"
+              value={value}
+              onChange={(e) => setValue(formatCurrencyInput(e.target.value))}
+              className="h-16 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-xl font-bold text-zinc-50 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
               required
             />
           </div>
         </div>
 
+        {/* ENDEREÇO COM FILTRO DO IFOOD */}
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-zinc-400">Endereço de Entrega</label>
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-semibold text-zinc-400">Endereço de Entrega</label>
+            <span className="text-[10px] text-zinc-500">Cole o texto do iFood aqui</span>
+          </div>
           <input
             type="text"
             placeholder="Rua, Número, Bairro"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
+            onPaste={handleAddressPaste}
             className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
             required
           />
@@ -175,10 +236,11 @@ export default function NovaEntregaPage() {
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-zinc-400">Troco para (R$)</label>
             <input
-              type="number"
-              placeholder="Ex: 50"
+              type="text"
+              inputMode="numeric"
+              placeholder="0,00"
               value={changeFor}
-              onChange={(e) => setChangeFor(e.target.value)}
+              onChange={(e) => setChangeFor(formatCurrencyInput(e.target.value))}
               className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
             />
           </div>
@@ -195,15 +257,30 @@ export default function NovaEntregaPage() {
           />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-zinc-400">Observação (Opcional)</label>
-          <input
-            type="text"
-            placeholder="Ex: Portão azul"
-            value={observation}
-            onChange={(e) => setObservation(e.target.value)}
-            className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
-          />
+        {/* CAMPOS OPCIONAIS E SECUNDÁRIOS */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-semibold text-zinc-400">Cód. Confirmação</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="Ex: 1234"
+              maxLength={4}
+              value={confirmationCode}
+              onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, ''))} // Só aceita números
+              className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-semibold text-zinc-400">Observação</label>
+            <input
+              type="text"
+              placeholder="Ex: Portão azul"
+              value={observation}
+              onChange={(e) => setObservation(e.target.value)}
+              className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
         </div>
 
         <button
