@@ -20,10 +20,10 @@ export interface Route {
 export interface Delivery {
   id: string;
   route_id: string;
-  order_id: string; // código de 8 dígitos (pedido)
-  confirmation_code: string; // código de 4 dígitos (confirmação na entrega)
+  order_id: string; // AGORA EM DESTAQUE: número do pedido (ex: 4 dígitos)
+  confirmation_code?: string; // OPCIONAL: código de confirmação na entrega
   customer_id: string;
-  value: number;
+  value: number; // Valor do pedido
   is_paid: boolean; // já pago (ex: pix antecipado / cartão online)
   payment_method: PaymentMethod;
   change_for?: number; // troco para quanto, se payment_method === 'dinheiro'
@@ -37,5 +37,5 @@ export interface Customer {
   id: string;
   name: string;
   neighborhood: string;
-  last_confirmation_code: string;
+  last_confirmation_code?: string;
 }
