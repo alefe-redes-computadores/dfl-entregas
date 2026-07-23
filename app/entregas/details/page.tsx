@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
+import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import type { Delivery } from '@/types';
 
 function DeliveryDetailsForm() {
@@ -14,11 +15,15 @@ function DeliveryDetailsForm() {
 
   const routes = useAppStore((state) => state.routes);
   const deliveries = useAppStore((state) => state.deliveries);
+  const customers = useAppStore((state) => state.customers);
   const updateDelivery = useAppStore((state) => state.updateDelivery);
-  
+  const getCustomerById = useAppStore((state) => state.getCustomerById);
+  const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
+
   const openRoutes = routes.filter(r => r.status === 'aberta');
 
   const [routeId, setRouteId] = useState('');
+  const [customerName, setCustomerName] = useState('');
   const [orderId, setOrderId] = useState('');
   const [value, setValue] = useState('');
   const [address, setAddress] = useState('');
@@ -29,6 +34,7 @@ function DeliveryDetailsForm() {
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
   const [confirmationCode, setConfirmationCode] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Máscara de moeda
   const formatCurrencyInput = (inputValue: string) => {
@@ -41,7 +47,7 @@ function DeliveryDetailsForm() {
   // Carrega os dados da entrega ao abrir a página
   useEffect(() => {
     if (!deliveryId) return;
-    
+
     const delivery = deliveries.find(d => d.id === deliveryId);
     if (delivery) {
       setRouteId(delivery.route_id);
@@ -55,10 +61,14 @@ function DeliveryDetailsForm() {
       setDrinks(delivery.drinks || '');
       setObservation(delivery.observation || '');
       setConfirmationCode(delivery.confirmation_code || '');
+
+      const existingCustomer = getCustomerById(delivery.customer_id);
+      setCustomerName(existingCustomer?.name || '');
     } else {
       toast.error('Entrega não encontrada');
       router.push('/');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deliveryId, deliveries, router]);
 
   // Função inteligente que limpa o texto do iFood na hora que cola
@@ -86,25 +96,42 @@ function DeliveryDetailsForm() {
       return;
     }
 
-    const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
-    const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
+    setIsSaving(true);
+    try {
+      const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
+      const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
 
-    await updateDelivery(deliveryId, {
-      route_id: routeId,
-      order_id: orderId,
-      confirmation_code: confirmationCode || undefined,
-      value: cleanValue,
-      is_paid: isPaid,
-      payment_method: paymentMethod,
-      change_for: cleanChangeFor,
-      address_string: address,
-      maps_link: mapsLink,
-      observation,
-      drinks,
-    });
+      // Resolve o cliente: acha o existente (e atualiza os dados) ou cria automaticamente
+      // já com endereço, maps link, obs e código de confirmação preenchidos. Campo opcional.
+      const customerId = customerName.trim()
+        ? await findOrCreateCustomer(customerName, {
+            address,
+            mapsLink,
+            confirmationCode,
+            observation,
+          })
+        : undefined;
 
-    toast.success('Entrega atualizada com sucesso!');
-    router.push('/');
+      await updateDelivery(deliveryId, {
+        route_id: routeId,
+        order_id: orderId,
+        confirmation_code: confirmationCode || undefined,
+        customer_id: customerId || '',
+        value: cleanValue,
+        is_paid: isPaid,
+        payment_method: paymentMethod,
+        change_for: cleanChangeFor,
+        address_string: address,
+        maps_link: mapsLink,
+        observation,
+        drinks,
+      } as Partial<Delivery>);
+
+      toast.success('Entrega atualizada com sucesso!');
+      router.push('/');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -134,6 +161,13 @@ function DeliveryDetailsForm() {
             ))}
           </select>
         </div>
+
+        {/* CLIENTE COM AUTOCOMPLETE */}
+        <CustomerAutocomplete
+          value={customerName}
+          onChange={setCustomerName}
+          customers={customers}
+        />
 
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
@@ -212,8 +246,12 @@ function DeliveryDetailsForm() {
           </div>
         </div>
 
-        <button type="submit" className="mt-6 h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98]">
-          Atualizar Entrega
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="mt-6 h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60"
+        >
+          {isSaving ? 'Salvando...' : 'Atualizar Entrega'}
         </button>
       </form>
     </div>
