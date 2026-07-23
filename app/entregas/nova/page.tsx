@@ -5,16 +5,20 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
+import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import type { Delivery } from '@/types';
 
 export default function NovaEntregaPage() {
   const router = useRouter();
   const routes = useAppStore((state) => state.routes);
+  const customers = useAppStore((state) => state.customers);
   const addDelivery = useAppStore((state) => state.addDelivery);
-  
+  const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
+
   const openRoutes = routes.filter(r => r.status === 'aberta');
 
   const [routeId, setRouteId] = useState('');
+  const [customerName, setCustomerName] = useState('');
   const [orderId, setOrderId] = useState('');
   const [value, setValue] = useState(''); // Usa string para manter a máscara "0,00"
   const [address, setAddress] = useState('');
@@ -25,16 +29,17 @@ export default function NovaEntregaPage() {
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
   const [confirmationCode, setConfirmationCode] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Função que cria a máscara de dinheiro (começa dos centavos)
   const formatCurrencyInput = (inputValue: string) => {
     // Remove tudo que não for número
     const onlyDigits = inputValue.replace(/\D/g, '');
     if (!onlyDigits) return '';
-    
+
     // Transforma em número decimal (divide por 100)
     const numberValue = parseInt(onlyDigits, 10) / 100;
-    
+
     // Formata para o padrão brasileiro: "63,25" ou "1.234,56"
     return numberValue.toLocaleString('pt-BR', {
       minimumFractionDigits: 2,
@@ -46,12 +51,12 @@ export default function NovaEntregaPage() {
   const handleAddressPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const text = e.clipboardData.getData('text');
-    
+
     if (!text) return;
 
     const lines = text.split('\n').map(l => l.trim()).filter(l => l);
     const addressParts = [];
-    
+
     for (const line of lines) {
       const lower = line.toLowerCase();
       // Ignora cabeçalhos do iFood
@@ -62,14 +67,14 @@ export default function NovaEntregaPage() {
       if (lower.includes('patos de minas') || lower.includes('- mg')) continue;
       // Para de ler assim que chegar na observação
       if (lower.startsWith('obs') || lower.includes('observação')) break;
-      
+
       addressParts.push(line);
     }
-    
+
     // Junta as partes válidas com vírgula e preenche o campo
     const cleanAddress = addressParts.join(', ');
     setAddress(cleanAddress);
-    
+
     if (lines.length > 1) {
       toast.success('Endereço do iFood limpo e formatado!');
     }
@@ -82,38 +87,53 @@ export default function NovaEntregaPage() {
       return;
     }
 
-    // Limpa a máscara de R$ para converter em número para o banco de dados
-    const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
-    const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
+    setIsSaving(true);
+    try {
+      // Limpa a máscara de R$ para converter em número para o banco de dados
+      const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
+      const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
 
-    // Usamos 'as any' aqui para o TypeScript ignorar o erro do 'createdAt'
-    const novaEntrega = {
-      id: Date.now().toString(),
-      route_id: routeId,
-      order_id: orderId,
-      confirmation_code: confirmationCode || undefined,
-      customer_id: 'temp-id',
-      value: cleanValue,
-      is_paid: isPaid,
-      payment_method: paymentMethod,
-      change_for: cleanChangeFor,
-      address_string: address,
-      maps_link: mapsLink,
-      observation,
-      drinks,
-      createdAt: new Date().toISOString()
-    } as any; 
+      // Resolve o cliente: acha o existente ou cria automaticamente já com
+      // endereço, maps link, obs e código de confirmação preenchidos. Campo opcional.
+      const customerId = customerName.trim()
+        ? await findOrCreateCustomer(customerName, {
+            address,
+            mapsLink,
+            confirmationCode,
+            observation,
+          })
+        : undefined;
 
-    await addDelivery(novaEntrega);
-    toast.success('Entrega adicionada com sucesso!');
-    router.push('/');
+      const novaEntrega = {
+        id: Date.now().toString(),
+        route_id: routeId,
+        order_id: orderId,
+        confirmation_code: confirmationCode || undefined,
+        customer_id: customerId || '',
+        value: cleanValue,
+        is_paid: isPaid,
+        payment_method: paymentMethod,
+        change_for: cleanChangeFor,
+        address_string: address,
+        maps_link: mapsLink,
+        observation,
+        drinks,
+        createdAt: new Date().toISOString()
+      } as any;
+
+      await addDelivery(novaEntrega);
+      toast.success('Entrega adicionada com sucesso!');
+      router.push('/');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (openRoutes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20 text-center px-4">
         <p className="text-zinc-400">Você precisa abrir uma rota primeiro para lançar entregas.</p>
-        <button 
+        <button
           onClick={() => router.push('/rotas/nova')}
           className="rounded-xl bg-emerald-500 px-6 py-3 font-bold text-zinc-950"
         >
@@ -126,7 +146,7 @@ export default function NovaEntregaPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <button 
+        <button
           onClick={() => router.push('/')}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95"
         >
@@ -136,10 +156,10 @@ export default function NovaEntregaPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5 pb-10">
-        
+
         <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold text-zinc-400">Selecionar Rota</label>
-          <select 
+          <select
             value={routeId}
             onChange={(e) => setRouteId(e.target.value)}
             className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none"
@@ -151,6 +171,13 @@ export default function NovaEntregaPage() {
             ))}
           </select>
         </div>
+
+        {/* CLIENTE COM AUTOCOMPLETE */}
+        <CustomerAutocomplete
+          value={customerName}
+          onChange={setCustomerName}
+          customers={customers}
+        />
 
         {/* DESTAQUE: Número do Pedido e Valor (AGORA COM MÁSCARA) */}
         <div className="grid grid-cols-2 gap-4">
@@ -211,7 +238,7 @@ export default function NovaEntregaPage() {
 
         <div className="flex flex-col gap-2 border-t border-zinc-800 pt-4">
           <label className="text-sm font-semibold text-zinc-400">Forma de Pagamento</label>
-          <select 
+          <select
             value={paymentMethod}
             onChange={(e) => setPaymentMethod(e.target.value as any)}
             className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none"
@@ -224,8 +251,8 @@ export default function NovaEntregaPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <input 
-            type="checkbox" 
+          <input
+            type="checkbox"
             id="isPaid"
             checked={isPaid}
             onChange={(e) => setIsPaid(e.target.checked)}
@@ -287,9 +314,10 @@ export default function NovaEntregaPage() {
 
         <button
           type="submit"
-          className="mt-6 h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98]"
+          disabled={isSaving}
+          className="mt-6 h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60"
         >
-          Salvar Entrega
+          {isSaving ? 'Salvando...' : 'Salvar Entrega'}
         </button>
       </form>
     </div>
