@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -9,19 +9,35 @@ import { LogIn, Bike } from 'lucide-react';
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const user = useAppStore((state) => state.user);
   const authLoaded = useAppStore((state) => state.authLoaded);
+  const hasHydrated = useAppStore((state) => state.hasHydrated);
   const login = useAppStore((state) => state.loginWithGoogle);
 
+  const hasInitializedRef = useRef(false);
+
+  // Só cuida do login/logout do Firebase. NÃO dispara initData aqui —
+  // isso fica por conta do efeito abaixo, que espera a hidratação local terminar.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       useAppStore.setState({ user: currentUser, authLoaded: true });
-      if (currentUser) {
-        useAppStore.getState().initData(); // Só puxa os dados se estiver logado
+      if (!currentUser) {
+        hasInitializedRef.current = false; // permite reinicializar num próximo login
       }
     });
     return () => unsubscribe();
   }, []);
 
-  if (!authLoaded) {
+  // Só sincroniza com a nuvem quando: usuário logado + storage local já hidratado.
+  // Isso evita o initData rodar em cima de um estado local ainda vazio (rehidratação
+  // do zustand-persist ainda não terminou) e sobrescrever/apagar dados criados offline
+  // que ainda não tinham subido pro Firebase.
+  useEffect(() => {
+    if (user && hasHydrated && !hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      useAppStore.getState().initData();
+    }
+  }, [user, hasHydrated]);
+
+  if (!authLoaded || !hasHydrated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
