@@ -13,6 +13,7 @@ npm run dev
 ```
 Abre em `http://localhost:3000`.
 
+
 ## O que já funciona nesta fase
 
 - **`types/index.ts`** — interfaces `Route`, `Delivery`, `Customer`.
