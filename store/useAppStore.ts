@@ -23,6 +23,7 @@ interface AppState {
   getCustomerById: (customerId: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
   addDelivery: (delivery: Delivery) => Promise<void>;
+  updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>; // Adicionado para a Edição!
   closeRoute: (routeId: string) => Promise<void>;
 }
 
@@ -38,22 +39,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   loginWithGoogle: async () => {
     try {
       if (Capacitor.isNativePlatform()) {
-        // 1. Inicializa o plugin do Capacitor com a sua chave Web
-        // IMPORTANTE: Substitua o ID abaixo pelo Client ID da Web lá do painel do Firebase
         GoogleAuth.initialize({
           clientId: '773967662232-pjodqa7f4c4drrhl80439amdp27u31ha.apps.googleusercontent.com',
           scopes: ['profile', 'email'],
           grantOfflineAccess: true,
         });
 
-        // 2. Abre a interface nativa do Android para o usuário escolher a conta
         const googleUser = await GoogleAuth.signIn();
-
-        // 3. Pega o token seguro e loga no Firebase silenciosamente
         const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
         await signInWithCredential(auth, credential);
       } else {
-        // Mantém funcionando normalmente quando testar pelo navegador na Vercel
         await signInWithPopup(auth, googleProvider);
       }
     } catch (error: any) {
@@ -122,11 +117,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   addDelivery: async (delivery) => {
+    // Salva na tela instantaneamente
     set((state) => ({ deliveries: [delivery, ...state.deliveries] }));
+    
     try {
-      await setDoc(doc(db, 'deliveries', delivery.id), delivery);
+      // FILTRO MÁGICO: Remove tudo que for "undefined" para o Firebase não surtar
+      const safeDelivery = Object.fromEntries(
+        Object.entries(delivery).filter(([_, v]) => v !== undefined)
+      ) as Delivery;
+
+      await setDoc(doc(db, 'deliveries', delivery.id), safeDelivery);
     } catch (error) {
-      console.error('Erro ao salvar entrega:', error);
+      console.error('Erro ao salvar entrega na nuvem:', error);
+    }
+  },
+
+  updateDelivery: async (id: string, updatedData: Partial<Delivery>) => {
+    // Atualiza na tela instantaneamente
+    set((state) => ({
+      deliveries: state.deliveries.map((d) => 
+        d.id === id ? { ...d, ...updatedData } : d
+      )
+    }));
+
+    try {
+      // FILTRO MÁGICO: Remove tudo que for "undefined"
+      const safeUpdate = Object.fromEntries(
+        Object.entries(updatedData).filter(([_, v]) => v !== undefined)
+      );
+
+      await updateDoc(doc(db, 'deliveries', id), safeUpdate);
+    } catch (error) {
+      console.error('Erro ao atualizar entrega na nuvem:', error);
     }
   },
 
