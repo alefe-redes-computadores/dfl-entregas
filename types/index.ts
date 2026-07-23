@@ -36,6 +36,11 @@ export interface Delivery {
 export interface Customer {
   id: string;
   name: string;
-  neighborhood: string;
+  neighborhood?: string; // extraído automaticamente do endereço quando possível
+  address?: string; // último endereço completo usado por esse cliente
+  maps_link?: string; // último link do Maps usado
+  observation?: string; // última observação registrada
   last_confirmation_code?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
