@@ -21,11 +21,21 @@ interface AppState {
   goToPreviousDay: () => void;
   goToNextDay: () => void;
   getDeliveriesByRoute: (routeId: string) => Delivery[];
-  getCustomerById: (customerId: string) => Customer | undefined;
+  getCustomerById: (customerId?: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
   addDelivery: (delivery: Delivery) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
   closeRoute: (routeId: string) => Promise<void>;
+  addCustomer: (customer: Customer) => Promise<void>;
+  findOrCreateCustomer: (
+    name: string,
+    details?: {
+      address?: string;
+      mapsLink?: string;
+      confirmationCode?: string;
+      observation?: string;
+    }
+  ) => Promise<string>;
 }
 
 // O (persist) envolve a loja toda para criar o "Cofre Físico" no celular
@@ -89,7 +99,7 @@ export const useAppStore = create<AppState>()(
             state.deliveries.forEach(localDelivery => {
               if (!mergedDeliveries.find(fbD => fbD.id === localDelivery.id)) {
                 mergedDeliveries.push(localDelivery);
-                
+
                 const safeDelivery = Object.fromEntries(
                   Object.entries(localDelivery).filter(([_, v]) => v !== undefined)
                 ) as Delivery;
@@ -105,10 +115,23 @@ export const useAppStore = create<AppState>()(
               }
             });
 
+            // Mescla clientes locais que ainda não subiram
+            const mergedCustomers = [...fbCustomers];
+            state.customers.forEach(localCustomer => {
+              if (!mergedCustomers.find(fbC => fbC.id === localCustomer.id)) {
+                mergedCustomers.push(localCustomer);
+
+                const safeCustomer = Object.fromEntries(
+                  Object.entries(localCustomer).filter(([_, v]) => v !== undefined)
+                );
+                setDoc(doc(db, 'customers', localCustomer.id), safeCustomer).catch(console.error);
+              }
+            });
+
             return {
               routes: mergedRoutes,
               deliveries: mergedDeliveries,
-              customers: fbCustomers,
+              customers: mergedCustomers,
               isSyncing: false
             };
           });
@@ -137,7 +160,7 @@ export const useAppStore = create<AppState>()(
         get().deliveries.filter((d) => d.route_id === routeId),
 
       getCustomerById: (customerId) =>
-        get().customers.find((c) => c.id === customerId),
+        customerId ? get().customers.find((c) => c.id === customerId) : undefined,
 
       addRoute: async (route) => {
         set((state) => ({ routes: [route, ...state.routes] }));
@@ -162,7 +185,7 @@ export const useAppStore = create<AppState>()(
 
       updateDelivery: async (id: string, updatedData: Partial<Delivery>) => {
         set((state) => ({
-          deliveries: state.deliveries.map((d) => 
+          deliveries: state.deliveries.map((d) =>
             d.id === id ? { ...d, ...updatedData } : d
           )
         }));
@@ -192,14 +215,101 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           console.error('Erro no Firebase, rota fechada apenas no celular:', error);
         }
-      }
+      },
+
+      addCustomer: async (customer) => {
+        set((state) => ({ customers: [customer, ...state.customers] }));
+        try {
+          const safeCustomer = Object.fromEntries(
+            Object.entries(customer).filter(([_, v]) => v !== undefined)
+          );
+          await setDoc(doc(db, 'customers', customer.id), safeCustomer);
+        } catch (error) {
+          console.error('Erro ao salvar cliente, mas está seguro offline:', error);
+        }
+      },
+
+      // Busca cliente por nome (case-insensitive). Se não existir, cria automaticamente
+      // (local + Firebase) já com bairro (extraído do endereço), endereço completo, maps link,
+      // observação e código de confirmação preenchidos na entrega. Se já existir, atualiza esses
+      // dados com o que veio de mais recente. Se o nome vier vazio, retorna string vazia.
+      findOrCreateCustomer: async (name, details) => {
+        const trimmed = name.trim();
+        if (!trimmed) return '';
+
+        // Extrai o bairro como o último trecho separado por vírgula do endereço
+        // (ex: "Rua ABC, 123, Centro" -> "Centro")
+        const extractNeighborhood = (address?: string): string | undefined => {
+          if (!address) return undefined;
+          const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
+          if (parts.length < 2) return undefined;
+          return parts[parts.length - 1];
+        };
+
+        const existing = get().customers.find(
+          (c) => c.name.trim().toLowerCase() === trimmed.toLowerCase()
+        );
+
+        const derivedNeighborhood = extractNeighborhood(details?.address);
+
+        if (existing) {
+          const updatedFields: Partial<Customer> = {};
+          if (details?.address) updatedFields.address = details.address;
+          if (details?.mapsLink) updatedFields.maps_link = details.mapsLink;
+          if (details?.confirmationCode) updatedFields.last_confirmation_code = details.confirmationCode;
+          if (details?.observation) updatedFields.observation = details.observation;
+          if (derivedNeighborhood) updatedFields.neighborhood = derivedNeighborhood;
+          updatedFields.updatedAt = new Date().toISOString();
+
+          set((state) => ({
+            customers: state.customers.map((c) =>
+              c.id === existing.id ? { ...c, ...updatedFields } : c
+            ),
+          }));
+
+          try {
+            const safeUpdate = Object.fromEntries(
+              Object.entries(updatedFields).filter(([_, v]) => v !== undefined)
+            );
+            await updateDoc(doc(db, 'customers', existing.id), safeUpdate);
+          } catch (error) {
+            console.error('Erro ao atualizar cliente existente, mas salvo offline:', error);
+          }
+
+          return existing.id;
+        }
+
+        const newCustomer: Customer = {
+          id: Date.now().toString(),
+          name: trimmed,
+          neighborhood: derivedNeighborhood,
+          address: details?.address || undefined,
+          maps_link: details?.mapsLink || undefined,
+          last_confirmation_code: details?.confirmationCode || undefined,
+          observation: details?.observation || undefined,
+          createdAt: new Date().toISOString(),
+        };
+
+        set((state) => ({ customers: [newCustomer, ...state.customers] }));
+
+        try {
+          const safeCustomer = Object.fromEntries(
+            Object.entries(newCustomer).filter(([_, v]) => v !== undefined)
+          );
+          await setDoc(doc(db, 'customers', newCustomer.id), safeCustomer);
+        } catch (error) {
+          console.error('Erro ao criar cliente, mas está seguro offline:', error);
+        }
+
+        return newCustomer.id;
+      },
     }),
     {
       name: 'dfl-entregas-cofre-offline',
-      partialize: (state) => ({ 
-        routes: state.routes, 
-        deliveries: state.deliveries, 
-        customers: state.customers 
+      partialize: (state) => ({
+        routes: state.routes,
+        deliveries: state.deliveries,
+        customers: state.customers
       }),
     }
   )
