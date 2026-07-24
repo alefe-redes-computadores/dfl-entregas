@@ -1,3 +1,4 @@
+// app/page.tsx
 'use client';
 
 import { ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Package } from 'lucide-react';
@@ -32,39 +33,37 @@ export default function HomePage() {
     return routeDate === selectedDateStr;
   });
 
-  // REDE DE SEGURANÇA (Auto-Recuperação Inteligente):
+  // ============================================================
+  // REDE DE SEGURANÇA (Auto-Recuperação Inteligente) - CORRIGIDO
+  // ============================================================
   const routeIdsDoDia = routesDoDia.map(r => r.id);
   
-  // Pegamos todas as entregas do dia selecionado
-  let deliveriesDoDia = deliveries.filter(d => {
+  const deliveriesDoDia = deliveries.filter(d => {
     const belongsToRoute = routeIdsDoDia.includes(d.route_id);
     const deliveryDateStr = new Date(d.updated_at || Date.now()).toDateString();
-    return belongsToRoute || deliveryDateStr === selectedDateStr;
+    const isSameDay = deliveryDateStr === selectedDateStr;
+    
+    return belongsToRoute || isSameDay;
   });
 
-  // Se houver entregas soltas para este dia mas nenhuma rota oficial, criamos a rota de resgate
-  // E amarramos o route_id da entrega para ela cair dentro da rota visualmente!
-  if (deliveriesDoDia.length > 0 && routesDoDia.length === 0) {
-    const rescueRouteId = 'rota-resgate-recuperada';
-    
-    // Força a entrega a pertencer à rota de resgate para aparecer no acordeão
-    deliveriesDoDia = deliveriesDoDia.map(d => ({
-      ...d,
-      route_id: rescueRouteId
-    }));
+  // Identificamos se existem entregas órfãs (que não pertencem a nenhuma rota que está na tela)
+  const orphanedDeliveries = deliveriesDoDia.filter(d => !routeIdsDoDia.includes(d.route_id));
 
+  // Se houver entregas órfãs, injetamos a Rota de Recuperação JUNTO com as rotas reais
+  if (orphanedDeliveries.length > 0) {
     const rescueRoute: Route = {
-      id: rescueRouteId,
+      id: 'rota-resgate-recuperada',
       name: 'Rota Geral de Recuperação',
       status: 'aberta',
       motoboy_name: 'Sincronizado da Nuvem',
       departure_time: selectedDate.toISOString(),
       change_money: 0,
-      drinks_summary: 'Recuperado automaticamente do Cofre/Firebase'
+      drinks_summary: 'Recuperado automaticamente'
     };
-    routesDoDia = [rescueRoute];
+    // Usamos o push para adicionar ela ao lado da Rota 1, Rota 2, etc.
+    routesDoDia.push(rescueRoute);
   }
-  
+
   const totalEntregas = deliveriesDoDia.length;
   const faturamentoTotal = deliveriesDoDia.reduce((acc, delivery) => acc + (delivery.value || 0), 0);
 
