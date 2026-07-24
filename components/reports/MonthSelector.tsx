@@ -8,7 +8,9 @@ import {
   Calendar as CalendarIcon,
   X,
   Check,
-  ChevronDown
+  ChevronDown,
+  Clock,
+  Filter
 } from 'lucide-react';
 
 interface MonthSelectorProps {
@@ -87,12 +89,10 @@ export function MonthSelector({ selectedMonth, onMonthChange }: MonthSelectorPro
     setIsOpen(false);
   };
 
-  // Obter o ícone do mês atual para exibição
-  const getMonthEmoji = (month: string): string => {
-    if (month === 'all') return '📅';
-    const monthNum = parseInt(month.split('-')[1]);
-    const emojis = ['❄️', '☀️', '🌸', '🌺', '🌻', '☀️', '☀️', '🌻', '🍂', '🍂', '❄️', '❄️'];
-    return emojis[monthNum - 1] || '📅';
+  // Obter ícone do mês
+  const getMonthIcon = (month: string) => {
+    if (month === 'all') return <Filter className="w-4 h-4" />;
+    return <CalendarIcon className="w-4 h-4" />;
   };
 
   return (
@@ -111,7 +111,7 @@ export function MonthSelector({ selectedMonth, onMonthChange }: MonthSelectorPro
           group
         `}
       >
-        <span className="text-base">{getMonthEmoji(selectedMonth)}</span>
+        {getMonthIcon(selectedMonth)}
         <span className="hidden sm:inline">{getMonthLabel(selectedMonth)}</span>
         <span className="sm:hidden">{getShortMonthLabel(selectedMonth)}</span>
         <ChevronDown className={`
@@ -132,9 +132,12 @@ export function MonthSelector({ selectedMonth, onMonthChange }: MonthSelectorPro
         ">
           {/* Header do dropdown */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50">
-            <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
-              Selecionar período
-            </span>
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-zinc-400" />
+              <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                Selecionar período
+              </span>
+            </div>
             <button
               onClick={() => setIsOpen(false)}
               className="p-1 rounded-lg hover:bg-zinc-800/50 transition-colors"
@@ -188,9 +191,16 @@ export function MonthSelector({ selectedMonth, onMonthChange }: MonthSelectorPro
                     ${isFirst ? 'border-b border-zinc-800/30 mb-1' : ''}
                   `}
                 >
-                  <span className="text-lg">
-                    {month === 'all' ? '📅' : getMonthEmoji(month)}
-                  </span>
+                  <div className={`
+                    p-1.5 rounded-lg
+                    ${isSelected ? 'bg-emerald-500/20' : 'bg-zinc-800/50'}
+                  `}>
+                    {month === 'all' ? (
+                      <Filter className="w-4 h-4" />
+                    ) : (
+                      <CalendarIcon className="w-4 h-4" />
+                    )}
+                  </div>
                   
                   <div className="flex-1 text-left">
                     <div className="text-sm font-medium">
