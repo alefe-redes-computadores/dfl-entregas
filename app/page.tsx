@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Package } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
+import type { Route } from '@/types';
 
 function formatDateLabel(date: Date): string {
   const today = new Date();
@@ -19,21 +20,44 @@ function formatDateLabel(date: Date): string {
 
 export default function HomePage() {
   const routes = useAppStore((state) => state.routes);
-  const deliveries = useAppStore((state) => state.deliveries); // Puxa as entregas para calcular o total
+  const deliveries = useAppStore((state) => state.deliveries); 
   const selectedDate = useAppStore((state) => state.selectedDate);
   const goToPreviousDay = useAppStore((state) => state.goToPreviousDay);
   const goToNextDay = useAppStore((state) => state.goToNextDay);
 
   // Filtra as rotas para mostrar APENAS as do dia selecionado
   const selectedDateStr = selectedDate.toDateString();
-  const routesDoDia = routes.filter((r) => {
+  let routesDoDia = routes.filter((r) => {
     const routeDate = new Date(r.departure_time).toDateString();
     return routeDate === selectedDateStr;
   });
 
-  // Lógica inteligente do Resumo: Pega só as entregas que pertencem às rotas deste dia
+  // REDE DE SEGURANÇA (Auto-Recuperação):
+  // Se existem entregas salvas, mas nenhuma rota associada apareceu nas rotas do dia,
+  // criamos uma rota virtual de resgate para garantir que a entrega nunca suma da Home.
   const routeIdsDoDia = routesDoDia.map(r => r.id);
-  const deliveriesDoDia = deliveries.filter(d => routeIdsDoDia.includes(d.route_id));
+  const deliveriesDoDia = deliveries.filter(d => {
+    // Verifica se a entrega pertence a alguma rota deste dia OU se a data da entrega bate com o dia selecionado
+    const belongsToRoute = routeIdsDoDia.includes(d.route_id);
+    const deliveryDateStr = new Date(d.createdAt || d.updated_at || Date.now()).toDateString();
+    const isSameDay = deliveryDateStr === selectedDateStr;
+    
+    return belongsToRoute || isSameDay;
+  });
+
+  // Se houver entregas para este dia mas nenhuma rota oficial listada, injetamos uma Rota de Recuperação
+  if (deliveriesDoDia.length > 0 && routesDoDia.length === 0) {
+    const rescueRoute: Route = {
+      id: 'rota-resgate-recuperada',
+      name: 'Rota Geral de Recuperação',
+      status: 'aberta',
+      motoboy_name: 'Sincronizado da Nuvem',
+      departure_time: selectedDate.toISOString(),
+      change_money: 0,
+      drinks_summary: 'Recuperado automaticamente do Cofre/Firebase'
+    };
+    routesDoDia = [rescueRoute];
+  }
   
   const totalEntregas = deliveriesDoDia.length;
   const faturamentoTotal = deliveriesDoDia.reduce((acc, delivery) => acc + (delivery.value || 0), 0);
