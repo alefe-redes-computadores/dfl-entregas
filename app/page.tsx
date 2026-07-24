@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Package } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
 
@@ -19,6 +19,7 @@ function formatDateLabel(date: Date): string {
 
 export default function HomePage() {
   const routes = useAppStore((state) => state.routes);
+  const deliveries = useAppStore((state) => state.deliveries); // Puxa as entregas para calcular o total
   const selectedDate = useAppStore((state) => state.selectedDate);
   const goToPreviousDay = useAppStore((state) => state.goToPreviousDay);
   const goToNextDay = useAppStore((state) => state.goToNextDay);
@@ -29,6 +30,13 @@ export default function HomePage() {
     const routeDate = new Date(r.departure_time).toDateString();
     return routeDate === selectedDateStr;
   });
+
+  // Lógica inteligente do Resumo: Pega só as entregas que pertencem às rotas deste dia
+  const routeIdsDoDia = routesDoDia.map(r => r.id);
+  const deliveriesDoDia = deliveries.filter(d => routeIdsDoDia.includes(d.route_id));
+  
+  const totalEntregas = deliveriesDoDia.length;
+  const faturamentoTotal = deliveriesDoDia.reduce((acc, delivery) => acc + (delivery.value || 0), 0);
 
   const openRoutes = routesDoDia.filter((r) => r.status === 'aberta');
   const closedRoutes = routesDoDia.filter((r) => r.status === 'fechada');
@@ -59,6 +67,29 @@ export default function HomePage() {
         </button>
       </div>
 
+      {/* PAINEL DE RESUMO DO DIA (DASHBOARD) */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
+          <div className="flex items-center gap-2 text-zinc-400">
+            <Package size={16} className="text-sky-400" />
+            <span className="text-xs font-semibold uppercase tracking-wider">Entregas</span>
+          </div>
+          <p className="font-heading text-2xl font-bold text-zinc-50">
+            {totalEntregas}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
+          <div className="flex items-center gap-2 text-zinc-400">
+            <TrendingUp size={16} className="text-emerald-500" />
+            <span className="text-xs font-semibold uppercase tracking-wider">Faturamento</span>
+          </div>
+          <p className="font-heading text-2xl font-bold text-zinc-50">
+            R$ {faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+        </div>
+      </div>
+
       {/* Rotas abertas */}
       {openRoutes.length > 0 && (
         <div className="flex flex-col gap-3">
@@ -73,7 +104,7 @@ export default function HomePage() {
 
       {/* Rotas fechadas (vão caindo pra cá) */}
       {closedRoutes.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 mt-2">
           <h2 className="px-1 font-heading text-sm font-bold uppercase tracking-wide text-zinc-500">
             Rotas finalizadas
           </h2>
