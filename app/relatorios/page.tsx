@@ -58,10 +58,10 @@ export default function ReportsPage() {
     return getFilteredDeliveries({ month: 'all' });
   }, [getFilteredDeliveries]);
 
-  // Calcular métricas
+  // Calcular métricas PASSANDO O selectedMonth
   const metrics = useMemo(() => {
-    return getMainMetrics(filteredDeliveries, allDeliveries);
-  }, [filteredDeliveries, allDeliveries, getMainMetrics]);
+    return getMainMetrics(filteredDeliveries, allDeliveries, selectedMonth);
+  }, [filteredDeliveries, allDeliveries, selectedMonth, getMainMetrics]);
 
   // Dados dos gráficos
   const dailyEvolutionData = useMemo(() => {
