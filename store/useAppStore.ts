@@ -76,8 +76,10 @@ function mergeByTimestamp<T extends { id: string; updated_at?: string }>(
   return { merged, toPush };
 }
 
-function pushSafely(collectionName: string, id: string, data: Record<string, unknown>) {
-  const safe = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
+function pushSafely(collectionName: string, id: string, data: object) {
+  const safe = Object.fromEntries(
+    Object.entries(data as Record<string, unknown>).filter(([_, v]) => v !== undefined)
+  );
   setDoc(doc(db, collectionName, id), safe).catch(console.error);
 }
 
