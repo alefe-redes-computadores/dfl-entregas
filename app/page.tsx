@@ -32,23 +32,29 @@ export default function HomePage() {
     return routeDate === selectedDateStr;
   });
 
-  // REDE DE SEGURANÇA (Auto-Recuperação):
-  // Se existem entregas salvas, mas nenhuma rota associada apareceu nas rotas do dia,
-  // criamos uma rota virtual de resgate para garantir que a entrega nunca suma da Home.
+  // REDE DE SEGURANÇA (Auto-Recuperação Inteligente):
   const routeIdsDoDia = routesDoDia.map(r => r.id);
-  const deliveriesDoDia = deliveries.filter(d => {
-    // Verifica se a entrega pertence a alguma rota deste dia OU se a data da entrega bate com o dia selecionado
+  
+  // Pegamos todas as entregas do dia selecionado
+  let deliveriesDoDia = deliveries.filter(d => {
     const belongsToRoute = routeIdsDoDia.includes(d.route_id);
     const deliveryDateStr = new Date(d.updated_at || Date.now()).toDateString();
-    const isSameDay = deliveryDateStr === selectedDateStr;
-    
-    return belongsToRoute || isSameDay;
+    return belongsToRoute || deliveryDateStr === selectedDateStr;
   });
 
-  // Se houver entregas para este dia mas nenhuma rota oficial listada, injetamos uma Rota de Recuperação
+  // Se houver entregas soltas para este dia mas nenhuma rota oficial, criamos a rota de resgate
+  // E amarramos o route_id da entrega para ela cair dentro da rota visualmente!
   if (deliveriesDoDia.length > 0 && routesDoDia.length === 0) {
+    const rescueRouteId = 'rota-resgate-recuperada';
+    
+    // Força a entrega a pertencer à rota de resgate para aparecer no acordeão
+    deliveriesDoDia = deliveriesDoDia.map(d => ({
+      ...d,
+      route_id: rescueRouteId
+    }));
+
     const rescueRoute: Route = {
-      id: 'rota-resgate-recuperada',
+      id: rescueRouteId,
       name: 'Rota Geral de Recuperação',
       status: 'aberta',
       motoboy_name: 'Sincronizado da Nuvem',
