@@ -141,15 +141,15 @@ export const useAppStore = create<AppState>()(
           const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
           const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
 
-          const routesResult = mergeByTimestamp(fbRoutes, get().routes);
-          const deliveriesResult = mergeByTimestamp(fbDeliveries, get().deliveries);
-          const customersResult = mergeByTimestamp(fbCustomers, get().customers);
-          const motoboysResult = mergeByTimestamp(fbMotoboys, get().motoboys);
+          const localRoutes = get().routes;
+          const localDeliveries = get().deliveries;
+          const localCustomers = get().customers;
+          const localMotoboys = get().motoboys;
 
-          routesResult.toPush.forEach((r) => pushSafely('routes', r.id, r));
-          deliveriesResult.toPush.forEach((d) => pushSafely('deliveries', d.id, d));
-          customersResult.toPush.forEach((c) => pushSafely('customers', c.id, c));
-          motoboysResult.toPush.forEach((m) => pushSafely('motoboys', m.id, m));
+          const routesResult = mergeByTimestamp(fbRoutes, localRoutes);
+          const deliveriesResult = mergeByTimestamp(fbDeliveries, localDeliveries);
+          const customersResult = mergeByTimestamp(fbCustomers, localCustomers);
+          const motoboysResult = mergeByTimestamp(fbMotoboys, localMotoboys);
 
           set({
             routes: routesResult.merged,
