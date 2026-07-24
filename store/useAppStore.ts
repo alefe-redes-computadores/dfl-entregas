@@ -46,42 +46,6 @@ interface AppState {
   ) => Promise<string>;
 }
 
-function mergeByTimestamp<T extends { id: string; updated_at?: string }>(
-  cloudItems: T[],
-  localItems: T[]
-): { merged: T[]; toPush: T[] } {
-  const merged: T[] = [...cloudItems];
-  const toPush: T[] = [];
-
-  localItems.forEach((localItem) => {
-    const idx = merged.findIndex((m) => m.id === localItem.id);
-
-    if (idx === -1) {
-      merged.push(localItem);
-      toPush.push(localItem);
-      return;
-    }
-
-    const cloudItem = merged[idx];
-    const localTime = localItem.updated_at ? new Date(localItem.updated_at).getTime() : 0;
-    const cloudTime = cloudItem.updated_at ? new Date(cloudItem.updated_at).getTime() : 0;
-
-    if (localTime > cloudTime) {
-      merged[idx] = localItem;
-      toPush.push(localItem);
-    }
-  });
-
-  return { merged, toPush };
-}
-
-function pushSafely(collectionName: string, id: string, data: object) {
-  const safe = Object.fromEntries(
-    Object.entries(data as Record<string, unknown>).filter(([_, v]) => v !== undefined)
-  );
-  setDoc(doc(db, collectionName, id), safe).catch(console.error);
-}
-
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -126,9 +90,6 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      // ============================================================
-      // initData CORRIGIDO - Remove a validação engessada do mergeByTimestamp
-      // ============================================================
       initData: async () => {
         if (!get().hasHydrated) return;
         set({ isSyncing: true });
@@ -145,8 +106,7 @@ export const useAppStore = create<AppState>()(
           const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
           const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
 
-          // FORÇA TOTAL: Se tem dados na nuvem, prioriza e injeta direto no estado local
-          // Unifica sem depender de timestamps antigos que travavam dados órfãos
+          // Sincronização Inteligente: Prioriza Firebase, mas não apaga dados criados offline que ainda não subiram
           const mergedRoutes = [...fbRoutes];
           get().routes.forEach(local => {
             if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
@@ -174,6 +134,8 @@ export const useAppStore = create<AppState>()(
             motoboys: mergedMotoboys,
             isSyncing: false
           });
+          
+          console.log(`✅ Sincronizado com sucesso: ${fbRoutes.length} rotas, ${fbDeliveries.length} entregas, ${fbCustomers.length} clientes, ${fbMotoboys.length} motoboys`);
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false });
@@ -192,12 +154,8 @@ export const useAppStore = create<AppState>()(
         return { selectedDate: next };
       }),
 
-      // ============================================================
-      // getDeliveriesByRoute CORRIGIDO - Reconhece a rota de resgate
-      // ============================================================
       getDeliveriesByRoute: (routeId) => {
         const state = get();
-        // Se for a rota de resgate virtual da Home, trazemos todas as entregas do dia selecionado
         if (routeId === 'rota-resgate-recuperada') {
           const selectedDateStr = state.selectedDate.toDateString();
           return state.deliveries.filter(d => {
@@ -348,7 +306,16 @@ export const useAppStore = create<AppState>()(
         customers: state.customers,
         motoboys: state.motoboys
       }),
-      onRehydrateStorage: () => (state) => { state?.setHasHydrated(true); },
+      onRehydrateStorage: () => (state) => { 
+        state?.setHasHydrated(true); 
+        
+        // A MÁGICA ACONTECE AQUI:
+        // Assim que o app termina de ler o cofre local (vazio numa reinstalação), 
+        // ele dispara um gatilho para puxar a nuvem.
+        setTimeout(() => {
+          state?.initData();
+        }, 300);
+      },
     }
   )
 );
