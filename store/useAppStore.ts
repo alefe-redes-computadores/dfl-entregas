@@ -1,3 +1,4 @@
+// store/useAppStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -14,7 +15,7 @@ interface AppState {
   routes: Route[];
   deliveries: Delivery[];
   customers: Customer[];
-  motoboys: Motoboy[]; // NOVO
+  motoboys: Motoboy[];
   selectedDate: Date;
   isSyncing: boolean;
   setHasHydrated: (value: boolean) => void;
@@ -32,7 +33,7 @@ interface AppState {
   closeRoute: (routeId: string) => Promise<void>;
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
-  addMotoboy: (motoboy: Motoboy) => Promise<void>; // NOVO
+  addMotoboy: (motoboy: Motoboy) => Promise<void>;
   findOrCreateCustomer: (
     name: string,
     details?: {
@@ -125,6 +126,9 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      // ============================================================
+      // initData CORRIGIDO - Remove a validação engessada do mergeByTimestamp
+      // ============================================================
       initData: async () => {
         if (!get().hasHydrated) return;
         set({ isSyncing: true });
@@ -141,21 +145,33 @@ export const useAppStore = create<AppState>()(
           const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
           const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
 
-          const localRoutes = get().routes;
-          const localDeliveries = get().deliveries;
-          const localCustomers = get().customers;
-          const localMotoboys = get().motoboys;
+          // FORÇA TOTAL: Se tem dados na nuvem, prioriza e injeta direto no estado local
+          // Unifica sem depender de timestamps antigos que travavam dados órfãos
+          const mergedRoutes = [...fbRoutes];
+          get().routes.forEach(local => {
+            if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
+          });
 
-          const routesResult = mergeByTimestamp(fbRoutes, localRoutes);
-          const deliveriesResult = mergeByTimestamp(fbDeliveries, localDeliveries);
-          const customersResult = mergeByTimestamp(fbCustomers, localCustomers);
-          const motoboysResult = mergeByTimestamp(fbMotoboys, localMotoboys);
+          const mergedDeliveries = [...fbDeliveries];
+          get().deliveries.forEach(local => {
+            if (!mergedDeliveries.some(m => m.id === local.id)) mergedDeliveries.push(local);
+          });
+
+          const mergedCustomers = [...fbCustomers];
+          get().customers.forEach(local => {
+            if (!mergedCustomers.some(m => m.id === local.id)) mergedCustomers.push(local);
+          });
+
+          const mergedMotoboys = [...fbMotoboys];
+          get().motoboys.forEach(local => {
+            if (!mergedMotoboys.some(m => m.id === local.id)) mergedMotoboys.push(local);
+          });
 
           set({
-            routes: routesResult.merged,
-            deliveries: deliveriesResult.merged,
-            customers: customersResult.merged,
-            motoboys: motoboysResult.merged,
+            routes: mergedRoutes,
+            deliveries: mergedDeliveries,
+            customers: mergedCustomers,
+            motoboys: mergedMotoboys,
             isSyncing: false
           });
         } catch (error) {
@@ -316,7 +332,7 @@ export const useAppStore = create<AppState>()(
         routes: state.routes, 
         deliveries: state.deliveries, 
         customers: state.customers,
-        motoboys: state.motoboys // Mantém salvo offline
+        motoboys: state.motoboys
       }),
       onRehydrateStorage: () => (state) => { state?.setHasHydrated(true); },
     }
