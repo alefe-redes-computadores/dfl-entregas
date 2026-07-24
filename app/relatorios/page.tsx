@@ -9,12 +9,12 @@ import {
   Calendar, 
   TrendingUp,
   Download,
-  ChevronRight,
   BarChart3,
   PieChart,
   MapPin,
   Clock,
-  Award
+  Award,
+  Zap
 } from 'lucide-react';
 
 import { useReportsData } from '@/hooks/useReportsData';
@@ -32,6 +32,17 @@ const animations = `
     from {
       opacity: 0;
       transform: translateY(30px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.95);
     }
     to {
       opacity: 1;
@@ -57,13 +68,30 @@ const animations = `
     }
   }
   
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-5px);
+    }
+  }
+  
   .animate-fadeInUp {
     animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     opacity: 0;
   }
   
+  .animate-fadeInDown {
+    animation: fadeInDown 0.2s ease-out forwards;
+  }
+  
   .animate-pulseGlow {
     animation: pulseGlow 3s ease-in-out infinite;
+  }
+  
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
   }
   
   .shimmer {
@@ -85,6 +113,20 @@ const animations = `
   
   .stat-number {
     font-variant-numeric: tabular-nums;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #3f3f46;
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: #52525b;
   }
 `;
 
@@ -240,7 +282,7 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* CARDS DE MÉTRICAS - Com ícones maiores e mais visuais */}
+          {/* CARDS DE MÉTRICAS */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
             <div className="animate-fadeInUp" style={{ animationDelay: '50ms' }}>
               <SummaryCard
@@ -288,7 +330,7 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* GRÁFICOS - Com labels e headers mais elegantes */}
+          {/* GRÁFICOS */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             
             {/* Gráfico 1: Evolução Diária */}
@@ -398,7 +440,7 @@ export default function ReportsPage() {
 
           </div>
 
-          {/* RODAPÉ - Resumo rápido */}
+          {/* RODAPÉ */}
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-500 border-t border-zinc-800/50 pt-6">
             <div className="flex items-center gap-4">
               <span>📊 Relatório gerado em tempo real</span>
