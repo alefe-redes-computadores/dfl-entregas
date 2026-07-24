@@ -2,11 +2,11 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Store, Smartphone, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
-import type { Delivery } from '@/types';
+import type { Delivery, OrderOrigin } from '@/types';
 
 function DeliveryDetailsForm() {
   const router = useRouter();
@@ -17,11 +17,13 @@ function DeliveryDetailsForm() {
   const deliveries = useAppStore((state) => state.deliveries);
   const customers = useAppStore((state) => state.customers);
   const updateDelivery = useAppStore((state) => state.updateDelivery);
+  const deleteDelivery = useAppStore((state) => state.deleteDelivery); // NOVO
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
 
   const openRoutes = routes.filter(r => r.status === 'aberta');
 
+  const [origin, setOrigin] = useState<OrderOrigin>('ifood');
   const [routeId, setRouteId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [orderId, setOrderId] = useState('');
@@ -35,8 +37,8 @@ function DeliveryDetailsForm() {
   const [observation, setObservation] = useState('');
   const [confirmationCode, setConfirmationCode] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false); // NOVO
 
-  // Máscara de moeda
   const formatCurrencyInput = (inputValue: string) => {
     const onlyDigits = inputValue.replace(/\D/g, '');
     if (!onlyDigits) return '';
@@ -44,14 +46,14 @@ function DeliveryDetailsForm() {
     return numberValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Carrega os dados da entrega ao abrir a página
   useEffect(() => {
     if (!deliveryId) return;
 
     const delivery = deliveries.find(d => d.id === deliveryId);
     if (delivery) {
+      setOrigin(delivery.origin || 'ifood');
       setRouteId(delivery.route_id);
-      setOrderId(delivery.order_id);
+      setOrderId(delivery.order_id || '');
       setValue(delivery.value ? delivery.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
       setAddress(delivery.address_string);
       setMapsLink(delivery.maps_link || '');
@@ -68,31 +70,16 @@ function DeliveryDetailsForm() {
       toast.error('Entrega não encontrada');
       router.push('/');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deliveryId, deliveries, router]);
-
-  // Função inteligente que limpa o texto do iFood na hora que cola
-  const handleAddressPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData('text');
-    if (!text) return;
-
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-    const addressParts = [];
-    for (const line of lines) {
-      const lower = line.toLowerCase();
-      if (lower.includes('endereço de entrega') || line.match(/\d{5}-\d{3}/) || lower.includes('cep') || lower.includes('patos de minas') || lower.includes('- mg')) continue;
-      if (lower.startsWith('obs') || lower.includes('observação')) break;
-      addressParts.push(line);
-    }
-    setAddress(addressParts.join(', '));
-    toast.success('Endereço formatado!');
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!deliveryId || !routeId || !orderId || !value || !address) {
+    if (!deliveryId || !routeId || !value || !address) {
       toast.error('Preencha os campos obrigatórios');
+      return;
+    }
+    if (origin === 'ifood' && !orderId) {
+      toast.error('Pedidos do iFood exigem o Número do Pedido.');
       return;
     }
 
@@ -101,20 +88,16 @@ function DeliveryDetailsForm() {
       const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
 
-      // Resolve o cliente: acha o existente (e atualiza os dados) ou cria automaticamente
-      // já com endereço, maps link, obs e código de confirmação preenchidos. Campo opcional.
       const customerId = customerName.trim()
         ? await findOrCreateCustomer(customerName, {
-            address,
-            mapsLink,
-            confirmationCode,
-            observation,
+            address, mapsLink, confirmationCode, observation, origin
           })
         : undefined;
 
       await updateDelivery(deliveryId, {
         route_id: routeId,
-        order_id: orderId,
+        origin,
+        order_id: orderId || undefined,
         confirmation_code: confirmationCode || undefined,
         customer_id: customerId || '',
         value: cleanValue,
@@ -134,83 +117,72 @@ function DeliveryDetailsForm() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deliveryId) return;
+    const confirm = window.confirm("Tem certeza que deseja excluir esta entrega permanentemente?");
+    if (!confirm) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteDelivery(deliveryId);
+      toast.success('Entrega excluída com sucesso!');
+      router.push('/');
+    } catch (error) {
+      toast.error('Erro ao excluir entrega.');
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <button 
-          onClick={() => router.push('/')}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95"
-        >
+        <button onClick={() => router.push('/')} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95">
           <ChevronLeft size={22} />
         </button>
         <h1 className="font-heading text-xl font-bold text-zinc-50">Editar Entrega</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5 pb-10">
+        <div className="flex gap-2 p-1 bg-zinc-900 rounded-2xl border border-zinc-800">
+          <button type="button" onClick={() => setOrigin('ifood')} className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <Smartphone size={18} /> iFood
+          </button>
+          <button type="button" onClick={() => setOrigin('loja')} className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'loja' ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <Store size={18} /> Loja Própria
+          </button>
+        </div>
+
         <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold text-zinc-400">Selecionar Rota</label>
-          <select 
-            value={routeId}
-            onChange={(e) => setRouteId(e.target.value)}
-            className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none"
-            required
-          >
+          <select value={routeId} onChange={(e) => setRouteId(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" required>
             <option value="">Selecione...</option>
-            {openRoutes.map(r => (
-              <option key={r.id} value={r.id}>{r.name} ({r.motoboy_name})</option>
-            ))}
+            {openRoutes.map(r => <option key={r.id} value={r.id}>{r.name} ({r.motoboy_name})</option>)}
           </select>
         </div>
 
-        {/* CLIENTE COM AUTOCOMPLETE */}
-        <CustomerAutocomplete
-          value={customerName}
-          onChange={setCustomerName}
-          customers={customers}
-        />
+        <CustomerAutocomplete value={customerName} onChange={setCustomerName} customers={customers} />
 
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-emerald-400">Número do Pedido</label>
-            <input
-              type="text" inputMode="numeric" placeholder="Ex: 4821" maxLength={4}
-              value={orderId} onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ''))}
-              className="h-16 rounded-2xl border-2 border-emerald-500/50 bg-zinc-900/80 px-4 text-xl font-bold text-zinc-50 focus:border-emerald-500 focus:outline-none" required
-            />
+            <label className="text-sm font-bold text-emerald-400">
+              {origin === 'ifood' ? 'Nº do Pedido*' : 'Nº Pedido (Opc.)'}
+            </label>
+            <input type="text" inputMode="numeric" placeholder="Ex: 4821" maxLength={4} value={orderId} onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ''))} className="h-16 rounded-2xl border-2 border-emerald-500/50 bg-zinc-900/80 px-4 text-xl font-bold text-zinc-50 focus:border-emerald-500 focus:outline-none" required={origin === 'ifood'} />
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-zinc-300">Valor (R$)</label>
-            <input
-              type="text" inputMode="numeric" placeholder="0,00"
-              value={value} onChange={(e) => setValue(formatCurrencyInput(e.target.value))}
-              className="h-16 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-xl font-bold text-zinc-50 focus:border-emerald-500 focus:outline-none" required
-            />
+            <label className="text-sm font-bold text-zinc-300">Valor (R$)*</label>
+            <input type="text" inputMode="numeric" placeholder="0,00" value={value} onChange={(e) => setValue(formatCurrencyInput(e.target.value))} className="h-16 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-xl font-bold text-zinc-50 focus:border-emerald-500 focus:outline-none" required />
           </div>
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-zinc-400">Endereço de Entrega</label>
-          <input
-            type="text" value={address} onChange={(e) => setAddress(e.target.value)} onPaste={handleAddressPaste}
-            className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" required
-          />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-zinc-400">Link do Maps</label>
-          <input
-            type="url" placeholder="https://maps.google.com/..."
-            value={mapsLink} onChange={(e) => setMapsLink(e.target.value)}
-            className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none"
-          />
+          <label className="text-sm font-semibold text-zinc-400">Endereço de Entrega*</label>
+          <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" required />
         </div>
 
         <div className="flex flex-col gap-2 border-t border-zinc-800 pt-4">
           <label className="text-sm font-semibold text-zinc-400">Forma de Pagamento</label>
-          <select 
-            value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as any)}
-            className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none"
-          >
+          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as any)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none">
             <option value="dinheiro">Dinheiro</option>
             <option value="pix">Pix</option>
             <option value="cartao_credito">Cartão de Crédito</option>
@@ -230,11 +202,6 @@ function DeliveryDetailsForm() {
           </div>
         )}
 
-        <div className="flex flex-col gap-2 border-t border-zinc-800 pt-4">
-          <label className="text-sm font-semibold text-zinc-400">Bebidas (Opcional)</label>
-          <input type="text" placeholder="Ex: 1 Coca 2L" value={drinks} onChange={(e) => setDrinks(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" />
-        </div>
-
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-zinc-400">Cód. Confirmação</label>
@@ -246,13 +213,16 @@ function DeliveryDetailsForm() {
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={isSaving}
-          className="mt-6 h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60"
-        >
-          {isSaving ? 'Salvando...' : 'Atualizar Entrega'}
-        </button>
+        <div className="flex flex-col gap-3 mt-6">
+          <button type="submit" disabled={isSaving || isDeleting} className="h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60">
+            {isSaving ? 'Salvando...' : 'Atualizar Entrega'}
+          </button>
+          
+          <button type="button" onClick={handleDelete} disabled={isSaving || isDeleting} className="flex items-center justify-center gap-2 h-14 w-full rounded-2xl border border-red-500/50 text-red-500 font-bold hover:bg-red-500/10 active:scale-[0.98] disabled:opacity-60">
+            <Trash2 size={18} />
+            {isDeleting ? 'Excluindo...' : 'Excluir Entrega'}
+          </button>
+        </div>
       </form>
     </div>
   );
