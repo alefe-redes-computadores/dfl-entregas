@@ -39,7 +39,7 @@ export default function HomePage() {
   const deliveriesDoDia = deliveries.filter(d => {
     // Verifica se a entrega pertence a alguma rota deste dia OU se a data da entrega bate com o dia selecionado
     const belongsToRoute = routeIdsDoDia.includes(d.route_id);
-    const deliveryDateStr = new Date(d.createdAt || d.updated_at || Date.now()).toDateString();
+    const deliveryDateStr = new Date(d.updated_at || Date.now()).toDateString();
     const isSameDay = deliveryDateStr === selectedDateStr;
     
     return belongsToRoute || isSameDay;
