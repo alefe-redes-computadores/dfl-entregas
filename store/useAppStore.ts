@@ -192,7 +192,21 @@ export const useAppStore = create<AppState>()(
         return { selectedDate: next };
       }),
 
-      getDeliveriesByRoute: (routeId) => get().deliveries.filter((d) => d.route_id === routeId),
+      // ============================================================
+      // getDeliveriesByRoute CORRIGIDO - Reconhece a rota de resgate
+      // ============================================================
+      getDeliveriesByRoute: (routeId) => {
+        const state = get();
+        // Se for a rota de resgate virtual da Home, trazemos todas as entregas do dia selecionado
+        if (routeId === 'rota-resgate-recuperada') {
+          const selectedDateStr = state.selectedDate.toDateString();
+          return state.deliveries.filter(d => {
+            const deliveryDateStr = new Date(d.updated_at || Date.now()).toDateString();
+            return deliveryDateStr === selectedDateStr;
+          });
+        }
+        return state.deliveries.filter((d) => d.route_id === routeId);
+      },
 
       getCustomerById: (customerId) => customerId ? get().customers.find((c) => c.id === customerId) : undefined,
 
