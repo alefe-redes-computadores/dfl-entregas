@@ -6,43 +6,56 @@ export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debi
 
 export type RouteStatus = 'aberta' | 'fechada';
 
+export type OrderOrigin = 'ifood' | 'loja';
+
 export interface Route {
   id: string;
-  name: string; // ex: "Rota 1"
+  name: string;
   status: RouteStatus;
   motoboy_name: string;
-  departure_time: string; // ISO datetime
-  end_time?: string; // ISO datetime, preenchido ao fechar a rota
-  change_money: number; // troco inicial que o motoboy saiu com
-  drinks_summary?: string; // ex: "3 coca lata, 1 guaraná 2L"
-  updated_at?: string; // ISO datetime — usado para decidir quem vence no merge local x nuvem
+  departure_time: string;
+  end_time?: string;
+  change_money: number;
+  drinks_summary?: string;
+  updated_at?: string;
 }
 
 export interface Delivery {
   id: string;
   route_id: string;
-  order_id: string; // AGORA EM DESTAQUE: número do pedido (ex: 4 dígitos)
-  confirmation_code?: string; // OPCIONAL: código de confirmação na entrega
+  order_id?: string;
+  origin: OrderOrigin;
+  confirmation_code?: string;
   customer_id: string;
-  value: number; // Valor do pedido
-  is_paid: boolean; // já pago (ex: pix antecipado / cartão online)
+  value: number;
+  is_paid: boolean;
   payment_method: PaymentMethod;
-  change_for?: number; // troco para quanto, se payment_method === 'dinheiro'
-  address_string: string; // "Rua, Número, Bairro"
+  change_for?: number;
+  address_string: string;
   maps_link: string;
   observation?: string;
-  drinks?: string; // ex: "2 coca lata"
-  updated_at?: string; // ISO datetime — usado para decidir quem vence no merge local x nuvem
+  drinks?: string;
+  updated_at?: string;
 }
 
 export interface Customer {
   id: string;
   name: string;
-  neighborhood?: string; // extraído automaticamente do endereço quando possível
-  address?: string; // último endereço completo usado por esse cliente
-  maps_link?: string; // último link do Maps usado
-  observation?: string; // última observação registrada
+  origin?: OrderOrigin;
+  neighborhood?: string;
+  address?: string;
+  maps_link?: string;
+  observation?: string;
   last_confirmation_code?: string;
   createdAt?: string;
-  updated_at?: string; // ISO datetime — usado para decidir quem vence no merge local x nuvem
+  updated_at?: string;
+}
+
+// NOVO: Tipagem do Motoboy
+export interface Motoboy {
+  id: string;
+  name: string;
+  active: boolean; // Para no futuro você poder "ocultar" quem não trabalha mais aí
+  createdAt?: string;
+  updated_at?: string;
 }
