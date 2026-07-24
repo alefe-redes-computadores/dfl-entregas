@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { Copy, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil } from 'lucide-react';
+import { Copy, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, Smartphone, Store } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Delivery, Customer } from '@/types';
 import { copyDeliveryToClipboard } from '@/lib/whatsapp';
-import { MiniMap } from '@/components/deliveries/MiniMap'; // Ajuste o caminho se necessário
+import { MiniMap } from '@/components/deliveries/MiniMap';
 
 interface DeliveryCardProps {
   delivery: Delivery;
@@ -22,53 +22,72 @@ const PAYMENT_CONFIG = {
 export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
   const payment = PAYMENT_CONFIG[delivery.payment_method] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
+  const isIfood = delivery.origin === 'ifood' || !delivery.origin; // fallback pra iFood se não tiver origem salva
 
   async function handleCopy() {
     const success = await copyDeliveryToClipboard(delivery);
     if (success) {
-      toast.success('Entrega copiada!', {
-        description: `Pedido #${delivery.order_id} pronto pra colar no WhatsApp.`,
-      });
+      toast.success('Entrega copiada!', { description: 'Pronto pra colar no WhatsApp.' });
     } else {
-      toast.error('Não foi possível copiar', {
-        description: 'Tenta novamente ou copia manualmente.',
-      });
+      toast.error('Não foi possível copiar', { description: 'Tenta novamente ou copia manualmente.' });
     }
   }
 
   return (
     <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/60 backdrop-blur-sm">
       <div className="flex flex-col p-4">
+        
+        {/* TAG DE ORIGEM NO TOPO DO CARD */}
+        <div className="flex justify-between items-center mb-3">
+          {isIfood ? (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-wider">
+              <Smartphone size={12} /> iFood
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase tracking-wider">
+              <Store size={12} /> Loja Própria
+            </span>
+          )}
+
+          {delivery.is_paid && (
+            <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-500">
+              <CheckCircle2 size={12} /> Pago
+            </span>
+          )}
+        </div>
+
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col">
 
-            {/* Número do Pedido */}
+            {/* DESTAQUE PRINCIPAL DEPENDE DA ORIGEM */}
             <div className="flex items-baseline gap-2">
-              <p className="font-heading text-3xl font-bold tracking-tight text-zinc-50">
-                #{delivery.order_id}
-              </p>
-              {delivery.confirmation_code && (
-                <p className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-mono tracking-wider text-zinc-400">
-                  Conf: {delivery.confirmation_code}
+              {isIfood ? (
+                <>
+                  <p className="font-heading text-3xl font-bold tracking-tight text-zinc-50">
+                    #{delivery.order_id}
+                  </p>
+                  {delivery.confirmation_code && (
+                    <p className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-mono tracking-wider text-zinc-400">
+                      Conf: {delivery.confirmation_code}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="font-heading text-2xl font-bold tracking-tight text-zinc-50 truncate max-w-[200px]">
+                  {customer?.name || 'Sem Nome'}
                 </p>
               )}
             </div>
 
-            {/* Valor do Pedido */}
             <p className="mt-1 text-sm font-bold text-emerald-400">
               R$ {delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}
             </p>
 
           </div>
-          {delivery.is_paid && (
-            <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-500">
-              <CheckCircle2 size={12} />
-              Pago
-            </span>
-          )}
         </div>
 
-        {customer && (
+        {/* NOME E BAIRRO (Se for iFood, mostra o nome menor. Se for Loja, o nome já é o destaque, então não repete) */}
+        {customer && isIfood && (
           <div className="mt-2 flex items-center gap-2">
             <p className="truncate text-sm font-medium text-zinc-300">{customer.name}</p>
             {customer.neighborhood && (
@@ -78,9 +97,9 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
             )}
           </div>
         )}
-        <p className="mt-1 truncate text-xs text-zinc-500">{delivery.address_string}</p>
 
-        {/* Mini-mapa integrado ao card */}
+        <p className={`truncate text-xs text-zinc-500 ${!isIfood ? 'mt-2' : 'mt-1'}`}>{delivery.address_string}</p>
+
         <MiniMap address={delivery.address_string} mapsLink={delivery.maps_link} />
       </div>
 
@@ -95,13 +114,9 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
 
       <div className="flex items-center justify-between gap-2 border-t border-zinc-800/80 px-4 py-3">
         <div className="flex items-center gap-2">
-          <span
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}
-          >
+          <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}>
             <PaymentIcon size={13} />
-            {payment.label === 'Dinheiro' && delivery.change_for
-              ? `Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')}`
-              : payment.label}
+            {payment.label === 'Dinheiro' && delivery.change_for ? `Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')}` : payment.label}
           </span>
 
           {delivery.drinks && (
@@ -112,21 +127,11 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
           )}
         </div>
 
-        {/* Botões de Ação */}
         <div className="flex items-center gap-2">
-          {/* Navegação por query param (?id=), sem rota dinâmica [id] — compatível com build estático do Capacitor */}
-          <Link
-            href={`/entregas/details?id=${delivery.id}`}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 transition-transform hover:bg-zinc-700 active:scale-90"
-          >
+          <Link href={`/entregas/details?id=${delivery.id}`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 transition-transform hover:bg-zinc-700 active:scale-90">
             <Pencil size={15} />
           </Link>
-
-          <button
-            onClick={handleCopy}
-            aria-label="Copiar dados da entrega"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-zinc-950 transition-transform active:scale-90"
-          >
+          <button onClick={handleCopy} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-zinc-950 transition-transform active:scale-90">
             <Copy size={16} strokeWidth={2.5} />
           </button>
         </div>
