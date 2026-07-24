@@ -260,8 +260,14 @@ export function useReportsData() {
       }));
   }, [formatDate]);
 
-  // Calcular métricas principais
-  const getMainMetrics = useCallback((filteredDeliveries: Delivery[], allDeliveries: Delivery[]) => {
+  // ============================================================
+  // getMainMetrics CORRIGIDO com parâmetro currentMonth
+  // ============================================================
+  const getMainMetrics = useCallback((
+    filteredDeliveries: Delivery[], 
+    allDeliveries: Delivery[],
+    currentMonth: string // ← novo parâmetro
+  ) => {
     const totalDeliveries = filteredDeliveries.length;
     const totalRevenue = filteredDeliveries.reduce((sum, d) => sum + (d.value || 0), 0);
     const averageTicket = totalDeliveries > 0 ? totalRevenue / totalDeliveries : 0;
@@ -276,9 +282,9 @@ export function useReportsData() {
       current.deliveries > best.deliveries ? current : best
     , dayStats[0] || { day: 'N/A', deliveries: 0, revenue: 0 });
     
-    // Variação com mês anterior
+    // Variação com mês anterior (agora só calcula se currentMonth !== 'all')
     let variation = 0;
-    if (filteredDeliveries.length > 0) {
+    if (filteredDeliveries.length > 0 && currentMonth !== 'all') {
       const firstItem = filteredDeliveries[0];
       const currentDate = formatDate(firstItem?.createdAt || firstItem?.updated_at || new Date());
       
@@ -293,7 +299,7 @@ export function useReportsData() {
       
       if (previousMonthDeliveries.length > 0) {
         variation = ((filteredDeliveries.length - previousMonthDeliveries.length) / previousMonthDeliveries.length) * 100;
-      } else if (filteredDeliveries.length > 0) {
+      } else {
         variation = 100;
       }
     }
