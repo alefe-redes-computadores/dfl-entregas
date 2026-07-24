@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { collection, doc, setDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
-import type { Route, Delivery, Customer } from '@/types';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy } from '@/types';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -14,6 +14,7 @@ interface AppState {
   routes: Route[];
   deliveries: Delivery[];
   customers: Customer[];
+  motoboys: Motoboy[]; // NOVO
   selectedDate: Date;
   isSyncing: boolean;
   setHasHydrated: (value: boolean) => void;
@@ -27,8 +28,11 @@ interface AppState {
   addRoute: (route: Route) => Promise<void>;
   addDelivery: (delivery: Delivery) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
+  deleteDelivery: (id: string) => Promise<void>;
   closeRoute: (routeId: string) => Promise<void>;
   addCustomer: (customer: Customer) => Promise<void>;
+  updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
+  addMotoboy: (motoboy: Motoboy) => Promise<void>; // NOVO
   findOrCreateCustomer: (
     name: string,
     details?: {
@@ -36,14 +40,11 @@ interface AppState {
       mapsLink?: string;
       confirmationCode?: string;
       observation?: string;
+      origin?: OrderOrigin;
     }
   ) => Promise<string>;
 }
 
-// Compara local x nuvem registro a registro usando `updated_at`.
-// - Se só existe local -> mantém e marca pra reenviar pra nuvem.
-// - Se existe nos dois e o local é mais novo -> local vence e marca pra reenviar.
-// - Se existe nos dois e a nuvem é igual ou mais nova -> mantém a versão da nuvem.
 function mergeByTimestamp<T extends { id: string; updated_at?: string }>(
   cloudItems: T[],
   localItems: T[]
@@ -55,7 +56,6 @@ function mergeByTimestamp<T extends { id: string; updated_at?: string }>(
     const idx = merged.findIndex((m) => m.id === localItem.id);
 
     if (idx === -1) {
-      // Só existe localmente -> mantém e reenvia pra nuvem
       merged.push(localItem);
       toPush.push(localItem);
       return;
@@ -66,11 +66,9 @@ function mergeByTimestamp<T extends { id: string; updated_at?: string }>(
     const cloudTime = cloudItem.updated_at ? new Date(cloudItem.updated_at).getTime() : 0;
 
     if (localTime > cloudTime) {
-      // Edição local mais recente que a nuvem (ex: update feito offline) -> local vence
       merged[idx] = localItem;
       toPush.push(localItem);
     }
-    // Se a nuvem for mais recente ou igual, mantém o que já está em merged (versão da nuvem)
   });
 
   return { merged, toPush };
@@ -83,7 +81,6 @@ function pushSafely(collectionName: string, id: string, data: object) {
   setDoc(doc(db, collectionName, id), safe).catch(console.error);
 }
 
-// O (persist) envolve a loja toda para criar o "Cofre Físico" no celular
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -93,6 +90,7 @@ export const useAppStore = create<AppState>()(
       routes: [],
       deliveries: [],
       customers: [],
+      motoboys: [],
       selectedDate: new Date(),
       isSyncing: false,
 
@@ -121,164 +119,142 @@ export const useAppStore = create<AppState>()(
       logout: async () => {
         try {
           await signOut(auth);
-          set({ routes: [], deliveries: [], customers: [], user: null });
+          set({ routes: [], deliveries: [], customers: [], motoboys: [], user: null });
         } catch (error) {
           console.error('Erro no logout:', error);
         }
       },
 
-      // IMPORTANTE: só chame initData() depois que `hasHydrated` for true.
-      // Chamar antes disso faz o merge enxergar o estado local como vazio e
-      // sobrescrever (e persistir) dados que ainda não subiram pra nuvem.
       initData: async () => {
-        if (!get().hasHydrated) {
-          console.warn('[initData] Chamado antes da hidratação local terminar — abortando pra não sobrescrever dados offline.');
-          return;
-        }
-
+        if (!get().hasHydrated) return;
         set({ isSyncing: true });
         try {
-          const [routesSnap, deliveriesSnap, customersSnap] = await Promise.all([
+          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
             getDocs(collection(db, 'deliveries')),
-            getDocs(collection(db, 'customers'))
+            getDocs(collection(db, 'customers')),
+            getDocs(collection(db, 'motoboys'))
           ]);
 
           const fbRoutes = routesSnap.docs.map(d => d.data() as Route);
           const fbDeliveries = deliveriesSnap.docs.map(d => d.data() as Delivery);
           const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
+          const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
 
-          const localRoutes = get().routes;
-          const localDeliveries = get().deliveries;
-          const localCustomers = get().customers;
+          const routesResult = mergeByTimestamp(fbRoutes, get().routes);
+          const deliveriesResult = mergeByTimestamp(fbDeliveries, get().deliveries);
+          const customersResult = mergeByTimestamp(fbCustomers, get().customers);
+          const motoboysResult = mergeByTimestamp(fbMotoboys, get().motoboys);
 
-          const routesResult = mergeByTimestamp(fbRoutes, localRoutes);
-          const deliveriesResult = mergeByTimestamp(fbDeliveries, localDeliveries);
-          const customersResult = mergeByTimestamp(fbCustomers, localCustomers);
-
-          // Reenvia pra nuvem só o que realmente precisa (novo local ou local mais recente)
           routesResult.toPush.forEach((r) => pushSafely('routes', r.id, r));
           deliveriesResult.toPush.forEach((d) => pushSafely('deliveries', d.id, d));
           customersResult.toPush.forEach((c) => pushSafely('customers', c.id, c));
+          motoboysResult.toPush.forEach((m) => pushSafely('motoboys', m.id, m));
 
           set({
             routes: routesResult.merged,
             deliveries: deliveriesResult.merged,
             customers: customersResult.merged,
+            motoboys: motoboysResult.merged,
             isSyncing: false
           });
         } catch (error) {
-          console.error('Erro ao sincronizar, mantendo dados offline:', error);
+          console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false });
         }
       },
 
-      goToPreviousDay: () =>
-        set((state) => {
-          const prev = new Date(state.selectedDate);
-          prev.setDate(prev.getDate() - 1);
-          return { selectedDate: prev };
-        }),
+      goToPreviousDay: () => set((state) => {
+        const prev = new Date(state.selectedDate);
+        prev.setDate(prev.getDate() - 1);
+        return { selectedDate: prev };
+      }),
 
-      goToNextDay: () =>
-        set((state) => {
-          const next = new Date(state.selectedDate);
-          next.setDate(next.getDate() + 1);
-          return { selectedDate: next };
-        }),
+      goToNextDay: () => set((state) => {
+        const next = new Date(state.selectedDate);
+        next.setDate(next.getDate() + 1);
+        return { selectedDate: next };
+      }),
 
-      getDeliveriesByRoute: (routeId) =>
-        get().deliveries.filter((d) => d.route_id === routeId),
+      getDeliveriesByRoute: (routeId) => get().deliveries.filter((d) => d.route_id === routeId),
 
-      getCustomerById: (customerId) =>
-        customerId ? get().customers.find((c) => c.id === customerId) : undefined,
+      getCustomerById: (customerId) => customerId ? get().customers.find((c) => c.id === customerId) : undefined,
 
       addRoute: async (route) => {
         const routeWithTimestamp: Route = { ...route, updated_at: new Date().toISOString() };
         set((state) => ({ routes: [routeWithTimestamp, ...state.routes] }));
         try {
-          const safeRoute = Object.fromEntries(
-            Object.entries(routeWithTimestamp).filter(([_, v]) => v !== undefined)
-          );
-          await setDoc(doc(db, 'routes', route.id), safeRoute);
-        } catch (error) {
-          console.error('Erro ao salvar rota, mas tá seguro no celular:', error);
-        }
+          await setDoc(doc(db, 'routes', route.id), routeWithTimestamp);
+        } catch (error) { console.error(error); }
+      },
+
+      addMotoboy: async (motoboy) => {
+        const dataWithTimestamp: Motoboy = { ...motoboy, updated_at: new Date().toISOString() };
+        set((state) => ({ motoboys: [...state.motoboys, dataWithTimestamp] }));
+        try {
+          await setDoc(doc(db, 'motoboys', motoboy.id), dataWithTimestamp);
+        } catch (error) { console.error(error); }
       },
 
       addDelivery: async (delivery) => {
         const deliveryWithTimestamp: Delivery = { ...delivery, updated_at: new Date().toISOString() };
         set((state) => ({ deliveries: [deliveryWithTimestamp, ...state.deliveries] }));
         try {
-          const safeDelivery = Object.fromEntries(
-            Object.entries(deliveryWithTimestamp).filter(([_, v]) => v !== undefined)
-          ) as Delivery;
-          await setDoc(doc(db, 'deliveries', delivery.id), safeDelivery);
-        } catch (error) {
-          console.error('Falha no Firebase, mas a entrega está segura offline:', error);
-        }
+          await setDoc(doc(db, 'deliveries', delivery.id), deliveryWithTimestamp);
+        } catch (error) { console.error(error); }
       },
 
-      updateDelivery: async (id: string, updatedData: Partial<Delivery>) => {
+      updateDelivery: async (id, updatedData) => {
         const dataWithTimestamp: Partial<Delivery> = { ...updatedData, updated_at: new Date().toISOString() };
-
         set((state) => ({
-          deliveries: state.deliveries.map((d) =>
-            d.id === id ? { ...d, ...dataWithTimestamp } : d
-          )
+          deliveries: state.deliveries.map((d) => d.id === id ? { ...d, ...dataWithTimestamp } as Delivery : d)
         }));
-
         try {
-          const safeUpdate = Object.fromEntries(
-            Object.entries(dataWithTimestamp).filter(([_, v]) => v !== undefined)
-          );
+          const safeUpdate = Object.fromEntries(Object.entries(dataWithTimestamp).filter(([_, v]) => v !== undefined));
           await updateDoc(doc(db, 'deliveries', id), safeUpdate);
-        } catch (error) {
-          console.error('Erro no update Firebase, salvo apenas no celular:', error);
-        }
+        } catch (error) { console.error(error); }
+      },
+
+      deleteDelivery: async (id) => {
+        set((state) => ({ deliveries: state.deliveries.filter((d) => d.id !== id) }));
+        try {
+          await deleteDoc(doc(db, 'deliveries', id));
+        } catch (error) { console.error(error); }
       },
 
       closeRoute: async (routeId) => {
         const endTime = new Date().toISOString();
         set((state) => ({
-          routes: state.routes.map((r) =>
-            r.id === routeId ? { ...r, status: 'fechada', end_time: endTime, updated_at: endTime } : r
-          ),
+          routes: state.routes.map((r) => r.id === routeId ? { ...r, status: 'fechada', end_time: endTime, updated_at: endTime } : r),
         }));
         try {
-          await updateDoc(doc(db, 'routes', routeId), {
-            status: 'fechada',
-            end_time: endTime,
-            updated_at: endTime
-          });
-        } catch (error) {
-          console.error('Erro no Firebase, rota fechada apenas no celular:', error);
-        }
+          await updateDoc(doc(db, 'routes', routeId), { status: 'fechada', end_time: endTime, updated_at: endTime });
+        } catch (error) { console.error(error); }
       },
 
       addCustomer: async (customer) => {
         const customerWithTimestamp: Customer = { ...customer, updated_at: new Date().toISOString() };
         set((state) => ({ customers: [customerWithTimestamp, ...state.customers] }));
         try {
-          const safeCustomer = Object.fromEntries(
-            Object.entries(customerWithTimestamp).filter(([_, v]) => v !== undefined)
-          );
-          await setDoc(doc(db, 'customers', customer.id), safeCustomer);
-        } catch (error) {
-          console.error('Erro ao salvar cliente, mas está seguro offline:', error);
-        }
+          await setDoc(doc(db, 'customers', customer.id), customerWithTimestamp);
+        } catch (error) { console.error(error); }
       },
 
-      // Busca cliente por nome (case-insensitive). Se não existir, cria automaticamente
-      // (local + Firebase) já com bairro (extraído do endereço), endereço completo, maps link,
-      // observação e código de confirmação preenchidos na entrega. Se já existir, atualiza esses
-      // dados com o que veio de mais recente. Se o nome vier vazio, retorna string vazia.
+      updateCustomer: async (id, updatedData) => {
+        const dataWithTimestamp: Partial<Customer> = { ...updatedData, updated_at: new Date().toISOString() };
+        set((state) => ({
+          customers: state.customers.map((c) => c.id === id ? { ...c, ...dataWithTimestamp } as Customer : c)
+        }));
+        try {
+          const safeUpdate = Object.fromEntries(Object.entries(dataWithTimestamp).filter(([_, v]) => v !== undefined));
+          await updateDoc(doc(db, 'customers', id), safeUpdate);
+        } catch (error) { console.error(error); }
+      },
+
       findOrCreateCustomer: async (name, details) => {
         const trimmed = name.trim();
         if (!trimmed) return '';
 
-        // Extrai o bairro como o último trecho separado por vírgula do endereço
-        // (ex: "Rua ABC, 123, Centro" -> "Centro")
         const extractNeighborhood = (address?: string): string | undefined => {
           if (!address) return undefined;
           const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
@@ -286,10 +262,7 @@ export const useAppStore = create<AppState>()(
           return parts[parts.length - 1];
         };
 
-        const existing = get().customers.find(
-          (c) => c.name.trim().toLowerCase() === trimmed.toLowerCase()
-        );
-
+        const existing = get().customers.find((c) => c.name.trim().toLowerCase() === trimmed.toLowerCase());
         const derivedNeighborhood = extractNeighborhood(details?.address);
         const now = new Date().toISOString();
 
@@ -300,21 +273,16 @@ export const useAppStore = create<AppState>()(
           if (details?.confirmationCode) updatedFields.last_confirmation_code = details.confirmationCode;
           if (details?.observation) updatedFields.observation = details.observation;
           if (derivedNeighborhood) updatedFields.neighborhood = derivedNeighborhood;
+          if (details?.origin) updatedFields.origin = details.origin;
 
           set((state) => ({
-            customers: state.customers.map((c) =>
-              c.id === existing.id ? { ...c, ...updatedFields } : c
-            ),
+            customers: state.customers.map((c) => c.id === existing.id ? { ...c, ...updatedFields } : c),
           }));
 
           try {
-            const safeUpdate = Object.fromEntries(
-              Object.entries(updatedFields).filter(([_, v]) => v !== undefined)
-            );
+            const safeUpdate = Object.fromEntries(Object.entries(updatedFields).filter(([_, v]) => v !== undefined));
             await updateDoc(doc(db, 'customers', existing.id), safeUpdate);
-          } catch (error) {
-            console.error('Erro ao atualizar cliente existente, mas salvo offline:', error);
-          }
+          } catch (error) { console.error(error); }
 
           return existing.id;
         }
@@ -322,6 +290,7 @@ export const useAppStore = create<AppState>()(
         const newCustomer: Customer = {
           id: Date.now().toString(),
           name: trimmed,
+          origin: details?.origin || 'loja',
           neighborhood: derivedNeighborhood,
           address: details?.address || undefined,
           maps_link: details?.mapsLink || undefined,
@@ -334,29 +303,22 @@ export const useAppStore = create<AppState>()(
         set((state) => ({ customers: [newCustomer, ...state.customers] }));
 
         try {
-          const safeCustomer = Object.fromEntries(
-            Object.entries(newCustomer).filter(([_, v]) => v !== undefined)
-          );
+          const safeCustomer = Object.fromEntries(Object.entries(newCustomer).filter(([_, v]) => v !== undefined));
           await setDoc(doc(db, 'customers', newCustomer.id), safeCustomer);
-        } catch (error) {
-          console.error('Erro ao criar cliente, mas está seguro offline:', error);
-        }
+        } catch (error) { console.error(error); }
 
         return newCustomer.id;
       },
     }),
     {
       name: 'dfl-entregas-cofre-offline',
-      partialize: (state) => ({
-        routes: state.routes,
-        deliveries: state.deliveries,
-        customers: state.customers
+      partialize: (state) => ({ 
+        routes: state.routes, 
+        deliveries: state.deliveries, 
+        customers: state.customers,
+        motoboys: state.motoboys // Mantém salvo offline
       }),
-      onRehydrateStorage: () => (state) => {
-        // Dispara depois que o storage local terminou de carregar no state.
-        // Só a partir daqui é seguro chamar initData() sem risco de sobrescrever dados offline.
-        state?.setHasHydrated(true);
-      },
+      onRehydrateStorage: () => (state) => { state?.setHasHydrated(true); },
     }
   )
 );
