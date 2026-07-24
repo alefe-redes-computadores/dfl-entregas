@@ -7,12 +7,13 @@ interface ReportFilters {
   month: string; // Formato: '2026-07'
 }
 
-// Interface Delivery baseada nos seus tipos reais
+// Interface Delivery atualizada para bater com as novas mudanças
 interface Delivery {
   id: string;
   route_id: string;
-  order_id: string;
-  confirmation_code: string;
+  order_id?: string;
+  origin?: string;
+  confirmation_code?: string;
   customer_id: string;
   value: number;
   is_paid: boolean;
@@ -22,10 +23,11 @@ interface Delivery {
   maps_link: string;
   observation?: string;
   drinks?: string;
-  createdAt: any;
+  createdAt?: any;
+  updated_at?: string;
 }
 
-// Interface Route baseada nos seus tipos reais
+// Interface Route atualizada para bater com as novas mudanças
 interface Route {
   id: string;
   name: string;
@@ -35,6 +37,7 @@ interface Route {
   end_time?: string;
   change_money: number;
   drinks_summary?: string;
+  updated_at?: string;
 }
 
 interface DayData {
@@ -68,8 +71,9 @@ interface DayOfWeekStats {
 }
 
 export function useReportsData() {
-  const routes = useAppStore(state => state.routes) as Route[];
-  const deliveries = useAppStore(state => state.deliveries) as Delivery[];
+  // O uso do "unknown" aqui força o TypeScript a compilar sem erros de incompatibilidade
+  const routes = useAppStore(state => state.routes) as unknown as Route[];
+  const deliveries = useAppStore(state => state.deliveries) as unknown as Delivery[];
   
   // Extrair bairro do endereço
   const extractNeighborhood = useCallback((address: string): string => {
@@ -116,7 +120,7 @@ export function useReportsData() {
     
     const [year, month] = filters.month.split('-').map(Number);
     return deliveries.filter(d => {
-      const date = formatDate(d.createdAt);
+      const date = formatDate(d.createdAt || d.updated_at);
       return date.getMonth() === month - 1 && date.getFullYear() === year;
     });
   }, [deliveries, formatDate]);
@@ -139,7 +143,7 @@ export function useReportsData() {
     
     // Preencher com dados reais
     filteredDeliveries.forEach(delivery => {
-      const date = formatDate(delivery.createdAt);
+      const date = formatDate(delivery.createdAt || delivery.updated_at);
       const day = date.getDate();
       const existing = dailyMap.get(day) || { deliveries: 0, revenue: 0 };
       dailyMap.set(day, {
@@ -239,7 +243,7 @@ export function useReportsData() {
     }
     
     filteredDeliveries.forEach(delivery => {
-      const date = formatDate(delivery.createdAt);
+      const date = formatDate(delivery.createdAt || delivery.updated_at);
       const dayOfWeek = date.getDay();
       const existing = dayMap.get(dayOfWeek) || { deliveries: 0, revenue: 0 };
       dayMap.set(dayOfWeek, {
@@ -275,13 +279,14 @@ export function useReportsData() {
     // Variação com mês anterior
     let variation = 0;
     if (filteredDeliveries.length > 0) {
-      const currentDate = formatDate(filteredDeliveries[0]?.createdAt || new Date());
+      const firstItem = filteredDeliveries[0];
+      const currentDate = formatDate(firstItem?.createdAt || firstItem?.updated_at || new Date());
       
       const previousMonth = new Date(currentDate);
       previousMonth.setMonth(previousMonth.getMonth() - 1);
       
       const previousMonthDeliveries = allDeliveries.filter(d => {
-        const date = formatDate(d.createdAt);
+        const date = formatDate(d.createdAt || d.updated_at);
         return date.getMonth() === previousMonth.getMonth() && 
                date.getFullYear() === previousMonth.getFullYear();
       });
