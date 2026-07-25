@@ -31,7 +31,7 @@ interface AppState {
   deleteDelivery: (id: string) => Promise<void>;
   closeRoute: (routeId: string) => Promise<void>;
   reopenRoute: (routeId: string) => Promise<void>;
-  reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>; // <-- NOVO
+  reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
   addMotoboy: (motoboy: Motoboy) => Promise<void>;
@@ -252,14 +252,14 @@ export const useAppStore = create<AppState>()(
         } catch (error) { console.error(error); }
       },
 
-      // NOVA FUNÇÃO: Reordenar e persistir no Firebase
       reorderDelivery: async (routeId, deliveryId, direction) => {
         const state = get();
         const routeDeliveries = state.deliveries
           .filter(d => d.route_id === routeId)
           .sort((a, b) => {
-             const orderA = a.order_index !== undefined ? a.order_index : new Date(a.createdAt || 0).getTime();
-             const orderB = b.order_index !== undefined ? b.order_index : new Date(b.createdAt || 0).getTime();
+             // CORRIGIDO: Usando updated_at para evitar erro de propriedade inexistente
+             const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
+             const orderB = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
              return orderA - orderB;
           });
 
