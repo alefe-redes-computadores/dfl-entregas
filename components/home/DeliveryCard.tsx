@@ -12,17 +12,19 @@ interface DeliveryCardProps {
   customer?: Customer;
 }
 
-const PAYMENT_CONFIG = {
+const PAYMENT_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
   dinheiro: { label: 'Dinheiro', icon: Banknote, className: 'text-amber-500 bg-amber-500/10' },
   pix: { label: 'Pix', icon: QrCode, className: 'text-emerald-500 bg-emerald-500/10' },
-  cartao_credito: { label: 'Cartão Crédito', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10' },
-  cartao_debito: { label: 'Cartão Débito', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10' },
-} as const;
+  cartao: { label: 'Cartão', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10' },
+  cartao_credito: { label: 'Cartão', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10' },
+  cartao_debito: { label: 'Cartão', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10' },
+};
 
 export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
+  // Faz o fallback inteligente, se não achar a forma de pagamento, joga como dinheiro
   const payment = PAYMENT_CONFIG[delivery.payment_method] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
-  const isIfood = delivery.origin === 'ifood' || !delivery.origin; // fallback pra iFood se não tiver origem salva
+  const isIfood = delivery.origin === 'ifood' || !delivery.origin; 
 
   async function handleCopy() {
     const success = await copyDeliveryToClipboard(delivery);
@@ -86,7 +88,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
           </div>
         </div>
 
-        {/* NOME E BAIRRO (Se for iFood, mostra o nome menor. Se for Loja, o nome já é o destaque, então não repete) */}
+        {/* NOME E BAIRRO */}
         {customer && isIfood && (
           <div className="mt-2 flex items-center gap-2">
             <p className="truncate text-sm font-medium text-zinc-300">{customer.name}</p>
