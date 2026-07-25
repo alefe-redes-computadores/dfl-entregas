@@ -37,7 +37,7 @@ export async function copyDeliveryToClipboard(delivery: Delivery): Promise<boole
         } else {
           parts.push(`- *DINHEIRO* - R$ ${valueStr} (Trocado)`);
         }
-      } else if (delivery.payment_method?.includes('cartao') || delivery.payment_method === 'cartao') {
+      } else if (delivery.payment_method?.includes('cartao') || (delivery.payment_method as string) === 'cartao') {
         parts.push(`- *CARTÃO* - R$ ${valueStr} (Levar maquininha)`);
       } else if (delivery.payment_method === 'pix') {
         parts.push(`- *PIX QR Code na maquininha* - R$ ${valueStr}`);
