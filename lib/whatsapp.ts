@@ -6,18 +6,16 @@ export async function copyDeliveryToClipboard(delivery: Delivery): Promise<boole
     const isIfood = delivery.origin === 'ifood' || !delivery.origin;
     const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
 
-    // 1. ID do pedido e Código Longo (SOMENTE IFOOD)
+    // 1. Número do pedido e ID lado a lado em negrito (SOMENTE IFOOD)
     if (isIfood) {
       if (delivery.order_id && delivery.confirmation_code) {
-        // Exemplo: *#8189* - ID: *12345678*
-        parts.push(`*#${delivery.order_id}* - ID: *${delivery.confirmation_code}*`);
+        parts.push(`*#${delivery.order_id}* - *ID: ${delivery.confirmation_code}*`);
       } else if (delivery.order_id) {
          parts.push(`*#${delivery.order_id}*`);
       } else if (delivery.confirmation_code) {
-         parts.push(`ID: *${delivery.confirmation_code}*`);
+         parts.push(`*ID: ${delivery.confirmation_code}*`);
       }
       
-      // Dá um respiro apenas se imprimiu algo do iFood
       if (delivery.order_id || delivery.confirmation_code) {
           parts.push(''); 
       }
@@ -57,7 +55,7 @@ export async function copyDeliveryToClipboard(delivery: Delivery): Promise<boole
       }
     }
 
-    // 6. Bebidas (Com Bullets e Negrito, se houver - Com trim() para não quebrar o WhatsApp)
+    // 6. Bebidas (Com trim() para arrumar o espaço fantasma que quebra o WhatsApp)
     if (delivery.drinks) {
       parts.push(`- *${delivery.drinks.trim()}*`);
     }
