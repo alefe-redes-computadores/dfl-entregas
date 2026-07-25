@@ -13,7 +13,6 @@ interface RouteAccordionProps {
   defaultOpen?: boolean;
 }
 
-// Utilitário para formatar a duração da rota
 function formatRouteDuration(departureTime: string, endTime?: string) {
   if (!endTime) return null;
   const start = new Date(departureTime).getTime();
@@ -33,17 +32,20 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const closeRoute = useAppStore((state) => state.closeRoute);
-  const reopenRoute = useAppStore((state) => state.reopenRoute); // NOVA FUNÇÃO
+  const reopenRoute = useAppStore((state) => state.reopenRoute);
 
   const deliveries = getDeliveriesByRoute(route.id);
   const pendingCount = deliveries.filter((d) => !d.is_paid).length;
   const duration = formatRouteDuration(route.departure_time, route.end_time);
 
-  // Ordenação: Pendentes em cima, concluídas embaixo
+  // MÁGICA DA ORDENAÇÃO: Respeita o seu reordenar, mas as concluídas caem!
   const sortedDeliveries = [...deliveries].sort((a, b) => {
     if (a.completed && !b.completed) return 1;
     if (!a.completed && b.completed) return -1;
-    return 0;
+    
+    const aOrder = a.order_index !== undefined ? a.order_index : new Date(a.createdAt || 0).getTime();
+    const bOrder = b.order_index !== undefined ? b.order_index : new Date(b.createdAt || 0).getTime();
+    return aOrder - bOrder;
   });
 
   const handleCloseRoute = () => {
@@ -96,7 +98,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             
             <div className="flex items-center gap-2 mt-0.5">
               <p className="text-xs text-zinc-500">{route.motoboy_name}</p>
-              {/* Exibe o cronômetro se estiver finalizada */}
               {route.status === 'fechada' && duration && (
                 <span className="flex items-center gap-1 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
                   <Clock size={10} /> {duration}
@@ -153,7 +154,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             ))
           )}
 
-          {/* Botões de Ação da Rota */}
           <div className="mt-2 flex flex-col gap-2">
             {route.status === 'aberta' ? (
               <button
