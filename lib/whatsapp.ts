@@ -29,9 +29,13 @@ export async function copyDeliveryToClipboard(delivery: Delivery): Promise<boole
       parts.push(`*OBS:* ${delivery.observation}`);
     }
 
-    // 4. Link do Maps (se houver)
+    // 4. Link do Maps (Usa o colado OU gera um automático pela rua)
     if (delivery.maps_link) {
       parts.push(`🗺️ ${delivery.maps_link}`);
+    } else if (delivery.address_string) {
+      // Magia: Gera um link de busca do Google Maps se não houver link colado
+      const encodedAddress = encodeURIComponent(`${delivery.address_string}, Patos de Minas - MG`);
+      parts.push(`🗺️ https://maps.google.com/?q=${encodedAddress}`);
     }
 
     parts.push(''); // Linha em branco antes do pagamento e bebida
