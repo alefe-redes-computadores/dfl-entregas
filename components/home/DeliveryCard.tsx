@@ -66,11 +66,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
           )}
 
           <div className="flex items-center gap-2">
-            {delivery.is_paid && (
-              <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-500">
-                <CheckCircle2 size={12} /> Pago
-              </span>
-            )}
+            {/* O selo de "Pago" foi removido daqui do topo para não duplicar, agora ele reina no rodapé! */}
             {delivery.completed && (
               <span className="flex items-center gap-1 rounded-full bg-zinc-700 px-2 py-1 text-[11px] font-semibold text-zinc-300">
                 <CheckCircle size={12} /> Entregue
@@ -134,10 +130,18 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
       <div className="flex flex-col gap-3 border-t border-zinc-800/80 px-4 py-3">
         {/* Row 1: Pagamento e Bebidas */}
         <div className="flex items-center gap-2">
-          <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}>
-            <PaymentIcon size={13} />
-            {payment.label === 'Dinheiro' && delivery.change_for ? `Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')}` : payment.label}
-          </span>
+          {delivery.is_paid ? (
+            <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-500">
+              <CheckCircle2 size={13} />
+              Pago
+            </span>
+          ) : (
+            <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}>
+              <PaymentIcon size={13} />
+              {payment.label === 'Dinheiro' && delivery.change_for ? `Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')}` : payment.label}
+            </span>
+          )}
+
           {delivery.drinks && (
             <span className="flex items-center gap-1 rounded-full bg-zinc-800 px-2.5 py-1 text-xs text-zinc-400">
               <CupSoda size={13} />
