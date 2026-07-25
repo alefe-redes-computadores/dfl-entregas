@@ -234,7 +234,7 @@ function DeliveryDetailsForm() {
               <QrCode size={24} />
               <span className="text-xs font-bold">Pix</span>
             </button>
-            <button type="button" onClick={() => setPaymentMethod('cartao' as any)} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'cartao' ? 'border-sky-500 bg-sky-500/10 text-sky-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
+            <button type="button" onClick={() => setPaymentMethod('cartao' as any)} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${(paymentMethod as string) === 'cartao' ? 'border-sky-500 bg-sky-500/10 text-sky-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
               <CreditCard size={24} />
               <span className="text-xs font-bold">Cartão</span>
             </button>
