@@ -30,7 +30,8 @@ interface AppState {
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
   closeRoute: (routeId: string) => Promise<void>;
-  reopenRoute: (routeId: string) => Promise<void>; // <-- NOVO
+  reopenRoute: (routeId: string) => Promise<void>;
+  reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>; // <-- NOVO
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
   addMotoboy: (motoboy: Motoboy) => Promise<void>;
@@ -241,7 +242,6 @@ export const useAppStore = create<AppState>()(
         } catch (error) { console.error(error); }
       },
 
-      // NOVA FUNÇÃO: Reabrir Rota
       reopenRoute: async (routeId) => {
         const now = new Date().toISOString();
         set((state) => ({
@@ -250,6 +250,49 @@ export const useAppStore = create<AppState>()(
         try {
           await updateDoc(doc(db, 'routes', routeId), { status: 'aberta', end_time: null, updated_at: now });
         } catch (error) { console.error(error); }
+      },
+
+      // NOVA FUNÇÃO: Reordenar e persistir no Firebase
+      reorderDelivery: async (routeId, deliveryId, direction) => {
+        const state = get();
+        const routeDeliveries = state.deliveries
+          .filter(d => d.route_id === routeId)
+          .sort((a, b) => {
+             const orderA = a.order_index !== undefined ? a.order_index : new Date(a.createdAt || 0).getTime();
+             const orderB = b.order_index !== undefined ? b.order_index : new Date(b.createdAt || 0).getTime();
+             return orderA - orderB;
+          });
+
+        routeDeliveries.forEach((d, i) => d.order_index = i);
+
+        const currentIndex = routeDeliveries.findIndex(d => d.id === deliveryId);
+        if (currentIndex === -1) return;
+        if (direction === 'up' && currentIndex === 0) return;
+        if (direction === 'down' && currentIndex === routeDeliveries.length - 1) return;
+
+        const targetDelivery = routeDeliveries[currentIndex];
+        const swapDelivery = routeDeliveries[direction === 'up' ? currentIndex - 1 : currentIndex + 1];
+
+        const temp = targetDelivery.order_index;
+        targetDelivery.order_index = swapDelivery.order_index;
+        swapDelivery.order_index = temp;
+
+        const now = new Date().toISOString();
+
+        set((prev) => ({
+          deliveries: prev.deliveries.map(d => {
+            if (d.id === targetDelivery.id) return { ...d, order_index: targetDelivery.order_index, updated_at: now };
+            if (d.id === swapDelivery.id) return { ...d, order_index: swapDelivery.order_index, updated_at: now };
+            return d;
+          })
+        }));
+
+        try {
+          await updateDoc(doc(db, 'deliveries', targetDelivery.id), { order_index: targetDelivery.order_index, updated_at: now });
+          await updateDoc(doc(db, 'deliveries', swapDelivery.id), { order_index: swapDelivery.order_index, updated_at: now });
+        } catch (error) {
+          console.error('Erro ao salvar reordenação:', error);
+        }
       },
 
       addCustomer: async (customer) => {
