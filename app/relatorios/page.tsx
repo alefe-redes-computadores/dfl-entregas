@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, BarChart3, Wallet, Map, Activity, X, CheckCircle } from 'lucide-react';
+// Olha a correção aqui: Importamos o Map com o apelido MapIcon
+import { ChevronLeft, BarChart3, Wallet, Map as MapIcon, Activity, X, CheckCircle } from 'lucide-react';
 import { useReportsData } from '@/hooks/useReportsData';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -39,6 +40,7 @@ export default function RelatoriosPage() {
   // NOSSAS DUAS NOVAS MÉTRICAS PRO MAX
   const peakHoursData = useMemo(() => reports.getPeakHoursStats(filteredDeliveries), [reports, filteredDeliveries]);
   const originData = useMemo(() => {
+    // Agora o JavaScript sabe que esse Map é o nativo de dados, não o ícone!
     const map = new Map<string, { count: number; total: number }>();
     filteredDeliveries.forEach(d => {
       const org = d.origin || 'ifood';
@@ -75,7 +77,8 @@ export default function RelatoriosPage() {
           <Wallet size={14} /> Receitas
         </button>
         <button onClick={() => setActiveTab('operacao')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full font-bold text-xs transition-all duration-300 ${activeTab === 'operacao' ? 'bg-zinc-800 text-sky-400 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          <Map size={14} /> Logística
+          {/* Usando o apelido MapIcon aqui */}
+          <MapIcon size={14} /> Logística
         </button>
       </div>
 
