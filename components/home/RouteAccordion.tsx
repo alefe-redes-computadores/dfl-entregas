@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 import type { Route } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
-import { DeliveryCard } from '@/components/deliveries/DeliveryCard';
+import { DeliveryCard } from '@/components/home/DeliveryCard';
 
 interface RouteAccordionProps {
   route: Route;
@@ -38,7 +38,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const pendingCount = deliveries.filter((d) => !d.is_paid).length;
   const duration = formatRouteDuration(route.departure_time, route.end_time);
 
-  // MÁGICA DA ORDENAÇÃO: Respeita o seu reordenar, mas as concluídas caem!
   const sortedDeliveries = [...deliveries].sort((a, b) => {
     if (a.completed && !b.completed) return 1;
     if (!a.completed && b.completed) return -1;
