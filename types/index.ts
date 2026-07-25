@@ -35,7 +35,8 @@ export interface Delivery {
   maps_link: string;
   observation?: string;
   drinks?: string;
-  completed?: boolean; // <-- NOVO: Controle de entrega finalizada
+  completed?: boolean;
+  order_index?: number; // <-- NOVO: Mantém a ordem customizada salva
   updated_at?: string;
 }
 
