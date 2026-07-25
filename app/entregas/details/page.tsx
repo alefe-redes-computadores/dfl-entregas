@@ -2,11 +2,11 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, Store, Smartphone, Trash2, Banknote, QrCode, CreditCard } from 'lucide-react';
+import { ChevronLeft, Store, Smartphone, Trash2, Banknote, QrCode, CreditCard, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
-import type { Delivery, OrderOrigin } from '@/types';
+import type { Delivery, OrderOrigin, Customer } from '@/types';
 
 function DeliveryDetailsForm() {
   const router = useRouter();
@@ -25,12 +25,14 @@ function DeliveryDetailsForm() {
 
   const [origin, setOrigin] = useState<OrderOrigin>('ifood');
   const [routeId, setRouteId] = useState('');
+  const [isRouteDropdownOpen, setIsRouteDropdownOpen] = useState(false); // NOVO
+  
   const [customerName, setCustomerName] = useState('');
   const [orderId, setOrderId] = useState('');
   const [value, setValue] = useState('');
   
-  const [streetAddress, setStreetAddress] = useState(''); // Separado Rua
-  const [neighborhood, setNeighborhood] = useState(''); // Separado Bairro
+  const [streetAddress, setStreetAddress] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
   
   const [mapsLink, setMapsLink] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<Delivery['payment_method']>('dinheiro');
@@ -49,6 +51,75 @@ function DeliveryDetailsForm() {
     return numberValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  // INTELIGÊNCIA: Autopreenchimento ao selecionar cliente no Autocomplete
+  const handleCustomerSelect = (c: Customer) => {
+    let street = c.address || '';
+    const hood = c.neighborhood || '';
+
+    if (street && hood) {
+      const regex = new RegExp(`[,\\-\\s]+${hood}$`, 'i');
+      street = street.replace(regex, '').trim();
+    }
+
+    if (street) setStreetAddress(street);
+    if (hood) setNeighborhood(hood);
+    if (c.observation) setObservation(c.observation);
+    
+    toast.success('Endereço preenchido automaticamente! 🪄');
+  };
+
+  // INTELIGÊNCIA: Fatiador de Endereço ao colar
+  const handleAddressPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text');
+    if (!text) return;
+    
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    let extractedStreet = '';
+    let extractedNeighborhood = '';
+    let extractedObs = observation;
+
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (lower.includes('endereço de entrega')) continue;
+      if (line.match(/\d{5}-\d{3}/) || lower.includes('cep')) continue;
+      if (lower.includes('patos de minas') || lower.includes('- mg')) continue;
+      
+      if (lower.startsWith('obs:') || lower.startsWith('observação:')) {
+        extractedObs = line.replace(/^(obs|observação):\s*/i, '').trim();
+        continue;
+      }
+
+      if (!extractedStreet && (line.includes(',') || line.includes('-'))) {
+         let addressPart = line;
+         if (line.includes('-')) {
+            const parts = line.split('-');
+            extractedNeighborhood = parts.pop()?.trim() || '';
+            addressPart = parts.join('-').trim();
+         }
+         addressPart = addressPart.replace(/,\s*$/, '');
+         extractedStreet = addressPart;
+         continue;
+      }
+
+      if (!extractedStreet) extractedStreet = line;
+    }
+
+    if (extractedStreet) setStreetAddress(extractedStreet);
+    if (extractedNeighborhood) setNeighborhood(extractedNeighborhood);
+    if (extractedObs) setObservation(extractedObs);
+
+    toast.success('Endereço fatiado magicamente! ✨');
+  };
+
+  // 🧠 Inteligência do Pagamento (TypeScript Bypass)
+  const handlePaymentMethodChange = (method: string) => {
+    setPaymentMethod(method as any);
+    if (method === 'cartao') {
+      setIsPaid(false);
+    }
+  };
+
   useEffect(() => {
     if (!deliveryId) return;
 
@@ -59,7 +130,6 @@ function DeliveryDetailsForm() {
       setOrderId(delivery.order_id || '');
       setValue(delivery.value ? delivery.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
       
-      // Inteligência para separar Rua e Bairro ao editar
       let street = delivery.address_string;
       let hood = '';
       if (street.includes(',')) {
@@ -76,7 +146,6 @@ function DeliveryDetailsForm() {
 
       setMapsLink(delivery.maps_link || '');
       
-      // Ajusta compatibilidade com o formato novo burlado pro TypeScript
       let method = delivery.payment_method as string;
       if (method.includes('cartao')) method = 'cartao';
       setPaymentMethod(method as any);
@@ -111,7 +180,6 @@ function DeliveryDetailsForm() {
       const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
 
-      // Junta bonito pro banco de dados
       const fullAddressString = neighborhood 
         ? `${streetAddress}, ${neighborhood}` 
         : streetAddress;
@@ -165,6 +233,10 @@ function DeliveryDetailsForm() {
     }
   };
 
+  // Se a entrega precisar ser vinculada a uma rota fechada, essa rota precisa estar nas opções também.
+  // Vamos garantir que a rota atual da entrega sempre apareça, mesmo fechada.
+  const routeOptions = routes.filter(r => r.status === 'aberta' || r.id === routeId);
+
   return (
     <div className="flex flex-col gap-6 relative">
       <div className="flex items-center gap-3">
@@ -176,7 +248,6 @@ function DeliveryDetailsForm() {
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5 pb-10">
         
-        {/* SELETOR DE ORIGEM (iFood x Loja) */}
         <div className="flex gap-2 p-1 bg-zinc-900 rounded-2xl border border-zinc-800">
           <button type="button" onClick={() => setOrigin('ifood')} className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Smartphone size={18} /> iFood
@@ -186,15 +257,60 @@ function DeliveryDetailsForm() {
           </button>
         </div>
 
-        <div className="flex flex-col gap-2">
+        {/* NOVO SELETOR DE ROTAS CUSTOMIZADO BONITÃO */}
+        <div className="relative flex flex-col gap-2">
           <label className="text-sm font-semibold text-zinc-400">Selecionar Rota</label>
-          <select value={routeId} onChange={(e) => setRouteId(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" required>
-            <option value="">Selecione...</option>
-            {openRoutes.map(r => <option key={r.id} value={r.id}>{r.name} ({r.motoboy_name})</option>)}
-          </select>
+          <button
+            type="button"
+            onClick={() => setIsRouteDropdownOpen(!isRouteDropdownOpen)}
+            className={`flex h-14 w-full items-center justify-between rounded-2xl border bg-zinc-900/50 px-4 text-left transition-colors ${isRouteDropdownOpen ? 'border-emerald-500' : 'border-zinc-800'}`}
+          >
+            <span className={routeId ? 'text-zinc-100' : 'text-zinc-500'}>
+              {routeId ? (
+                <span className="font-semibold">
+                  {routeOptions.find(r => r.id === routeId)?.name} <span className="text-zinc-400 font-normal">({routeOptions.find(r => r.id === routeId)?.motoboy_name})</span>
+                </span>
+              ) : 'Selecione a rota...'}
+            </span>
+            <ChevronDown size={20} className={`text-zinc-500 transition-transform ${isRouteDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isRouteDropdownOpen && (
+            <div className="fixed inset-0 z-20" onClick={() => setIsRouteDropdownOpen(false)} />
+          )}
+
+          {isRouteDropdownOpen && (
+            <div className="absolute top-[84px] z-30 flex max-h-56 w-full flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl">
+              {routeOptions.map(r => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => {
+                    setRouteId(r.id);
+                    setIsRouteDropdownOpen(false);
+                  }}
+                  className="flex items-center justify-between px-4 py-4 text-left text-sm active:bg-zinc-800 border-b border-zinc-800/50 last:border-0"
+                >
+                  <span className={`font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>
+                    {r.name} <span className={routeId === r.id ? 'text-emerald-500/70' : 'text-zinc-500 font-normal'}>({r.motoboy_name}) {r.status === 'fechada' && '🔒'}</span>
+                  </span>
+                  {routeId === r.id ? (
+                    <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                  ) : (
+                    <div className="h-2 w-2 rounded-full border border-zinc-600" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        <CustomerAutocomplete value={customerName} onChange={setCustomerName} customers={customers} />
+        <CustomerAutocomplete 
+          value={customerName} 
+          onChange={setCustomerName} 
+          onSelect={handleCustomerSelect} 
+          customers={customers} 
+        />
 
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
@@ -209,11 +325,10 @@ function DeliveryDetailsForm() {
           </div>
         </div>
 
-        {/* ENDEREÇO FATIADO */}
         <div className="flex flex-col gap-4 border-t border-zinc-800 pt-4">
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-zinc-400">Rua e Número*</label>
-            <input type="text" value={streetAddress} onChange={(e) => setStreetAddress(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" required />
+            <input type="text" value={streetAddress} onChange={(e) => setStreetAddress(e.target.value)} onPaste={handleAddressPaste} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" required />
           </div>
           
           <div className="flex flex-col gap-2">
@@ -222,35 +337,37 @@ function DeliveryDetailsForm() {
           </div>
         </div>
 
-        {/* FORMA DE PAGAMENTO UI MODERNA */}
-        <div className="flex flex-col gap-3 border-t border-zinc-800 pt-5">
+        {/* FORMA DE PAGAMENTO UI MODERNA - Fica cinza se estiver pago! */}
+        <div className={`flex flex-col gap-3 border-t border-zinc-800 pt-5 transition-all duration-300 ${isPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
           <label className="text-sm font-semibold text-zinc-400">Forma de Pagamento</label>
           <div className="grid grid-cols-3 gap-2">
-            <button type="button" onClick={() => setPaymentMethod('dinheiro' as any)} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
+            <button type="button" onClick={() => handlePaymentMethodChange('dinheiro')} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
               <Banknote size={24} />
               <span className="text-xs font-bold">Dinheiro</span>
             </button>
-            <button type="button" onClick={() => setPaymentMethod('pix' as any)} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'pix' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
+            <button type="button" onClick={() => handlePaymentMethodChange('pix')} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'pix' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
               <QrCode size={24} />
               <span className="text-xs font-bold">Pix</span>
             </button>
-            <button type="button" onClick={() => setPaymentMethod('cartao' as any)} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${(paymentMethod as string) === 'cartao' ? 'border-sky-500 bg-sky-500/10 text-sky-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
+            <button type="button" onClick={() => handlePaymentMethodChange('cartao')} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${(paymentMethod as string) === 'cartao' ? 'border-sky-500 bg-sky-500/10 text-sky-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
               <CreditCard size={24} />
               <span className="text-xs font-bold">Cartão</span>
             </button>
           </div>
         </div>
 
-        {/* TOGGLE PAGO UI MODERNA */}
-        <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800 mt-2">
-          <div className="flex flex-col">
-            <span className="font-bold text-zinc-200">Pedido já está pago?</span>
-            <span className="text-xs text-zinc-500">Marque se já foi recebido no iFood/Loja</span>
+        {/* TOGGLE PAGO UI MODERNA - Oculta se o método for Cartão */}
+        {(paymentMethod as string) !== 'cartao' && (
+          <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800 mt-2">
+            <div className="flex flex-col">
+              <span className="font-bold text-zinc-200">Pedido já está pago?</span>
+              <span className="text-xs text-zinc-500">Marque se já foi recebido no iFood/Loja</span>
+            </div>
+            <button type="button" onClick={() => setIsPaid(!isPaid)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 ${isPaid ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+              <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${isPaid ? 'translate-x-7' : 'translate-x-1'}`} />
+            </button>
           </div>
-          <button type="button" onClick={() => setIsPaid(!isPaid)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 ${isPaid ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
-            <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${isPaid ? 'translate-x-7' : 'translate-x-1'}`} />
-          </button>
-        </div>
+        )}
 
         {paymentMethod === 'dinheiro' && !isPaid && (
           <div className="flex flex-col gap-2 mt-2">
