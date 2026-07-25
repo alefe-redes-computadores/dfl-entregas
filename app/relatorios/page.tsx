@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, BarChart3, Wallet, Map, Activity } from 'lucide-react';
-import { useReportsData } from '@/hooks/useReportsData'; // Ajuste o caminho pro seu hook!
+import { ChevronLeft, BarChart3, Wallet, Map, Activity, X, CheckCircle, Clock } from 'lucide-react';
+import { useReportsData } from '@/hooks/useReportsData';
 import { useAppStore } from '@/store/useAppStore';
 
 import { MonthSelector } from '@/components/reports/MonthSelector';
@@ -13,6 +13,7 @@ import { NeighborhoodChart } from '@/components/reports/Charts/NeighborhoodChart
 import { DailyEvolutionChart } from '@/components/reports/Charts/DailyEvolutionChart';
 import { MotoboyChart } from '@/components/reports/Charts/MotoboyChart';
 import { DayOfWeekChart } from '@/components/reports/Charts/DayOfWeekChart';
+import { OriginChart } from '@/components/reports/Charts/OriginChart';
 
 type TabType = 'geral' | 'financeiro' | 'operacao';
 
@@ -21,10 +22,12 @@ export default function RelatoriosPage() {
   const [selectedMonth, setSelectedMonth] = useState('all');
   const [activeTab, setActiveTab] = useState<TabType>('geral');
   
+  // Estado do Drill-down (Dia selecionado no gráfico)
+  const [drilldownDay, setDrilldownDay] = useState<{ day: number; date: string } | null>(null);
+
   const deliveries = useAppStore(state => state.deliveries);
   const reports = useReportsData();
 
-  // Processamento de dados via Hook
   const filteredDeliveries = useMemo(() => reports.getFilteredDeliveries({ month: selectedMonth }), [reports, selectedMonth]);
   const metrics = useMemo(() => reports.getMainMetrics(filteredDeliveries, deliveries as any, selectedMonth), [reports, filteredDeliveries, deliveries, selectedMonth]);
   
@@ -34,20 +37,40 @@ export default function RelatoriosPage() {
   const motoboyData = useMemo(() => reports.getMotoboyStats(filteredDeliveries), [reports, filteredDeliveries]);
   const dayOfWeekData = useMemo(() => reports.getDayOfWeekStats(filteredDeliveries), [reports, filteredDeliveries]);
 
+  // Estatísticas de Origem (iFood vs Loja)
+  const originData = useMemo(() => {
+    const map = new Map<string, { count: number; total: number }>();
+    filteredDeliveries.forEach(d => {
+      const org = d.origin || 'ifood';
+      const curr = map.get(org) || { count: 0, total: 0 };
+      map.set(org, { count: curr.count + 1, total: curr.total + (d.value || 0) });
+    });
+    return Array.from(map.entries()).map(([origin, val]) => ({ origin, count: val.count, total: val.total }));
+  }, [filteredDeliveries]);
+
+  // Filtrar entregas do dia selecionado para o Drill-down
+  const drilldownDeliveries = useMemo(() => {
+    if (!drilldownDay) return [];
+    return filteredDeliveries.filter(d => {
+      const dDate = reports.formatDate(d.createdAt || d.updated_at);
+      return dDate.getDate() === drilldownDay.day;
+    });
+  }, [drilldownDay, filteredDeliveries, reports]);
+
   return (
-    <div className="flex flex-col gap-6 pb-24">
+    <div className="flex flex-col gap-6 pb-24 relative">
       {/* Header Fixo */}
       <div className="flex items-center justify-between sticky top-0 z-20 bg-zinc-950/80 backdrop-blur-md pt-4 pb-2">
         <div className="flex items-center gap-3">
           <button onClick={() => router.push('/')} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95 transition-all">
             <ChevronLeft size={22} />
           </button>
-          <h1 className="font-heading text-2xl font-bold text-zinc-50">Inteligência</h1>
+          <h1 className="font-heading text-2xl font-bold text-zinc-50">Inteligência v0.3</h1>
         </div>
         <MonthSelector selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />
       </div>
 
-      {/* Navegação de Abas (Estilo Banco) */}
+      {/* Navegação de Abas */}
       <div className="flex bg-zinc-900/50 p-1 rounded-2xl border border-zinc-800 shadow-sm">
         <button onClick={() => setActiveTab('geral')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'geral' ? 'bg-zinc-800 text-emerald-400 shadow' : 'text-zinc-500'}`}>
           <Activity size={16} /> Geral
@@ -61,7 +84,7 @@ export default function RelatoriosPage() {
       </div>
 
       {/* CONTEÚDO DAS ABAS */}
-      <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col gap-6 animate-in fade-in duration-300">
         
         {/* ABA 1: GERAL */}
         {activeTab === 'geral' && (
@@ -70,7 +93,9 @@ export default function RelatoriosPage() {
               <SummaryCard title="Total Entregas" value={metrics.totalDeliveries} icon={<BarChart3 size={20} />} variation={metrics.variation} accentColor="emerald" delay={0} />
               <SummaryCard title="Faturamento" value={`R$ ${metrics.totalRevenue.toFixed(2)}`} icon={<Wallet size={20} />} accentColor="amber" delay={100} />
             </div>
-            <DailyEvolutionChart data={dailyData} />
+            {/* Gráfico com a função de clique ativada */}
+            <DailyEvolutionChart data={dailyData} onSelectDay={(dayInfo) => setDrilldownDay(dayInfo)} />
+            <OriginChart data={originData} />
           </>
         )}
 
@@ -99,6 +124,58 @@ export default function RelatoriosPage() {
           </>
         )}
       </div>
+
+      {/* MODAL DE DRILL-DOWN (Detalhes do Dia Selecionado) */}
+      {drilldownDay && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-zinc-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border-t border-zinc-800 rounded-t-[32px] p-6 max-h-[80vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+            
+            {/* Header do Modal */}
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <div>
+                <h2 className="text-xl font-bold text-zinc-50">Detalhes do Dia {drilldownDay.date}</h2>
+                <p className="text-xs text-zinc-400">{drilldownDeliveries.length} entregas realizadas nesta data</p>
+              </div>
+              <button onClick={() => setDrilldownDay(null)} className="p-2 bg-zinc-800 text-zinc-400 rounded-full hover:bg-zinc-700 active:scale-95">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Lista de Entregas do Dia */}
+            <div className="overflow-y-auto flex-1 py-4 flex flex-col gap-3">
+              {drilldownDeliveries.length === 0 ? (
+                <div className="py-10 text-center text-zinc-500">Nenhuma entrega registrada neste dia.</div>
+              ) : (
+                drilldownDeliveries.map(d => (
+                  <div key={d.id} className="flex items-center justify-between p-4 bg-zinc-950/50 rounded-2xl border border-zinc-800/80">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-zinc-100">#{d.order_id || 'Loja'}</span>
+                        {d.is_paid && <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full"><CheckCircle size={10} /> Pago</span>}
+                      </div>
+                      <span className="text-xs text-zinc-400 truncate max-w-[200px]">{d.address_string}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-emerald-400">R$ {d.value.toFixed(2).replace('.', ',')}</span>
+                      <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">{d.payment_method}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div className="pt-4 border-t border-zinc-800 flex justify-between items-center text-sm font-bold text-zinc-300">
+              <span>Total Faturado no Dia:</span>
+              <span className="text-emerald-400 text-lg">
+                R$ {drilldownDeliveries.reduce((acc, curr) => acc + (curr.value || 0), 0).toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
