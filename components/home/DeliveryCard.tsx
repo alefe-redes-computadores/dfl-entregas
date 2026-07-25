@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Copy, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, Smartphone, Store, CheckCircle } from 'lucide-react';
+import { Copy, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, Smartphone, Store, CheckCircle, ArrowUp, ArrowDown } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import type { Delivery, Customer } from '@/types';
@@ -24,6 +24,7 @@ const PAYMENT_CONFIG = {
 
 export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
   const updateDelivery = useAppStore((state) => state.updateDelivery);
+  const reorderDelivery = useAppStore((state) => state.reorderDelivery);
   
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
@@ -38,7 +39,6 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
     }
   }
 
-  // Função para marcar como concluída/pendente
   async function handleToggleCompleted() {
     await updateDelivery(delivery.id, { completed: !delivery.completed });
     if (!delivery.completed) {
@@ -54,8 +54,6 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
       )}
     >
       <div className="flex flex-col p-4">
-        
-        {/* TOPO DO CARD */}
         <div className="flex justify-between items-center mb-3">
           {isIfood ? (
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-wider">
@@ -73,7 +71,6 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
                 <CheckCircle2 size={12} /> Pago
               </span>
             )}
-            {/* NOVO SELO DE CONCLUÍDA */}
             {delivery.completed && (
               <span className="flex items-center gap-1 rounded-full bg-zinc-700 px-2 py-1 text-[11px] font-semibold text-zinc-300">
                 <CheckCircle size={12} /> Entregue
@@ -133,8 +130,9 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
         </div>
       )}
 
-      {/* RODAPÉ E AÇÕES MELHORADAS */}
+      {/* RODAPÉ MASTER v0.4.0 */}
       <div className="flex flex-col gap-3 border-t border-zinc-800/80 px-4 py-3">
+        {/* Row 1: Pagamento e Bebidas */}
         <div className="flex items-center gap-2">
           <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}>
             <PaymentIcon size={13} />
@@ -148,8 +146,9 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
           )}
         </div>
 
+        {/* Row 2: Ações Operacionais */}
         <div className="flex items-center gap-2 mt-1">
-          {/* Botão Principal: Marcar Concluída */}
+          {/* Botão de Finalizar */}
           <button 
             onClick={handleToggleCompleted} 
             className={clsx(
@@ -163,7 +162,20 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
             {delivery.completed ? 'Desfazer' : 'Concluída'}
           </button>
 
-          {/* Botões Secundários: Editar e Copiar */}
+          {/* Cápsula de Ordenação (Apenas se NÃO estiver concluída) */}
+          {!delivery.completed && (
+            <div className="flex bg-zinc-800/60 border border-zinc-700/50 rounded-xl overflow-hidden shrink-0">
+              <button onClick={() => reorderDelivery(delivery.route_id, delivery.id, 'up')} className="flex h-10 w-9 items-center justify-center text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-colors active:bg-zinc-600">
+                <ArrowUp size={16} />
+              </button>
+              <div className="w-[1px] bg-zinc-700/50" />
+              <button onClick={() => reorderDelivery(delivery.route_id, delivery.id, 'down')} className="flex h-10 w-9 items-center justify-center text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-colors active:bg-zinc-600">
+                <ArrowDown size={16} />
+              </button>
+            </div>
+          )}
+
+          {/* Botões Essenciais */}
           <Link href={`/entregas/details?id=${delivery.id}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-800 text-zinc-300 transition-transform hover:bg-zinc-700 active:scale-90">
             <Pencil size={15} />
           </Link>
