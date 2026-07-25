@@ -7,10 +7,11 @@ import type { Customer } from '@/types';
 interface CustomerAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
+  onSelect?: (customer: Customer) => void; // A mágica começa aqui!
   customers: Customer[];
 }
 
-export function CustomerAutocomplete({ value, onChange, customers }: CustomerAutocompleteProps) {
+export function CustomerAutocomplete({ value, onChange, onSelect, customers }: CustomerAutocompleteProps) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -32,8 +33,9 @@ export function CustomerAutocomplete({ value, onChange, customers }: CustomerAut
   }, []);
 
   function handleSelect(customer: Customer) {
-    onChange(customer.name);
-    setShowSuggestions(false);
+    onChange(customer.name); // Preenche o input
+    if (onSelect) onSelect(customer); // Devolve o cliente pra tela principal
+    setShowSuggestions(false); // Esconde a lista
   }
 
   return (
