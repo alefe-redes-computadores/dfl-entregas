@@ -45,7 +45,7 @@ interface AppState {
   ) => Promise<string>;
 }
 
-// 🛡️ Função ajudante para limpar qualquer 'undefined' antes de ir pro Firebase
+// Escudo anti-undefined para o Firebase aceitar os dados felizes
 const sanitizeForFirebase = (obj: any) => {
   return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
 };
@@ -115,9 +115,21 @@ export const useAppStore = create<AppState>()(
             if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
           });
 
-          const mergedDeliveries = [...fbDeliveries];
+          // 🚨 RESGATE NA NUVEM: Mescla as entregas e injeta a data se estiver faltando
+          let mergedDeliveries = [...fbDeliveries];
           get().deliveries.forEach(local => {
             if (!mergedDeliveries.some(m => m.id === local.id)) mergedDeliveries.push(local);
+          });
+          
+          mergedDeliveries = mergedDeliveries.map(d => {
+             if (!d.createdAt) {
+                const fixedDelivery = { ...d, createdAt: d.updated_at || new Date().toISOString() };
+                const safeData = sanitizeForFirebase(fixedDelivery);
+                // Já empurra pro Firebase corrigido!
+                setDoc(doc(db, 'deliveries', fixedDelivery.id), safeData).catch(() => {});
+                return fixedDelivery;
+             }
+             return d;
           });
 
           const mergedCustomers = [...fbCustomers];
@@ -138,7 +150,7 @@ export const useAppStore = create<AppState>()(
             isSyncing: false
           });
           
-          console.log(`✅ Sincronizado com sucesso: ${fbRoutes.length} rotas, ${fbDeliveries.length} entregas, ${fbCustomers.length} clientes, ${fbMotoboys.length} motoboys`);
+          console.log(`✅ Sincronizado com sucesso: ${fbRoutes.length} rotas, ${fbDeliveries.length} entregas`);
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false });
@@ -190,10 +202,17 @@ export const useAppStore = create<AppState>()(
       },
 
       addDelivery: async (delivery) => {
-        const deliveryWithTimestamp: Delivery = { ...delivery, updated_at: new Date().toISOString() };
+        const now = new Date().toISOString();
+        // 🚨 PREVENÇÃO: Garante que toda entrega nova receba o createdAt
+        const deliveryWithTimestamp: Delivery = { 
+          ...delivery, 
+          createdAt: delivery.createdAt || now,
+          updated_at: now 
+        };
+        
         set((state) => ({ deliveries: [deliveryWithTimestamp, ...state.deliveries] }));
+        
         try {
-          // 🛡️ O ERRO MORAVA AQUI. Agora a entrega passa pelo filtro antes do setDoc!
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
           await setDoc(doc(db, 'deliveries', delivery.id), safeData);
         } catch (error) { console.error(error); }
@@ -323,7 +342,13 @@ export const useAppStore = create<AppState>()(
       }),
       onRehydrateStorage: () => (state) => { 
         state?.setHasHydrated(true); 
+        
         setTimeout(() => {
+          // 🚨 RESGATE IMEDIATO LOCAL: Corrige as invisíveis na mesma hora
+          if (state && state.deliveries) {
+             const rescuedDeliveries = state.deliveries.map(d => (!d.createdAt ? { ...d, createdAt: d.updated_at || new Date().toISOString() } : d));
+             useAppStore.setState({ deliveries: rescuedDeliveries });
+          }
           state?.initData();
         }, 300);
       },
