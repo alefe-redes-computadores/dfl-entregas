@@ -3,10 +3,14 @@ import type { Delivery } from '@/types';
 export async function copyDeliveryToClipboard(delivery: Delivery): Promise<boolean> {
   try {
     const parts: string[] = [];
+    const isIfood = delivery.origin === 'ifood' || !delivery.origin;
+    const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
 
-    // 1. ID do pedido isolado em cima e em negrito
-    parts.push(`*${delivery.order_id}*`);
-    parts.push(''); // Linha em branco para dar respiro
+    // 1. ID do pedido isolado em cima e em negrito (SOMENTE IFOOD)
+    if (isIfood && delivery.order_id) {
+      parts.push(`*#${delivery.order_id}*`);
+      parts.push(''); // Linha em branco para dar respiro
+    }
 
     // 2. Endereço
     parts.push(delivery.address_string);
@@ -23,19 +27,23 @@ export async function copyDeliveryToClipboard(delivery: Delivery): Promise<boole
 
     parts.push(''); // Linha em branco antes do pagamento e bebida
 
-    // 5. Forma de Pagamento (Com Bullets e Negrito)
+    // 5. Forma de Pagamento e Valores
     if (delivery.is_paid) {
       parts.push(`- *PAGO*`);
-    } else if (delivery.payment_method === 'dinheiro') {
-      if (delivery.change_for) {
-        parts.push(`- *DINHEIRO* (Levar troco para R$ ${delivery.change_for.toFixed(2).replace('.', ',')})`);
+    } else {
+      if (delivery.payment_method === 'dinheiro') {
+        if (delivery.change_for) {
+          parts.push(`- *DINHEIRO* - R$ ${valueStr} (Levar troco para R$ ${delivery.change_for.toFixed(2).replace('.', ',')})`);
+        } else {
+          parts.push(`- *DINHEIRO* - R$ ${valueStr} (Trocado)`);
+        }
+      } else if (delivery.payment_method?.includes('cartao') || delivery.payment_method === 'cartao') {
+        parts.push(`- *CARTÃO* - R$ ${valueStr} (Levar maquininha)`);
+      } else if (delivery.payment_method === 'pix') {
+        parts.push(`- *PIX QR Code na maquininha* - R$ ${valueStr}`);
       } else {
-        parts.push(`- *DINHEIRO* (Trocado)`);
+        parts.push(`- *${delivery.payment_method?.toUpperCase() || 'PAGAMENTO'}* - R$ ${valueStr}`);
       }
-    } else if (delivery.payment_method.includes('cartao')) {
-      parts.push(`- *CARTÃO* (Levar maquininha)`);
-    } else if (delivery.payment_method === 'pix') {
-      parts.push(`- *PIX*`);
     }
 
     // 6. Bebidas (Com Bullets e Negrito, se houver)
