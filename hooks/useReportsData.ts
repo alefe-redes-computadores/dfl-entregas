@@ -232,6 +232,26 @@ export function useReportsData() {
       }));
   }, [formatDate]);
 
+  // 🧠 NOVA INTELIGÊNCIA: Horários de Pico (Peak Hours)
+  const getPeakHoursStats = useCallback((filteredDeliveries: Delivery[]) => {
+    const hoursMap = new Map<number, number>();
+    
+    filteredDeliveries.forEach(delivery => {
+      const date = formatDate(delivery.createdAt || delivery.updated_at);
+      const hour = date.getHours();
+      hoursMap.set(hour, (hoursMap.get(hour) || 0) + 1);
+    });
+    
+    // Filtra apenas os horários que tiveram movimento e ordena cronologicamente
+    return Array.from(hoursMap.entries())
+      .filter(([_, count]) => count > 0)
+      .map(([hour, count]) => ({
+        hour: `${hour.toString().padStart(2, '0')}h`,
+        count
+      }))
+      .sort((a, b) => parseInt(a.hour) - parseInt(b.hour));
+  }, [formatDate]);
+
   const getMainMetrics = useCallback((
     filteredDeliveries: Delivery[], 
     allDeliveries: Delivery[],
@@ -287,6 +307,7 @@ export function useReportsData() {
     getNeighborhoodStats,
     getPaymentStats,
     getDayOfWeekStats,
+    getPeakHoursStats, // <-- Exportado aqui!
     getMainMetrics,
     extractNeighborhood,
     formatDate
