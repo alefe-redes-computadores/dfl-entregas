@@ -30,6 +30,7 @@ interface AppState {
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
   closeRoute: (routeId: string) => Promise<void>;
+  reopenRoute: (routeId: string) => Promise<void>; // <-- NOVO
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
   addMotoboy: (motoboy: Motoboy) => Promise<void>;
@@ -45,7 +46,6 @@ interface AppState {
   ) => Promise<string>;
 }
 
-// Escudo anti-undefined para o Firebase aceitar os dados felizes
 const sanitizeForFirebase = (obj: any) => {
   return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
 };
@@ -115,7 +115,6 @@ export const useAppStore = create<AppState>()(
             if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
           });
 
-          // 🚨 RESGATE NA NUVEM COM TYPESCRIPT BURLADO
           let mergedDeliveries = [...fbDeliveries];
           get().deliveries.forEach(local => {
             if (!mergedDeliveries.some(m => m.id === local.id)) mergedDeliveries.push(local);
@@ -148,8 +147,6 @@ export const useAppStore = create<AppState>()(
             motoboys: mergedMotoboys,
             isSyncing: false
           });
-          
-          console.log(`✅ Sincronizado com sucesso: ${fbRoutes.length} rotas, ${fbDeliveries.length} entregas`);
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false });
@@ -202,7 +199,6 @@ export const useAppStore = create<AppState>()(
 
       addDelivery: async (delivery) => {
         const now = new Date().toISOString();
-        // BURLANDO TYPESCRIPT PARA SALVAR A DATA
         const deliveryWithTimestamp = { 
           ...delivery, 
           createdAt: (delivery as any).createdAt || now,
@@ -242,6 +238,17 @@ export const useAppStore = create<AppState>()(
         }));
         try {
           await updateDoc(doc(db, 'routes', routeId), { status: 'fechada', end_time: endTime, updated_at: endTime });
+        } catch (error) { console.error(error); }
+      },
+
+      // NOVA FUNÇÃO: Reabrir Rota
+      reopenRoute: async (routeId) => {
+        const now = new Date().toISOString();
+        set((state) => ({
+          routes: state.routes.map((r) => r.id === routeId ? { ...r, status: 'aberta', end_time: undefined, updated_at: now } : r),
+        }));
+        try {
+          await updateDoc(doc(db, 'routes', routeId), { status: 'aberta', end_time: null, updated_at: now });
         } catch (error) { console.error(error); }
       },
 
@@ -341,9 +348,7 @@ export const useAppStore = create<AppState>()(
       }),
       onRehydrateStorage: () => (state) => { 
         state?.setHasHydrated(true); 
-        
         setTimeout(() => {
-          // 🚨 RESGATE IMEDIATO LOCAL
           if (state && state.deliveries) {
              const rescuedDeliveries = state.deliveries.map(d => (!(d as any).createdAt ? { ...d, createdAt: d.updated_at || new Date().toISOString() } as Delivery : d));
              useAppStore.setState({ deliveries: rescuedDeliveries });
