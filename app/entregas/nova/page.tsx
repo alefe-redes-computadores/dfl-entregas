@@ -216,15 +216,15 @@ export default function NovaEntregaPage() {
         <div className="flex flex-col gap-3 border-t border-zinc-800 pt-5">
           <label className="text-sm font-semibold text-zinc-400">Forma de Pagamento</label>
           <div className="grid grid-cols-3 gap-2">
-            <button type="button" onClick={() => setPaymentMethod('dinheiro')} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
+            <button type="button" onClick={() => setPaymentMethod('dinheiro' as any)} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
               <Banknote size={24} />
               <span className="text-xs font-bold">Dinheiro</span>
             </button>
-            <button type="button" onClick={() => setPaymentMethod('pix')} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'pix' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
+            <button type="button" onClick={() => setPaymentMethod('pix' as any)} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'pix' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
               <QrCode size={24} />
               <span className="text-xs font-bold">Pix</span>
             </button>
-            <button type="button" onClick={() => setPaymentMethod('cartao')} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'cartao' ? 'border-sky-500 bg-sky-500/10 text-sky-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
+            <button type="button" onClick={() => setPaymentMethod('cartao' as any)} className={`flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 transition-all ${paymentMethod === 'cartao' ? 'border-sky-500 bg-sky-500/10 text-sky-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'}`}>
               <CreditCard size={24} />
               <span className="text-xs font-bold">Cartão</span>
             </button>
