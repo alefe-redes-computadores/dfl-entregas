@@ -47,8 +47,10 @@ export default function NovaEntregaPage() {
     const hood = c.neighborhood || '';
 
     if (street && hood) {
-      const regex = new RegExp(`[,\\-\\s]+${hood}$`, 'i');
-      street = street.replace(regex, '').trim();
+      const suffix1 = `, ${hood}`;
+      const suffix2 = ` - ${hood}`;
+      if (street.endsWith(suffix1)) street = street.substring(0, street.length - suffix1.length);
+      if (street.endsWith(suffix2)) street = street.substring(0, street.length - suffix2.length);
     }
 
     if (street) setStreetAddress(street);
@@ -81,11 +83,16 @@ export default function NovaEntregaPage() {
 
       if (!extractedStreet && (line.includes(',') || line.includes('-'))) {
          let addressPart = line;
-         if (line.includes('-')) {
-            const parts = line.split('-');
-            extractedNeighborhood = parts.pop()?.trim() || '';
-            addressPart = parts.join('-').trim();
+         
+         if (addressPart.includes('-')) {
+            const parts = addressPart.split('-');
+            const lastPart = parts[parts.length - 1].trim();
+            if (!/\d/.test(lastPart) && lastPart.length > 3) {
+               extractedNeighborhood = parts.pop()?.trim() || '';
+               addressPart = parts.join('-').trim();
+            }
          }
+         
          addressPart = addressPart.replace(/,\s*$/, '');
          extractedStreet = addressPart;
          continue;
@@ -101,12 +108,9 @@ export default function NovaEntregaPage() {
     toast.success('Endereço fatiado magicamente! ✨');
   };
 
-  // 🧠 Inteligência do Pagamento CORRIGIDA (TypeScript Bypass)
   const handlePaymentMethodChange = (method: string) => {
     setPaymentMethod(method as any);
-    if (method === 'cartao') {
-      setIsPaid(false);
-    }
+    if (method === 'cartao') setIsPaid(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -125,15 +129,16 @@ export default function NovaEntregaPage() {
       const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
 
+      const cleanStreet = streetAddress.trim().replace(/[,|-]\s*$/, '');
       const fullAddressString = neighborhood 
-        ? `${streetAddress}, ${neighborhood}` 
-        : streetAddress;
+        ? `${cleanStreet} - ${neighborhood}` 
+        : cleanStreet;
 
       const customerId = customerName.trim()
         ? await findOrCreateCustomer(customerName, {
             address: fullAddressString,
             mapsLink,
-            confirmationCode,
+            confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
             observation,
             origin,
           })
@@ -143,8 +148,8 @@ export default function NovaEntregaPage() {
         id: Date.now().toString(),
         route_id: routeId,
         origin,
-        order_id: orderId || undefined,
-        confirmation_code: confirmationCode || undefined,
+        order_id: origin === 'ifood' ? (orderId || undefined) : undefined,
+        confirmation_code: origin === 'ifood' ? (confirmationCode || undefined) : undefined,
         customer_id: customerId || '',
         value: cleanValue,
         is_paid: isPaid,
@@ -191,7 +196,7 @@ export default function NovaEntregaPage() {
           <button type="button" onClick={() => setOrigin('ifood')} className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Smartphone size={18} /> iFood
           </button>
-          <button type="button" onClick={() => setOrigin('loja')} className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'loja' ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button type="button" onClick={() => { setOrigin('loja'); setOrderId(''); setConfirmationCode(''); }} className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'loja' ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Store size={18} /> Loja Própria
           </button>
         </div>
@@ -213,9 +218,7 @@ export default function NovaEntregaPage() {
             <ChevronDown size={20} className={`text-zinc-500 transition-transform ${isRouteDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
 
-          {isRouteDropdownOpen && (
-            <div className="fixed inset-0 z-20" onClick={() => setIsRouteDropdownOpen(false)} />
-          )}
+          {isRouteDropdownOpen && <div className="fixed inset-0 z-20" onClick={() => setIsRouteDropdownOpen(false)} />}
 
           {isRouteDropdownOpen && (
             <div className="absolute top-[84px] z-30 flex max-h-56 w-full flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl">
@@ -223,10 +226,7 @@ export default function NovaEntregaPage() {
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => {
-                    setRouteId(r.id);
-                    setIsRouteDropdownOpen(false);
-                  }}
+                  onClick={() => { setRouteId(r.id); setIsRouteDropdownOpen(false); }}
                   className="flex items-center justify-between px-4 py-4 text-left text-sm active:bg-zinc-800 border-b border-zinc-800/50 last:border-0"
                 >
                   <span className={`font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>
@@ -243,19 +243,24 @@ export default function NovaEntregaPage() {
           )}
         </div>
 
-        <CustomerAutocomplete 
-          value={customerName} 
-          onChange={setCustomerName} 
-          onSelect={handleCustomerSelect}
-          customers={customers} 
-        />
+        <CustomerAutocomplete value={customerName} onChange={setCustomerName} onSelect={handleCustomerSelect} customers={customers} />
 
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-bold text-emerald-400">
-              {origin === 'ifood' ? 'Nº do Pedido*' : 'Nº Pedido (Opcional)'}
+            <label className={`text-sm font-bold transition-colors ${origin === 'ifood' ? 'text-emerald-400' : 'text-zinc-600'}`}>
+              Nº do Pedido (iFood)
             </label>
-            <input type="text" inputMode="numeric" placeholder="Ex: 4821" maxLength={4} value={orderId} onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ''))} className="h-16 rounded-2xl border-2 border-emerald-500/50 bg-zinc-900/80 px-4 text-xl font-bold text-zinc-50 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" required={origin === 'ifood'} />
+            <input 
+              type="text" 
+              inputMode="numeric" 
+              placeholder="Ex: 4821" 
+              maxLength={4} 
+              value={orderId} 
+              onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ''))} 
+              disabled={origin === 'loja'}
+              className={`h-16 rounded-2xl border-2 px-4 text-xl font-bold transition-all focus:outline-none ${origin === 'loja' ? 'border-zinc-800 bg-zinc-900/40 text-zinc-600 cursor-not-allowed' : 'border-emerald-500/50 bg-zinc-900/80 text-zinc-50 placeholder:text-zinc-600 focus:border-emerald-500'}`} 
+              required={origin === 'ifood'} 
+            />
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-sm font-bold text-zinc-300">Valor (R$)*</label>
@@ -270,12 +275,11 @@ export default function NovaEntregaPage() {
           </div>
           
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-zinc-400">Bairro (Opcional, preenche ao colar)</label>
+            <label className="text-sm font-semibold text-zinc-400">Bairro (Opcional)</label>
             <input type="text" placeholder="Ex: Jardim Quebec" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
           </div>
         </div>
 
-        {/* FORMA DE PAGAMENTO UI MODERNA - Fica cinza se estiver pago! */}
         <div className={`flex flex-col gap-3 border-t border-zinc-800 pt-5 transition-all duration-300 ${isPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
           <label className="text-sm font-semibold text-zinc-400">Forma de Pagamento</label>
           <div className="grid grid-cols-3 gap-2">
@@ -294,7 +298,6 @@ export default function NovaEntregaPage() {
           </div>
         </div>
 
-        {/* TOGGLE PAGO UI MODERNA - Oculta se o método for Cartão */}
         {(paymentMethod as string) !== 'cartao' && (
           <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800 mt-2">
             <div className="flex flex-col">
@@ -321,8 +324,17 @@ export default function NovaEntregaPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-zinc-400">Cód. Confirmação</label>
-            <input type="text" inputMode="numeric" placeholder="Ex: 1234" maxLength={4} value={confirmationCode} onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, ''))} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
+            <label className={`text-sm font-semibold transition-colors ${origin === 'ifood' ? 'text-zinc-400' : 'text-zinc-600'}`}>Cód. Confirmação</label>
+            <input 
+              type="text" 
+              inputMode="numeric" 
+              placeholder="Ex: 1234" 
+              maxLength={4} 
+              value={confirmationCode} 
+              onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, ''))} 
+              disabled={origin === 'loja'}
+              className={`h-14 rounded-2xl border px-4 transition-all focus:outline-none ${origin === 'loja' ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-600 cursor-not-allowed' : 'border-zinc-800 bg-zinc-900/50 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500'}`} 
+            />
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-zinc-400">Observação</label>
