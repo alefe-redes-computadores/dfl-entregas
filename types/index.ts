@@ -35,6 +35,7 @@ export interface Delivery {
   maps_link: string;
   observation?: string;
   drinks?: string;
+  completed?: boolean; // <-- NOVO: Controle de entrega finalizada
   updated_at?: string;
 }
 
@@ -51,11 +52,10 @@ export interface Customer {
   updated_at?: string;
 }
 
-// NOVO: Tipagem do Motoboy
 export interface Motoboy {
   id: string;
   name: string;
-  active: boolean; // Para no futuro você poder "ocultar" quem não trabalha mais aí
+  active: boolean; 
   createdAt?: string;
   updated_at?: string;
 }
