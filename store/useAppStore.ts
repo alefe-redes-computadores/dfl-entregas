@@ -1,4 +1,3 @@
-// store/useAppStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -106,7 +105,6 @@ export const useAppStore = create<AppState>()(
           const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
           const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
 
-          // Sincronização Inteligente: Prioriza Firebase, mas não apaga dados criados offline que ainda não subiram
           const mergedRoutes = [...fbRoutes];
           get().routes.forEach(local => {
             if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
@@ -243,11 +241,19 @@ export const useAppStore = create<AppState>()(
         const trimmed = name.trim();
         if (!trimmed) return '';
 
+        // Extrai o bairro limpando os números (ex: tira o "43" que vinha duplicado)
         const extractNeighborhood = (address?: string): string | undefined => {
           if (!address) return undefined;
+          
+          if (address.includes('-')) {
+            const parts = address.split('-');
+            const potentialHood = parts[parts.length - 1].trim();
+            return potentialHood.replace(/[0-9]/g, '').trim() || undefined;
+          }
+          
           const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
           if (parts.length < 2) return undefined;
-          return parts[parts.length - 1];
+          return parts[parts.length - 1].replace(/[0-9]/g, '').trim() || undefined;
         };
 
         const existing = get().customers.find((c) => c.name.trim().toLowerCase() === trimmed.toLowerCase());
@@ -308,10 +314,6 @@ export const useAppStore = create<AppState>()(
       }),
       onRehydrateStorage: () => (state) => { 
         state?.setHasHydrated(true); 
-        
-        // A MÁGICA ACONTECE AQUI:
-        // Assim que o app termina de ler o cofre local (vazio numa reinstalação), 
-        // ele dispara um gatilho para puxar a nuvem.
         setTimeout(() => {
           state?.initData();
         }, 300);
