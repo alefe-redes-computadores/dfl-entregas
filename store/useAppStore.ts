@@ -45,6 +45,11 @@ interface AppState {
   ) => Promise<string>;
 }
 
+// 🛡️ Função ajudante para limpar qualquer 'undefined' antes de ir pro Firebase
+const sanitizeForFirebase = (obj: any) => {
+  return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
+};
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -170,7 +175,8 @@ export const useAppStore = create<AppState>()(
         const routeWithTimestamp: Route = { ...route, updated_at: new Date().toISOString() };
         set((state) => ({ routes: [routeWithTimestamp, ...state.routes] }));
         try {
-          await setDoc(doc(db, 'routes', route.id), routeWithTimestamp);
+          const safeData = sanitizeForFirebase(routeWithTimestamp);
+          await setDoc(doc(db, 'routes', route.id), safeData);
         } catch (error) { console.error(error); }
       },
 
@@ -178,7 +184,8 @@ export const useAppStore = create<AppState>()(
         const dataWithTimestamp: Motoboy = { ...motoboy, updated_at: new Date().toISOString() };
         set((state) => ({ motoboys: [...state.motoboys, dataWithTimestamp] }));
         try {
-          await setDoc(doc(db, 'motoboys', motoboy.id), dataWithTimestamp);
+          const safeData = sanitizeForFirebase(dataWithTimestamp);
+          await setDoc(doc(db, 'motoboys', motoboy.id), safeData);
         } catch (error) { console.error(error); }
       },
 
@@ -186,7 +193,9 @@ export const useAppStore = create<AppState>()(
         const deliveryWithTimestamp: Delivery = { ...delivery, updated_at: new Date().toISOString() };
         set((state) => ({ deliveries: [deliveryWithTimestamp, ...state.deliveries] }));
         try {
-          await setDoc(doc(db, 'deliveries', delivery.id), deliveryWithTimestamp);
+          // 🛡️ O ERRO MORAVA AQUI. Agora a entrega passa pelo filtro antes do setDoc!
+          const safeData = sanitizeForFirebase(deliveryWithTimestamp);
+          await setDoc(doc(db, 'deliveries', delivery.id), safeData);
         } catch (error) { console.error(error); }
       },
 
@@ -196,8 +205,8 @@ export const useAppStore = create<AppState>()(
           deliveries: state.deliveries.map((d) => d.id === id ? { ...d, ...dataWithTimestamp } as Delivery : d)
         }));
         try {
-          const safeUpdate = Object.fromEntries(Object.entries(dataWithTimestamp).filter(([_, v]) => v !== undefined));
-          await updateDoc(doc(db, 'deliveries', id), safeUpdate);
+          const safeData = sanitizeForFirebase(dataWithTimestamp);
+          await updateDoc(doc(db, 'deliveries', id), safeData);
         } catch (error) { console.error(error); }
       },
 
@@ -222,7 +231,8 @@ export const useAppStore = create<AppState>()(
         const customerWithTimestamp: Customer = { ...customer, updated_at: new Date().toISOString() };
         set((state) => ({ customers: [customerWithTimestamp, ...state.customers] }));
         try {
-          await setDoc(doc(db, 'customers', customer.id), customerWithTimestamp);
+          const safeData = sanitizeForFirebase(customerWithTimestamp);
+          await setDoc(doc(db, 'customers', customer.id), safeData);
         } catch (error) { console.error(error); }
       },
 
@@ -232,8 +242,8 @@ export const useAppStore = create<AppState>()(
           customers: state.customers.map((c) => c.id === id ? { ...c, ...dataWithTimestamp } as Customer : c)
         }));
         try {
-          const safeUpdate = Object.fromEntries(Object.entries(dataWithTimestamp).filter(([_, v]) => v !== undefined));
-          await updateDoc(doc(db, 'customers', id), safeUpdate);
+          const safeData = sanitizeForFirebase(dataWithTimestamp);
+          await updateDoc(doc(db, 'customers', id), safeData);
         } catch (error) { console.error(error); }
       },
 
@@ -241,7 +251,6 @@ export const useAppStore = create<AppState>()(
         const trimmed = name.trim();
         if (!trimmed) return '';
 
-        // Extrai o bairro limpando os números (ex: tira o "43" que vinha duplicado)
         const extractNeighborhood = (address?: string): string | undefined => {
           if (!address) return undefined;
           
@@ -274,8 +283,8 @@ export const useAppStore = create<AppState>()(
           }));
 
           try {
-            const safeUpdate = Object.fromEntries(Object.entries(updatedFields).filter(([_, v]) => v !== undefined));
-            await updateDoc(doc(db, 'customers', existing.id), safeUpdate);
+            const safeData = sanitizeForFirebase(updatedFields);
+            await updateDoc(doc(db, 'customers', existing.id), safeData);
           } catch (error) { console.error(error); }
 
           return existing.id;
@@ -297,8 +306,8 @@ export const useAppStore = create<AppState>()(
         set((state) => ({ customers: [newCustomer, ...state.customers] }));
 
         try {
-          const safeCustomer = Object.fromEntries(Object.entries(newCustomer).filter(([_, v]) => v !== undefined));
-          await setDoc(doc(db, 'customers', newCustomer.id), safeCustomer);
+          const safeData = sanitizeForFirebase(newCustomer);
+          await setDoc(doc(db, 'customers', newCustomer.id), safeData);
         } catch (error) { console.error(error); }
 
         return newCustomer.id;
