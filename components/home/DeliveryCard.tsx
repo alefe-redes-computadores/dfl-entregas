@@ -12,19 +12,19 @@ interface DeliveryCardProps {
   customer?: Customer;
 }
 
-const PAYMENT_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
+const PAYMENT_CONFIG = {
   dinheiro: { label: 'Dinheiro', icon: Banknote, className: 'text-amber-500 bg-amber-500/10' },
   pix: { label: 'Pix', icon: QrCode, className: 'text-emerald-500 bg-emerald-500/10' },
   cartao: { label: 'Cartão', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10' },
   cartao_credito: { label: 'Cartão', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10' },
   cartao_debito: { label: 'Cartão', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10' },
-};
+} as const;
 
 export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
-  // Faz o fallback inteligente, se não achar a forma de pagamento, joga como dinheiro
-  const payment = PAYMENT_CONFIG[delivery.payment_method] || PAYMENT_CONFIG.dinheiro;
+  // O "as keyof typeof" garante que o TypeScript aceite os formatos antigos e o novo
+  const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
-  const isIfood = delivery.origin === 'ifood' || !delivery.origin; 
+  const isIfood = delivery.origin === 'ifood' || !delivery.origin; // fallback pra iFood se não tiver origem salva
 
   async function handleCopy() {
     const success = await copyDeliveryToClipboard(delivery);
