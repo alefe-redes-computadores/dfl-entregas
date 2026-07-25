@@ -38,12 +38,16 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const pendingCount = deliveries.filter((d) => !d.is_paid).length;
   const duration = formatRouteDuration(route.departure_time, route.end_time);
 
+  // Ordenação blindada usando updated_at ou order_index
   const sortedDeliveries = [...deliveries].sort((a, b) => {
     if (a.completed && !b.completed) return 1;
     if (!a.completed && b.completed) return -1;
     
-    const aOrder = a.order_index !== undefined ? a.order_index : new Date(a.createdAt || 0).getTime();
-    const bOrder = b.order_index !== undefined ? b.order_index : new Date(b.createdAt || 0).getTime();
+    const timeA = new Date(a.updated_at || 0).getTime();
+    const timeB = new Date(b.updated_at || 0).getTime();
+
+    const aOrder = a.order_index !== undefined ? a.order_index : timeA;
+    const bOrder = b.order_index !== undefined ? b.order_index : timeB;
     return aOrder - bOrder;
   });
 
