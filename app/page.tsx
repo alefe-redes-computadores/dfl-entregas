@@ -1,4 +1,3 @@
-// app/page.tsx
 'use client';
 
 import { ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Package } from 'lucide-react';
@@ -25,17 +24,14 @@ export default function HomePage() {
   const selectedDate = useAppStore((state) => state.selectedDate);
   const goToPreviousDay = useAppStore((state) => state.goToPreviousDay);
   const goToNextDay = useAppStore((state) => state.goToNextDay);
+  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode); // <-- MODO PRIVACIDADE IMPORTADO
 
-  // Filtra as rotas para mostrar APENAS as do dia selecionado
   const selectedDateStr = selectedDate.toDateString();
   let routesDoDia = routes.filter((r) => {
     const routeDate = new Date(r.departure_time).toDateString();
     return routeDate === selectedDateStr;
   });
 
-  // ============================================================
-  // REDE DE SEGURANÇA (Auto-Recuperação Inteligente) - CORRIGIDO
-  // ============================================================
   const routeIdsDoDia = routesDoDia.map(r => r.id);
   
   const deliveriesDoDia = deliveries.filter(d => {
@@ -46,10 +42,8 @@ export default function HomePage() {
     return belongsToRoute || isSameDay;
   });
 
-  // Identificamos se existem entregas órfãs (que não pertencem a nenhuma rota que está na tela)
   const orphanedDeliveries = deliveriesDoDia.filter(d => !routeIdsDoDia.includes(d.route_id));
 
-  // Se houver entregas órfãs, injetamos a Rota de Recuperação JUNTO com as rotas reais
   if (orphanedDeliveries.length > 0) {
     const rescueRoute: Route = {
       id: 'rota-resgate-recuperada',
@@ -60,7 +54,6 @@ export default function HomePage() {
       change_money: 0,
       drinks_summary: 'Recuperado automaticamente'
     };
-    // Usamos o push para adicionar ela ao lado da Rota 1, Rota 2, etc.
     routesDoDia.push(rescueRoute);
   }
 
@@ -72,7 +65,6 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Filtro de data */}
       <div className="flex items-center justify-between rounded-[20px] border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
         <button
           onClick={goToPreviousDay}
@@ -96,7 +88,6 @@ export default function HomePage() {
         </button>
       </div>
 
-      {/* PAINEL DE RESUMO DO DIA (DASHBOARD) */}
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
           <div className="flex items-center gap-2 text-zinc-400">
@@ -114,12 +105,14 @@ export default function HomePage() {
             <span className="text-xs font-semibold uppercase tracking-wider">Faturamento</span>
           </div>
           <p className="font-heading text-2xl font-bold text-zinc-50">
-            R$ {faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {isPrivacyMode 
+              ? 'R$ •••••' 
+              : `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            }
           </p>
         </div>
       </div>
 
-      {/* Rotas abertas */}
       {openRoutes.length > 0 && (
         <div className="flex flex-col gap-3">
           <h2 className="px-1 font-heading text-sm font-bold uppercase tracking-wide text-zinc-500">
@@ -131,7 +124,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Rotas fechadas (vão caindo pra cá) */}
       {closedRoutes.length > 0 && (
         <div className="flex flex-col gap-3 mt-2">
           <h2 className="px-1 font-heading text-sm font-bold uppercase tracking-wide text-zinc-500">
