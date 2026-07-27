@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Trash2, CheckSquare, Moon, LogOut, Users, Eye, EyeOff } from 'lucide-react';
+import { RefreshCw, Trash2, CheckSquare, Moon, LogOut, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -11,7 +11,6 @@ export default function MaisPage() {
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
   
-  // A variável global do nosso "Olho Mágico"
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
 
@@ -40,7 +39,7 @@ export default function MaisPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 pb-6 relative animate-in fade-in duration-300">
+    <div className="flex flex-col gap-6 pb-24 relative animate-in fade-in duration-300">
       <h1 className="font-heading text-2xl font-bold text-zinc-50">Configurações e Mais</h1>
 
       {/* Perfil */}
@@ -90,33 +89,11 @@ export default function MaisPage() {
               </div>
               <div className="text-left">
                 <p className="font-semibold text-zinc-100">Modo Privacidade</p>
-                <p className="text-xs text-zinc-500">Ocultar valores e faturamento</p>
+                <p className="text-xs text-zinc-500">Ocultar faturamento na Home</p>
               </div>
             </div>
-            {/* O Switchzinho do iOS */}
             <div className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${isPrivacyMode ? 'bg-sky-500' : 'bg-zinc-700'}`}>
               <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${isPrivacyMode ? 'translate-x-6' : 'translate-x-1'}`} />
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* EQUIPE (A Central de Motoboys) */}
-      <div className="flex flex-col gap-2">
-        <h3 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-          Equipe de Entregas
-        </h3>
-        <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
-          <button
-            onClick={() => router.push('/motoboys')}
-            className="flex w-full items-center gap-4 p-4 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
-              <Users size={20} />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold text-zinc-100">Motoboys e Acertos</p>
-              <p className="text-xs text-zinc-500">Cadastros, Regras e Fechamento Diário</p>
             </div>
           </button>
         </div>
