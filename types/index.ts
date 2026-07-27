@@ -3,18 +3,25 @@
 // ============================================================================
 
 export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debito';
-
 export type RouteStatus = 'aberta' | 'fechada';
-
 export type OrderOrigin = 'ifood' | 'loja';
+export type PaymentRuleType = 'fixed' | 'per_delivery' | 'fixed_plus_variable';
+
+export interface MotoboyPaymentRule {
+  type: PaymentRuleType;
+  fixed_amount?: number;    // Ex: R$ 100
+  delivery_fee?: number;    // Ex: R$ 6 por entrega
+  threshold?: number;       // Ex: 15 entregas (limite da base fixa)
+  extra_fee?: number;       // Ex: R$ 7 por entrega após o limite
+}
 
 export interface Route {
   id: string;
   name: string;
   status: RouteStatus;
   motoboy_name: string;
-  departure_time: string; // Data de criação
-  started_at?: string;    // <-- NOVO: Hora real que a rota iniciou na rua
+  departure_time: string;
+  started_at?: string;
   end_time?: string;
   change_money: number;
   drinks_summary?: string;
@@ -58,6 +65,7 @@ export interface Motoboy {
   id: string;
   name: string;
   active: boolean; 
+  payment_rule?: MotoboyPaymentRule; // <-- Cérebro Financeiro do Motoboy
   createdAt?: string;
   updated_at?: string;
 }
