@@ -1,13 +1,13 @@
 'use client';
 
-import { Home, Users, Plus, BarChart3, MoreHorizontal } from 'lucide-react';
+import { Home, Store, Plus, BarChart3, MoreHorizontal } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import clsx from 'clsx';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Início', icon: Home },
-  { href: '/clientes', label: 'Clientes', icon: Users },
+  { href: '/loja', label: 'Loja', icon: Store }, // <-- MUDOU AQUI: Agora é a Loja!
   { href: '__fab__', label: 'Adicionar', icon: Plus },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/mais', label: 'Mais', icon: MoreHorizontal },
