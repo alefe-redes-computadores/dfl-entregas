@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
+import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -32,7 +34,7 @@ export default function LojaPage() {
   
   // Alertas
   const [alertsEnabled, setAlertsEnabled] = useState(false);
-  const [routeAlerts, setRouteAlerts] = useState(true);
+  const [routeAlerts, setRouteAlerts] = useState(false);
 
   // ------------------------------------------------------------------
   // INTELIGÊNCIA: RESUMO DO DIA
@@ -46,11 +48,10 @@ export default function LojaPage() {
   const totalEntregas = todaysDeliveries.length;
   const faturamentoTotal = todaysDeliveries.reduce((acc, d) => acc + (d.value || 0), 0);
   
-  // Pega apenas os motoboys marcados como "Fixo" e que estão Ativos
   const motoboysFixos = motoboys.filter(m => m.active && (m as any).type === 'fixo');
 
   // ------------------------------------------------------------------
-  // AÇÕES
+  // AÇÕES E NOTIFICAÇÕES NATIVAS
   // ------------------------------------------------------------------
   const toggleStore = () => {
     const newState = !isStoreOpen;
@@ -66,14 +67,76 @@ export default function LojaPage() {
     );
   };
 
-  const handleToggleAlerts = () => {
+  // 🔔 Ativar Lembrete de Abertura Nativo (Toca 30 min antes)
+  const handleToggleAlerts = async () => {
     const newState = !alertsEnabled;
-    setAlertsEnabled(newState);
+    
     if (newState) {
-      toast('Permissão de Notificação Solicitada', {
-        description: 'O sistema nativo do celular pedirá permissão em breve.',
-        icon: <Bell className="text-sky-500" />
-      });
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const permStatus = await LocalNotifications.requestPermissions();
+          if (permStatus.display === 'granted') {
+            const [hours, minutes] = openTime.split(':').map(Number);
+            let notifDate = new Date();
+            notifDate.setHours(hours, minutes - 30, 0, 0);
+
+            await LocalNotifications.schedule({
+              notifications: [
+                {
+                  title: 'Prepara a chapa! 🍔',
+                  body: 'Faltam 30 minutos para abrir a lanchonete!',
+                  id: 1,
+                  schedule: { on: { hour: notifDate.getHours(), minute: notifDate.getMinutes() }, allowWhileIdle: true },
+                  sound: 'beep.wav',
+                  actionTypeId: '',
+                  extra: null
+                }
+              ]
+            });
+            setAlertsEnabled(true);
+            toast.success('Alarme configurado no sistema Android/iOS!', { 
+              description: `Você será avisado às ${notifDate.getHours().toString().padStart(2, '0')}:${notifDate.getMinutes().toString().padStart(2, '0')}` 
+            });
+          } else {
+            toast.error('Permissão negada', { description: 'Ative as notificações nas configurações do seu celular.' });
+          }
+        } catch (error) {
+          console.error(error);
+          toast.error('Erro ao configurar notificação nativa.');
+        }
+      } else {
+        setAlertsEnabled(true);
+        toast.success('Lembrete Web Ativado', { description: '(No celular ele pedirá permissão e tocará o alarme real)' });
+      }
+    } else {
+      setAlertsEnabled(false);
+      if (Capacitor.isNativePlatform()) {
+        await LocalNotifications.cancel({ notifications: [{ id: 1 }] });
+      }
+    }
+  };
+
+  // 🏍️ Ativar Alerta de Rota Fechada (Teste em 3 segundos)
+  const handleToggleRouteAlerts = async () => {
+    const newState = !routeAlerts;
+    setRouteAlerts(newState);
+
+    if (newState && Capacitor.isNativePlatform()) {
+      try {
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              title: 'Rota Finalizada ✅',
+              body: 'O motoboy encerrou a rota. Clique para ver o resumo.',
+              id: 2,
+              schedule: { at: new Date(Date.now() + 1000 * 3) } // Toca em 3 segundos
+            }
+          ]
+        });
+        toast.success('Alerta de Rota Ativado', { description: 'Um teste tocará em 3 segundos no seu celular!' });
+      } catch (error) {
+        console.error(error);
+      }
     }
   };
 
@@ -202,14 +265,13 @@ export default function LojaPage() {
       </div>
 
       {/* =========================================
-          AUTOMAÇÃO & HORÁRIOS
+          AUTOMAÇÃO & HORÁRIOS (NATIVOS)
       ========================================= */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Automação & Horários</h2>
         
         <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden p-4 gap-5">
           
-          {/* DIAS DE FUNCIONAMENTO */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-zinc-300">
               <Calendar size={16} className="text-indigo-400" />
@@ -235,7 +297,6 @@ export default function LojaPage() {
             </div>
           </div>
 
-          {/* HORÁRIOS */}
           <div className="grid grid-cols-2 gap-3 border-t border-zinc-800/80 pt-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-bold text-zinc-500 uppercase">Abre às</label>
@@ -265,7 +326,6 @@ export default function LojaPage() {
 
         </div>
 
-        {/* ALERTAS PUSH */}
         <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden mt-1">
           
           <div className="flex items-center justify-between p-4 border-b border-zinc-800/80">
@@ -275,7 +335,7 @@ export default function LojaPage() {
               </div>
               <div className="text-left">
                 <p className="font-bold text-zinc-100 text-sm">Lembrete de Abertura</p>
-                <p className="text-xs text-zinc-500">Notificar 30 min antes de abrir</p>
+                <p className="text-xs text-zinc-500">Notifica nativamente 30 min antes</p>
               </div>
             </div>
             <button 
@@ -297,7 +357,7 @@ export default function LojaPage() {
               </div>
             </div>
             <button 
-              onClick={() => setRouteAlerts(!routeAlerts)} 
+              onClick={handleToggleRouteAlerts} 
               className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${routeAlerts ? 'bg-amber-500' : 'bg-zinc-700'}`}
             >
               <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${routeAlerts ? 'translate-x-6' : 'translate-x-1'}`} />
