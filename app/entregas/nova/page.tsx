@@ -46,6 +46,7 @@ export default function NovaEntregaPage() {
     let street = c.address || '';
     const hood = c.neighborhood || '';
 
+    // Limpeza de bairro duplicado na rua (caso venha do banco sujo)
     if (street && hood) {
       const suffix1 = `, ${hood}`;
       const suffix2 = ` - ${hood}`;
@@ -60,6 +61,7 @@ export default function NovaEntregaPage() {
     toast.success('Endereço preenchido automaticamente! 🪄');
   };
 
+  // 🧠 FATIADOR DE ENDEREÇO 2.0 (CIRÚRGICO)
   const handleAddressPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const text = e.clipboardData.getData('text');
@@ -68,44 +70,63 @@ export default function NovaEntregaPage() {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l);
     let extractedStreet = '';
     let extractedNeighborhood = '';
-    let extractedObs = observation;
+    let extractedObs = observation; // Mantém o que já estiver digitado
+
+    let addressLines: string[] = [];
 
     for (const line of lines) {
       const lower = line.toLowerCase();
+      // Ignora lixo do iFood
       if (lower.includes('endereço de entrega')) continue;
       if (line.match(/\d{5}-\d{3}/) || lower.includes('cep')) continue;
-      if (lower.includes('patos de minas') || lower.includes('- mg')) continue;
       
-      if (lower.startsWith('obs:') || lower.startsWith('observação:')) {
-        extractedObs = line.replace(/^(obs|observação):\s*/i, '').trim();
+      // Se for uma linha explícita de observação/referência
+      if (lower.startsWith('obs:') || lower.startsWith('observação:') || lower.startsWith('referência:')) {
+        const obsText = line.replace(/^(obs|observação|referência):\s*/i, '').trim();
+        extractedObs = extractedObs ? `${extractedObs} | ${obsText}` : obsText;
         continue;
       }
 
-      if (!extractedStreet && (line.includes(',') || line.includes('-'))) {
-         let addressPart = line;
-         
-         if (addressPart.includes('-')) {
-            const parts = addressPart.split('-');
-            const lastPart = parts[parts.length - 1].trim();
-            if (!/\d/.test(lastPart) && lastPart.length > 3) {
-               extractedNeighborhood = parts.pop()?.trim() || '';
-               addressPart = parts.join('-').trim();
-            }
-         }
-         
-         addressPart = addressPart.replace(/,\s*$/, '');
-         extractedStreet = addressPart;
-         continue;
-      }
+      addressLines.push(line);
+    }
 
-      if (!extractedStreet) extractedStreet = line;
+    // Junta o que sobrou para fatiar
+    let fullAddress = addressLines.join(' - ');
+    
+    // Remove "Patos de Minas - MG" automaticamente
+    fullAddress = fullAddress.replace(/[-,\s]*patos de minas\s*[-,\s]*mg/i, '').trim();
+
+    // Fatiando pelo traço
+    const parts = fullAddress.split('-').map(p => p.trim()).filter(p => p);
+
+    if (parts.length > 0) {
+      extractedStreet = parts[0]; // Primeira parte é sempre a Rua/Número
+      
+      if (parts.length > 1) {
+        extractedNeighborhood = parts[parts.length - 1]; // Última parte é o Bairro
+        
+        // Se houver mais partes no meio (ex: Apto, Bloco, Fundos), joga para Observação
+        if (parts.length > 2) {
+          const complement = parts.slice(1, -1).join(' - ');
+          extractedObs = extractedObs ? `${complement} | ${extractedObs}` : complement;
+        }
+      }
+    }
+
+    // Fallback: se não achou bairro pelo traço, tenta pela vírgula (Rua, 123, Bairro)
+    if (!extractedNeighborhood && extractedStreet.includes(',')) {
+       const stParts = extractedStreet.split(',').map(p => p.trim());
+       if (stParts.length > 2) {
+           extractedNeighborhood = stParts.pop() || '';
+           extractedStreet = stParts.join(', ');
+       }
     }
 
     if (extractedStreet) setStreetAddress(extractedStreet);
     if (extractedNeighborhood) setNeighborhood(extractedNeighborhood);
     if (extractedObs) setObservation(extractedObs);
 
-    toast.success('Endereço fatiado magicamente! ✨');
+    toast.success('Endereço fatiado perfeitamente! ✨');
   };
 
   const handlePaymentMethodChange = (method: string) => {
@@ -322,7 +343,6 @@ export default function NovaEntregaPage() {
           <input type="text" placeholder="Ex: 1 Coca 2L" value={drinks} onChange={(e) => setDrinks(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
         </div>
 
-        {/* --- CAMPO DO MAPS REINSERIDO AQUI --- */}
         <div className="flex flex-col gap-2 border-t border-zinc-800 pt-5 mt-2">
           <label className="text-sm font-semibold text-zinc-400">Link do Maps (Opcional)</label>
           <input type="text" placeholder="Ex: https://maps.app.goo.gl/..." value={mapsLink} onChange={(e) => setMapsLink(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
@@ -344,7 +364,7 @@ export default function NovaEntregaPage() {
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-zinc-400">Observação</label>
-            <input type="text" placeholder="Ex: Portão azul" value={observation} onChange={(e) => setObservation(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
+            <input type="text" placeholder="Ex: Portão azul, fundos" value={observation} onChange={(e) => setObservation(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
           </div>
         </div>
 
