@@ -168,7 +168,7 @@ export default function MotoboysPage() {
   };
 
   // ------------------------------------------------------------------
-  // MÁQUINA DE CALCULAR ACERTO (FILTRO BLINDADO CONTRA BUG DE FUSO)
+  // MÁQUINA DE CALCULAR ACERTO (FILTRO BLINDADO CONTRA BUG DE FUSO E TS)
   // ------------------------------------------------------------------
   const acertoData = useMemo(() => {
     if (!selectedMotoboy) return null;
@@ -178,11 +178,9 @@ export default function MotoboysPage() {
     // Função ultra-segura para extrair o dia exato gravado no banco
     const getSafeDate = (rawDate: any) => {
       if (!rawDate) return '';
-      // Se for string ISO (2026-07-26T23:59...), corta exatamente na letra T para pegar o dia real
       if (typeof rawDate === 'string' && rawDate.includes('T')) {
         return rawDate.split('T')[0]; 
       }
-      // Fallback para timestamp numérico ou Date object
       const d = new Date(rawDate);
       if (isNaN(d.getTime())) return '';
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -192,7 +190,9 @@ export default function MotoboysPage() {
     const todaysRoutes = routes.filter(r => {
       const isSameMotoboy = (r.motoboy_name || '').toLowerCase().trim() === motoboyNameLower;
       if (!isSameMotoboy) return false;
-      const rDateStr = getSafeDate(r.started_at || r.departure_time || r.created_at);
+      
+      // Ajuste TS: Removido o r.created_at que não existia na tipagem
+      const rDateStr = getSafeDate(r.started_at || (r as any).departure_time || r.updated_at);
       return rDateStr === acertoDate;
     });
 
@@ -200,16 +200,15 @@ export default function MotoboysPage() {
 
     // 2. Coleta entregas vinculadas à rota OU feitas diretamente pelo motoboy na data
     const todaysDeliveries = deliveries.filter(d => {
-      // Se a entrega estiver amarrada a uma rota do dia, já conta
       const belongsToRoute = d.route_id && routeIds.has(d.route_id);
       if (belongsToRoute) return true;
 
-      // Busca secundária: Entregas soltas atreladas a ele no mesmo dia
       const dMotoboy = (d.motoboy_name || '').toLowerCase().trim();
       const isSameMotoboy = dMotoboy === motoboyNameLower;
       if (!isSameMotoboy) return false;
 
-      const dDateStr = getSafeDate(d.updated_at || d.created_at);
+      // Ajuste TS: Uso do updated_at e fallback forçado para "any" caso exista createdAt legado
+      const dDateStr = getSafeDate(d.updated_at || (d as any).createdAt);
       return dDateStr === acertoDate;
     });
     
