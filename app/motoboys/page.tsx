@@ -152,13 +152,14 @@ export default function MotoboysPage() {
   const acertoData = useMemo(() => {
     if (!selectedMotoboy) return null;
     
-    // Filtra rotas comparando estritamente a string YYYY-MM-DD local
+    // Filtro robusto de rotas por data local estrita (evita bugs de fuso no dia 25/26)
     const todaysRoutes = routes.filter(r => {
       const isSameMotoboy = r.motoboy_name.toLowerCase().trim() === selectedMotoboy.name.toLowerCase().trim();
-      const routeDateObj = new Date(r.started_at || r.departure_time || Date.now());
-      const rDateStr = routeDateObj.getFullYear() + '-' + 
-                       String(routeDateObj.getMonth() + 1).padStart(2, '0') + '-' + 
-                       String(routeDateObj.getDate()).padStart(2, '0');
+      const rawDate = r.started_at || r.departure_time || Date.now();
+      const dateObj = new Date(rawDate);
+      
+      const rDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+      
       return isSameMotoboy && rDateStr === acertoDate;
     });
 
@@ -211,7 +212,6 @@ export default function MotoboysPage() {
   const handleCopyWhatsApp = async () => {
     if (!selectedMotoboy || !acertoData) return;
 
-    // Formatação amigável da data para o recibo
     const [year, month, day] = acertoDate.split('-');
     const formattedDate = `${day}/${month}/${year}`;
     
@@ -250,6 +250,7 @@ export default function MotoboysPage() {
   return (
     <div className="flex flex-col gap-5 relative pb-24">
       
+      {/* CABEÇALHO COM VOLTAR PARA A LOJA */}
       <PageHeader 
         title="Equipe de Motoboys" 
         subtitle="Gerencie frotas, regras e acertos" 
@@ -336,7 +337,7 @@ export default function MotoboysPage() {
         })}
       </div>
 
-      {/* MODAL DO MOTOBOY */}
+      {/* MODAL / PAINEL DO MOTOBOY */}
       {selectedMotoboy && (
         <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-md animate-in fade-in duration-200">
           <div className="flex items-center justify-between p-4 border-b border-zinc-900 bg-zinc-950">
