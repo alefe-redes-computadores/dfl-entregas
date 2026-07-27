@@ -239,7 +239,7 @@ export default function MotoboysPage() {
   return (
     <div className="flex flex-col gap-5 relative pb-24">
       
-      {/* CABEÇALHO COM APONTAMENTO PARA A LOJA */}
+      {/* CABEÇALHO COM APONTAMENTO SEGURO PARA A LOJA */}
       <PageHeader 
         title="Equipe de Motoboys" 
         subtitle="Gerencie frotas, regras e acertos" 
@@ -247,7 +247,7 @@ export default function MotoboysPage() {
       />
 
       {!isAdding ? (
-        <button onClick={() => setIsAdding(true)} className="flex items-center justify-center gap-2 bg-zinc-900/60 border border-dashed border-zinc-700 text-zinc-300 rounded-2xl p-4 font-bold hover:bg-zinc-800 transition-colors">
+        <button onClick={() => setIsAdding(true)} className="flex items-center justify-center gap-2 bg-zinc-900/60 border border-dashed border-zinc-700 text-zinc-300 rounded-2xl p-4 font-bold hover:bg-zinc-800 transition-colors cursor-pointer">
           <UserPlus size={18} /> Adicionar Novo Motoboy
         </button>
       ) : (
@@ -266,24 +266,24 @@ export default function MotoboysPage() {
               <button 
                 type="button" 
                 onClick={() => setNewMotoboyType('fixo')}
-                className={`px-3 rounded-lg text-xs font-bold transition-all ${newMotoboyType === 'fixo' ? 'bg-sky-500 text-zinc-950' : 'text-zinc-400'}`}
+                className={`px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${newMotoboyType === 'fixo' ? 'bg-sky-500 text-zinc-950' : 'text-zinc-400'}`}
               >
                 Fixo
               </button>
               <button 
                 type="button" 
                 onClick={() => setNewMotoboyType('avulso')}
-                className={`px-3 rounded-lg text-xs font-bold transition-all ${newMotoboyType === 'avulso' ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400'}`}
+                className={`px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${newMotoboyType === 'avulso' ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400'}`}
               >
                 Avulso
               </button>
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={handleAddMotoboy} className="flex-1 h-11 rounded-xl bg-sky-500 text-zinc-950 font-bold text-sm hover:bg-sky-400">
+            <button onClick={handleAddMotoboy} className="flex-1 h-11 rounded-xl bg-sky-500 text-zinc-950 font-bold text-sm hover:bg-sky-400 cursor-pointer">
               Salvar Motoboy
             </button>
-            <button onClick={() => setIsAdding(false)} className="h-11 px-4 rounded-xl bg-zinc-800 text-zinc-400 text-sm hover:bg-zinc-700">
+            <button onClick={() => setIsAdding(false)} className="h-11 px-4 rounded-xl bg-zinc-800 text-zinc-400 text-sm hover:bg-zinc-700 cursor-pointer">
               Cancelar
             </button>
           </div>
@@ -298,7 +298,7 @@ export default function MotoboysPage() {
             <button 
               key={m.id} 
               onClick={() => openMotoboyPanel(m)}
-              className={`flex items-center justify-between p-4 rounded-[24px] border border-zinc-800/80 transition-all ${m.active ? 'bg-zinc-900/40 hover:bg-zinc-800/60' : 'bg-zinc-950/50 opacity-60 grayscale'}`}
+              className={`flex items-center justify-between p-4 rounded-[24px] border border-zinc-800/80 transition-all cursor-pointer ${m.active ? 'bg-zinc-900/40 hover:bg-zinc-800/60' : 'bg-zinc-950/50 opacity-60 grayscale'}`}
             >
               <div className="flex items-center gap-3">
                 <div className={`h-11 w-11 rounded-full flex items-center justify-center font-bold text-base ${m.active ? 'bg-sky-500/10 text-sky-500' : 'bg-zinc-800 text-zinc-500'}`}>
@@ -312,7 +312,7 @@ export default function MotoboysPage() {
                     </span>
                     {!m.active && (
                       <span className="flex items-center gap-1 text-[10px] text-zinc-500 font-semibold">
-                        <X size={10} /> Inativo
+                        <Users size={10} /> Inativo
                       </span>
                     )}
                   </div>
@@ -339,16 +339,16 @@ export default function MotoboysPage() {
                 <p className="text-xs text-zinc-500">Central de Fechamento e Regras</p>
               </div>
             </div>
-            <button onClick={() => setSelectedMotoboy(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white">
+            <button onClick={() => setSelectedMotoboy(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white cursor-pointer">
               <X size={20} />
             </button>
           </div>
 
           <div className="flex bg-zinc-900 p-1.5 border-b border-zinc-800">
-            <button onClick={() => setActiveTab('acerto')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-all ${activeTab === 'acerto' ? 'bg-zinc-800 text-emerald-400 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <button onClick={() => setActiveTab('acerto')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${activeTab === 'acerto' ? 'bg-zinc-800 text-emerald-400 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
               <Receipt size={14} /> Acerto Diário
             </button>
-            <button onClick={() => setActiveTab('config')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-all ${activeTab === 'config' ? 'bg-zinc-800 text-sky-400 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <button onClick={() => setActiveTab('config')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${activeTab === 'config' ? 'bg-zinc-800 text-sky-400 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
               <Settings size={14} /> Regras & Tipo
             </button>
           </div>
@@ -412,7 +412,7 @@ export default function MotoboysPage() {
                       onChange={(e)=>setValeAmount(formatCurrencyInput(e.target.value))} 
                       className="flex-1 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500 outline-none font-bold" 
                     />
-                    <button onClick={handleAddVale} className="h-11 w-11 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300 hover:bg-zinc-700 shrink-0"><PlusCircle size={18}/></button>
+                    <button onClick={handleAddVale} className="h-11 w-11 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300 hover:bg-zinc-700 shrink-0 cursor-pointer"><PlusCircle size={18}/></button>
                   </div>
 
                   {vales.length > 0 && (
@@ -422,7 +422,7 @@ export default function MotoboysPage() {
                           <span className="text-xs text-red-400 font-semibold">{v.description}</span>
                           <div className="flex items-center gap-3">
                             <span className="text-xs text-red-400 font-bold">- R$ {v.amount.toFixed(2).replace('.', ',')}</span>
-                            <button onClick={()=>setVales(vales.filter(x => x.id !== v.id))} className="text-red-500/50 hover:text-red-500"><Trash2 size={14}/></button>
+                            <button onClick={()=>setVales(vales.filter(x => x.id !== v.id))} className="text-red-500/50 hover:text-red-500 cursor-pointer"><Trash2 size={14}/></button>
                           </div>
                         </div>
                       ))}
@@ -438,7 +438,7 @@ export default function MotoboysPage() {
                   <CheckCircle2 size={28} className="text-emerald-500/30" />
                 </div>
 
-                <button onClick={handleCopyWhatsApp} className="w-full flex items-center justify-center gap-2 h-14 bg-emerald-500 hover:bg-emerald-400 rounded-xl font-bold text-zinc-950 text-base shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                <button onClick={handleCopyWhatsApp} className="w-full flex items-center justify-center gap-2 h-14 bg-emerald-500 hover:bg-emerald-400 rounded-xl font-bold text-zinc-950 text-base shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer">
                   <Send size={18} /> Enviar Recibo WhatsApp
                 </button>
               </div>
@@ -454,14 +454,14 @@ export default function MotoboysPage() {
                     <button
                       type="button"
                       onClick={() => setEditType('fixo')}
-                      className={`h-12 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all ${editType === 'fixo' ? 'bg-sky-500/15 border-sky-500 text-sky-400 shadow-md' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
+                      className={`h-12 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${editType === 'fixo' ? 'bg-sky-500/15 border-sky-500 text-sky-400 shadow-md' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
                     >
                       {editType === 'fixo' && <Check size={14} />} Fixo
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditType('avulso')}
-                      className={`h-12 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all ${editType === 'avulso' ? 'bg-amber-500/15 border-amber-500 text-amber-400 shadow-md' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
+                      className={`h-12 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${editType === 'avulso' ? 'bg-amber-500/15 border-amber-500 text-amber-400 shadow-md' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
                     >
                       {editType === 'avulso' && <Check size={14} />} Avulso
                     </button>
@@ -480,7 +480,7 @@ export default function MotoboysPage() {
                         key={item.id}
                         type="button"
                         onClick={() => setRuleType(item.id as PaymentRuleType)}
-                        className={`flex items-center justify-between p-3.5 rounded-xl border text-left font-semibold text-xs transition-all ${ruleType === item.id ? 'bg-sky-500/10 border-sky-500 text-sky-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
+                        className={`flex items-center justify-between p-3.5 rounded-xl border text-left font-semibold text-xs transition-all cursor-pointer ${ruleType === item.id ? 'bg-sky-500/10 border-sky-500 text-sky-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
                       >
                         {item.label}
                         {ruleType === item.id && <Check size={16} className="text-sky-400" />}
@@ -555,12 +555,12 @@ export default function MotoboysPage() {
                   </div>
                 )}
 
-                <button type="submit" className="h-12 w-full rounded-xl bg-sky-500 hover:bg-sky-400 font-bold text-zinc-950 active:scale-[0.98] shadow-md shadow-sky-500/20 mt-2 text-sm transition-all">
+                <button type="submit" className="h-12 w-full rounded-xl bg-sky-500 hover:bg-sky-400 font-bold text-zinc-950 active:scale-[0.98] shadow-md shadow-sky-500/20 mt-2 text-sm transition-all cursor-pointer">
                   Salvar Alterações
                 </button>
 
                 <div className="border-t border-zinc-800 pt-4 mt-2 flex flex-col gap-2">
-                  <button type="button" onClick={toggleActive} className={`flex justify-center items-center gap-2 h-12 rounded-xl border font-bold text-xs transition-colors ${selectedMotoboy.active ? 'border-amber-500/50 text-amber-500 bg-amber-500/10 hover:bg-amber-500/20' : 'border-emerald-500/50 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20'}`}>
+                  <button type="button" onClick={toggleActive} className={`flex justify-center items-center gap-2 h-12 rounded-xl border font-bold text-xs transition-colors cursor-pointer ${selectedMotoboy.active ? 'border-amber-500/50 text-amber-500 bg-amber-500/10 hover:bg-amber-500/20' : 'border-emerald-500/50 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20'}`}>
                     <ShieldCheck size={14} />
                     {selectedMotoboy.active ? 'Suspender / Desativar Motoboy' : 'Reativar Motoboy'}
                   </button>
