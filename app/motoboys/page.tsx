@@ -2,12 +2,12 @@
 
 import { useState, useMemo } from 'react';
 import { 
-  Users, UserPlus, Settings, Send, 
-  X, Calculator, PlusCircle, Trash2, ShieldCheck, 
-  CheckCircle2, Package, Wallet, TrendingUp, CalendarDays, Receipt
+  Users, UserPlus, Calculator, PlusCircle, Trash2, ShieldCheck, 
+  CheckCircle2, Package, Wallet, TrendingUp, CalendarDays, Receipt, X, Send, Settings
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
+import { PageHeader } from '@/components/layout/PageHeader';
 import type { Motoboy, MotoboyPaymentRule, PaymentRuleType } from '@/types';
 
 type TabType = 'acerto' | 'config';
@@ -186,7 +186,7 @@ export default function MotoboysPage() {
   }, [selectedMotoboy, acertoDate, routes, deliveries, vales]);
 
   // ------------------------------------------------------------------
-  // GERADOR DE WHATSAPP (MANTÉM OS EMOJIS AQUI PARA O WHATSAPP LER)
+  // GERADOR DE WHATSAPP
   // ------------------------------------------------------------------
   const handleCopyWhatsApp = async () => {
     if (!selectedMotoboy || !acertoData) return;
@@ -227,12 +227,12 @@ export default function MotoboysPage() {
 
   return (
     <div className="flex flex-col gap-5 relative pb-24">
-      <div className="flex flex-col gap-2">
-        <h1 className="font-heading text-2xl font-bold text-zinc-50 flex items-center gap-2">
-          <Users className="text-sky-400" /> Equipe de Motoboys
-        </h1>
-        <p className="text-sm text-zinc-500">Gerencie a frota, regras de pagamento e feche acertos diários automatizados.</p>
-      </div>
+      
+      {/* CABEÇALHO COM BOTÃO DE VOLTAR INTELIGENTE PARA A LOJA */}
+      <PageHeader 
+        title="Equipe de Motoboys" 
+        subtitle="Gerencie frotas, regras e acertos" 
+      />
 
       {!isAdding ? (
         <button onClick={() => setIsAdding(true)} className="flex items-center justify-center gap-2 bg-zinc-900/60 border border-dashed border-zinc-700 text-zinc-300 rounded-2xl p-4 font-bold hover:bg-zinc-800 transition-colors">
@@ -252,7 +252,7 @@ export default function MotoboysPage() {
             <select 
               value={newMotoboyType} 
               onChange={(e) => setNewMotoboyType(e.target.value as 'fixo' | 'avulso')}
-              className="h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-xs text-zinc-200 font-bold"
+              className="h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-xs text-zinc-200 font-bold outline-none"
             >
               <option value="fixo">Fixo</option>
               <option value="avulso">Avulso</option>
@@ -269,7 +269,7 @@ export default function MotoboysPage() {
         </div>
       )}
 
-      {/* LISTA DE MOTOBOYS COM ETIQUETAS */}
+      {/* LISTA DE MOTOBOYS */}
       <div className="flex flex-col gap-3">
         {sortedMotoboys.map(m => {
           const type = (m as any).type || 'fixo';
@@ -318,6 +318,7 @@ export default function MotoboysPage() {
                 <p className="text-xs text-zinc-500">Central de Fechamento e Regras</p>
               </div>
             </div>
+            {/* Botão de Fechar do Modal Blindado com X */}
             <button onClick={() => setSelectedMotoboy(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white">
               <X size={20} />
             </button>
@@ -334,14 +335,14 @@ export default function MotoboysPage() {
 
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
             
-            {/* --- ABA 1: ACERTO AUTOMÁTICO (UI 100% Lucide React) --- */}
+            {/* --- ABA 1: ACERTO AUTOMÁTICO --- */}
             {activeTab === 'acerto' && acertoData && (
               <div className="flex flex-col gap-4 animate-in slide-in-from-right-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
                     <CalendarDays size={14} /> Data do Acerto
                   </label>
-                  <input type="date" value={acertoDate} onChange={(e) => setAcertoDate(e.target.value)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 font-bold text-sm" />
+                  <input type="date" value={acertoDate} onChange={(e) => setAcertoDate(e.target.value)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 font-bold text-sm outline-none" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -370,8 +371,8 @@ export default function MotoboysPage() {
                 <div className="border-t border-zinc-800 pt-4 flex flex-col gap-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Abatimentos / Vales (Opcional)</h3>
                   <div className="flex gap-2">
-                    <input type="text" placeholder="Ex: Lanche / Dinheiro retido" value={valeDesc} onChange={(e)=>setValeDesc(e.target.value)} className="flex-[2] h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500" />
-                    <input type="number" placeholder="R$ 0,00" value={valeAmount} onChange={(e)=>setValeAmount(e.target.value)} className="flex-1 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500" />
+                    <input type="text" placeholder="Ex: Lanche / Dinheiro retido" value={valeDesc} onChange={(e)=>setValeDesc(e.target.value)} className="flex-[2] h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500 outline-none" />
+                    <input type="number" placeholder="R$ 0,00" value={valeAmount} onChange={(e)=>setValeAmount(e.target.value)} className="flex-1 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500 outline-none" />
                     <button onClick={handleAddVale} className="h-11 w-11 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300 hover:bg-zinc-700 shrink-0"><PlusCircle size={18}/></button>
                   </div>
 
@@ -413,10 +414,10 @@ export default function MotoboysPage() {
                   <select 
                     value={editType} 
                     onChange={(e) => setEditType(e.target.value as 'fixo' | 'avulso')}
-                    className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 text-sm font-semibold focus:border-sky-500"
+                    className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 text-sm font-semibold focus:border-sky-500 outline-none"
                   >
-                    <option value="fixo">Fixo</option>
-                    <option value="avulso">Avulso</option>
+                    <option value="fixo" className="bg-zinc-900">Fixo</option>
+                    <option value="avulso" className="bg-zinc-900">Avulso</option>
                   </select>
                 </div>
 
@@ -425,11 +426,11 @@ export default function MotoboysPage() {
                   <select 
                     value={ruleType} 
                     onChange={(e) => setRuleType(e.target.value as PaymentRuleType)}
-                    className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 text-sm font-semibold focus:border-sky-500"
+                    className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 text-sm font-semibold focus:border-sky-500 outline-none"
                   >
-                    <option value="fixed_plus_variable">Fixo Mínimo + Taxa Extra</option>
-                    <option value="per_delivery">Apenas por Entrega (Fixo)</option>
-                    <option value="fixed">Apenas Diária Fixa</option>
+                    <option value="fixed_plus_variable" className="bg-zinc-900">Fixo Mínimo + Taxa Extra</option>
+                    <option value="per_delivery" className="bg-zinc-900">Apenas por Entrega (Fixo)</option>
+                    <option value="fixed" className="bg-zinc-900">Apenas Diária Fixa</option>
                   </select>
                 </div>
 
@@ -437,15 +438,15 @@ export default function MotoboysPage() {
                   <div className="grid grid-cols-2 gap-3 bg-zinc-900 p-3.5 rounded-xl border border-zinc-800">
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] font-bold text-zinc-500 uppercase">Valor Fixo (R$)</label>
-                      <input type="number" value={ruleFixedAmount} onChange={e => setRuleFixedAmount(e.target.value)} placeholder="Ex: 100" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm focus:border-sky-500" required />
+                      <input type="number" value={ruleFixedAmount} onChange={e => setRuleFixedAmount(e.target.value)} placeholder="Ex: 100" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm focus:border-sky-500 outline-none" required />
                     </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] font-bold text-zinc-500 uppercase">Até Quantas?</label>
-                      <input type="number" value={ruleThreshold} onChange={e => setRuleThreshold(e.target.value)} placeholder="Ex: 15" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm focus:border-sky-500" required />
+                      <input type="number" value={ruleThreshold} onChange={e => setRuleThreshold(e.target.value)} placeholder="Ex: 15" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm focus:border-sky-500 outline-none" required />
                     </div>
                     <div className="flex flex-col gap-1 col-span-2 border-t border-zinc-800 pt-2.5">
                       <label className="text-[10px] font-bold text-sky-400 uppercase">Taxa por entrega extra (R$)</label>
-                      <input type="number" value={ruleExtraFee} onChange={e => setRuleExtraFee(e.target.value)} placeholder="Ex: 7" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm focus:border-sky-500" required />
+                      <input type="number" value={ruleExtraFee} onChange={e => setRuleExtraFee(e.target.value)} placeholder="Ex: 7" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm focus:border-sky-500 outline-none" required />
                     </div>
                   </div>
                 )}
@@ -453,14 +454,14 @@ export default function MotoboysPage() {
                 {ruleType === 'per_delivery' && (
                   <div className="bg-zinc-900 p-3.5 rounded-xl border border-zinc-800 flex flex-col gap-1">
                     <label className="text-[10px] font-bold text-sky-400 uppercase">Valor por Entrega (R$)</label>
-                    <input type="number" value={ruleDeliveryFee} onChange={e => setRuleDeliveryFee(e.target.value)} placeholder="Ex: 6.50" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm focus:border-sky-500" required />
+                    <input type="number" value={ruleDeliveryFee} onChange={e => setRuleDeliveryFee(e.target.value)} placeholder="Ex: 6.50" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm focus:border-sky-500 outline-none" required />
                   </div>
                 )}
 
                 {ruleType === 'fixed' && (
                   <div className="bg-zinc-900 p-3.5 rounded-xl border border-zinc-800 flex flex-col gap-1">
                     <label className="text-[10px] font-bold text-sky-400 uppercase">Diária Fixa (R$)</label>
-                    <input type="number" value={ruleFixedAmount} onChange={e => setRuleFixedAmount(e.target.value)} placeholder="Ex: 120" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm focus:border-sky-500" required />
+                    <input type="number" value={ruleFixedAmount} onChange={e => setRuleFixedAmount(e.target.value)} placeholder="Ex: 120" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm focus:border-sky-500 outline-none" required />
                   </div>
                 )}
 
