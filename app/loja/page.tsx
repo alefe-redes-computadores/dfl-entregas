@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Store, Power, Users, MapPin, Clock, 
@@ -18,11 +18,15 @@ export default function LojaPage() {
   const router = useRouter();
   
   // ------------------------------------------------------------------
-  // ESTADOS GLOBAIS (Lendo a operação em tempo real)
+  // ESTADOS GLOBAIS
   // ------------------------------------------------------------------
   const deliveries = useAppStore((state) => state.deliveries);
   const motoboys = useAppStore((state) => state.motoboys);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
+  
+  // Status Real do Alerta de Rota
+  const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
+  const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
 
   // ------------------------------------------------------------------
   // ESTADOS LOCAIS (Configurações da Loja)
@@ -30,11 +34,8 @@ export default function LojaPage() {
   const [isStoreOpen, setIsStoreOpen] = useState(false);
   const [openTime, setOpenTime] = useState('18:00');
   const [closeTime, setCloseTime] = useState('23:59');
-  const [activeDays, setActiveDays] = useState<number[]>([4, 5, 6, 0]); // Qui, Sex, Sáb, Dom
-  
-  // Alertas
+  const [activeDays, setActiveDays] = useState<number[]>([4, 5, 6, 0]); 
   const [alertsEnabled, setAlertsEnabled] = useState(false);
-  const [routeAlerts, setRouteAlerts] = useState(false);
 
   // ------------------------------------------------------------------
   // INTELIGÊNCIA: RESUMO DO DIA
@@ -47,11 +48,10 @@ export default function LojaPage() {
 
   const totalEntregas = todaysDeliveries.length;
   const faturamentoTotal = todaysDeliveries.reduce((acc, d) => acc + (d.value || 0), 0);
-  
   const motoboysFixos = motoboys.filter(m => m.active && (m as any).type === 'fixo');
 
   // ------------------------------------------------------------------
-  // AÇÕES E NOTIFICAÇÕES NATIVAS
+  // AÇÕES
   // ------------------------------------------------------------------
   const toggleStore = () => {
     const newState = !isStoreOpen;
@@ -67,10 +67,8 @@ export default function LojaPage() {
     );
   };
 
-  // 🔔 Ativar Lembrete de Abertura Nativo (Toca 30 min antes)
   const handleToggleAlerts = async () => {
     const newState = !alertsEnabled;
-    
     if (newState) {
       if (Capacitor.isNativePlatform()) {
         try {
@@ -87,26 +85,20 @@ export default function LojaPage() {
                   body: 'Faltam 30 minutos para abrir a lanchonete!',
                   id: 1,
                   schedule: { on: { hour: notifDate.getHours(), minute: notifDate.getMinutes() }, allowWhileIdle: true },
-                  sound: 'beep.wav',
-                  actionTypeId: '',
-                  extra: null
                 }
               ]
             });
             setAlertsEnabled(true);
-            toast.success('Alarme configurado no sistema Android/iOS!', { 
-              description: `Você será avisado às ${notifDate.getHours().toString().padStart(2, '0')}:${notifDate.getMinutes().toString().padStart(2, '0')}` 
-            });
+            toast.success('Alarme de Abertura ativado!');
           } else {
-            toast.error('Permissão negada', { description: 'Ative as notificações nas configurações do seu celular.' });
+            toast.error('Permissão negada.');
           }
         } catch (error) {
-          console.error(error);
-          toast.error('Erro ao configurar notificação nativa.');
+          toast.error('Erro ao configurar notificação.');
         }
       } else {
         setAlertsEnabled(true);
-        toast.success('Lembrete Web Ativado', { description: '(No celular ele pedirá permissão e tocará o alarme real)' });
+        toast.success('Lembrete Web Ativado');
       }
     } else {
       setAlertsEnabled(false);
@@ -116,27 +108,25 @@ export default function LojaPage() {
     }
   };
 
-  // 🏍️ Ativar Alerta de Rota Fechada (Teste em 3 segundos)
+  // 🏍️ Ativar Alerta Real de Rota Fechada
   const handleToggleRouteAlerts = async () => {
-    const newState = !routeAlerts;
-    setRouteAlerts(newState);
-
-    if (newState && Capacitor.isNativePlatform()) {
-      try {
-        await LocalNotifications.schedule({
-          notifications: [
-            {
-              title: 'Rota Finalizada ✅',
-              body: 'O motoboy encerrou a rota. Clique para ver o resumo.',
-              id: 2,
-              schedule: { at: new Date(Date.now() + 1000 * 3) } // Toca em 3 segundos
-            }
-          ]
-        });
-        toast.success('Alerta de Rota Ativado', { description: 'Um teste tocará em 3 segundos no seu celular!' });
-      } catch (error) {
-        console.error(error);
+    const newState = !routeAlertsEnabled;
+    
+    if (newState) {
+      if (Capacitor.isNativePlatform()) {
+        const permStatus = await LocalNotifications.requestPermissions();
+        if (permStatus.display === 'granted') {
+          setRouteAlertsEnabled(true);
+          toast.success('Alerta de Rota Ativado', { description: 'Você será notificado quando uma rota for finalizada.' });
+        } else {
+          toast.error('Permissão negada. Ative nas configurações do celular.');
+        }
+      } else {
+        setRouteAlertsEnabled(true);
+        toast.success('Alertas ativados (Modo Web)');
       }
+    } else {
+      setRouteAlertsEnabled(false);
     }
   };
 
@@ -358,9 +348,9 @@ export default function LojaPage() {
             </div>
             <button 
               onClick={handleToggleRouteAlerts} 
-              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${routeAlerts ? 'bg-amber-500' : 'bg-zinc-700'}`}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${routeAlertsEnabled ? 'bg-amber-500' : 'bg-zinc-700'}`}
             >
-              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${routeAlerts ? 'translate-x-6' : 'translate-x-1'}`} />
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${routeAlertsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
 
