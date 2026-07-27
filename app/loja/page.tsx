@@ -41,8 +41,8 @@ export default function LojaPage() {
   // INTELIGÊNCIA: RESUMO DO DIA
   // ------------------------------------------------------------------
   const todayStr = new Date().toDateString();
-  const todaysDeliveries = deliveries.filter(d => {
-    const dDateStr = new Date(d.updated_at || d.createdAt || Date.now()).toDateString();
+    const todaysDeliveries = deliveries.filter(d => {
+    const dDateStr = new Date(d.updated_at || Date.now()).toDateString();
     return dDateStr === todayStr;
   });
 
