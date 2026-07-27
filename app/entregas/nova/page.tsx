@@ -322,6 +322,12 @@ export default function NovaEntregaPage() {
           <input type="text" placeholder="Ex: 1 Coca 2L" value={drinks} onChange={(e) => setDrinks(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
         </div>
 
+        {/* --- CAMPO DO MAPS REINSERIDO AQUI --- */}
+        <div className="flex flex-col gap-2 border-t border-zinc-800 pt-5 mt-2">
+          <label className="text-sm font-semibold text-zinc-400">Link do Maps (Opcional)</label>
+          <input type="text" placeholder="Ex: https://maps.app.goo.gl/..." value={mapsLink} onChange={(e) => setMapsLink(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
             <label className={`text-sm font-semibold transition-colors ${origin === 'ifood' ? 'text-zinc-400' : 'text-zinc-600'}`}>Cód. Confirmação</label>
