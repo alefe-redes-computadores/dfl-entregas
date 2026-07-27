@@ -7,6 +7,8 @@ import clsx from 'clsx';
 import type { Route } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { DeliveryCard } from '@/components/home/DeliveryCard';
+import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 interface RouteAccordionProps {
   route: Route;
@@ -29,15 +31,16 @@ function formatRouteDuration(departureTime: string, endTime?: string) {
 
 export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const closeRoute = useAppStore((state) => state.closeRoute);
   const reopenRoute = useAppStore((state) => state.reopenRoute);
-  const startRoute = useAppStore((state) => state.startRoute); // <-- NOVO
+  const startRoute = useAppStore((state) => state.startRoute); 
+  const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled); // <-- LÊ A CONFIGURAÇÃO DE ALERTA
 
   const deliveries = getDeliveriesByRoute(route.id);
   const pendingCount = deliveries.filter((d) => !d.is_paid).length;
-  // Agora usa o started_at se existir, senão usa departure_time como segurança
   const duration = formatRouteDuration(route.started_at || route.departure_time, route.end_time);
 
   const sortedDeliveries = [...deliveries].sort((a, b) => {
@@ -59,12 +62,30 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     });
   };
 
-  const handleCloseRoute = () => {
+  const handleCloseRoute = async () => {
     closeRoute(route.id);
     toast.success('Rota finalizada!', {
       description: 'Ela foi enviada para o histórico do dia.',
     });
     setIsOpen(false);
+
+    // 🔔 DISPARADOR DE NOTIFICAÇÃO NATIVA (SE ATIVADO NA LOJA)
+    if (routeAlertsEnabled && Capacitor.isNativePlatform()) {
+      try {
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              title: 'Rota Finalizada ✅',
+              body: `O motoboy ${route.motoboy_name} encerrou a rota com ${deliveries.length} entregas.`,
+              id: Math.floor(Math.random() * 100000), // Garante um ID único para o alarme
+              schedule: { at: new Date(Date.now() + 1000) }, // Toca 1 segundo após fechar
+            }
+          ]
+        });
+      } catch (error) {
+        console.error('Erro ao disparar alarme nativo:', error);
+      }
+    }
   };
 
   const handleReopenRoute = () => {
@@ -167,7 +188,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
           <div className="mt-2 flex flex-col gap-2">
             {route.status === 'aberta' ? (
-              // 🚀 Lógica Nova: Iniciar vs Finalizar
               !route.started_at ? (
                 <button
                   onClick={handleStartRoute}
