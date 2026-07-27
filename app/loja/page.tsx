@@ -3,246 +3,281 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Store, Power, Users, Clock, 
-  Bike, ChevronRight, BellRing, Smartphone, ShieldCheck
+  Store, Power, Users, MapPin, Clock, 
+  BellRing, Bike, Settings, TrendingUp, 
+  Package, Calendar, CheckCircle2, Bell, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { PageHeader } from '@/components/layout/PageHeader';
 
 const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export default function LojaPage() {
   const router = useRouter();
   
-  const storeSettings = useAppStore((state) => state.storeSettings);
-  const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
+  // ------------------------------------------------------------------
+  // ESTADOS GLOBAIS
+  // ------------------------------------------------------------------
+  const deliveries = useAppStore((state) => state.deliveries);
+  const motoboys = useAppStore((state) => state.motoboys);
+  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
+  
+  // Status Real do Alerta de Rota
+  const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
+  const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
 
-  const [isOpen, setIsOpen] = useState(storeSettings?.isOpen ?? true);
-  const [openingTime, setOpeningTime] = useState(storeSettings?.openingTime || '18:00');
-  const [closingTime, setClosingTime] = useState(storeSettings?.closingTime || '23:30');
-  const [activeDays, setActiveDays] = useState<number[]>(storeSettings?.activeDays || [1, 2, 3, 4, 5, 6, 0]);
+  // ------------------------------------------------------------------
+  // ESTADOS LOCAIS (Configurações da Loja)
+  // ------------------------------------------------------------------
+  const [isStoreOpen, setIsStoreOpen] = useState(false);
+  const [openTime, setOpenTime] = useState('18:00');
+  const [closeTime, setCloseTime] = useState('23:59');
+  const [activeDays, setActiveDays] = useState<number[]>([4, 5, 6, 0]); 
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
 
-  const handleToggleStore = async () => {
-    const newStatus = !isOpen;
-    setIsOpen(newStatus);
-    
-    await updateStoreSettings({ isOpen: newStatus });
-    toast.success(newStatus ? 'Loja Aberta para Entregas!' : 'Loja Fechada com sucesso.');
+  // ------------------------------------------------------------------
+  // INTELIGÊNCIA: RESUMO DO DIA
+  // ------------------------------------------------------------------
+  const todayStr = new Date().toDateString();
+    const todaysDeliveries = deliveries.filter(d => {
+    const dDateStr = new Date(d.updated_at || Date.now()).toDateString();
+    return dDateStr === todayStr;
+  });
 
-    if (newStatus && Capacitor.isNativePlatform()) {
-      try {
-        await LocalNotifications.schedule({
-          notifications: [
-            {
-              title: 'Aviso da Loja - DFL Entregas',
-              body: 'A loja está aberta. Lembre-se de conferir os acertos e fechamentos.',
-              id: 999,
-              schedule: { at: new Date(Date.now() + 1000 * 60 * 60) },
-            },
-          ],
-        });
-      } catch (e) {
-        console.error(e);
+  const totalEntregas = todaysDeliveries.length;
+  const faturamentoTotal = todaysDeliveries.reduce((acc, d) => acc + (d.value || 0), 0);
+  const motoboysFixos = motoboys.filter(m => m.active && (m as any).type === 'fixo');
+
+  // ------------------------------------------------------------------
+  // AÇÕES
+  // ------------------------------------------------------------------
+  const toggleStore = () => {
+    const newState = !isStoreOpen;
+    setIsStoreOpen(newState);
+    toast.success(newState ? 'Operação Aberta! Bom trabalho, Capitão!' : 'Operação Fechada! Bom descanso!', {
+      style: { background: newState ? '#10b981' : '#ef4444', color: '#fff', border: 'none' }
+    });
+  };
+
+  const toggleDay = (index: number) => {
+    setActiveDays(prev => 
+      prev.includes(index) ? prev.filter(d => d !== index) : [...prev, index]
+    );
+  };
+
+  const handleToggleAlerts = async () => {
+    const newState = !alertsEnabled;
+    if (newState) {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const permStatus = await LocalNotifications.requestPermissions();
+          if (permStatus.display === 'granted') {
+            const [hours, minutes] = openTime.split(':').map(Number);
+            let notifDate = new Date();
+            notifDate.setHours(hours, minutes - 30, 0, 0);
+
+            await LocalNotifications.schedule({
+              notifications: [
+                {
+                  title: 'Prepara a chapa! 🍔',
+                  body: 'Faltam 30 minutos para abrir a lanchonete!',
+                  id: 1,
+                  schedule: { on: { hour: notifDate.getHours(), minute: notifDate.getMinutes() }, allowWhileIdle: true },
+                }
+              ]
+            });
+            setAlertsEnabled(true);
+            toast.success('Alarme de Abertura ativado!');
+          } else {
+            toast.error('Permissão negada.');
+          }
+        } catch (error) {
+          toast.error('Erro ao configurar notificação.');
+        }
+      } else {
+        setAlertsEnabled(true);
+        toast.success('Lembrete Web Ativado');
+      }
+    } else {
+      setAlertsEnabled(false);
+      if (Capacitor.isNativePlatform()) {
+        await LocalNotifications.cancel({ notifications: [{ id: 1 }] });
       }
     }
   };
 
-  const handleTestNotification = async () => {
-    if (!Capacitor.isNativePlatform()) {
-      toast.info('Notificações nativas funcionam apenas no aplicativo do celular.');
-      return;
-    }
-    try {
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            title: 'Teste de Alerta | DFL Entregas',
-            body: 'O sistema de avisos e notificações está operando perfeitamente.',
-            id: Date.now(),
-            schedule: { at: new Date(Date.now() + 1000 * 2) },
-          },
-        ],
-      });
-      toast.success('Notificação de teste disparada!');
-    } catch (e) {
-      toast.error('Erro ao disparar notificação.');
-    }
-  };
-
-  const handleSaveSchedule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await updateStoreSettings({
-      openingTime,
-      closingTime,
-      activeDays,
-    });
-    toast.success('Horários e expediente atualizados!');
-  };
-
-  const toggleDay = (dayIndex: number) => {
-    if (activeDays.includes(dayIndex)) {
-      setActiveDays(activeDays.filter(d => d !== dayIndex));
+  // 🏍️ Ativar Alerta Real de Rota Fechada
+  const handleToggleRouteAlerts = async () => {
+    const newState = !routeAlertsEnabled;
+    
+    if (newState) {
+      if (Capacitor.isNativePlatform()) {
+        const permStatus = await LocalNotifications.requestPermissions();
+        if (permStatus.display === 'granted') {
+          setRouteAlertsEnabled(true);
+          toast.success('Alerta de Rota Ativado', { description: 'Você será notificado quando uma rota for finalizada.' });
+        } else {
+          toast.error('Permissão negada. Ative nas configurações do celular.');
+        }
+      } else {
+        setRouteAlertsEnabled(true);
+        toast.success('Alertas ativados (Modo Web)');
+      }
     } else {
-      setActiveDays([...activeDays, dayIndex]);
+      setRouteAlertsEnabled(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-6 pb-24 relative animate-in fade-in duration-300">
+    <div className="flex flex-col gap-6 pb-24 animate-in fade-in duration-300 relative">
       
-      {/* CABEÇALHO PADRÃO COM VOLTAR PARA A HOME */}
-      <PageHeader 
-        title="Central da Loja" 
-        subtitle="Controle de expediente, status e gestão" 
-        to="/"
-      />
+      {/* HEADER DA LOJA */}
+      <div className="flex flex-col gap-1">
+        <h1 className="font-heading text-2xl font-black text-zinc-50 flex items-center gap-2">
+          <Store className="text-emerald-500" /> Minha Loja
+        </h1>
+        <p className="text-sm text-zinc-500">Centro de comando da Da Família Lanches.</p>
+      </div>
 
-      {/* STATUS DA LOJA (ABERTO / FECHADO) */}
-      <div className={`flex items-center justify-between p-5 rounded-[28px] border transition-all ${isOpen ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-        <div className="flex items-center gap-4">
-          <div className={`flex h-14 w-14 items-center justify-center rounded-2xl shadow-md ${isOpen ? 'bg-emerald-500 text-zinc-950' : 'bg-red-500 text-white'}`}>
-            <Power size={28} strokeWidth={2.5} />
+      {/* BOTÃO MESTRE - STATUS DA LOJA */}
+      <button 
+        onClick={toggleStore}
+        className={`relative overflow-hidden flex items-center justify-between p-5 rounded-[28px] border transition-all duration-500 ${
+          isStoreOpen 
+            ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.1)]' 
+            : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800/80'
+        }`}
+      >
+        <div className="flex items-center gap-4 relative z-10">
+          <div className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors duration-500 ${
+            isStoreOpen ? 'bg-emerald-500 text-zinc-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-zinc-800 text-zinc-500'
+          }`}>
+            <Power size={24} strokeWidth={2.5} />
           </div>
-          <div>
-            <h2 className="font-heading text-lg font-bold text-zinc-50">
-              {isOpen ? 'Loja Aberta' : 'Loja Fechada'}
-            </h2>
-            <p className="text-xs text-zinc-400">
-              {isOpen ? 'Aceitando novas rotas e entregas' : 'Expediente encerrado temporariamente'}
-            </p>
+          <div className="text-left flex flex-col">
+            <span className={`text-lg font-black tracking-wide uppercase transition-colors ${isStoreOpen ? 'text-emerald-400' : 'text-zinc-400'}`}>
+              {isStoreOpen ? 'Operação Aberta' : 'Operação Fechada'}
+            </span>
+            <span className="text-xs font-semibold text-zinc-500">
+              {isStoreOpen ? 'Recebendo pedidos e lançando rotas' : 'Sistema em modo de repouso'}
+            </span>
           </div>
         </div>
+      </button>
 
-        <button
-          onClick={handleToggleStore}
-          className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 ${isOpen ? 'bg-emerald-500' : 'bg-zinc-700'}`}
-        >
-          <span className={`inline-block h-6 w-6 transform rounded-full bg-zinc-950 shadow-md transition-transform duration-300 ${isOpen ? 'translate-x-7' : 'translate-x-1'}`} />
-        </button>
-      </div>
-
-      {/* ATALHOS RÁPIDOS PARA MOTOBOYS E CLIENTES */}
-      <div className="flex flex-col gap-2">
-        <h3 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-          Gestão e Operação
-        </h3>
-        <div className="flex flex-col gap-3">
-          
-          {/* CARD MOTOBOYS */}
-          <button
-            onClick={() => router.push('/motoboys')}
-            className="flex items-center justify-between p-4 rounded-[24px] border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-800/60 transition-all active:scale-[0.98] text-left group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 font-bold shrink-0">
-                <Bike size={22} />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-bold text-zinc-100 text-base group-hover:text-sky-400 transition-colors">
-                  Equipe de Motoboys
-                </span>
-                <span className="text-xs text-zinc-500">
-                  Acertos diários, regras e caixas
-                </span>
-              </div>
-            </div>
-            <ChevronRight size={20} className="text-zinc-600 group-hover:text-zinc-300 transition-colors shrink-0" />
-          </button>
-
-          {/* CARD CLIENTES */}
-          <button
-            onClick={() => router.push('/clientes')}
-            className="flex items-center justify-between p-4 rounded-[24px] border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-800/60 transition-all active:scale-[0.98] text-left group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold shrink-0">
-                <Users size={22} />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-bold text-zinc-100 text-base group-hover:text-emerald-400 transition-colors">
-                  Base de Clientes
-                </span>
-                <span className="text-xs text-zinc-500">
-                  Endereços e códigos de confirmação iFood
-                </span>
-              </div>
-            </div>
-            <ChevronRight size={20} className="text-zinc-600 group-hover:text-zinc-300 transition-colors shrink-0" />
-          </button>
-        </div>
-      </div>
-
-      {/* PAINEL DE NOTIFICAÇÕES E ALERTAS */}
-      <div className="flex flex-col gap-2">
-        <h3 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-          Notificações e Alertas
-        </h3>
-        <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
-          <button
-            onClick={handleTestNotification}
-            className="flex w-full items-center gap-4 p-4 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30 text-left"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
-              <BellRing size={20} />
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-zinc-100">Testar Alerta Push</p>
-              <p className="text-xs text-zinc-500">Disparar notificação de teste no aparelho</p>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* CONFIGURAÇÃO DE HORÁRIOS */}
-      <div className="flex flex-col gap-2">
-        <h3 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-          Expediente e Horários
-        </h3>
+      {/* =========================================
+          RESUMO DA OPERAÇÃO (TEMPO REAL)
+      ========================================= */}
+      <div className="flex flex-col gap-3">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2">
+          <TrendingUp size={14} /> Desempenho de Hoje
+        </h2>
         
-        <form onSubmit={handleSaveSchedule} className="flex flex-col gap-4 rounded-[24px] border border-zinc-800 bg-zinc-900/40 p-5">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
-                <Clock size={14} className="text-amber-500" /> Abertura
-              </label>
-              <input
-                type="time"
-                value={openingTime}
-                onChange={(e) => setOpeningTime(e.target.value)}
-                className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 focus:border-amber-500 outline-none font-bold"
-              />
-            </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-zinc-900/60 border border-zinc-800 p-4 rounded-[24px] flex flex-col gap-1.5">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase">
+              <Package size={14} className="text-sky-500" /> Entregas
+            </span>
+            <span className="font-heading text-2xl font-black text-zinc-100">{totalEntregas}</span>
+          </div>
+          
+          <div className="bg-zinc-900/60 border border-zinc-800 p-4 rounded-[24px] flex flex-col gap-1.5">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase">
+              <TrendingUp size={14} className="text-emerald-500" /> Faturamento
+            </span>
+            <span className="font-heading text-xl font-black text-emerald-400">
+              {isPrivacyMode ? 'R$ •••••' : `R$ ${faturamentoTotal.toFixed(2).replace('.', ',')}`}
+            </span>
+          </div>
+        </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
-                <Clock size={14} className="text-red-500" /> Fechamento
-              </label>
-              <input
-                type="time"
-                value={closingTime}
-                onChange={(e) => setClosingTime(e.target.value)}
-                className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 focus:border-red-500 outline-none font-bold"
-              />
+        {/* MOTOBOYS ESCALADOS */}
+        <div className="bg-zinc-900/40 border border-zinc-800 p-4 rounded-[24px] flex items-center justify-between">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5">
+              <Bike size={14} className="text-amber-500" /> Motoboys Fixos Hoje
+            </span>
+            <div className="flex items-center gap-2 mt-1">
+              {motoboysFixos.length > 0 ? (
+                motoboysFixos.map(m => (
+                  <span key={m.id} className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                    {m.name}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-zinc-600 font-semibold">Nenhum fixo ativo hoje</span>
+              )}
             </div>
           </div>
+        </div>
+      </div>
 
-          <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800/80">
-            <label className="text-xs font-semibold text-zinc-400">Dias de Funcionamento</label>
-            <div className="grid grid-cols-7 gap-1.5">
+      {/* =========================================
+          ATALHOS DE GESTÃO
+      ========================================= */}
+      <div className="flex flex-col gap-3">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Gestão Rápida</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => router.push('/motoboys')} className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left">
+            <Bike className="text-sky-400" size={24} />
+            <div>
+              <p className="font-bold text-zinc-100">Equipe</p>
+              <p className="text-[10px] text-zinc-500">Motoboys e Acertos</p>
+            </div>
+          </button>
+          
+          <button onClick={() => router.push('/clientes')} className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left">
+            <Users className="text-amber-400" size={24} />
+            <div>
+              <p className="font-bold text-zinc-100">Clientes</p>
+              <p className="text-[10px] text-zinc-500">Endereços e Códigos</p>
+            </div>
+          </button>
+
+          <button className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left opacity-60">
+            <MapPin className="text-purple-400" size={24} />
+            <div>
+              <p className="font-bold text-zinc-100">Zonas</p>
+              <p className="text-[10px] text-zinc-500">Taxas (Em breve)</p>
+            </div>
+          </button>
+
+          <button className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left opacity-60">
+            <Settings className="text-zinc-400" size={24} />
+            <div>
+              <p className="font-bold text-zinc-100">Cardápio</p>
+              <p className="text-[10px] text-zinc-500">Lanches (Em breve)</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* =========================================
+          AUTOMAÇÃO & HORÁRIOS (NATIVOS)
+      ========================================= */}
+      <div className="flex flex-col gap-3">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Automação & Horários</h2>
+        
+        <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden p-4 gap-5">
+          
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-zinc-300">
+              <Calendar size={16} className="text-indigo-400" />
+              <span className="text-sm font-bold">Dias de Funcionamento</span>
+            </div>
+            <div className="flex justify-between items-center gap-1">
               {DAYS_OF_WEEK.map((day, index) => {
                 const isActive = activeDays.includes(index);
                 return (
-                  <button
+                  <button 
                     key={day}
-                    type="button"
                     onClick={() => toggleDay(index)}
-                    className={`flex h-10 items-center justify-center rounded-xl text-xs font-bold transition-all ${
+                    className={`h-10 w-10 rounded-full text-xs font-bold transition-all ${
                       isActive 
-                        ? 'bg-amber-500 text-zinc-950 shadow-md' 
-                        : 'bg-zinc-950 border border-zinc-800 text-zinc-600'
+                        ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' 
+                        : 'bg-zinc-800 text-zinc-500 border border-zinc-700 hover:bg-zinc-700'
                     }`}
                   >
                     {day}
@@ -252,14 +287,76 @@ export default function LojaPage() {
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="mt-2 h-12 w-full rounded-xl bg-zinc-800 hover:bg-zinc-700 font-bold text-zinc-100 text-sm active:scale-[0.98] transition-all border border-zinc-700 cursor-pointer"
-          >
-            Salvar Alterações de Expediente
-          </button>
-        </form>
+          <div className="grid grid-cols-2 gap-3 border-t border-zinc-800/80 pt-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase">Abre às</label>
+              <div className="relative">
+                <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input 
+                  type="time" 
+                  value={openTime}
+                  onChange={(e) => setOpenTime(e.target.value)}
+                  className="w-full h-12 bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-3 text-sm font-bold text-zinc-200 focus:border-indigo-500 outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase">Fecha às</label>
+              <div className="relative">
+                <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input 
+                  type="time" 
+                  value={closeTime}
+                  onChange={(e) => setCloseTime(e.target.value)}
+                  className="w-full h-12 bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-3 text-sm font-bold text-zinc-200 focus:border-indigo-500 outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden mt-1">
+          
+          <div className="flex items-center justify-between p-4 border-b border-zinc-800/80">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-sky-500/10 text-sky-400 rounded-full flex items-center justify-center">
+                <BellRing size={18} />
+              </div>
+              <div className="text-left">
+                <p className="font-bold text-zinc-100 text-sm">Lembrete de Abertura</p>
+                <p className="text-xs text-zinc-500">Notifica nativamente 30 min antes</p>
+              </div>
+            </div>
+            <button 
+              onClick={handleToggleAlerts} 
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${alertsEnabled ? 'bg-sky-500' : 'bg-zinc-700'}`}
+            >
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${alertsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center">
+                <AlertTriangle size={18} />
+              </div>
+              <div className="text-left">
+                <p className="font-bold text-zinc-100 text-sm">Alerta de Rota Fechada</p>
+                <p className="text-xs text-zinc-500">Avisar quando motoboy voltar</p>
+              </div>
+            </div>
+            <button 
+              onClick={handleToggleRouteAlerts} 
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${routeAlertsEnabled ? 'bg-amber-500' : 'bg-zinc-700'}`}
+            >
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${routeAlertsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+        </div>
       </div>
+
     </div>
   );
 }
