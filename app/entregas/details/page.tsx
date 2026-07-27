@@ -53,6 +53,7 @@ function DeliveryDetailsForm() {
     let street = c.address || '';
     const hood = c.neighborhood || '';
 
+    // Limpeza de bairro duplicado
     if (street && hood) {
       const suffix1 = `, ${hood}`;
       const suffix2 = ` - ${hood}`;
@@ -67,6 +68,7 @@ function DeliveryDetailsForm() {
     toast.success('Endereço preenchido automaticamente! 🪄');
   };
 
+  // 🧠 FATIADOR DE ENDEREÇO 2.0 (CIRÚRGICO)
   const handleAddressPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const text = e.clipboardData.getData('text');
@@ -75,44 +77,55 @@ function DeliveryDetailsForm() {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l);
     let extractedStreet = '';
     let extractedNeighborhood = '';
-    let extractedObs = observation;
+    let extractedObs = observation; // Mantém o que já estiver digitado
+
+    let addressLines: string[] = [];
 
     for (const line of lines) {
       const lower = line.toLowerCase();
       if (lower.includes('endereço de entrega')) continue;
       if (line.match(/\d{5}-\d{3}/) || lower.includes('cep')) continue;
-      if (lower.includes('patos de minas') || lower.includes('- mg')) continue;
       
-      if (lower.startsWith('obs:') || lower.startsWith('observação:')) {
-        extractedObs = line.replace(/^(obs|observação):\s*/i, '').trim();
+      if (lower.startsWith('obs:') || lower.startsWith('observação:') || lower.startsWith('referência:')) {
+        const obsText = line.replace(/^(obs|observação|referência):\s*/i, '').trim();
+        extractedObs = extractedObs ? `${extractedObs} | ${obsText}` : obsText;
         continue;
       }
 
-      if (!extractedStreet && (line.includes(',') || line.includes('-'))) {
-         let addressPart = line;
-         
-         if (addressPart.includes('-')) {
-            const parts = addressPart.split('-');
-            const lastPart = parts[parts.length - 1].trim();
-            if (!/\d/.test(lastPart) && lastPart.length > 3) {
-               extractedNeighborhood = parts.pop()?.trim() || '';
-               addressPart = parts.join('-').trim();
-            }
-         }
-         
-         addressPart = addressPart.replace(/,\s*$/, '');
-         extractedStreet = addressPart;
-         continue;
-      }
+      addressLines.push(line);
+    }
 
-      if (!extractedStreet) extractedStreet = line;
+    let fullAddress = addressLines.join(' - ');
+    fullAddress = fullAddress.replace(/[-,\s]*patos de minas\s*[-,\s]*mg/i, '').trim();
+
+    const parts = fullAddress.split('-').map(p => p.trim()).filter(p => p);
+
+    if (parts.length > 0) {
+      extractedStreet = parts[0]; 
+      
+      if (parts.length > 1) {
+        extractedNeighborhood = parts[parts.length - 1]; 
+        
+        if (parts.length > 2) {
+          const complement = parts.slice(1, -1).join(' - ');
+          extractedObs = extractedObs ? `${complement} | ${extractedObs}` : complement;
+        }
+      }
+    }
+
+    if (!extractedNeighborhood && extractedStreet.includes(',')) {
+       const stParts = extractedStreet.split(',').map(p => p.trim());
+       if (stParts.length > 2) {
+           extractedNeighborhood = stParts.pop() || '';
+           extractedStreet = stParts.join(', ');
+       }
     }
 
     if (extractedStreet) setStreetAddress(extractedStreet);
     if (extractedNeighborhood) setNeighborhood(extractedNeighborhood);
     if (extractedObs) setObservation(extractedObs);
 
-    toast.success('Endereço fatiado magicamente! ✨');
+    toast.success('Endereço fatiado perfeitamente! ✨');
   };
 
   const handlePaymentMethodChange = (method: string) => {
@@ -376,7 +389,13 @@ function DeliveryDetailsForm() {
           <input type="text" placeholder="Ex: 1 Coca 2L" value={drinks} onChange={(e) => setDrinks(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        {/* CAMPO DO MAPS REINSERIDO */}
+        <div className="flex flex-col gap-2 border-t border-zinc-800 pt-5 mt-2">
+          <label className="text-sm font-semibold text-zinc-400">Link do Maps (Opcional)</label>
+          <input type="text" placeholder="Ex: https://maps.app.goo.gl/..." value={mapsLink} onChange={(e) => setMapsLink(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mt-2">
           <div className="flex flex-col gap-2">
             <label className={`text-sm font-semibold transition-colors ${origin === 'ifood' ? 'text-zinc-400' : 'text-zinc-600'}`}>Cód. Confirmação</label>
             <input 
@@ -391,8 +410,8 @@ function DeliveryDetailsForm() {
             />
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-zinc-400">Observação</label>
-            <input type="text" placeholder="Ex: Portão azul" value={observation} onChange={(e) => setObservation(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
+            <label className="text-sm font-semibold text-zinc-400">Observação / Complemento</label>
+            <input type="text" placeholder="Ex: Apto 4, Portão azul..." value={observation} onChange={(e) => setObservation(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
           </div>
         </div>
 
