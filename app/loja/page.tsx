@@ -100,11 +100,9 @@ export default function LojaPage() {
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Formata a hora para o padrão HH:MM para salvar na memória
     const openingTime = `${String(openHour).padStart(2, '0')}:${String(openMin).padStart(2, '0')}`;
     const closingTime = `${String(closeHour).padStart(2, '0')}:${String(closeMin).padStart(2, '0')}`;
     
-    // Salva TUDO no Zustand de uma vez (Persistência Garantida!)
     await updateStoreSettings({
       ...storeSettings,
       openingTime,
@@ -118,7 +116,6 @@ export default function LojaPage() {
       description: 'Dias, horários e alertas foram gravados.'
     });
 
-    // Configura o alerta nativo se ativado
     if (alertsEnabled && Capacitor.isNativePlatform()) {
       try {
         await LocalNotifications.requestPermissions();
@@ -128,7 +125,7 @@ export default function LojaPage() {
               title: 'Prepara a chapa! 🍔',
               body: 'Faltam 30 minutos para abrir a lanchonete!',
               id: 1,
-              schedule: { at: new Date(Date.now() + 1000 * 5) }, // Teste rápido de 5 seg
+              schedule: { at: new Date(Date.now() + 1000 * 5) },
             }
           ]
         });
@@ -143,7 +140,25 @@ export default function LojaPage() {
     toast.success(!currentActiveStatus ? 'Motoboy escalado para hoje!' : 'Motoboy removido da escala.');
   };
 
-  if (!isMounted) return null; // Evita falhas de hidratação na tela preta
+  // ------------------------------------------------------------------
+  // LÓGICA DE TEMPO: MÚLTIPLOS DE 5 (BLINDADA CONTRA HORÁRIOS QUEBRADOS)
+  // ------------------------------------------------------------------
+  const handleMinUp = (current: number, setFn: (val: number) => void) => {
+    const next = current + 5;
+    const rounded = next - (next % 5);
+    setFn(rounded >= 60 ? 0 : rounded);
+  };
+
+  const handleMinDown = (current: number, setFn: (val: number) => void) => {
+    if (current === 0) {
+      setFn(55);
+      return;
+    }
+    const rounded = current - (current % 5);
+    setFn(current % 5 !== 0 ? rounded : rounded - 5);
+  };
+
+  if (!isMounted) return null;
 
   return (
     <div className="flex flex-col gap-6 pb-24 animate-in fade-in duration-300 relative">
@@ -262,7 +277,7 @@ export default function LojaPage() {
         </div>
       </div>
 
-      {/* AUTOMAÇÃO & HORÁRIOS (ZERO INPUTS NATIVOS) */}
+      {/* AUTOMAÇÃO & HORÁRIOS */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Automação & Expediente</h2>
         
@@ -295,7 +310,7 @@ export default function LojaPage() {
             </div>
           </div>
 
-          {/* SPINNERS DE HORA CUSTOMIZADOS (SUBSTITUEM O INPUT TIME) */}
+          {/* SPINNERS DE HORA CUSTOMIZADOS (AGORA COM TRAVA DE MÚLTIPLOS DE 5) */}
           <div className="grid grid-cols-2 gap-3 border-t border-zinc-800/80 pt-5">
             
             {/* SPINNER: ABERTURA */}
@@ -309,9 +324,9 @@ export default function LojaPage() {
                 </div>
                 <span className="text-xl font-black text-zinc-600 mb-1">:</span>
                 <div className="flex flex-col items-center gap-1">
-                  <button type="button" onClick={() => setOpenMin(m => m >= 55 ? 0 : m + 5)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronUp size={18}/></button>
+                  <button type="button" onClick={() => handleMinUp(openMin, setOpenMin)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronUp size={18}/></button>
                   <span className="text-xl font-black text-zinc-100 w-8 text-center">{String(openMin).padStart(2, '0')}</span>
-                  <button type="button" onClick={() => setOpenMin(m => m <= 0 ? 55 : m - 5)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronDown size={18}/></button>
+                  <button type="button" onClick={() => handleMinDown(openMin, setOpenMin)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronDown size={18}/></button>
                 </div>
               </div>
             </div>
@@ -327,16 +342,16 @@ export default function LojaPage() {
                 </div>
                 <span className="text-xl font-black text-zinc-600 mb-1">:</span>
                 <div className="flex flex-col items-center gap-1">
-                  <button type="button" onClick={() => setCloseMin(m => m >= 55 ? 0 : m + 5)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronUp size={18}/></button>
+                  <button type="button" onClick={() => handleMinUp(closeMin, setCloseMin)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronUp size={18}/></button>
                   <span className="text-xl font-black text-zinc-100 w-8 text-center">{String(closeMin).padStart(2, '0')}</span>
-                  <button type="button" onClick={() => setCloseMin(m => m <= 0 ? 55 : m - 5)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronDown size={18}/></button>
+                  <button type="button" onClick={() => handleMinDown(closeMin, setCloseMin)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronDown size={18}/></button>
                 </div>
               </div>
             </div>
 
           </div>
 
-          {/* TOGGLES DE NOTIFICAÇÃO (SALVOS JUNTO COM O EXPEDIENTE) */}
+          {/* TOGGLES DE NOTIFICAÇÃO */}
           <div className="flex flex-col bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden mt-2">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800/80">
               <div className="flex items-center gap-3">
