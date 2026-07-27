@@ -5,7 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { ThemeProvider } from '@/components/ThemeProvider'; // <-- IMPORTADO O CÉREBRO DO TEMA
+import { ThemeProvider } from '@/components/ThemeProvider';
 import './globals.css';
 
 const poppins = Poppins({
@@ -42,19 +42,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className={`${poppins.variable} ${inter.variable}`}>
+    <html lang="pt-BR" className={`${poppins.variable} ${inter.variable}`} suppressHydrationWarning>
       <body>
-        {/* ENVOLVENDO TUDO COM O GERENCIADOR DE TEMA */}
         <ThemeProvider>
           <ErrorBoundary>
             <AuthGuard>
-              <div className="mx-auto flex min-h-screen max-w-md flex-col bg-zinc-950">
+              <div className="mx-auto flex min-h-screen max-w-md flex-col bg-background text-foreground transition-colors duration-300">
                 <Header />
                 <main className="flex-1 px-4 pb-28 pt-4">{children}</main>
                 <BottomNav />
               </div>
               <Toaster
-                theme="dark"
+                theme="system"
                 position="top-center"
                 toastOptions={{
                   style: {
