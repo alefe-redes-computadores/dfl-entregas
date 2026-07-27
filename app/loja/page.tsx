@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Store, Power, Users, MapPin, Clock, 
   BellRing, Bike, Settings, TrendingUp, 
-  Package, Calendar, CheckCircle2, Bell, AlertTriangle
+  Package, Calendar, CheckCircle2, Bell, AlertTriangle, Plus, Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
@@ -23,49 +23,80 @@ export default function LojaPage() {
   // ------------------------------------------------------------------
   const deliveries = useAppStore((state) => state.deliveries);
   const motoboys = useAppStore((state) => state.motoboys);
+  const updateMotoboy = useAppStore((state) => state.updateMotoboy);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   
-  // Status Real do Alerta de Rota
+  const storeSettings = useAppStore((state) => state.storeSettings);
+  const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
+
+  // Status do Alerta de Rota
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
 
   // ------------------------------------------------------------------
-  // ESTADOS LOCAIS (Configurações da Loja)
+  // ESTADOS LOCAIS (Sincronizados com o Store Global)
   // ------------------------------------------------------------------
-  const [isStoreOpen, setIsStoreOpen] = useState(false);
-  const [openTime, setOpenTime] = useState('18:00');
-  const [closeTime, setCloseTime] = useState('23:59');
-  const [activeDays, setActiveDays] = useState<number[]>([4, 5, 6, 0]); 
+  const [isStoreOpen, setIsStoreOpen] = useState(storeSettings?.isOpen ?? false);
+  const [openTime, setOpenTime] = useState(storeSettings?.openingTime || '18:00');
+  const [closeTime, setCloseTime] = useState(storeSettings?.closingTime || '23:59');
+  const [activeDays, setActiveDays] = useState<number[]>(storeSettings?.activeDays || [1, 2, 3, 4, 5, 6, 0]); 
   const [alertsEnabled, setAlertsEnabled] = useState(false);
 
   // ------------------------------------------------------------------
-  // INTELIGÊNCIA: RESUMO DO DIA
+  // INTELIGÊNCIA: RESUMO DO DIA & ESCALA DE MOTOBOYS
   // ------------------------------------------------------------------
+  const todayIndex = new Date().getDay(); // 0 = Dom, 1 = Seg...
   const todayStr = new Date().toDateString();
-    const todaysDeliveries = deliveries.filter(d => {
+
+  const todaysDeliveries = deliveries.filter(d => {
     const dDateStr = new Date(d.updated_at || Date.now()).toDateString();
     return dDateStr === todayStr;
   });
 
   const totalEntregas = todaysDeliveries.length;
   const faturamentoTotal = todaysDeliveries.reduce((acc, d) => acc + (d.value || 0), 0);
+
+  // Filtra motoboys fixos ativos
   const motoboysFixos = motoboys.filter(m => m.active && (m as any).type === 'fixo');
 
   // ------------------------------------------------------------------
   // AÇÕES
   // ------------------------------------------------------------------
-  const toggleStore = () => {
+  const toggleStore = async () => {
     const newState = !isStoreOpen;
     setIsStoreOpen(newState);
+    await updateStoreSettings({ isOpen: newState });
+    
     toast.success(newState ? 'Operação Aberta! Bom trabalho, Capitão!' : 'Operação Fechada! Bom descanso!', {
       style: { background: newState ? '#10b981' : '#ef4444', color: '#fff', border: 'none' }
     });
   };
 
-  const toggleDay = (index: number) => {
-    setActiveDays(prev => 
-      prev.includes(index) ? prev.filter(d => d !== index) : [...prev, index]
-    );
+  const toggleDay = async (index: number) => {
+    const updatedDays = activeDays.includes(index) 
+      ? activeDays.filter(d => d !== index) 
+      : [...activeDays, index];
+    
+    setActiveDays(updatedDays);
+    await updateStoreSettings({ activeDays: updatedDays });
+    toast.success('Dias de funcionamento atualizados!');
+  };
+
+  const handleSaveSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await updateStoreSettings({
+      openingTime: openTime,
+      closingTime: closeTime,
+      activeDays: activeDays,
+      isOpen: isStoreOpen
+    });
+    toast.success('Horários e expediente salvos com sucesso!');
+  };
+
+  // Alternar escala rápida de motoboy fixo direto da Loja
+  const handleToggleMotoboyScale = async (motoboyId: string, currentActiveStatus: boolean) => {
+    await updateMotoboy(motoboyId, { active: !currentActiveStatus } as any);
+    toast.success(!currentActiveStatus ? 'Motoboy escalado para hoje!' : 'Motoboy removido da escala.');
   };
 
   const handleToggleAlerts = async () => {
@@ -109,10 +140,8 @@ export default function LojaPage() {
     }
   };
 
-  // 🏍️ Ativar Alerta Real de Rota Fechada
   const handleToggleRouteAlerts = async () => {
     const newState = !routeAlertsEnabled;
-    
     if (newState) {
       if (Capacitor.isNativePlatform()) {
         const permStatus = await LocalNotifications.requestPermissions();
@@ -120,7 +149,7 @@ export default function LojaPage() {
           setRouteAlertsEnabled(true);
           toast.success('Alerta de Rota Ativado', { description: 'Você será notificado quando uma rota for finalizada.' });
         } else {
-          toast.error('Permissão negada. Ative nas configurações do celular.');
+          toast.error('Permissão negada nas configurações do celular.');
         }
       } else {
         setRouteAlertsEnabled(true);
@@ -128,13 +157,14 @@ export default function LojaPage() {
       }
     } else {
       setRouteAlertsEnabled(false);
+      toast.success('Alerta de rota desativado.');
     }
   };
 
   return (
     <div className="flex flex-col gap-6 pb-24 animate-in fade-in duration-300 relative">
       
-      {/* CABEÇALHO PADRÃO COM VOLTAR PARA A HOME */}
+      {/* HEADER DA LOJA COM BOTÃO DE VOLTAR SEGURO */}
       <PageHeader 
         title="Minha Loja" 
         subtitle="Centro de comando da Da Família Lanches" 
@@ -168,7 +198,7 @@ export default function LojaPage() {
       </button>
 
       {/* =========================================
-          RESUMO DA OPERAÇÃO (TEMPO REAL)
+          RESUMO DA OPERAÇÃO & ESCALA DE HOJE
       ========================================= */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2">
@@ -193,29 +223,48 @@ export default function LojaPage() {
           </div>
         </div>
 
-        {/* MOTOBOYS ESCALADOS */}
-        <div className="bg-zinc-900/40 border border-zinc-800 p-4 rounded-[24px] flex items-center justify-between">
-          <div className="flex flex-col gap-1">
+        {/* ESCALA DE MOTOBOYS FIXOS PARA HOJE */}
+        <div className="bg-zinc-900/40 border border-zinc-800 p-4 rounded-[24px] flex flex-col gap-3">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5">
-              <Bike size={14} className="text-amber-500" /> Motoboys Fixos Hoje
+              <Bike size={14} className="text-amber-500" /> Escala de Motoboys (Hoje)
             </span>
-            <div className="flex items-center gap-2 mt-1">
-              {motoboysFixos.length > 0 ? (
-                motoboysFixos.map(m => (
-                  <span key={m.id} className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">
-                    {m.name}
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-zinc-600 font-semibold">Nenhum fixo ativo hoje</span>
-              )}
-            </div>
+            <button 
+              onClick={() => router.push('/motoboys')} 
+              className="text-[11px] font-bold text-sky-400 hover:text-sky-300 cursor-pointer"
+            >
+              Gerenciar Equipe ➔
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {motoboys.length > 0 ? (
+              motoboys.map(m => {
+                const isFixo = (m as any).type === 'fixo';
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => handleToggleMotoboyScale(m.id, m.active)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      m.active 
+                        ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-sm' 
+                        : 'bg-zinc-950 border border-zinc-800 text-zinc-600 opacity-60'
+                    }`}
+                  >
+                    <span>{m.name}</span>
+                    {m.active && <Check size={12} className="text-amber-400" />}
+                  </button>
+                );
+              })
+            ) : (
+              <span className="text-xs text-zinc-600 font-semibold">Nenhum motoboy cadastrado.</span>
+            )}
           </div>
         </div>
       </div>
 
       {/* =========================================
-          ATALHOS DE GESTÃO
+          ATALHOS DE GESTÃO RÁPIDA
       ========================================= */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Gestão Rápida</h2>
@@ -235,32 +284,16 @@ export default function LojaPage() {
               <p className="text-[10px] text-zinc-500">Endereços e Códigos</p>
             </div>
           </button>
-
-          <button className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left opacity-60">
-            <MapPin className="text-purple-400" size={24} />
-            <div>
-              <p className="font-bold text-zinc-100">Zonas</p>
-              <p className="text-[10px] text-zinc-500">Taxas (Em breve)</p>
-            </div>
-          </button>
-
-          <button className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left opacity-60">
-            <Settings className="text-zinc-400" size={24} />
-            <div>
-              <p className="font-bold text-zinc-100">Cardápio</p>
-              <p className="text-[10px] text-zinc-500">Lanches (Em breve)</p>
-            </div>
-          </button>
         </div>
       </div>
 
       {/* =========================================
-          AUTOMAÇÃO & HORÁRIOS
+          AUTOMAÇÃO & HORÁRIOS (DESIGN ELEGANTE)
       ========================================= */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Automação & Horários</h2>
         
-        <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden p-4 gap-5">
+        <form onSubmit={handleSaveSchedule} className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden p-4 gap-5">
           
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-zinc-300">
@@ -273,6 +306,7 @@ export default function LojaPage() {
                 return (
                   <button 
                     key={day}
+                    type="button"
                     onClick={() => toggleDay(index)}
                     className={`h-10 w-10 rounded-full text-xs font-bold transition-all cursor-pointer ${
                       isActive 
@@ -314,7 +348,13 @@ export default function LojaPage() {
             </div>
           </div>
 
-        </div>
+          <button 
+            type="submit"
+            className="w-full h-12 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm transition-all shadow-md cursor-pointer active:scale-[0.98] mt-1"
+          >
+            Salvar Alterações de Expediente
+          </button>
+        </form>
 
         <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden mt-1">
           
@@ -329,6 +369,7 @@ export default function LojaPage() {
               </div>
             </div>
             <button 
+              type="button"
               onClick={handleToggleAlerts} 
               className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 cursor-pointer ${alertsEnabled ? 'bg-sky-500' : 'bg-zinc-700'}`}
             >
@@ -347,6 +388,7 @@ export default function LojaPage() {
               </div>
             </div>
             <button 
+              type="button"
               onClick={handleToggleRouteAlerts} 
               className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 cursor-pointer ${routeAlertsEnabled ? 'bg-amber-500' : 'bg-zinc-700'}`}
             >
