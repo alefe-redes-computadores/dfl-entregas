@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Trash2, CheckSquare, Moon, Sun, Monitor, LogOut, Eye, EyeOff } from 'lucide-react';
+import { RefreshCw, Trash2, CheckSquare, Moon, LogOut, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -13,10 +13,6 @@ export default function MaisPage() {
   
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
-  
-  // NOSSOS NOVOS ESTADOS DO TEMA
-  const theme = useAppStore((state) => state.theme);
-  const setTheme = useAppStore((state) => state.setTheme);
 
   const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Álefe';
   const fullName = user?.displayName || 'Álefe Jôhsefe';
@@ -103,44 +99,20 @@ export default function MaisPage() {
         </div>
       </div>
 
-      {/* SISTEMA E TEMA */}
+      {/* SISTEMA E DADOS */}
       <div className="flex flex-col gap-2">
         <h3 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-          Sistema Visual e Dados
+          Sistema e Dados
         </h3>
         <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40 flex flex-col">
           
-          {/* TEMA VISUAL AQUI */}
-          <div className="flex flex-col gap-3 p-4 border-b border-zinc-800/80">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
-                {theme === 'dark' ? <Moon size={20} /> : theme === 'light' ? <Sun size={20} /> : <Monitor size={20} />}
-              </div>
-              <div className="text-left flex-1">
-                <p className="font-semibold text-zinc-100">Tema do Sistema</p>
-                <p className="text-xs text-zinc-500">Como o app deve ser exibido?</p>
-              </div>
+          <div className="flex items-center gap-4 p-4 border-b border-zinc-800/80">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
+              <Moon size={20} />
             </div>
-            
-            <div className="flex bg-zinc-950 rounded-2xl p-1.5 border border-zinc-800">
-              <button 
-                onClick={() => setTheme('light')} 
-                className={`flex-1 py-2 text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all ${theme === 'light' ? 'bg-zinc-800 text-zinc-100 shadow-md' : 'text-zinc-500 hover:text-zinc-400'}`}
-              >
-                Claro
-              </button>
-              <button 
-                onClick={() => setTheme('dark')} 
-                className={`flex-1 py-2 text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all ${theme === 'dark' ? 'bg-zinc-800 text-zinc-100 shadow-md' : 'text-zinc-500 hover:text-zinc-400'}`}
-              >
-                Escuro
-              </button>
-              <button 
-                onClick={() => setTheme('system')} 
-                className={`flex-1 py-2 text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all ${theme === 'system' ? 'bg-zinc-800 text-zinc-100 shadow-md' : 'text-zinc-500 hover:text-zinc-400'}`}
-              >
-                Auto
-              </button>
+            <div className="text-left flex-1">
+              <p className="font-semibold text-zinc-100">Modo Escuro Ativo</p>
+              <p className="text-xs text-zinc-500">Padrão visual de alta performance</p>
             </div>
           </div>
 
