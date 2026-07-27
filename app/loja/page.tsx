@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Store, Power, Users, Clock, 
-  Bike, ChevronRight, Check
+  Bike, ChevronRight, BellRing, Smartphone, ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
@@ -32,7 +32,6 @@ export default function LojaPage() {
     await updateStoreSettings({ isOpen: newStatus });
     toast.success(newStatus ? 'Loja Aberta para Entregas!' : 'Loja Fechada com sucesso.');
 
-    // Se aberto, agenda notificação de fechamento se estiver no Capacitor
     if (newStatus && Capacitor.isNativePlatform()) {
       try {
         await LocalNotifications.schedule({
@@ -41,13 +40,35 @@ export default function LojaPage() {
               title: 'Aviso da Loja - DFL Entregas',
               body: 'A loja está aberta. Lembre-se de conferir os acertos e fechamentos.',
               id: 999,
-              schedule: { at: new Date(Date.now() + 1000 * 60 * 60) }, // 1 hora
+              schedule: { at: new Date(Date.now() + 1000 * 60 * 60) },
             },
           ],
         });
       } catch (e) {
         console.error(e);
       }
+    }
+  };
+
+  const handleTestNotification = async () => {
+    if (!Capacitor.isNativePlatform()) {
+      toast.info('Notificações nativas funcionam apenas no aplicativo do celular.');
+      return;
+    }
+    try {
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            title: 'Teste de Alerta | DFL Entregas',
+            body: 'O sistema de avisos e notificações está operando perfeitamente.',
+            id: Date.now(),
+            schedule: { at: new Date(Date.now() + 1000 * 2) },
+          },
+        ],
+      });
+      toast.success('Notificação de teste disparada!');
+    } catch (e) {
+      toast.error('Erro ao disparar notificação.');
     }
   };
 
@@ -150,6 +171,27 @@ export default function LojaPage() {
               </div>
             </div>
             <ChevronRight size={20} className="text-zinc-600 group-hover:text-zinc-300 transition-colors shrink-0" />
+          </button>
+        </div>
+      </div>
+
+      {/* PAINEL DE NOTIFICAÇÕES E ALERTAS */}
+      <div className="flex flex-col gap-2">
+        <h3 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
+          Notificações e Alertas
+        </h3>
+        <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
+          <button
+            onClick={handleTestNotification}
+            className="flex w-full items-center gap-4 p-4 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30 text-left"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
+              <BellRing size={20} />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-zinc-100">Testar Alerta Push</p>
+              <p className="text-xs text-zinc-500">Disparar notificação de teste no aparelho</p>
+            </div>
           </button>
         </div>
       </div>
