@@ -2,12 +2,12 @@
 
 import { useState, useMemo } from 'react';
 import { 
-  Users, UserPlus, Settings, Send, 
-  X, Calculator, PlusCircle, Trash2, ShieldCheck, 
+  Users, UserPlus, Calculator, PlusCircle, Trash2, ShieldCheck, 
   CheckCircle2, Package, Wallet, TrendingUp, CalendarDays, Receipt, Check
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
+import { PageHeader } from '@/components/layout/PageHeader';
 import type { Motoboy, MotoboyPaymentRule, PaymentRuleType } from '@/types';
 
 type TabType = 'acerto' | 'config';
@@ -238,12 +238,12 @@ export default function MotoboysPage() {
 
   return (
     <div className="flex flex-col gap-5 relative pb-24">
-      <div className="flex flex-col gap-2">
-        <h1 className="font-heading text-2xl font-bold text-zinc-50 flex items-center gap-2">
-          <Users className="text-sky-400" /> Equipe de Motoboys
-        </h1>
-        <p className="text-sm text-zinc-500">Gerencie a frota, regras de pagamento e feche acertos diários automatizados.</p>
-      </div>
+      
+      {/* CABEÇALHO COM BOTÃO DE VOLTAR INTELIGENTE */}
+      <PageHeader 
+        title="Equipe de Motoboys" 
+        subtitle="Gerencie frotas, regras e acertos" 
+      />
 
       {!isAdding ? (
         <button onClick={() => setIsAdding(true)} className="flex items-center justify-center gap-2 bg-zinc-900/60 border border-dashed border-zinc-700 text-zinc-300 rounded-2xl p-4 font-bold hover:bg-zinc-800 transition-colors">
@@ -311,7 +311,7 @@ export default function MotoboysPage() {
                     </span>
                     {!m.active && (
                       <span className="flex items-center gap-1 text-[10px] text-zinc-500 font-semibold">
-                        <X size={10} /> Inativo
+                        <Users size={10} /> Inativo
                       </span>
                     )}
                   </div>
@@ -339,7 +339,7 @@ export default function MotoboysPage() {
               </div>
             </div>
             <button onClick={() => setSelectedMotoboy(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white">
-              <X size={20} />
+              <Users size={20} />
             </button>
           </div>
 
@@ -354,14 +354,13 @@ export default function MotoboysPage() {
 
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
             
-            {/* --- ABA 1: ACERTO DIÁRIO (SEM CALENDÁRIO NATIVO) --- */}
+            {/* --- ABA 1: ACERTO DIÁRIO --- */}
             {activeTab === 'acerto' && acertoData && (
               <div className="flex flex-col gap-4 animate-in slide-in-from-right-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
                     <CalendarDays size={14} /> Data do Acerto
                   </label>
-                  {/* Substituído o input date nativo por um campo estilizado esquerdo-escuro */}
                   <div className="relative">
                     <input 
                       type="date" 
@@ -439,16 +438,15 @@ export default function MotoboysPage() {
                 </div>
 
                 <button onClick={handleCopyWhatsApp} className="w-full flex items-center justify-center gap-2 h-14 bg-emerald-500 hover:bg-emerald-400 rounded-xl font-bold text-zinc-950 text-base shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
-                  <Send size={18} /> Enviar Recibo WhatsApp
+                  <Users size={18} /> Enviar Recibo WhatsApp
                 </button>
               </div>
             )}
 
-            {/* --- ABA 2: REGRAS E CONFIGURAÇÕES (SEM SELECTS NATIVOS & COM MÁSCARA) --- */}
+            {/* --- ABA 2: REGRAS E CONFIGURAÇÕES --- */}
             {activeTab === 'config' && (
               <form onSubmit={handleSaveConfig} className="flex flex-col gap-4 animate-in slide-in-from-left-4">
                 
-                {/* TIPO DE CONTRATAÇÃO (BOTÕES CUSTOMIZADOS) */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-zinc-400">Tipo de Contratação (Etiqueta)</label>
                   <div className="grid grid-cols-2 gap-2">
@@ -469,7 +467,6 @@ export default function MotoboysPage() {
                   </div>
                 </div>
 
-                {/* REGRA DE PAGAMENTO (BOTÕES CUSTOMIZADOS EM LISTA) */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-zinc-400">Regra de Pagamento</label>
                   <div className="flex flex-col gap-2">
@@ -491,7 +488,6 @@ export default function MotoboysPage() {
                   </div>
                 </div>
 
-                {/* CAMPOS COM MÁSCARA AUTOMÁTICA DE MOEDA */}
                 {ruleType === 'fixed_plus_variable' && (
                   <div className="grid grid-cols-2 gap-3 bg-zinc-900 p-3.5 rounded-xl border border-zinc-800">
                     <div className="flex flex-col gap-1">
