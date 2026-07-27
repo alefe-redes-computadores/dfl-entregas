@@ -25,29 +25,24 @@ export default function LojaPage() {
   const motoboys = useAppStore((state) => state.motoboys);
   const updateMotoboy = useAppStore((state) => state.updateMotoboy);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
-  
-  const storeSettings = useAppStore((state) => state.storeSettings);
-  const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
 
   // Status do Alerta de Rota
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
 
   // ------------------------------------------------------------------
-  // ESTADOS LOCAIS (Sincronizados com o Store Global)
+  // ESTADOS LOCAIS
   // ------------------------------------------------------------------
-  const [isStoreOpen, setIsStoreOpen] = useState(storeSettings?.isOpen ?? false);
-  const [openTime, setOpenTime] = useState(storeSettings?.openingTime || '18:00');
-  const [closeTime, setCloseTime] = useState(storeSettings?.closingTime || '23:59');
-  const [activeDays, setActiveDays] = useState<number[]>(storeSettings?.activeDays || [1, 2, 3, 4, 5, 6, 0]); 
+  const [isStoreOpen, setIsStoreOpen] = useState(false);
+  const [openTime, setOpenTime] = useState('18:00');
+  const [closeTime, setCloseTime] = useState('23:59');
+  const [activeDays, setActiveDays] = useState<number[]>([1, 2, 3, 4, 5, 6, 0]); 
   const [alertsEnabled, setAlertsEnabled] = useState(false);
 
   // ------------------------------------------------------------------
   // INTELIGÊNCIA: RESUMO DO DIA & ESCALA DE MOTOBOYS
   // ------------------------------------------------------------------
-  const todayIndex = new Date().getDay(); // 0 = Dom, 1 = Seg...
   const todayStr = new Date().toDateString();
-
   const todaysDeliveries = deliveries.filter(d => {
     const dDateStr = new Date(d.updated_at || Date.now()).toDateString();
     return dDateStr === todayStr;
@@ -56,44 +51,29 @@ export default function LojaPage() {
   const totalEntregas = todaysDeliveries.length;
   const faturamentoTotal = todaysDeliveries.reduce((acc, d) => acc + (d.value || 0), 0);
 
-  // Filtra motoboys fixos ativos
-  const motoboysFixos = motoboys.filter(m => m.active && (m as any).type === 'fixo');
-
   // ------------------------------------------------------------------
   // AÇÕES
   // ------------------------------------------------------------------
-  const toggleStore = async () => {
+  const toggleStore = () => {
     const newState = !isStoreOpen;
     setIsStoreOpen(newState);
-    await updateStoreSettings({ isOpen: newState });
-    
     toast.success(newState ? 'Operação Aberta! Bom trabalho, Capitão!' : 'Operação Fechada! Bom descanso!', {
       style: { background: newState ? '#10b981' : '#ef4444', color: '#fff', border: 'none' }
     });
   };
 
-  const toggleDay = async (index: number) => {
-    const updatedDays = activeDays.includes(index) 
-      ? activeDays.filter(d => d !== index) 
-      : [...activeDays, index];
-    
-    setActiveDays(updatedDays);
-    await updateStoreSettings({ activeDays: updatedDays });
+  const toggleDay = (index: number) => {
+    setActiveDays(prev => 
+      prev.includes(index) ? prev.filter(d => d !== index) : [...prev, index]
+    );
     toast.success('Dias de funcionamento atualizados!');
   };
 
-  const handleSaveSchedule = async (e: React.FormEvent) => {
+  const handleSaveSchedule = (e: React.FormEvent) => {
     e.preventDefault();
-    await updateStoreSettings({
-      openingTime: openTime,
-      closingTime: closeTime,
-      activeDays: activeDays,
-      isOpen: isStoreOpen
-    });
     toast.success('Horários e expediente salvos com sucesso!');
   };
 
-  // Alternar escala rápida de motoboy fixo direto da Loja
   const handleToggleMotoboyScale = async (motoboyId: string, currentActiveStatus: boolean) => {
     await updateMotoboy(motoboyId, { active: !currentActiveStatus } as any);
     toast.success(!currentActiveStatus ? 'Motoboy escalado para hoje!' : 'Motoboy removido da escala.');
@@ -239,23 +219,20 @@ export default function LojaPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             {motoboys.length > 0 ? (
-              motoboys.map(m => {
-                const isFixo = (m as any).type === 'fixo';
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => handleToggleMotoboyScale(m.id, m.active)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      m.active 
-                        ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-sm' 
-                        : 'bg-zinc-950 border border-zinc-800 text-zinc-600 opacity-60'
-                    }`}
-                  >
-                    <span>{m.name}</span>
-                    {m.active && <Check size={12} className="text-amber-400" />}
-                  </button>
-                );
-              })
+              motoboys.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => handleToggleMotoboyScale(m.id, m.active)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    m.active 
+                      ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-sm' 
+                      : 'bg-zinc-950 border border-zinc-800 text-zinc-600 opacity-60'
+                  }`}
+                >
+                  <span>{m.name}</span>
+                  {m.active && <Check size={12} className="text-amber-400" />}
+                </button>
+              ))
             ) : (
               <span className="text-xs text-zinc-600 font-semibold">Nenhum motoboy cadastrado.</span>
             )}
@@ -288,13 +265,12 @@ export default function LojaPage() {
       </div>
 
       {/* =========================================
-          AUTOMAÇÃO & HORÁRIOS (DESIGN ELEGANTE)
+          AUTOMAÇÃO & HORÁRIOS
       ========================================= */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Automação & Horários</h2>
         
         <form onSubmit={handleSaveSchedule} className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden p-4 gap-5">
-          
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-zinc-300">
               <Calendar size={16} className="text-indigo-400" />
@@ -357,7 +333,6 @@ export default function LojaPage() {
         </form>
 
         <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden mt-1">
-          
           <div className="flex items-center justify-between p-4 border-b border-zinc-800/80">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 bg-sky-500/10 text-sky-400 rounded-full flex items-center justify-center">
@@ -395,7 +370,6 @@ export default function LojaPage() {
               <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${routeAlertsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
-
         </div>
       </div>
 
