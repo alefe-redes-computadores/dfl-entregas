@@ -69,7 +69,7 @@ export default function MotoboysPage() {
   const [editType, setEditType] = useState<'fixo' | 'avulso'>('fixo');
 
   // ------------------------------------------------------------------
-  // CONTROLE CUSTOMIZADO DE DATA (SUBSTITUI O CALENDÁRIO NATIVO)
+  // CONTROLE CUSTOMIZADO DE DATA
   // ------------------------------------------------------------------
   const handleShiftDate = (days: number) => {
     const [year, month, day] = acertoDate.split('-').map(Number);
@@ -168,21 +168,19 @@ export default function MotoboysPage() {
   };
 
   // ------------------------------------------------------------------
-  // MÁQUINA DE CALCULAR ACERTO (FILTRO BLINDADO CONTRA BUG DE FUSO E TS)
+  // MÁQUINA DE CALCULAR ACERTO (CORREÇÃO DE FUSO HORÁRIO)
   // ------------------------------------------------------------------
   const acertoData = useMemo(() => {
     if (!selectedMotoboy) return null;
     
     const motoboyNameLower = selectedMotoboy.name.toLowerCase().trim();
 
-    // Função ultra-segura para extrair o dia exato gravado no banco
+    // Função de data que respeita o fuso horário local do aparelho
     const getSafeDate = (rawDate: any) => {
       if (!rawDate) return '';
-      if (typeof rawDate === 'string' && rawDate.includes('T')) {
-        return rawDate.split('T')[0]; 
-      }
       const d = new Date(rawDate);
       if (isNaN(d.getTime())) return '';
+      // Pegamos ano, mês e dia locais, para que as madrugadas (UTC) não mudem de dia!
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
@@ -202,7 +200,6 @@ export default function MotoboysPage() {
       const belongsToRoute = d.route_id && routeIds.has(d.route_id);
       if (belongsToRoute) return true;
 
-      // Ajuste TS: Uso de (d as any) para evitar erro de propriedade inexistente
       const dMotoboy = ((d as any).motoboy_name || '').toLowerCase().trim();
       const isSameMotoboy = dMotoboy === motoboyNameLower;
       if (!isSameMotoboy) return false;
