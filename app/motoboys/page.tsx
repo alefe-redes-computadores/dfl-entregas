@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { 
   Users, UserPlus, Calculator, PlusCircle, Trash2, ShieldCheck, 
-  CheckCircle2, Package, Wallet, TrendingUp, CalendarDays, Receipt, X, Send, Settings, Check
+  CheckCircle2, Package, Wallet, TrendingUp, CalendarDays, Receipt, X, Send, Settings, Check, ChevronLeft, ChevronRight, Calendar
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
@@ -47,13 +47,10 @@ export default function MotoboysPage() {
   const [selectedMotoboy, setSelectedMotoboy] = useState<Motoboy & { type?: 'fixo' | 'avulso' } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('acerto');
 
-  // Estados do Modal de Acerto (Data local sem bugs de fuso)
+  // Estado da Data do Acerto (Formato YYYY-MM-DD local)
   const [acertoDate, setAcertoDate] = useState(() => {
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
 
   const [vales, setVales] = useState<ValeItem[]>([]);
@@ -67,6 +64,25 @@ export default function MotoboysPage() {
   const [ruleThreshold, setRuleThreshold] = useState('');
   const [ruleExtraFee, setRuleExtraFee] = useState('');
   const [editType, setEditType] = useState<'fixo' | 'avulso'>('fixo');
+
+  // Navegação rápida de dias para o acerto
+  const handleShiftDate = (days: number) => {
+    const [year, month, day] = acertoDate.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
+    d.setDate(d.getDate() + days);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dt = String(d.getDate()).padStart(2, '0');
+    setAcertoDate(`${y}-${m}-${dt}`);
+  };
+
+  const handleSetToday = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const dt = String(now.getDate()).padStart(2, '0');
+    setAcertoDate(`${y}-${m}-${dt}`);
+  };
 
   // ------------------------------------------------------------------
   // LISTAGEM & ORDENAÇÃO
@@ -147,23 +163,45 @@ export default function MotoboysPage() {
   };
 
   // ------------------------------------------------------------------
-  // MÁQUINA DE CALCULAR ACERTO (CORRIGIDA PARA COMPARAÇÃO EXATA DE DATA)
+  // MÁQUINA DE CALCULAR ACERTO (FILTRAGEM BLINDADA DE ENTREGAS)
   // ------------------------------------------------------------------
   const acertoData = useMemo(() => {
     if (!selectedMotoboy) return null;
     
-    // Filtro robusto de rotas por data local estrita (evita bugs de fuso no dia 25/26)
+    const motoboyNameLower = selectedMotoboy.name.toLowerCase().trim();
+
+    // 1. Identifica rotas do motoboy na data selecionada
     const todaysRoutes = routes.filter(r => {
-      const isSameMotoboy = r.motoboy_name.toLowerCase().trim() === selectedMotoboy.name.toLowerCase().trim();
-      const rawDate = r.started_at || r.departure_time || Date.now();
+      const isSameMotoboy = (r.motoboy_name || '').toLowerCase().trim() === motoboyNameLower;
+      if (!isSameMotoboy) return false;
+
+      const rawDate = r.started_at || r.departure_time || r.created_at || Date.now();
       const dateObj = new Date(rawDate);
-      
+      if (isNaN(dateObj.getTime())) return false;
+
       const rDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-      
-      return isSameMotoboy && rDateStr === acertoDate;
+      return rDateStr === acertoDate;
     });
 
-    const todaysDeliveries = deliveries.filter(d => todaysRoutes.some(r => r.id === d.route_id));
+    const routeIds = new Set(todaysRoutes.map(r => r.id));
+
+    // 2. Coleta entregas vinculadas às rotas OU entregas diretas do motoboy na data
+    const todaysDeliveries = deliveries.filter(d => {
+      const belongsToRoute = d.route_id && routeIds.has(d.route_id);
+      if (belongsToRoute) return true;
+
+      // Fallback direto por nome e data
+      const dMotoboy = (d.motoboy_name || '').toLowerCase().trim();
+      const isSameMotoboy = dMotoboy === motoboyNameLower;
+      if (!isSameMotoboy) return false;
+
+      const dRawDate = d.updated_at || d.created_at || Date.now();
+      const dDateObj = new Date(dRawDate);
+      if (isNaN(dDateObj.getTime())) return false;
+
+      const dDateStr = `${dDateObj.getFullYear()}-${String(dDateObj.getMonth() + 1).padStart(2, '0')}-${String(dDateObj.getDate()).padStart(2, '0')}`;
+      return dDateStr === acertoDate;
+    });
     
     const totalDeliveries = todaysDeliveries.length;
     const deliveriesRevenue = todaysDeliveries.reduce((acc, curr) => acc + (curr.value || 0), 0);
@@ -250,7 +288,6 @@ export default function MotoboysPage() {
   return (
     <div className="flex flex-col gap-5 relative pb-24">
       
-      {/* CABEÇALHO COM VOLTAR PARA A LOJA */}
       <PageHeader 
         title="Equipe de Motoboys" 
         subtitle="Gerencie frotas, regras e acertos" 
@@ -272,7 +309,7 @@ export default function MotoboysPage() {
               className="flex-1 h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-zinc-100 focus:border-sky-500 focus:outline-none text-sm" 
               autoFocus
             />
-            {/* SELETOR CUSTOMIZADO SEM SELECT NATIVO */}
+            {/* SELETOR CUSTOMIZADO DE TIPO */}
             <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-1 shrink-0">
               <button 
                 type="button" 
@@ -366,20 +403,50 @@ export default function MotoboysPage() {
 
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
             
-            {/* --- ABA 1: ACERTO DIÁRIO --- */}
+            {/* --- ABA 1: ACERTO DIÁRIO (COM NAVEGAÇÃO DE DATA CUSTOMIZADA) --- */}
             {activeTab === 'acerto' && acertoData && (
               <div className="flex flex-col gap-4 animate-in slide-in-from-right-4">
-                <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
-                    <CalendarDays size={14} /> Data do Acerto
-                  </label>
-                  <div className="relative">
-                    <input 
-                      type="date" 
-                      value={acertoDate} 
-                      onChange={(e) => setAcertoDate(e.target.value)} 
-                      className="w-full h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 font-bold text-sm outline-none" 
-                    />
+                
+                {/* SELETOR DE DATA CUSTOMIZADO (SEM CALENDÁRIO NATIVO FEIO) */}
+                <div className="flex flex-col gap-2 bg-zinc-900/60 border border-zinc-800 p-3.5 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5">
+                      <CalendarDays size={14} className="text-emerald-400" /> Data do Acerto
+                    </span>
+                    <button 
+                      type="button" 
+                      onClick={handleSetToday}
+                      className="text-[10px] font-extrabold px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 cursor-pointer transition-all"
+                    >
+                      Hoje
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button 
+                      type="button" 
+                      onClick={() => handleShiftDate(-1)}
+                      className="h-11 w-11 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl shrink-0 cursor-pointer transition-all active:scale-95"
+                      aria-label="Dia Anterior"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+
+                    <div className="flex-1 h-11 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-center px-4 font-black text-zinc-100 text-sm tracking-wide">
+                      {(() => {
+                        const [y, m, d] = acertoDate.split('-');
+                        return `${d}/${m}/${y}`;
+                      })()}
+                    </div>
+
+                    <button 
+                      type="button" 
+                      onClick={() => handleShiftDate(1)}
+                      className="h-11 w-11 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl shrink-0 cursor-pointer transition-all active:scale-95"
+                      aria-label="Próximo Dia"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
                   </div>
                 </div>
 
