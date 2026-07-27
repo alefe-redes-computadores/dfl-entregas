@@ -18,10 +18,12 @@ interface AppState {
   selectedDate: Date;
   isSyncing: boolean;
   isPrivacyMode: boolean; 
-  routeAlertsEnabled: boolean; // <-- NOVO: STATUS DO ALERTA DE ROTA
+  routeAlertsEnabled: boolean;
+  theme: 'dark' | 'light' | 'system'; // <-- NOVO: STATUS DO TEMA
   setHasHydrated: (value: boolean) => void;
   togglePrivacyMode: () => void; 
-  setRouteAlertsEnabled: (enabled: boolean) => void; // <-- NOVO: FUNÇÃO DE CONTROLE
+  setRouteAlertsEnabled: (enabled: boolean) => void; 
+  setTheme: (theme: 'dark' | 'light' | 'system') => void; // <-- NOVO: FUNÇÃO PARA TROCAR TEMA
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   initData: () => Promise<void>;
@@ -71,11 +73,13 @@ export const useAppStore = create<AppState>()(
       selectedDate: new Date(),
       isSyncing: false,
       isPrivacyMode: false,
-      routeAlertsEnabled: false, // <-- INICIA DESLIGADO POR PADRÃO
+      routeAlertsEnabled: false,
+      theme: 'system', // <-- INICIA COMO MODO DO SISTEMA (AUTO)
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
       togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })), 
-      setRouteAlertsEnabled: (enabled) => set({ routeAlertsEnabled: enabled }), // <-- ALTERA O STATUS
+      setRouteAlertsEnabled: (enabled) => set({ routeAlertsEnabled: enabled }), 
+      setTheme: (theme) => set({ theme }), // <-- ALTERA O TEMA
 
       loginWithGoogle: async () => {
         try {
@@ -442,7 +446,8 @@ export const useAppStore = create<AppState>()(
         customers: state.customers,
         motoboys: state.motoboys,
         isPrivacyMode: state.isPrivacyMode,
-        routeAlertsEnabled: state.routeAlertsEnabled // <-- SALVA A CONFIGURAÇÃO DE ALERTA
+        routeAlertsEnabled: state.routeAlertsEnabled,
+        theme: state.theme // <-- SALVA O ESTADO DO TEMA OFFLINE
       }),
       onRehydrateStorage: () => (state) => { 
         state?.setHasHydrated(true); 
