@@ -47,8 +47,15 @@ export default function MotoboysPage() {
   const [selectedMotoboy, setSelectedMotoboy] = useState<Motoboy & { type?: 'fixo' | 'avulso' } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('acerto');
 
-  // Estados do Modal de Acerto
-  const [acertoDate, setAcertoDate] = useState(new Date().toISOString().split('T')[0]);
+  // Estados do Modal de Acerto (Data local sem bugs de fuso)
+  const [acertoDate, setAcertoDate] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+
   const [vales, setVales] = useState<ValeItem[]>([]);
   const [valeDesc, setValeDesc] = useState('');
   const [valeAmount, setValeAmount] = useState('');
@@ -128,7 +135,7 @@ export default function MotoboysPage() {
     } as any);
 
     toast.success('Configurações atualizadas com sucesso!');
-    setSelectedMotoboy(null); // Fecha o modal após salvar
+    setSelectedMotoboy(null);
   };
 
   const toggleActive = async () => {
@@ -140,17 +147,19 @@ export default function MotoboysPage() {
   };
 
   // ------------------------------------------------------------------
-  // MÁQUINA DE CALCULAR ACERTO
+  // MÁQUINA DE CALCULAR ACERTO (CORRIGIDA PARA COMPARAÇÃO EXATA DE DATA)
   // ------------------------------------------------------------------
   const acertoData = useMemo(() => {
     if (!selectedMotoboy) return null;
-
-    const targetDateStr = new Date(acertoDate + 'T12:00:00Z').toDateString();
     
+    // Filtra rotas comparando estritamente a string YYYY-MM-DD local
     const todaysRoutes = routes.filter(r => {
-      const isSameMotoboy = r.motoboy_name.toLowerCase() === selectedMotoboy.name.toLowerCase();
-      const rDateStr = new Date(r.started_at || r.departure_time).toDateString();
-      return isSameMotoboy && rDateStr === targetDateStr;
+      const isSameMotoboy = r.motoboy_name.toLowerCase().trim() === selectedMotoboy.name.toLowerCase().trim();
+      const routeDateObj = new Date(r.started_at || r.departure_time || Date.now());
+      const rDateStr = routeDateObj.getFullYear() + '-' + 
+                       String(routeDateObj.getMonth() + 1).padStart(2, '0') + '-' + 
+                       String(routeDateObj.getDate()).padStart(2, '0');
+      return isSameMotoboy && rDateStr === acertoDate;
     });
 
     const todaysDeliveries = deliveries.filter(d => todaysRoutes.some(r => r.id === d.route_id));
@@ -202,7 +211,9 @@ export default function MotoboysPage() {
   const handleCopyWhatsApp = async () => {
     if (!selectedMotoboy || !acertoData) return;
 
-    const formattedDate = new Date(acertoDate + 'T12:00:00Z').toLocaleDateString('pt-BR');
+    // Formatação amigável da data para o recibo
+    const [year, month, day] = acertoDate.split('-');
+    const formattedDate = `${day}/${month}/${year}`;
     
     let text = `🏍️ *ACERTO DIÁRIO | DFL ENTREGAS* 🏍️\n`;
     text += `👤 *Motoboy:* ${selectedMotoboy.name}\n`;
@@ -239,7 +250,6 @@ export default function MotoboysPage() {
   return (
     <div className="flex flex-col gap-5 relative pb-24">
       
-      {/* CABEÇALHO COM APONTAMENTO SEGURO PARA A LOJA */}
       <PageHeader 
         title="Equipe de Motoboys" 
         subtitle="Gerencie frotas, regras e acertos" 
@@ -261,7 +271,7 @@ export default function MotoboysPage() {
               className="flex-1 h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-zinc-100 focus:border-sky-500 focus:outline-none text-sm" 
               autoFocus
             />
-            {/* SELETOR CUSTOMIZADO DE TIPO */}
+            {/* SELETOR CUSTOMIZADO SEM SELECT NATIVO */}
             <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-1 shrink-0">
               <button 
                 type="button" 
