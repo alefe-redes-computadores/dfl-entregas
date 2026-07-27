@@ -175,16 +175,13 @@ export default function MotoboysPage() {
     
     const motoboyNameLower = selectedMotoboy.name.toLowerCase().trim();
 
-    // Função de data que respeita o fuso horário local do aparelho
     const getSafeDate = (rawDate: any) => {
       if (!rawDate) return '';
       const d = new Date(rawDate);
       if (isNaN(d.getTime())) return '';
-      // Pegamos ano, mês e dia locais, para que as madrugadas (UTC) não mudem de dia!
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
-    // 1. Identifica rotas do motoboy na data
     const todaysRoutes = routes.filter(r => {
       const isSameMotoboy = ((r as any).motoboy_name || '').toLowerCase().trim() === motoboyNameLower;
       if (!isSameMotoboy) return false;
@@ -195,7 +192,6 @@ export default function MotoboysPage() {
 
     const routeIds = new Set(todaysRoutes.map(r => r.id));
 
-    // 2. Coleta entregas vinculadas à rota OU feitas diretamente pelo motoboy na data
     const todaysDeliveries = deliveries.filter(d => {
       const belongsToRoute = d.route_id && routeIds.has(d.route_id);
       if (belongsToRoute) return true;
@@ -262,18 +258,17 @@ export default function MotoboysPage() {
     text += `👤 *Motoboy:* ${selectedMotoboy.name}\n`;
     text += `📅 *Data:* ${formattedDate}\n\n`;
     
-    text += `📦 *Entregas Realizadas:* ${acertoData.totalDeliveries}\n`;
-    text += `💰 *Valor Bruto em Caixa:* R$ ${acertoData.deliveriesRevenue.toFixed(2).replace('.', ',')}\n\n`;
+    text += `📦 *Entregas Realizadas:* ${acertoData.totalDeliveries}\n\n`;
 
     text += `📈 *Cálculo do Repasse:*\n`;
     text += `   ↳ ${acertoData.calculationDesc} = *R$ ${acertoData.calculatedAmount.toFixed(2).replace('.', ',')}*\n\n`;
 
     if (vales.length > 0) {
-      text += `➖ *Vales / Retenções / Caixas:*\n`;
+      text += `➖ *Abatimentos / Vales:*\n`;
       vales.forEach(v => {
         text += `   - ${v.description}: R$ ${v.amount.toFixed(2).replace('.', ',')}\n`;
       });
-      text += `   *Total Abatido:* R$ ${acertoData.totalVales.toFixed(2).replace('.', ',')}\n\n`;
+      text += `   *Total Abatido:* - R$ ${acertoData.totalVales.toFixed(2).replace('.', ',')}\n\n`;
     }
 
     text += `💵 *TOTAL A RECEBER:* *R$ ${acertoData.finalAmountToPay.toFixed(2).replace('.', ',')}* 💵`;
