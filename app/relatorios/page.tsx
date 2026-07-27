@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-// Olha a correção aqui: Importamos o Map com o apelido MapIcon
 import { ChevronLeft, BarChart3, Wallet, Map as MapIcon, Activity, X, CheckCircle } from 'lucide-react';
 import { useReportsData } from '@/hooks/useReportsData';
 import { useAppStore } from '@/store/useAppStore';
@@ -16,6 +15,7 @@ import { MotoboyChart } from '@/components/reports/Charts/MotoboyChart';
 import { DayOfWeekChart } from '@/components/reports/Charts/DayOfWeekChart';
 import { OriginChart } from '@/components/reports/Charts/OriginChart';
 import { PeakHoursChart } from '@/components/reports/Charts/PeakHoursChart';
+import { LogisticsTimeChart } from '@/components/reports/Charts/LogisticsTimeChart'; // <-- IMPORTANTE!
 
 type TabType = 'geral' | 'financeiro' | 'operacao';
 
@@ -26,6 +26,7 @@ export default function RelatoriosPage() {
   const [drilldownDay, setDrilldownDay] = useState<{ day: number; date: string } | null>(null);
 
   const deliveries = useAppStore(state => state.deliveries);
+  const routes = useAppStore(state => state.routes); // <-- NOVO: Puxando rotas
   const reports = useReportsData();
 
   const filteredDeliveries = useMemo(() => reports.getFilteredDeliveries({ month: selectedMonth }), [reports, selectedMonth]);
@@ -36,19 +37,51 @@ export default function RelatoriosPage() {
   const neighborhoodData = useMemo(() => reports.getNeighborhoodStats(filteredDeliveries), [reports, filteredDeliveries]);
   const motoboyData = useMemo(() => reports.getMotoboyStats(filteredDeliveries), [reports, filteredDeliveries]);
   const dayOfWeekData = useMemo(() => reports.getDayOfWeekStats(filteredDeliveries), [reports, filteredDeliveries]);
-  
-  // NOSSAS DUAS NOVAS MÉTRICAS PRO MAX
   const peakHoursData = useMemo(() => reports.getPeakHoursStats(filteredDeliveries), [reports, filteredDeliveries]);
-  const originData = useMemo(() => {
-    // Agora o JavaScript sabe que esse Map é o nativo de dados, não o ícone!
-    const map = new Map<string, { count: number; total: number }>();
-    filteredDeliveries.forEach(d => {
-      const org = d.origin || 'ifood';
-      const curr = map.get(org) || { count: 0, total: 0 };
-      map.set(org, { count: curr.count + 1, total: curr.total + (d.value || 0) });
+  const originData = useMemo(() => reports.getOriginStats(filteredDeliveries), [reports, filteredDeliveries]);
+
+  // 🧠 CÁLCULO DE LOGÍSTICA EXTREMA (Velocidade)
+  const logisticsTimeData = useMemo(() => {
+    const statsMap = new Map<string, { totalMinutes: number; totalDeliveries: number }>();
+    const [year, month] = selectedMonth === 'all' ? [null, null] : selectedMonth.split('-').map(Number);
+
+    routes.forEach(route => {
+      // Regra 1: Filtra o Diretor Operacional (Não calcula métricas para as suas retiradas)
+      const name = route.motoboy_name.toLowerCase();
+      if (name.includes('álefe') || name.includes('alefe')) return;
+      
+      // Regra 2: Apenas rotas fechadas que possuem tempo final
+      if (route.status !== 'fechada' || !route.end_time) return;
+
+      const date = new Date(route.updated_at || route.departure_time);
+      if (year && month) {
+        if (date.getMonth() !== month - 1 || date.getFullYear() !== year) return;
+      }
+
+      // Usa o novo `started_at` se existir, senão usa o `departure_time`
+      const startTime = new Date(route.started_at || route.departure_time).getTime();
+      const endTime = new Date(route.end_time).getTime();
+      const minutes = (endTime - startTime) / (1000 * 60);
+
+      // Trava de segurança para dados corrompidos
+      if (minutes < 0 || minutes > 600) return; 
+
+      const routeDeliveries = deliveries.filter(d => d.route_id === route.id);
+      if (routeDeliveries.length === 0) return;
+
+      const current = statsMap.get(route.motoboy_name) || { totalMinutes: 0, totalDeliveries: 0 };
+      statsMap.set(route.motoboy_name, {
+        totalMinutes: current.totalMinutes + minutes,
+        totalDeliveries: current.totalDeliveries + routeDeliveries.length
+      });
     });
-    return Array.from(map.entries()).map(([origin, val]) => ({ origin, count: val.count, total: val.total }));
-  }, [filteredDeliveries]);
+
+    return Array.from(statsMap.entries()).map(([name, data]) => ({
+      name,
+      avgTimePerDelivery: data.totalDeliveries > 0 ? (data.totalMinutes / data.totalDeliveries) : 0,
+      totalDeliveries: data.totalDeliveries
+    })).sort((a, b) => a.avgTimePerDelivery - b.avgTimePerDelivery); // Do mais rápido pro mais lento
+  }, [routes, deliveries, selectedMonth]);
 
   const drilldownDeliveries = useMemo(() => {
     if (!drilldownDay) return [];
@@ -57,7 +90,6 @@ export default function RelatoriosPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-24 relative">
-      {/* Header Fixo Premium */}
       <div className="flex items-center justify-between sticky top-0 z-20 bg-zinc-950/90 backdrop-blur-xl pt-4 pb-3 px-1 border-b border-zinc-900">
         <div className="flex items-center gap-3">
           <button onClick={() => router.push('/')} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 active:scale-95 transition-all">
@@ -68,7 +100,6 @@ export default function RelatoriosPage() {
         <MonthSelector selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />
       </div>
 
-      {/* Abas Estilo Segmented Control (iOS) */}
       <div className="flex bg-zinc-900/60 p-1.5 rounded-full border border-zinc-800/80 mx-1">
         <button onClick={() => setActiveTab('geral')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full font-bold text-xs transition-all duration-300 ${activeTab === 'geral' ? 'bg-zinc-800 text-emerald-400 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
           <Activity size={14} /> Visão Geral
@@ -77,15 +108,12 @@ export default function RelatoriosPage() {
           <Wallet size={14} /> Receitas
         </button>
         <button onClick={() => setActiveTab('operacao')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full font-bold text-xs transition-all duration-300 ${activeTab === 'operacao' ? 'bg-zinc-800 text-sky-400 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          {/* Usando o apelido MapIcon aqui */}
           <MapIcon size={14} /> Logística
         </button>
       </div>
 
-      {/* CONTEÚDO DAS ABAS */}
       <div className="flex flex-col gap-5 px-1 animate-in fade-in duration-500">
         
-        {/* ABA 1: VISÃO GERAL */}
         {activeTab === 'geral' && (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -97,7 +125,6 @@ export default function RelatoriosPage() {
           </>
         )}
 
-        {/* ABA 2: RECEITAS (FINANCEIRO) */}
         {activeTab === 'financeiro' && (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -109,17 +136,16 @@ export default function RelatoriosPage() {
           </>
         )}
 
-        {/* ABA 3: LOGÍSTICA (OPERAÇÃO) */}
         {activeTab === 'operacao' && (
           <>
              <PeakHoursChart data={peakHoursData} />
+             <LogisticsTimeChart data={logisticsTimeData} />
              <NeighborhoodChart data={neighborhoodData} />
              <MotoboyChart data={motoboyData} />
           </>
         )}
       </div>
 
-      {/* MODAL DRILL-DOWN Mantido igual ao anterior */}
       {drilldownDay && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-zinc-950/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-zinc-900 border-t border-zinc-800 rounded-t-[32px] p-6 max-h-[80vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
