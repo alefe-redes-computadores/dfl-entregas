@@ -188,10 +188,9 @@ export default function MotoboysPage() {
 
     // 1. Identifica rotas do motoboy na data
     const todaysRoutes = routes.filter(r => {
-      const isSameMotoboy = (r.motoboy_name || '').toLowerCase().trim() === motoboyNameLower;
+      const isSameMotoboy = ((r as any).motoboy_name || '').toLowerCase().trim() === motoboyNameLower;
       if (!isSameMotoboy) return false;
       
-      // Ajuste TS: Removido o r.created_at que não existia na tipagem
       const rDateStr = getSafeDate(r.started_at || (r as any).departure_time || r.updated_at);
       return rDateStr === acertoDate;
     });
@@ -203,11 +202,11 @@ export default function MotoboysPage() {
       const belongsToRoute = d.route_id && routeIds.has(d.route_id);
       if (belongsToRoute) return true;
 
-      const dMotoboy = (d.motoboy_name || '').toLowerCase().trim();
+      // Ajuste TS: Uso de (d as any) para evitar erro de propriedade inexistente
+      const dMotoboy = ((d as any).motoboy_name || '').toLowerCase().trim();
       const isSameMotoboy = dMotoboy === motoboyNameLower;
       if (!isSameMotoboy) return false;
 
-      // Ajuste TS: Uso do updated_at e fallback forçado para "any" caso exista createdAt legado
       const dDateStr = getSafeDate(d.updated_at || (d as any).createdAt);
       return dDateStr === acertoDate;
     });
