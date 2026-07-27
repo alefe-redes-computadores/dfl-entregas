@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Search, MapPin, User, Hash, Smartphone, Store, Pencil, X, Filter } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
+import { PageHeader } from '@/components/layout/PageHeader';
 import type { Customer, OrderOrigin } from '@/types';
 
 export default function ClientesPage() {
@@ -81,11 +82,12 @@ export default function ClientesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-5 relative">
-      <div className="flex flex-col gap-2">
-        <h1 className="font-heading text-2xl font-bold text-zinc-50">Clientes</h1>
-        <p className="text-sm text-zinc-500">Gerencie a base de clientes, ruas, bairros e códigos.</p>
-      </div>
+    <div className="flex flex-col gap-5 relative pb-24">
+      {/* CABEÇALHO COM BOTÃO DE VOLTAR INTELIGENTE */}
+      <PageHeader 
+        title="Clientes" 
+        subtitle="Gerencie a base de clientes, ruas, bairros e códigos" 
+      />
 
       {/* Barra de Busca Inteligente */}
       <div className="relative">
