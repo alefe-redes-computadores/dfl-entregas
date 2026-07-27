@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Bike, Wallet, PackageCheck, CheckCircle2, Clock, RotateCcw } from 'lucide-react';
+import { ChevronDown, Bike, Wallet, PackageCheck, CheckCircle2, Clock, RotateCcw, Timer } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import type { Route } from '@/types';
@@ -33,12 +33,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const closeRoute = useAppStore((state) => state.closeRoute);
   const reopenRoute = useAppStore((state) => state.reopenRoute);
+  const startRoute = useAppStore((state) => state.startRoute); // <-- NOVO
 
   const deliveries = getDeliveriesByRoute(route.id);
   const pendingCount = deliveries.filter((d) => !d.is_paid).length;
-  const duration = formatRouteDuration(route.departure_time, route.end_time);
+  // Agora usa o started_at se existir, senão usa departure_time como segurança
+  const duration = formatRouteDuration(route.started_at || route.departure_time, route.end_time);
 
-  // Ordenação blindada usando updated_at ou order_index
   const sortedDeliveries = [...deliveries].sort((a, b) => {
     if (a.completed && !b.completed) return 1;
     if (!a.completed && b.completed) return -1;
@@ -50,6 +51,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     const bOrder = b.order_index !== undefined ? b.order_index : timeB;
     return aOrder - bOrder;
   });
+
+  const handleStartRoute = () => {
+    startRoute(route.id);
+    toast.success('Rota Iniciada! 🚀', {
+      description: 'O cronômetro de performance está valendo.',
+    });
+  };
 
   const handleCloseRoute = () => {
     closeRoute(route.id);
@@ -159,13 +167,24 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
           <div className="mt-2 flex flex-col gap-2">
             {route.status === 'aberta' ? (
-              <button
-                onClick={handleCloseRoute}
-                className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-800/80 py-3.5 text-sm font-semibold text-zinc-300 transition-colors active:bg-zinc-800"
-              >
-                <CheckCircle2 size={18} className="text-emerald-500" />
-                Finalizar Rota
-              </button>
+              // 🚀 Lógica Nova: Iniciar vs Finalizar
+              !route.started_at ? (
+                <button
+                  onClick={handleStartRoute}
+                  className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-sky-500/10 border border-sky-500/20 py-3.5 text-sm font-bold text-sky-500 transition-all hover:bg-sky-500/20 active:scale-95"
+                >
+                  <Timer size={18} />
+                  Iniciar Rota (Cronômetro)
+                </button>
+              ) : (
+                <button
+                  onClick={handleCloseRoute}
+                  className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-800/80 py-3.5 text-sm font-semibold text-zinc-300 transition-colors active:bg-zinc-800"
+                >
+                  <CheckCircle2 size={18} className="text-emerald-500" />
+                  Finalizar Rota
+                </button>
+              )
             ) : (
               <button
                 onClick={handleReopenRoute}
