@@ -228,10 +228,11 @@ export default function MotoboysPage() {
   return (
     <div className="flex flex-col gap-5 relative pb-24">
       
-      {/* CABEÇALHO COM BOTÃO DE VOLTAR INTELIGENTE PARA A LOJA */}
+      {/* CABEÇALHO FORÇANDO O RETORNO DIRETO PARA A LOJA */}
       <PageHeader 
         title="Equipe de Motoboys" 
         subtitle="Gerencie frotas, regras e acertos" 
+        to="/loja"
       />
 
       {!isAdding ? (
@@ -318,7 +319,6 @@ export default function MotoboysPage() {
                 <p className="text-xs text-zinc-500">Central de Fechamento e Regras</p>
               </div>
             </div>
-            {/* Botão de Fechar do Modal Blindado com X */}
             <button onClick={() => setSelectedMotoboy(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white">
               <X size={20} />
             </button>
