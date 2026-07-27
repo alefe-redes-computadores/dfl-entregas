@@ -19,11 +19,19 @@ interface AppState {
   isSyncing: boolean;
   isPrivacyMode: boolean; 
   routeAlertsEnabled: boolean;
-  theme: 'dark' | 'light' | 'system'; // <-- NOVO: STATUS DO TEMA
+  theme: 'dark' | 'light' | 'system';
+  storeSettings: {
+    isOpen: boolean;
+    openingTime: string;
+    closingTime: string;
+    activeDays: number[];
+    alertsEnabled: boolean;
+  };
   setHasHydrated: (value: boolean) => void;
   togglePrivacyMode: () => void; 
   setRouteAlertsEnabled: (enabled: boolean) => void; 
-  setTheme: (theme: 'dark' | 'light' | 'system') => void; // <-- NOVO: FUNÇÃO PARA TROCAR TEMA
+  setTheme: (theme: 'dark' | 'light' | 'system') => void;
+  updateStoreSettings: (settings: Partial<AppState['storeSettings']>) => void;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   initData: () => Promise<void>;
@@ -74,12 +82,23 @@ export const useAppStore = create<AppState>()(
       isSyncing: false,
       isPrivacyMode: false,
       routeAlertsEnabled: false,
-      theme: 'system', // <-- INICIA COMO MODO DO SISTEMA (AUTO)
+      theme: 'system',
+      storeSettings: {
+        isOpen: false,
+        openingTime: '18:00',
+        closingTime: '23:59',
+        activeDays: [1, 2, 3, 4, 5, 6, 0],
+        alertsEnabled: false,
+      },
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
       togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })), 
       setRouteAlertsEnabled: (enabled) => set({ routeAlertsEnabled: enabled }), 
-      setTheme: (theme) => set({ theme }), // <-- ALTERA O TEMA
+      setTheme: (theme) => set({ theme }),
+      updateStoreSettings: (settings) => 
+        set((state) => ({
+          storeSettings: { ...state.storeSettings, ...settings },
+        })),
 
       loginWithGoogle: async () => {
         try {
@@ -447,7 +466,8 @@ export const useAppStore = create<AppState>()(
         motoboys: state.motoboys,
         isPrivacyMode: state.isPrivacyMode,
         routeAlertsEnabled: state.routeAlertsEnabled,
-        theme: state.theme // <-- SALVA O ESTADO DO TEMA OFFLINE
+        theme: state.theme,
+        storeSettings: state.storeSettings // <-- ADICIONADO AQUI NA PERSISTÊNCIA
       }),
       onRehydrateStorage: () => (state) => { 
         state?.setHasHydrated(true); 
