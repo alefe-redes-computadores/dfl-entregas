@@ -26,6 +26,7 @@ interface AppState {
   getDeliveriesByRoute: (routeId: string) => Delivery[];
   getCustomerById: (customerId?: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
+  startRoute: (routeId: string) => Promise<void>; // <-- NOVO
   addDelivery: (delivery: Delivery) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
@@ -189,6 +190,17 @@ export const useAppStore = create<AppState>()(
         } catch (error) { console.error(error); }
       },
 
+      // 🚀 NOVO: INICIAR ROTA
+      startRoute: async (routeId) => {
+        const now = new Date().toISOString();
+        set((state) => ({
+          routes: state.routes.map((r) => r.id === routeId ? { ...r, started_at: now, updated_at: now } : r),
+        }));
+        try {
+          await updateDoc(doc(db, 'routes', routeId), { started_at: now, updated_at: now });
+        } catch (error) { console.error(error); }
+      },
+
       addMotoboy: async (motoboy) => {
         const dataWithTimestamp: Motoboy = { ...motoboy, updated_at: new Date().toISOString() };
         set((state) => ({ motoboys: [...state.motoboys, dataWithTimestamp] }));
@@ -216,12 +228,33 @@ export const useAppStore = create<AppState>()(
 
       updateDelivery: async (id, updatedData) => {
         const dataWithTimestamp: Partial<Delivery> = { ...updatedData, updated_at: new Date().toISOString() };
+        
         set((state) => ({
           deliveries: state.deliveries.map((d) => d.id === id ? { ...d, ...dataWithTimestamp } as Delivery : d)
         }));
+        
         try {
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await updateDoc(doc(db, 'deliveries', id), safeData);
+
+          // 🧠 AUTO-FINALIZAÇÃO MÁGICA DE ROTA
+          if (updatedData.completed === true) {
+            const state = get();
+            const delivery = state.deliveries.find(d => d.id === id);
+            if (delivery) {
+              const routeDeliveries = state.deliveries.filter(d => d.route_id === delivery.route_id);
+              // Verifica se tem entregas e se absolutamente TODAS foram concluídas
+              const allDone = routeDeliveries.length > 0 && routeDeliveries.every(d => d.completed);
+              
+              if (allDone) {
+                const route = state.routes.find(r => r.id === delivery.route_id);
+                // Se estiver aberta, fecha automaticamente
+                if (route && route.status === 'aberta') {
+                  await state.closeRoute(route.id);
+                }
+              }
+            }
+          }
         } catch (error) { console.error(error); }
       },
 
@@ -257,7 +290,6 @@ export const useAppStore = create<AppState>()(
         const routeDeliveries = state.deliveries
           .filter(d => d.route_id === routeId)
           .sort((a, b) => {
-             // CORRIGIDO: Usando updated_at para evitar erro de propriedade inexistente
              const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
              const orderB = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
              return orderA - orderB;
