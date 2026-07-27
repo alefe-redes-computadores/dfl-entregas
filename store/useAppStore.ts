@@ -26,7 +26,7 @@ interface AppState {
   getDeliveriesByRoute: (routeId: string) => Delivery[];
   getCustomerById: (customerId?: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
-  startRoute: (routeId: string) => Promise<void>; // <-- NOVO
+  startRoute: (routeId: string) => Promise<void>; 
   addDelivery: (delivery: Delivery) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
@@ -36,6 +36,8 @@ interface AppState {
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
   addMotoboy: (motoboy: Motoboy) => Promise<void>;
+  updateMotoboy: (id: string, updatedData: Partial<Motoboy>) => Promise<void>; // <-- NOVO
+  deleteMotoboy: (id: string) => Promise<void>; // <-- NOVO
   findOrCreateCustomer: (
     name: string,
     details?: {
@@ -190,7 +192,6 @@ export const useAppStore = create<AppState>()(
         } catch (error) { console.error(error); }
       },
 
-      // 🚀 NOVO: INICIAR ROTA
       startRoute: async (routeId) => {
         const now = new Date().toISOString();
         set((state) => ({
@@ -207,6 +208,25 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await setDoc(doc(db, 'motoboys', motoboy.id), safeData);
+        } catch (error) { console.error(error); }
+      },
+
+      // 🚀 NOVO: UPDATE E DELETE MOTOBOY
+      updateMotoboy: async (id, updatedData) => {
+        const dataWithTimestamp: Partial<Motoboy> = { ...updatedData, updated_at: new Date().toISOString() };
+        set((state) => ({
+          motoboys: state.motoboys.map((m) => m.id === id ? { ...m, ...dataWithTimestamp } as Motoboy : m)
+        }));
+        try {
+          const safeData = sanitizeForFirebase(dataWithTimestamp);
+          await updateDoc(doc(db, 'motoboys', id), safeData);
+        } catch (error) { console.error(error); }
+      },
+
+      deleteMotoboy: async (id) => {
+        set((state) => ({ motoboys: state.motoboys.filter((m) => m.id !== id) }));
+        try {
+          await deleteDoc(doc(db, 'motoboys', id));
         } catch (error) { console.error(error); }
       },
 
@@ -237,18 +257,14 @@ export const useAppStore = create<AppState>()(
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await updateDoc(doc(db, 'deliveries', id), safeData);
 
-          // 🧠 AUTO-FINALIZAÇÃO MÁGICA DE ROTA
           if (updatedData.completed === true) {
             const state = get();
             const delivery = state.deliveries.find(d => d.id === id);
             if (delivery) {
               const routeDeliveries = state.deliveries.filter(d => d.route_id === delivery.route_id);
-              // Verifica se tem entregas e se absolutamente TODAS foram concluídas
               const allDone = routeDeliveries.length > 0 && routeDeliveries.every(d => d.completed);
-              
               if (allDone) {
                 const route = state.routes.find(r => r.id === delivery.route_id);
-                // Se estiver aberta, fecha automaticamente
                 if (route && route.status === 'aberta') {
                   await state.closeRoute(route.id);
                 }
@@ -353,13 +369,11 @@ export const useAppStore = create<AppState>()(
 
         const extractNeighborhood = (address?: string): string | undefined => {
           if (!address) return undefined;
-          
           if (address.includes('-')) {
             const parts = address.split('-');
             const potentialHood = parts[parts.length - 1].trim();
             return potentialHood.replace(/[0-9]/g, '').trim() || undefined;
           }
-          
           const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
           if (parts.length < 2) return undefined;
           return parts[parts.length - 1].replace(/[0-9]/g, '').trim() || undefined;
