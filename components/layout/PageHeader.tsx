@@ -6,16 +6,24 @@ import { ChevronLeft } from 'lucide-react';
 interface PageHeaderProps {
   title: string;
   subtitle?: string;
-  to?: string; // <-- Rota de destino opcional
+  to?: string;
 }
 
-export function PageHeader({ title, subtitle, to = '/loja' }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, to }: PageHeaderProps) {
   const router = useRouter();
+
+  const handleBack = () => {
+    if (to) {
+      router.push(to);
+    } else {
+      router.back();
+    }
+  };
 
   return (
     <div className="flex items-center gap-3 pb-4 pt-2 border-b border-zinc-800/80 mb-5">
       <button
-        onClick={() => router.push(to)}
+        onClick={handleBack}
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 transition-transform active:scale-95"
         aria-label="Voltar"
       >
