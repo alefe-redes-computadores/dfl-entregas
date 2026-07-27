@@ -13,7 +13,8 @@ export interface Route {
   name: string;
   status: RouteStatus;
   motoboy_name: string;
-  departure_time: string;
+  departure_time: string; // Data de criação
+  started_at?: string;    // <-- NOVO: Hora real que a rota iniciou na rua
   end_time?: string;
   change_money: number;
   drinks_summary?: string;
@@ -36,7 +37,7 @@ export interface Delivery {
   observation?: string;
   drinks?: string;
   completed?: boolean;
-  order_index?: number; // <-- NOVO: Mantém a ordem customizada salva
+  order_index?: number; 
   updated_at?: string;
 }
 
