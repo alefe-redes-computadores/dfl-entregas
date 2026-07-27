@@ -17,7 +17,9 @@ interface AppState {
   motoboys: Motoboy[];
   selectedDate: Date;
   isSyncing: boolean;
+  isPrivacyMode: boolean; // <-- MODO PRIVACIDADE (OLHO MÁGICO)
   setHasHydrated: (value: boolean) => void;
+  togglePrivacyMode: () => void; // <-- ALTERAR MODO PRIVACIDADE
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   initData: () => Promise<void>;
@@ -36,8 +38,8 @@ interface AppState {
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
   addMotoboy: (motoboy: Motoboy) => Promise<void>;
-  updateMotoboy: (id: string, updatedData: Partial<Motoboy>) => Promise<void>; // <-- NOVO
-  deleteMotoboy: (id: string) => Promise<void>; // <-- NOVO
+  updateMotoboy: (id: string, updatedData: Partial<Motoboy>) => Promise<void>;
+  deleteMotoboy: (id: string) => Promise<void>;
   findOrCreateCustomer: (
     name: string,
     details?: {
@@ -66,8 +68,10 @@ export const useAppStore = create<AppState>()(
       motoboys: [],
       selectedDate: new Date(),
       isSyncing: false,
+      isPrivacyMode: false, // Inicia desativado por padrão
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
+      togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })),
 
       loginWithGoogle: async () => {
         try {
@@ -211,7 +215,6 @@ export const useAppStore = create<AppState>()(
         } catch (error) { console.error(error); }
       },
 
-      // 🚀 NOVO: UPDATE E DELETE MOTOBOY
       updateMotoboy: async (id, updatedData) => {
         const dataWithTimestamp: Partial<Motoboy> = { ...updatedData, updated_at: new Date().toISOString() };
         set((state) => ({
@@ -433,7 +436,8 @@ export const useAppStore = create<AppState>()(
         routes: state.routes, 
         deliveries: state.deliveries, 
         customers: state.customers,
-        motoboys: state.motoboys
+        motoboys: state.motoboys,
+        isPrivacyMode: state.isPrivacyMode // Salva a preferência do Modo Privacidade
       }),
       onRehydrateStorage: () => (state) => { 
         state?.setHasHydrated(true); 
