@@ -17,9 +17,11 @@ interface AppState {
   motoboys: Motoboy[];
   selectedDate: Date;
   isSyncing: boolean;
-  isPrivacyMode: boolean; // <-- MODO PRIVACIDADE ATIVADO NO ESTADO GLOBAL
+  isPrivacyMode: boolean; 
+  routeAlertsEnabled: boolean; // <-- NOVO: STATUS DO ALERTA DE ROTA
   setHasHydrated: (value: boolean) => void;
-  togglePrivacyMode: () => void; // <-- FUNÇÃO DE ALTERNÂNCIA
+  togglePrivacyMode: () => void; 
+  setRouteAlertsEnabled: (enabled: boolean) => void; // <-- NOVO: FUNÇÃO DE CONTROLE
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   initData: () => Promise<void>;
@@ -68,10 +70,12 @@ export const useAppStore = create<AppState>()(
       motoboys: [],
       selectedDate: new Date(),
       isSyncing: false,
-      isPrivacyMode: false, // <-- INICIA DESATIVADO POR PADRÃO
+      isPrivacyMode: false,
+      routeAlertsEnabled: false, // <-- INICIA DESLIGADO POR PADRÃO
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
-      togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })), // <-- ALTERNA O MODO
+      togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })), 
+      setRouteAlertsEnabled: (enabled) => set({ routeAlertsEnabled: enabled }), // <-- ALTERA O STATUS
 
       loginWithGoogle: async () => {
         try {
@@ -437,7 +441,8 @@ export const useAppStore = create<AppState>()(
         deliveries: state.deliveries, 
         customers: state.customers,
         motoboys: state.motoboys,
-        isPrivacyMode: state.isPrivacyMode // <-- SALVA A PREFERÊNCIA DO USUÁRIO
+        isPrivacyMode: state.isPrivacyMode,
+        routeAlertsEnabled: state.routeAlertsEnabled // <-- SALVA A CONFIGURAÇÃO DE ALERTA
       }),
       onRehydrateStorage: () => (state) => { 
         state?.setHasHydrated(true); 
