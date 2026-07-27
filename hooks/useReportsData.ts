@@ -70,28 +70,20 @@ export function useReportsData() {
   const routes = useAppStore(state => state.routes) as unknown as Route[];
   const deliveries = useAppStore(state => state.deliveries) as unknown as Delivery[];
   
-  // EXTRAÇÃO INTELIGENTE DE BAIRRO (Limpa números e foca no traço)
   const extractNeighborhood = useCallback((address: string): string => {
     if (!address) return 'Não informado';
-    
-    // Tenta separar pelo traço (padrão colado do WhatsApp: Rua Tal, 43 - Bairro)
     if (address.includes('-')) {
       const parts = address.split('-');
       const potentialNeighborhood = parts[parts.length - 1].trim();
-      // Limpa qualquer número que possa ter ido junto
       return potentialNeighborhood.replace(/[0-9]/g, '').trim() || 'Não informado';
     }
-    
-    // Fallback para vírgula
     const parts = address.split(',').map(p => p.trim());
     if (parts.length >= 3) {
       return parts[2].replace(/[0-9]/g, '').trim() || 'Não informado';
     }
-    
     if (parts.length > 0) {
       return parts[parts.length - 1].replace(/[0-9]/g, '').trim() || 'Não informado';
     }
-    
     return 'Não informado';
   }, []);
 
@@ -176,7 +168,6 @@ export function useReportsData() {
       .slice(0, 10);
   }, [extractNeighborhood]);
 
-  // AGRUPAMENTO INTELIGENTE DE PAGAMENTOS
   const getPaymentStats = useCallback((filteredDeliveries: Delivery[]): PaymentStats[] => {
     const paymentMap = new Map<string, { count: number; total: number }>();
     
@@ -208,7 +199,8 @@ export function useReportsData() {
 
   const getDayOfWeekStats = useCallback((filteredDeliveries: Delivery[]): DayOfWeekStats[] => {
     const dayMap = new Map<number, { deliveries: number; revenue: number }>();
-    const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    // NOMES CURTOS PARA CABER NO CELULAR
+    const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     
     for (let i = 0; i < 7; i++) {
       dayMap.set(i, { deliveries: 0, revenue: 0 });
@@ -232,25 +224,58 @@ export function useReportsData() {
       }));
   }, [formatDate]);
 
-  // 🧠 NOVA INTELIGÊNCIA: Horários de Pico (Peak Hours)
+  // 🧠 NOVA INTELIGÊNCIA: Horários de Pico (FILTRO NOTURNO + ORDENAÇÃO)
   const getPeakHoursStats = useCallback((filteredDeliveries: Delivery[]) => {
     const hoursMap = new Map<number, number>();
     
     filteredDeliveries.forEach(delivery => {
       const date = formatDate(delivery.createdAt || delivery.updated_at);
       const hour = date.getHours();
-      hoursMap.set(hour, (hoursMap.get(hour) || 0) + 1);
+      // FILTRO DE SANEAMENTO: Ignora entregas importadas/bugadas feitas no meio do dia. 
+      // Considera apenas a partir das 17h até as 05h da manhã.
+      if (hour >= 17 || hour <= 5) {
+        hoursMap.set(hour, (hoursMap.get(hour) || 0) + 1);
+      }
     });
     
-    // Filtra apenas os horários que tiveram movimento e ordena cronologicamente
     return Array.from(hoursMap.entries())
       .filter(([_, count]) => count > 0)
       .map(([hour, count]) => ({
         hour: `${hour.toString().padStart(2, '0')}h`,
-        count
+        count,
+        rawHour: hour
       }))
-      .sort((a, b) => parseInt(a.hour) - parseInt(b.hour));
+      .sort((a, b) => {
+        // Ordena para que 17, 18, 19 venham antes de 00, 01, 02 da madrugada
+        const hA = a.rawHour <= 5 ? a.rawHour + 24 : a.rawHour;
+        const hB = b.rawHour <= 5 ? b.rawHour + 24 : b.rawHour;
+        return hA - hB;
+      })
+      .map(({ hour, count }) => ({ hour, count }));
   }, [formatDate]);
+
+  // 🧠 NOVA INTELIGÊNCIA: Dados dos Canais de Venda (Resolve o bug de aparecer só Loja Própria)
+  const getOriginStats = useCallback((filteredDeliveries: Delivery[]) => {
+    let ifoodCount = 0, ifoodTotal = 0;
+    let lojaCount = 0, lojaTotal = 0;
+    
+    filteredDeliveries.forEach(d => {
+      // Se não tiver origem cadastrada (pedidos antigos), assume que foi iFood
+      const origin = d.origin || 'ifood'; 
+      if (origin === 'ifood') {
+        ifoodCount++;
+        ifoodTotal += (d.value || 0);
+      } else {
+        lojaCount++;
+        lojaTotal += (d.value || 0);
+      }
+    });
+    
+    return [
+      { origin: 'ifood', count: ifoodCount, total: ifoodTotal },
+      { origin: 'loja', count: lojaCount, total: lojaTotal }
+    ];
+  }, []);
 
   const getMainMetrics = useCallback((
     filteredDeliveries: Delivery[], 
@@ -307,7 +332,8 @@ export function useReportsData() {
     getNeighborhoodStats,
     getPaymentStats,
     getDayOfWeekStats,
-    getPeakHoursStats, // <-- Exportado aqui!
+    getPeakHoursStats,
+    getOriginStats, // <- O gráfico de canais vai usar isso agora!
     getMainMetrics,
     extractNeighborhood,
     formatDate
