@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -133,18 +134,17 @@ export default function LojaPage() {
   return (
     <div className="flex flex-col gap-6 pb-24 animate-in fade-in duration-300 relative">
       
-      {/* HEADER DA LOJA */}
-      <div className="flex flex-col gap-1">
-        <h1 className="font-heading text-2xl font-black text-zinc-50 flex items-center gap-2">
-          <Store className="text-emerald-500" /> Minha Loja
-        </h1>
-        <p className="text-sm text-zinc-500">Centro de comando da Da Família Lanches.</p>
-      </div>
+      {/* CABEÇALHO PADRÃO COM VOLTAR PARA A HOME */}
+      <PageHeader 
+        title="Minha Loja" 
+        subtitle="Centro de comando da Da Família Lanches" 
+        to="/"
+      />
 
       {/* BOTÃO MESTRE - STATUS DA LOJA */}
       <button 
         onClick={toggleStore}
-        className={`relative overflow-hidden flex items-center justify-between p-5 rounded-[28px] border transition-all duration-500 ${
+        className={`relative overflow-hidden flex items-center justify-between p-5 rounded-[28px] border transition-all duration-500 cursor-pointer ${
           isStoreOpen 
             ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.1)]' 
             : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800/80'
@@ -220,7 +220,7 @@ export default function LojaPage() {
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Gestão Rápida</h2>
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => router.push('/motoboys')} className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left">
+          <button onClick={() => router.push('/motoboys')} className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left cursor-pointer">
             <Bike className="text-sky-400" size={24} />
             <div>
               <p className="font-bold text-zinc-100">Equipe</p>
@@ -228,7 +228,7 @@ export default function LojaPage() {
             </div>
           </button>
           
-          <button onClick={() => router.push('/clientes')} className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left">
+          <button onClick={() => router.push('/clientes')} className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left cursor-pointer">
             <Users className="text-amber-400" size={24} />
             <div>
               <p className="font-bold text-zinc-100">Clientes</p>
@@ -255,7 +255,7 @@ export default function LojaPage() {
       </div>
 
       {/* =========================================
-          AUTOMAÇÃO & HORÁRIOS (NATIVOS)
+          AUTOMAÇÃO & HORÁRIOS
       ========================================= */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Automação & Horários</h2>
@@ -274,7 +274,7 @@ export default function LojaPage() {
                   <button 
                     key={day}
                     onClick={() => toggleDay(index)}
-                    className={`h-10 w-10 rounded-full text-xs font-bold transition-all ${
+                    className={`h-10 w-10 rounded-full text-xs font-bold transition-all cursor-pointer ${
                       isActive 
                         ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' 
                         : 'bg-zinc-800 text-zinc-500 border border-zinc-700 hover:bg-zinc-700'
@@ -330,7 +330,7 @@ export default function LojaPage() {
             </div>
             <button 
               onClick={handleToggleAlerts} 
-              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${alertsEnabled ? 'bg-sky-500' : 'bg-zinc-700'}`}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 cursor-pointer ${alertsEnabled ? 'bg-sky-500' : 'bg-zinc-700'}`}
             >
               <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${alertsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
@@ -348,7 +348,7 @@ export default function LojaPage() {
             </div>
             <button 
               onClick={handleToggleRouteAlerts} 
-              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${routeAlertsEnabled ? 'bg-amber-500' : 'bg-zinc-700'}`}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 cursor-pointer ${routeAlertsEnabled ? 'bg-amber-500' : 'bg-zinc-700'}`}
             >
               <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${routeAlertsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
