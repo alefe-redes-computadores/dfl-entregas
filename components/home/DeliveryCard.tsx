@@ -25,6 +25,7 @@ const PAYMENT_CONFIG = {
 export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const reorderDelivery = useAppStore((state) => state.reorderDelivery);
+  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode); // <-- MODO PRIVACIDADE IMPORTADO
   
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
@@ -66,7 +67,6 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
           )}
 
           <div className="flex items-center gap-2">
-            {/* O selo de "Pago" foi removido daqui do topo para não duplicar, agora ele reina no rodapé! */}
             {delivery.completed && (
               <span className="flex items-center gap-1 rounded-full bg-zinc-700 px-2 py-1 text-[11px] font-semibold text-zinc-300">
                 <CheckCircle size={12} /> Entregue
@@ -95,8 +95,12 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
                 </p>
               )}
             </div>
+            {/* VALOR DA ENTREGA OCULTADO */}
             <p className="mt-1 text-sm font-bold text-emerald-400">
-              R$ {delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}
+              {isPrivacyMode 
+                ? 'R$ •••••' 
+                : `R$ ${delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}`
+              }
             </p>
           </div>
         </div>
@@ -126,9 +130,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
         </div>
       )}
 
-      {/* RODAPÉ MASTER v0.4.0 */}
       <div className="flex flex-col gap-3 border-t border-zinc-800/80 px-4 py-3">
-        {/* Row 1: Pagamento e Bebidas */}
         <div className="flex items-center gap-2">
           {delivery.is_paid ? (
             <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-500">
@@ -138,7 +140,10 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
           ) : (
             <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}>
               <PaymentIcon size={13} />
-              {payment.label === 'Dinheiro' && delivery.change_for ? `Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')}` : payment.label}
+              {/* VALOR DO TROCO OCULTADO */}
+              {payment.label === 'Dinheiro' && delivery.change_for 
+                ? `Troco p/ R$ ${isPrivacyMode ? '•••••' : delivery.change_for.toFixed(2).replace('.', ',')}` 
+                : payment.label}
             </span>
           )}
 
@@ -150,9 +155,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
           )}
         </div>
 
-        {/* Row 2: Ações Operacionais */}
         <div className="flex items-center gap-2 mt-1">
-          {/* Botão de Finalizar */}
           <button 
             onClick={handleToggleCompleted} 
             className={clsx(
@@ -166,7 +169,6 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
             {delivery.completed ? 'Desfazer' : 'Concluída'}
           </button>
 
-          {/* Cápsula de Ordenação (Apenas se NÃO estiver concluída) */}
           {!delivery.completed && (
             <div className="flex bg-zinc-800/60 border border-zinc-700/50 rounded-xl overflow-hidden shrink-0">
               <button onClick={() => reorderDelivery(delivery.route_id, delivery.id, 'up')} className="flex h-10 w-9 items-center justify-center text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-colors active:bg-zinc-600">
@@ -179,7 +181,6 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
             </div>
           )}
 
-          {/* Botões Essenciais */}
           <Link href={`/entregas/details?id=${delivery.id}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-800 text-zinc-300 transition-transform hover:bg-zinc-700 active:scale-90">
             <Pencil size={15} />
           </Link>
