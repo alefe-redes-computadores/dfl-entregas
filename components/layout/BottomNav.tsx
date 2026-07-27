@@ -7,7 +7,7 @@ import clsx from 'clsx';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Início', icon: Home },
-  { href: '/loja', label: 'Loja', icon: Store }, // <-- MUDOU AQUI: Agora é a Loja!
+  { href: '/loja', label: 'Loja', icon: Store },
   { href: '__fab__', label: 'Adicionar', icon: Plus },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/mais', label: 'Mais', icon: MoreHorizontal },
@@ -17,6 +17,11 @@ export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [showAddSheet, setShowAddSheet] = useState(false);
+
+  // Oculta a barra inferior se estiver em páginas de formulários profundos ou sub-rotas específicas se necessário
+  if (pathname.includes('/nova') || pathname.includes('/editar')) {
+    return null;
+  }
 
   return (
     <>
