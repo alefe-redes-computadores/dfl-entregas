@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Users, UserPlus, Calculator, PlusCircle, Trash2, ShieldCheck, 
-  CheckCircle2, Package, Wallet, TrendingUp, CalendarDays, Receipt, X, Send, Settings
+  CheckCircle2, Package, Wallet, TrendingUp, CalendarDays, Receipt, X, Send, Settings, ChevronLeft
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/layout/PageHeader';
 import type { Motoboy, MotoboyPaymentRule, PaymentRuleType } from '@/types';
 
 type TabType = 'acerto' | 'config';
@@ -19,6 +19,7 @@ interface ValeItem {
 }
 
 export default function MotoboysPage() {
+  const router = useRouter();
   const motoboys = useAppStore(state => state.motoboys);
   const routes = useAppStore(state => state.routes);
   const deliveries = useAppStore(state => state.deliveries);
@@ -126,7 +127,7 @@ export default function MotoboysPage() {
   };
 
   // ------------------------------------------------------------------
-  // MÁQUINA DE CALCULAR ACERTO (AUTO-PREENCHIMENTO)
+  // MÁQUINA DE CALCULAR ACERTO
   // ------------------------------------------------------------------
   const acertoData = useMemo(() => {
     if (!selectedMotoboy) return null;
@@ -185,9 +186,6 @@ export default function MotoboysPage() {
     };
   }, [selectedMotoboy, acertoDate, routes, deliveries, vales]);
 
-  // ------------------------------------------------------------------
-  // GERADOR DE WHATSAPP
-  // ------------------------------------------------------------------
   const handleCopyWhatsApp = async () => {
     if (!selectedMotoboy || !acertoData) return;
 
@@ -228,12 +226,20 @@ export default function MotoboysPage() {
   return (
     <div className="flex flex-col gap-5 relative pb-24">
       
-      {/* CABEÇALHO FORÇANDO O RETORNO DIRETO PARA A LOJA */}
-      <PageHeader 
-        title="Equipe de Motoboys" 
-        subtitle="Gerencie frotas, regras e acertos" 
-        to="/loja"
-      />
+      {/* CABEÇALHO COM BOTÃO DE VOLTAR FORÇADO PARA /LOJA */}
+      <div className="flex items-center gap-3 pb-4 pt-2 border-b border-zinc-800/80 mb-5">
+        <button
+          onClick={() => router.push('/loja')}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 transition-transform active:scale-95 cursor-pointer"
+          aria-label="Voltar para Loja"
+        >
+          <ChevronLeft size={22} />
+        </button>
+        <div className="flex flex-col">
+          <h1 className="font-heading text-lg font-bold text-zinc-50 leading-tight">Equipe de Motoboys</h1>
+          <p className="text-xs text-zinc-500">Gerencie frotas, regras e acertos</p>
+        </div>
+      </div>
 
       {!isAdding ? (
         <button onClick={() => setIsAdding(true)} className="flex items-center justify-center gap-2 bg-zinc-900/60 border border-dashed border-zinc-700 text-zinc-300 rounded-2xl p-4 font-bold hover:bg-zinc-800 transition-colors">
@@ -319,7 +325,7 @@ export default function MotoboysPage() {
                 <p className="text-xs text-zinc-500">Central de Fechamento e Regras</p>
               </div>
             </div>
-            <button onClick={() => setSelectedMotoboy(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white">
+            <button onClick={() => setSelectedMotoboy(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white cursor-pointer">
               <X size={20} />
             </button>
           </div>
@@ -373,7 +379,7 @@ export default function MotoboysPage() {
                   <div className="flex gap-2">
                     <input type="text" placeholder="Ex: Lanche / Dinheiro retido" value={valeDesc} onChange={(e)=>setValeDesc(e.target.value)} className="flex-[2] h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500 outline-none" />
                     <input type="number" placeholder="R$ 0,00" value={valeAmount} onChange={(e)=>setValeAmount(e.target.value)} className="flex-1 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500 outline-none" />
-                    <button onClick={handleAddVale} className="h-11 w-11 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300 hover:bg-zinc-700 shrink-0"><PlusCircle size={18}/></button>
+                    <button onClick={handleAddVale} className="h-11 w-11 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300 hover:bg-zinc-700 shrink-0 cursor-pointer"><PlusCircle size={18}/></button>
                   </div>
 
                   {vales.length > 0 && (
@@ -383,7 +389,7 @@ export default function MotoboysPage() {
                           <span className="text-xs text-red-400 font-semibold">{v.description}</span>
                           <div className="flex items-center gap-3">
                             <span className="text-xs text-red-400 font-bold">- R$ {v.amount.toFixed(2).replace('.', ',')}</span>
-                            <button onClick={()=>setVales(vales.filter(x => x.id !== v.id))} className="text-red-500/50 hover:text-red-500"><Trash2 size={14}/></button>
+                            <button onClick={()=>setVales(vales.filter(x => x.id !== v.id))} className="text-red-500/50 hover:text-red-500 cursor-pointer"><Trash2 size={14}/></button>
                           </div>
                         </div>
                       ))}
@@ -399,7 +405,7 @@ export default function MotoboysPage() {
                   <CheckCircle2 size={28} className="text-emerald-500/30" />
                 </div>
 
-                <button onClick={handleCopyWhatsApp} className="w-full flex items-center justify-center gap-2 h-14 bg-emerald-500 hover:bg-emerald-400 rounded-xl font-bold text-zinc-950 text-base shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                <button onClick={handleCopyWhatsApp} className="w-full flex items-center justify-center gap-2 h-14 bg-emerald-500 hover:bg-emerald-400 rounded-xl font-bold text-zinc-950 text-base shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer">
                   <Send size={18} /> Enviar Recibo WhatsApp
                 </button>
               </div>
@@ -465,12 +471,12 @@ export default function MotoboysPage() {
                   </div>
                 )}
 
-                <button type="submit" className="h-12 w-full rounded-xl bg-sky-500 hover:bg-sky-400 font-bold text-zinc-950 active:scale-[0.98] shadow-md shadow-sky-500/20 mt-2 text-sm transition-all">
+                <button type="submit" className="h-12 w-full rounded-xl bg-sky-500 hover:bg-sky-400 font-bold text-zinc-950 active:scale-[0.98] shadow-md shadow-sky-500/20 mt-2 text-sm transition-all cursor-pointer">
                   Salvar Alterações
                 </button>
 
                 <div className="border-t border-zinc-800 pt-4 mt-2 flex flex-col gap-2">
-                  <button type="button" onClick={toggleActive} className={`flex justify-center items-center gap-2 h-12 rounded-xl border font-bold text-xs transition-colors ${selectedMotoboy.active ? 'border-amber-500/50 text-amber-500 bg-amber-500/10 hover:bg-amber-500/20' : 'border-emerald-500/50 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20'}`}>
+                  <button type="button" onClick={toggleActive} className={`flex justify-center items-center gap-2 h-12 rounded-xl border font-bold text-xs transition-colors cursor-pointer ${selectedMotoboy.active ? 'border-amber-500/50 text-amber-500 bg-amber-500/10 hover:bg-amber-500/20' : 'border-emerald-500/50 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20'}`}>
                     <ShieldCheck size={14} />
                     {selectedMotoboy.active ? 'Suspender / Desativar Motoboy' : 'Reativar Motoboy'}
                   </button>
