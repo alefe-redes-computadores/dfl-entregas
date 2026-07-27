@@ -17,9 +17,9 @@ interface AppState {
   motoboys: Motoboy[];
   selectedDate: Date;
   isSyncing: boolean;
-  isPrivacyMode: boolean; // <-- MODO PRIVACIDADE (OLHO MÁGICO)
+  isPrivacyMode: boolean; // <-- MODO PRIVACIDADE ATIVADO NO ESTADO GLOBAL
   setHasHydrated: (value: boolean) => void;
-  togglePrivacyMode: () => void; // <-- ALTERAR MODO PRIVACIDADE
+  togglePrivacyMode: () => void; // <-- FUNÇÃO DE ALTERNÂNCIA
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   initData: () => Promise<void>;
@@ -68,10 +68,10 @@ export const useAppStore = create<AppState>()(
       motoboys: [],
       selectedDate: new Date(),
       isSyncing: false,
-      isPrivacyMode: false, // Inicia desativado por padrão
+      isPrivacyMode: false, // <-- INICIA DESATIVADO POR PADRÃO
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
-      togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })),
+      togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })), // <-- ALTERNA O MODO
 
       loginWithGoogle: async () => {
         try {
@@ -437,7 +437,7 @@ export const useAppStore = create<AppState>()(
         deliveries: state.deliveries, 
         customers: state.customers,
         motoboys: state.motoboys,
-        isPrivacyMode: state.isPrivacyMode // Salva a preferência do Modo Privacidade
+        isPrivacyMode: state.isPrivacyMode // <-- SALVA A PREFERÊNCIA DO USUÁRIO
       }),
       onRehydrateStorage: () => (state) => { 
         state?.setHasHydrated(true); 
