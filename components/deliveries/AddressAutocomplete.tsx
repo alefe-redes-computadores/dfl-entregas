@@ -25,9 +25,26 @@ export function AddressAutocomplete({
   const [isOpen, setIsOpen] = useState(false);
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
 
-  useEffect(() => {
+  // Inicializa o serviço do Google Places com segurança
+  const initService = () => {
     if (typeof window !== 'undefined' && window.google?.maps?.places) {
-      autocompleteService.current = new google.maps.places.AutocompleteService();
+      if (!autocompleteService.current) {
+        autocompleteService.current = new google.maps.places.AutocompleteService();
+      }
+      return true;
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    // Tenta carregar imediatamente e faz novas tentativas caso o script do layout demore a injetar
+    if (!initService()) {
+      const timer = setInterval(() => {
+        if (initService()) {
+          clearInterval(timer);
+        }
+      }, 500);
+      return () => clearInterval(timer);
     }
   }, []);
 
@@ -35,7 +52,8 @@ export function AddressAutocomplete({
     const val = e.target.value;
     onChange(val);
 
-    if (!val.trim() || !autocompleteService.current) {
+    // Se o serviço do Google ainda não estiver pronto, apenas atualiza o texto sem travar
+    if (!val.trim() || !initService() || !autocompleteService.current) {
       setSuggestions([]);
       setIsOpen(false);
       setIsLoading(false);
@@ -44,11 +62,12 @@ export function AddressAutocomplete({
 
     setIsLoading(true);
     
-        autocompleteService.current.getPlacePredictions(
+    // Dispara a busca no Google Maps
+    autocompleteService.current.getPlacePredictions(
       {
         input: val,
         componentRestrictions: { country: 'br' },
-        location: new google.maps.LatLng(-18.5789, -46.5181), // Foco em Patos de Minas
+        location: new google.maps.LatLng(-18.5789, -46.5181), // Coordenadas de Patos de Minas
         radius: 30000, 
       },
       (predictions, status) => {
@@ -60,14 +79,14 @@ export function AddressAutocomplete({
           setSuggestions([]);
           setIsOpen(false);
           
-          // 🔥 ALARME NA TELA: Mostra o erro exato do Google
+          // 🔥 ALARME NA TELA: Mostra o erro exato do Google se não for apenas "sem resultados"
           if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
              toast.error(`Bloqueio do Google Maps: ${status}`);
           }
         }
       }
     );
-
+  };
 
   const handleSelectPrediction = (prediction: google.maps.places.AutocompletePrediction) => {
     onChange(prediction.description);
