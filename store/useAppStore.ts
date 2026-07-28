@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
@@ -27,13 +27,13 @@ interface AppState {
     closingTime: string;
     activeDays: number[];
     alertsEnabled: boolean;
-    storeAddress?: string; // <-- NOVO: ENDEREÇO DA LANCHONETE (BASE DA ROTA)
+    storeAddress?: string;
   };
   setHasHydrated: (value: boolean) => void;
   togglePrivacyMode: () => void; 
   setRouteAlertsEnabled: (enabled: boolean) => void; 
   setTheme: (theme: 'dark' | 'light' | 'system') => void;
-  updateStoreSettings: (settings: Partial<AppState['storeSettings']>) => void;
+  updateStoreSettings: (settings: Partial<AppState['storeSettings']>) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   initData: () => Promise<void>;
@@ -92,17 +92,28 @@ export const useAppStore = create<AppState>()(
         closingTime: '23:59',
         activeDays: [1, 2, 3, 4, 5, 6, 0],
         alertsEnabled: false,
-        storeAddress: 'Patos de Minas, MG', // <-- INICIA COM SUA CIDADE
+        storeAddress: 'Patos de Minas, MG',
       },
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
       togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })), 
       setRouteAlertsEnabled: (enabled) => set({ routeAlertsEnabled: enabled }), 
       setTheme: (theme) => set({ theme }),
-      updateStoreSettings: (settings) => 
-        set((state) => ({
-          storeSettings: { ...state.storeSettings, ...settings },
-        })),
+      
+      // Sincroniza as configurações da loja localmente e na nuvem (Firebase)
+      updateStoreSettings: async (settings) => {
+        const currentSettings = get().storeSettings;
+        const newSettings = { ...currentSettings, ...settings };
+        
+        set({ storeSettings: newSettings });
+
+        try {
+          const safeData = sanitizeForFirebase(newSettings);
+          await setDoc(doc(db, 'store', 'settings'), safeData, { merge: true });
+        } catch (error) {
+          console.error('Erro ao salvar configurações da loja na nuvem:', error);
+        }
+      },
 
       loginWithGoogle: async () => {
         try {
@@ -137,17 +148,20 @@ export const useAppStore = create<AppState>()(
         if (!get().hasHydrated) return;
         set({ isSyncing: true, syncError: false }); 
         try {
-          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap] = await Promise.all([
+          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, storeSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
             getDocs(collection(db, 'deliveries')),
             getDocs(collection(db, 'customers')),
-            getDocs(collection(db, 'motoboys'))
+            getDocs(collection(db, 'motoboys')),
+            getDoc(doc(db, 'store', 'settings'))
           ]);
 
           const fbRoutes = routesSnap.docs.map(d => d.data() as Route);
           const fbDeliveries = deliveriesSnap.docs.map(d => d.data() as Delivery);
           const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
           const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
+          
+          const cloudStoreSettings = storeSnap.exists() ? storeSnap.data() : null;
 
           const mergedRoutes = [...fbRoutes];
           get().routes.forEach(local => {
@@ -179,11 +193,17 @@ export const useAppStore = create<AppState>()(
             if (!mergedMotoboys.some(m => m.id === local.id)) mergedMotoboys.push(local);
           });
 
+          // Se houver configurações na nuvem, mescla com o padrão local
+          const finalStoreSettings = cloudStoreSettings 
+            ? { ...get().storeSettings, ...cloudStoreSettings }
+            : get().storeSettings;
+
           set({
             routes: mergedRoutes,
             deliveries: mergedDeliveries,
             customers: mergedCustomers,
             motoboys: mergedMotoboys,
+            storeSettings: finalStoreSettings as any,
             isSyncing: false,
             syncError: false
           });
