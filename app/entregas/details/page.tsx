@@ -224,7 +224,8 @@ function DeliveryDetailsForm() {
         maps_link: mapsLink,
         observation,
         drinks,
-      } as Partial<Delivery>);
+      } as any);
+
 
       toast.success('Entrega atualizada com sucesso!');
       router.push('/');
