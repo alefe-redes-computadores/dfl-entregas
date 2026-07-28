@@ -105,11 +105,14 @@ export const useAppStore = create<AppState>()(
         const currentSettings = get().storeSettings;
         const newSettings = { ...currentSettings, ...settings };
         
+        // SALVA LOCALMENTE NO ZUSTAND
         set({ storeSettings: newSettings });
 
+        // SALVA NO FIREBASE (Backup/Nuvem)
         try {
           const safeData = sanitizeForFirebase(newSettings);
-          await setDoc(doc(db, 'store', 'settings'), safeData, { merge: true });
+          // Usa 'store_settings' como ID do documento para evitar confusão com subcoleções
+          await setDoc(doc(db, 'store', 'store_settings'), safeData, { merge: true });
         } catch (error) {
           console.error('Erro ao salvar configurações da loja na nuvem:', error);
         }
@@ -153,7 +156,7 @@ export const useAppStore = create<AppState>()(
             getDocs(collection(db, 'deliveries')),
             getDocs(collection(db, 'customers')),
             getDocs(collection(db, 'motoboys')),
-            getDoc(doc(db, 'store', 'settings'))
+            getDoc(doc(db, 'store', 'store_settings')) // Busca do ID correto 'store_settings'
           ]);
 
           const fbRoutes = routesSnap.docs.map(d => d.data() as Route);
@@ -193,7 +196,7 @@ export const useAppStore = create<AppState>()(
             if (!mergedMotoboys.some(m => m.id === local.id)) mergedMotoboys.push(local);
           });
 
-          // Se houver configurações na nuvem, mescla com o padrão local
+          // Se houver configurações na nuvem, mescla com o padrão local (Dando preferência para a Nuvem)
           const finalStoreSettings = cloudStoreSettings 
             ? { ...get().storeSettings, ...cloudStoreSettings }
             : get().storeSettings;
