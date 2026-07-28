@@ -6,6 +6,7 @@ import { Search, MapPin, User, Hash, Smartphone, Store, Pencil, X, Filter } from
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; // 🔥 IMPORTAÇÃO DO AUTOCOMPLETE
 import type { Customer, OrderOrigin } from '@/types';
 
 export default function ClientesPage() {
@@ -246,13 +247,13 @@ export default function ClientesPage() {
                 />
               </div>
 
+              {/* ENDEREÇO INTEGRADO COM O AUTOCOMPLETE DO GOOGLE MAPS E VOZ */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-zinc-400">Endereço Completo / Rua</label>
-                <input 
-                  type="text" 
+                <AddressAutocomplete 
                   value={editAddress} 
-                  onChange={(e) => setEditAddress(e.target.value)} 
-                  className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" 
+                  onChange={setEditAddress} 
+                  placeholder="Ex: Rua Major Gote, 100"
+                  label="Endereço Completo / Rua"
                 />
               </div>
 
