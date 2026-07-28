@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Power, Users, BellRing, Bike, TrendingUp, 
-  Package, Calendar, AlertTriangle, Check, ChevronUp, ChevronDown
+  Package, Calendar, AlertTriangle, Check, ChevronUp, ChevronDown, MapPin
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
@@ -26,6 +26,8 @@ export default function LojaPage() {
   const updateMotoboy = useAppStore((state) => state.updateMotoboy);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
 
+  // A TRAVA DE HIDRATAÇÃO: Só carrega depois que o banco local acordou
+  const hasHydrated = useAppStore((state) => state.hasHydrated);
   const storeSettings = useAppStore((state) => state.storeSettings) || {};
   const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
 
@@ -38,20 +40,24 @@ export default function LojaPage() {
   const [isStoreOpen, setIsStoreOpen] = useState(false);
   const [activeDays, setActiveDays] = useState<number[]>([1, 2, 3, 4, 5, 6, 0]); 
   const [alertsEnabled, setAlertsEnabled] = useState(false);
+  
+  // Novo estado para o endereço base
+  const [storeAddress, setStoreAddress] = useState('Patos de Minas, MG');
 
-  // Estados dos Spinners Customizados (Horas e Minutos) sem input nativo!
+  // Estados dos Spinners Customizados
   const [openHour, setOpenHour] = useState(18);
   const [openMin, setOpenMin] = useState(0);
   const [closeHour, setCloseHour] = useState(23);
   const [closeMin, setCloseMin] = useState(59);
 
-  // Sincroniza a memória global com a tela assim que ela carrega
+  // Sincroniza a memória global com a tela assim que a hidratação terminar
   useEffect(() => {
     setIsMounted(true);
-    if (storeSettings) {
+    if (hasHydrated && storeSettings) {
       setIsStoreOpen(storeSettings.isOpen ?? false);
       setActiveDays(storeSettings.activeDays || [1, 2, 3, 4, 5, 6, 0]);
       setAlertsEnabled(storeSettings.alertsEnabled ?? false);
+      setStoreAddress(storeSettings.storeAddress || 'Patos de Minas, MG');
       
       if (storeSettings.openingTime) {
         const [h, m] = storeSettings.openingTime.split(':').map(Number);
@@ -64,7 +70,7 @@ export default function LojaPage() {
         setCloseMin(m || 59);
       }
     }
-  }, [storeSettings]);
+  }, [storeSettings, hasHydrated]);
 
   // ------------------------------------------------------------------
   // INTELIGÊNCIA: RESUMO DO DIA & ESCALA
@@ -100,6 +106,11 @@ export default function LojaPage() {
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!storeAddress.trim()) {
+      toast.error('O endereço da lanchonete é obrigatório!');
+      return;
+    }
+
     const openingTime = `${String(openHour).padStart(2, '0')}:${String(openMin).padStart(2, '0')}`;
     const closingTime = `${String(closeHour).padStart(2, '0')}:${String(closeMin).padStart(2, '0')}`;
     
@@ -109,11 +120,12 @@ export default function LojaPage() {
       closingTime,
       activeDays,
       alertsEnabled,
-      isOpen: isStoreOpen
+      isOpen: isStoreOpen,
+      storeAddress: storeAddress.trim()
     });
 
-    toast.success('Regras de Expediente Salvas com Sucesso!', {
-      description: 'Dias, horários e alertas foram gravados.'
+    toast.success('Configurações Salvas com Sucesso!', {
+      description: 'Expediente e Endereço de Base atualizados.'
     });
 
     if (alertsEnabled && Capacitor.isNativePlatform()) {
@@ -140,9 +152,6 @@ export default function LojaPage() {
     toast.success(!currentActiveStatus ? 'Motoboy escalado para hoje!' : 'Motoboy removido da escala.');
   };
 
-  // ------------------------------------------------------------------
-  // LÓGICA DE TEMPO: MÚLTIPLOS DE 5 (BLINDADA CONTRA HORÁRIOS QUEBRADOS)
-  // ------------------------------------------------------------------
   const handleMinUp = (current: number, setFn: (val: number) => void) => {
     const next = current + 5;
     const rounded = next - (next % 5);
@@ -158,7 +167,7 @@ export default function LojaPage() {
     setFn(current % 5 !== 0 ? rounded : rounded - 5);
   };
 
-  if (!isMounted) return null;
+  if (!isMounted || !hasHydrated) return null; // Aguarda a tela brilhar com dados reais
 
   return (
     <div className="flex flex-col gap-6 pb-24 animate-in fade-in duration-300 relative">
@@ -283,6 +292,23 @@ export default function LojaPage() {
         
         <form onSubmit={handleSaveSchedule} className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden p-4 gap-5">
           
+          {/* NOVO CAMPO: ENDEREÇO DA LANCHONETE (PONTO DE ORIGEM DA ROTA) */}
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              <MapPin size={14} className="text-indigo-400" /> Endereço Base (Origem)
+            </label>
+            <input 
+              type="text"
+              value={storeAddress}
+              onChange={(e) => setStoreAddress(e.target.value)}
+              placeholder="Rua, Número, Bairro, Cidade - MG"
+              className="h-12 w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 text-sm font-semibold text-zinc-100 placeholder:text-zinc-600 focus:border-indigo-500 outline-none transition-all"
+            />
+            <p className="text-[10px] text-zinc-500 leading-tight">Este endereço será usado como ponto de partida para organizar a rota inteligente dos motoboys no mapa.</p>
+          </div>
+
+          <div className="h-px w-full bg-zinc-800/80" />
+
           {/* DIAS DA SEMANA */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-zinc-300">
