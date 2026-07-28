@@ -36,10 +36,13 @@ export function AddressAutocomplete({
     if (!val.trim() || !autocompleteService.current) {
       setSuggestions([]);
       setIsOpen(false);
+      setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
+    
+    // Restringe e prioriza a busca em Patos de Minas - MG
     autocompleteService.current.getPlacePredictions(
       {
         input: val,
@@ -53,6 +56,8 @@ export function AddressAutocomplete({
           setSuggestions(predictions);
           setIsOpen(true);
         } else {
+          // Loga no console o status exato caso o Google recuse (ex: REQUEST_DENIED)
+          console.warn("Status do Google Places Autocomplete:", status);
           setSuggestions([]);
           setIsOpen(false);
         }
@@ -104,6 +109,7 @@ export function AddressAutocomplete({
         </button>
       </div>
 
+      {/* Caixa de Sugestões Suspensas do Google Maps */}
       {isOpen && suggestions.length > 0 && (
         <div className="absolute top-20 z-50 w-full flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
           {suggestions.map((item) => (
