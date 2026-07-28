@@ -14,6 +14,7 @@ function getGreeting(): string {
 
 export function Header() {
   const isSyncing = useAppStore((state) => state.isSyncing);
+  const syncError = useAppStore((state) => state.syncError); // <-- IMPORTAMOS O ESTADO DE ERRO
   const initData = useAppStore((state) => state.initData);
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
@@ -53,19 +54,31 @@ export function Header() {
                 {greeting}, {firstName}
               </span>
               <div className="flex items-center gap-1.5 mt-0.5">
-                {/* A Mágica da Bolinha Pulsante (Radar) */}
+                
+                {/* A Mágica da Bolinha Pulsante (Radar Inteligente) */}
                 <span className="relative flex h-2.5 w-2.5">
-                  <span 
-                    className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                      isSyncing ? 'animate-pulse-sync bg-emerald-500' : 'animate-ping bg-emerald-400'
-                    }`} 
-                  />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  {isSyncing ? (
+                    <>
+                      <span className="absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping bg-sky-500" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-sky-500" />
+                    </>
+                  ) : syncError ? (
+                    <>
+                      <span className="absolute inline-flex h-full w-full rounded-full opacity-75 animate-pulse bg-red-500" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+                    </>
+                  ) : (
+                    <>
+                      <span className="absolute inline-flex h-full w-full rounded-full opacity-75 animate-pulse bg-emerald-500" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                    </>
+                  )}
                 </span>
                 
-                <span className="text-[11px] font-medium tracking-wide text-zinc-400">
-                  {isSyncing ? 'Sincronizando...' : 'Online'}
+                <span className={`text-[11px] font-medium tracking-wide ${syncError && !isSyncing ? 'text-red-400' : 'text-zinc-400'}`}>
+                  {isSyncing ? 'Sincronizando...' : syncError ? 'Offline / Erro' : 'Online'}
                 </span>
+
               </div>
             </div>
           </div>
