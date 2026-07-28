@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Copy, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, Smartphone, Store, CheckCircle, ArrowUp, ArrowDown } from 'lucide-react';
+import { Copy, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, Smartphone, Store, CheckCircle, ArrowUp, ArrowDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import type { Delivery, Customer } from '@/types';
@@ -25,11 +25,12 @@ const PAYMENT_CONFIG = {
 export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const reorderDelivery = useAppStore((state) => state.reorderDelivery);
-  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode); // <-- MODO PRIVACIDADE IMPORTADO
+  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode); 
   
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
   const isIfood = delivery.origin === 'ifood' || !delivery.origin; 
+  const isUrgent = (delivery as any).is_urgent; // 🔥 PUXA STATUS DE URGÊNCIA
 
   async function handleCopy() {
     const success = await copyDeliveryToClipboard(delivery);
@@ -51,20 +52,31 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
     <div 
       className={clsx(
         "overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/60 backdrop-blur-sm transition-all duration-500",
-        delivery.completed && "opacity-50 grayscale"
+        delivery.completed && "opacity-50 grayscale",
+        isUrgent && !delivery.completed && "border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.05)]" // Destaque extra na borda
       )}
     >
       <div className="flex flex-col p-4">
         <div className="flex justify-between items-center mb-3">
-          {isIfood ? (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-wider">
-              <Smartphone size={12} /> iFood
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase tracking-wider">
-              <Store size={12} /> Loja Própria
-            </span>
-          )}
+          
+          <div className="flex items-center gap-2">
+            {isIfood ? (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-wider">
+                <Smartphone size={12} /> iFood
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase tracking-wider">
+                <Store size={12} /> Loja Própria
+              </span>
+            )}
+
+            {/* 🔥 SELO DE URGÊNCIA 🔥 */}
+            {isUrgent && (
+              <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-500 text-white text-[10px] font-black uppercase tracking-wider shadow-md shadow-red-500/30">
+                <AlertTriangle size={12} /> Urgente
+              </span>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             {delivery.completed && (
@@ -95,7 +107,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
                 </p>
               )}
             </div>
-            {/* VALOR DA ENTREGA OCULTADO */}
+            
             <p className="mt-1 text-sm font-bold text-emerald-400">
               {isPrivacyMode 
                 ? 'R$ •••••' 
@@ -140,7 +152,6 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
           ) : (
             <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}>
               <PaymentIcon size={13} />
-              {/* VALOR DO TROCO OCULTADO */}
               {payment.label === 'Dinheiro' && delivery.change_for 
                 ? `Troco p/ R$ ${isPrivacyMode ? '•••••' : delivery.change_for.toFixed(2).replace('.', ',')}` 
                 : payment.label}
