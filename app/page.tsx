@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Package } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Package, Eye, EyeOff } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
 import type { Route } from '@/types';
@@ -24,7 +24,10 @@ export default function HomePage() {
   const selectedDate = useAppStore((state) => state.selectedDate);
   const goToPreviousDay = useAppStore((state) => state.goToPreviousDay);
   const goToNextDay = useAppStore((state) => state.goToNextDay);
-  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode); // <-- MODO PRIVACIDADE IMPORTADO
+  
+  // MODO PRIVACIDADE IMPORTADOS
+  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
+  const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
 
   const selectedDateStr = selectedDate.toDateString();
   let routesDoDia = routes.filter((r) => {
@@ -100,9 +103,18 @@ export default function HomePage() {
         </div>
 
         <div className="flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
-          <div className="flex items-center gap-2 text-zinc-400">
-            <TrendingUp size={16} className="text-emerald-500" />
-            <span className="text-xs font-semibold uppercase tracking-wider">Faturamento</span>
+          <div className="flex items-center justify-between text-zinc-400">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={16} className="text-emerald-500" />
+              <span className="text-xs font-semibold uppercase tracking-wider">Faturamento</span>
+            </div>
+            {/* NOVO BOTÃO DE PRIVACIDADE NA HOME */}
+            <button 
+              onClick={togglePrivacyMode} 
+              className="text-zinc-500 hover:text-zinc-300 transition-colors active:scale-90"
+            >
+              {isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
           <p className="font-heading text-2xl font-bold text-zinc-50">
             {isPrivacyMode 
