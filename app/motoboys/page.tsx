@@ -18,12 +18,6 @@ interface ValeItem {
   amount: number;
 }
 
-const MONTH_NAMES = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-];
-const WEEK_DAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-
 // Utilitário para Máscara de Moeda em Reais (R$)
 const formatCurrencyInput = (value: string): string => {
   const numbers = value.replace(/\D/g, '');
@@ -62,10 +56,6 @@ export default function MotoboysPage() {
     return `${year}-${month}-${day}`;
   });
 
-  // Estados do Calendário Customizado
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [calendarViewDate, setCalendarViewDate] = useState(new Date());
-
   const [vales, setVales] = useState<ValeItem[]>([]);
   const [valeDesc, setValeDesc] = useState('');
   const [valeAmount, setValeAmount] = useState('');
@@ -79,7 +69,7 @@ export default function MotoboysPage() {
   const [editType, setEditType] = useState<'fixo' | 'avulso'>('fixo');
 
   // ------------------------------------------------------------------
-  // CONTROLE CUSTOMIZADO DE DATA
+  // CONTROLE CUSTOMIZADO DE DATA (SUBSTITUI O CALENDÁRIO NATIVO)
   // ------------------------------------------------------------------
   const handleShiftDate = (days: number) => {
     const [year, month, day] = acertoDate.split('-').map(Number);
@@ -97,56 +87,6 @@ export default function MotoboysPage() {
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const dt = String(now.getDate()).padStart(2, '0');
     setAcertoDate(`${y}-${m}-${dt}`);
-  };
-
-  const handleOpenCalendar = () => {
-    const [y, m, d] = acertoDate.split('-').map(Number);
-    setCalendarViewDate(new Date(y, m - 1, 1));
-    setIsCalendarOpen(true);
-  };
-
-  const handleShiftCalendarMonth = (months: number) => {
-    const newDate = new Date(calendarViewDate);
-    newDate.setMonth(newDate.getMonth() + months);
-    setCalendarViewDate(newDate);
-  };
-
-  const renderCalendarDays = () => {
-    const year = calendarViewDate.getFullYear();
-    const month = calendarViewDate.getMonth();
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    const startDay = new Date(year, month, 1).getDay();
-
-    const days = [];
-    for (let i = 0; i < startDay; i++) {
-      days.push(<div key={`empty-${i}`} className="h-10 w-10"></div>);
-    }
-    
-    for (let d = 1; d <= totalDays; d++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const isSelected = dateStr === acertoDate;
-      
-      // Verifica se o dia renderizado é o dia exato de "Hoje"
-      const todayObj = new Date();
-      const isRealToday = dateStr === `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
-      
-      days.push(
-        <button 
-          key={d} 
-          onClick={() => { setAcertoDate(dateStr); setIsCalendarOpen(false); }}
-          className={`h-10 w-10 flex items-center justify-center rounded-full text-sm font-bold transition-all ${
-            isSelected 
-              ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/30 scale-105' 
-              : isRealToday
-                ? 'bg-zinc-800 text-emerald-400 border border-emerald-500/50 hover:bg-zinc-700'
-                : 'text-zinc-300 hover:bg-zinc-800'
-          }`}
-        >
-          {d}
-        </button>
-      );
-    }
-    return days;
   };
 
   // ------------------------------------------------------------------
@@ -192,10 +132,12 @@ export default function MotoboysPage() {
     
     const rule = m.payment_rule || { type: 'fixed_plus_variable', fixed_amount: 100, threshold: 15, extra_fee: 7 };
     setRuleType(rule.type);
-    setRuleFixedAmount(rule.fixed_amount ? (rule.fixed_amount * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
-    setRuleDeliveryFee(rule.delivery_fee ? (rule.delivery_fee * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
-    setRuleThreshold(rule.threshold?.toString() || '');
-    setRuleExtraFee(rule.extra_fee ? (rule.extra_fee * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
+    
+    // CORREÇÃO: Lê o valor bruto e aplica apenas a formatação visual sem multiplicar indevidamente
+    setRuleFixedAmount((rule.fixed_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setRuleDeliveryFee((rule.delivery_fee || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setRuleThreshold(rule.threshold?.toString() || '0');
+    setRuleExtraFee((rule.extra_fee || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   };
 
   const handleSaveConfig = async (e: React.FormEvent) => {
@@ -215,7 +157,7 @@ export default function MotoboysPage() {
       type: editType 
     } as any);
 
-    toast.success('Configurações atualizadas com sucesso!');
+    toast.success('Configurações salvas e aplicadas na nuvem!');
     setSelectedMotoboy(null);
   };
 
@@ -228,7 +170,7 @@ export default function MotoboysPage() {
   };
 
   // ------------------------------------------------------------------
-  // MÁQUINA DE CALCULAR ACERTO (CORREÇÃO DE FUSO HORÁRIO)
+  // MÁQUINA DE CALCULAR ACERTO (FILTRO BLINDADO)
   // ------------------------------------------------------------------
   const acertoData = useMemo(() => {
     if (!selectedMotoboy) return null;
@@ -237,6 +179,9 @@ export default function MotoboysPage() {
 
     const getSafeDate = (rawDate: any) => {
       if (!rawDate) return '';
+      if (typeof rawDate === 'string' && rawDate.includes('T')) {
+        return rawDate.split('T')[0]; 
+      }
       const d = new Date(rawDate);
       if (isNaN(d.getTime())) return '';
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -245,7 +190,6 @@ export default function MotoboysPage() {
     const todaysRoutes = routes.filter(r => {
       const isSameMotoboy = ((r as any).motoboy_name || '').toLowerCase().trim() === motoboyNameLower;
       if (!isSameMotoboy) return false;
-      
       const rDateStr = getSafeDate(r.started_at || (r as any).departure_time || r.updated_at);
       return rDateStr === acertoDate;
     });
@@ -318,17 +262,18 @@ export default function MotoboysPage() {
     text += `👤 *Motoboy:* ${selectedMotoboy.name}\n`;
     text += `📅 *Data:* ${formattedDate}\n\n`;
     
-    text += `📦 *Entregas Realizadas:* ${acertoData.totalDeliveries}\n\n`;
+    text += `📦 *Entregas Realizadas:* ${acertoData.totalDeliveries}\n`;
+    text += `💰 *Valor Bruto em Caixa:* R$ ${acertoData.deliveriesRevenue.toFixed(2).replace('.', ',')}\n\n`;
 
     text += `📈 *Cálculo do Repasse:*\n`;
     text += `   ↳ ${acertoData.calculationDesc} = *R$ ${acertoData.calculatedAmount.toFixed(2).replace('.', ',')}*\n\n`;
 
     if (vales.length > 0) {
-      text += `➖ *Abatimentos / Vales:*\n`;
+      text += `➖ *Vales / Retenções / Caixas:*\n`;
       vales.forEach(v => {
         text += `   - ${v.description}: R$ ${v.amount.toFixed(2).replace('.', ',')}\n`;
       });
-      text += `   *Total Abatido:* - R$ ${acertoData.totalVales.toFixed(2).replace('.', ',')}\n\n`;
+      text += `   *Total Abatido:* R$ ${acertoData.totalVales.toFixed(2).replace('.', ',')}\n\n`;
     }
 
     text += `💵 *TOTAL A RECEBER:* *R$ ${acertoData.finalAmountToPay.toFixed(2).replace('.', ',')}* 💵`;
@@ -369,7 +314,6 @@ export default function MotoboysPage() {
               className="flex-1 h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-zinc-100 focus:border-sky-500 focus:outline-none text-sm" 
               autoFocus
             />
-            {/* SELETOR CUSTOMIZADO SEM SELECT NATIVO */}
             <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-1 shrink-0">
               <button 
                 type="button" 
@@ -467,7 +411,6 @@ export default function MotoboysPage() {
             {activeTab === 'acerto' && acertoData && (
               <div className="flex flex-col gap-4 animate-in slide-in-from-right-4">
                 
-                {/* 🌟 SELETOR DE DATA CUSTOMIZADO E ELEGANTE 🌟 */}
                 <div className="flex flex-col gap-2 bg-zinc-900/60 border border-zinc-800 p-3.5 rounded-2xl">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5">
@@ -487,28 +430,21 @@ export default function MotoboysPage() {
                       type="button" 
                       onClick={() => handleShiftDate(-1)}
                       className="h-12 w-12 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl shrink-0 cursor-pointer transition-all active:scale-95 shadow-sm"
-                      aria-label="Dia Anterior"
                     >
                       <ChevronLeft size={22} />
                     </button>
 
-                    <button 
-                      type="button"
-                      onClick={handleOpenCalendar}
-                      className="flex-1 h-12 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-center gap-2 px-4 font-black text-zinc-100 text-sm tracking-widest shadow-inner hover:bg-zinc-900 transition-colors cursor-pointer active:scale-[0.98]"
-                    >
+                    <div className="flex-1 h-12 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-center px-4 font-black text-zinc-100 text-sm tracking-widest shadow-inner">
                       {(() => {
                         const [y, m, d] = acertoDate.split('-');
                         return `${d}/${m}/${y}`;
                       })()}
-                      <CalendarDays size={14} className="text-zinc-500" />
-                    </button>
+                    </div>
 
                     <button 
                       type="button" 
                       onClick={() => handleShiftDate(1)}
                       className="h-12 w-12 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl shrink-0 cursor-pointer transition-all active:scale-95 shadow-sm"
-                      aria-label="Próximo Dia"
                     >
                       <ChevronRight size={22} />
                     </button>
@@ -538,26 +474,24 @@ export default function MotoboysPage() {
                   <span className="text-xl font-black text-sky-400 mt-1">R$ {acertoData.calculatedAmount.toFixed(2).replace('.', ',')}</span>
                 </div>
 
-                <div className="border-t border-zinc-800 pt-4 flex flex-col gap-3 w-full">
+                <div className="border-t border-zinc-800 pt-4 flex flex-col gap-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Abatimentos / Vales (Opcional)</h3>
-                  
-                  {/* CORREÇÃO DO BOTÃO VAZADO AQUI: min-w-0 e w-full no contêiner */}
-                  <div className="flex gap-2 w-full">
+                  <div className="flex gap-2">
                     <input 
                       type="text" 
                       placeholder="Ex: Lanche" 
                       value={valeDesc} 
                       onChange={(e)=>setValeDesc(e.target.value)} 
-                      className="w-full min-w-0 flex-[3] h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500 outline-none" 
+                      className="flex-[2] h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500 outline-none" 
                     />
                     <input 
                       type="text" 
                       placeholder="R$ 0,00" 
                       value={valeAmount} 
                       onChange={(e)=>setValeAmount(formatCurrencyInput(e.target.value))} 
-                      className="w-full min-w-0 flex-[2] h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500 outline-none font-bold" 
+                      className="flex-1 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 focus:border-red-500 outline-none font-bold" 
                     />
-                    <button onClick={handleAddVale} className="h-11 w-11 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300 hover:bg-zinc-700 shrink-0 cursor-pointer active:scale-95"><PlusCircle size={18}/></button>
+                    <button onClick={handleAddVale} className="h-11 w-11 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300 hover:bg-zinc-700 shrink-0 cursor-pointer"><PlusCircle size={18}/></button>
                   </div>
 
                   {vales.length > 0 && (
@@ -575,7 +509,7 @@ export default function MotoboysPage() {
                   )}
                 </div>
 
-                <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center justify-between mt-2">
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center justify-between">
                   <div className="flex flex-col">
                     <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Total Líquido a Pagar</span>
                     <span className="text-2xl font-black text-emerald-400 mt-0.5">R$ {acertoData.finalAmountToPay.toFixed(2).replace('.', ',')}</span>
@@ -642,7 +576,7 @@ export default function MotoboysPage() {
                         type="text" 
                         value={ruleFixedAmount} 
                         onChange={e => setRuleFixedAmount(formatCurrencyInput(e.target.value))} 
-                        placeholder="R$ 0,00" 
+                        placeholder="0,00" 
                         className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold focus:border-sky-500 outline-none" 
                         required 
                       />
@@ -664,7 +598,7 @@ export default function MotoboysPage() {
                         type="text" 
                         value={ruleExtraFee} 
                         onChange={e => setRuleExtraFee(formatCurrencyInput(e.target.value))} 
-                        placeholder="R$ 0,00" 
+                        placeholder="0,00" 
                         className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold focus:border-sky-500 outline-none" 
                         required 
                       />
@@ -679,7 +613,7 @@ export default function MotoboysPage() {
                       type="text" 
                       value={ruleDeliveryFee} 
                       onChange={e => setRuleDeliveryFee(formatCurrencyInput(e.target.value))} 
-                      placeholder="R$ 0,00" 
+                      placeholder="0,00" 
                       className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold focus:border-sky-500 outline-none" 
                       required 
                     />
@@ -693,7 +627,7 @@ export default function MotoboysPage() {
                       type="text" 
                       value={ruleFixedAmount} 
                       onChange={e => setRuleFixedAmount(formatCurrencyInput(e.target.value))} 
-                      placeholder="R$ 0,00" 
+                      placeholder="0,00" 
                       className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold focus:border-sky-500 outline-none" 
                       required 
                     />
@@ -716,71 +650,6 @@ export default function MotoboysPage() {
           </div>
         </div>
       )}
-
-      {/* ========================================================= */}
-      {/* MODAL DO CALENDÁRIO CUSTOMIZADO (DARK MODE) */}
-      {/* ========================================================= */}
-      {isCalendarOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-3xl p-5 shadow-2xl flex flex-col gap-5">
-            
-            <div className="flex items-center justify-between">
-              <button 
-                type="button"
-                onClick={() => setIsCalendarOpen(false)}
-                className="p-2 text-zinc-500 hover:text-white rounded-full bg-zinc-900 active:scale-95 transition-all"
-              >
-                <X size={18} />
-              </button>
-              <h3 className="font-black text-zinc-100 text-sm uppercase tracking-widest">Selecionar Data</h3>
-              <div className="w-9" /> {/* Spacer para alinhar ao centro */}
-            </div>
-
-            <div className="flex items-center justify-between bg-zinc-900/50 p-2 rounded-2xl border border-zinc-800/80">
-              <button 
-                type="button" 
-                onClick={() => handleShiftCalendarMonth(-1)}
-                className="h-10 w-10 flex items-center justify-center bg-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-700 active:scale-95 transition-all"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <span className="font-bold text-zinc-100 text-sm">
-                {MONTH_NAMES[calendarViewDate.getMonth()]} {calendarViewDate.getFullYear()}
-              </span>
-              <button 
-                type="button" 
-                onClick={() => handleShiftCalendarMonth(1)}
-                className="h-10 w-10 flex items-center justify-center bg-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-700 active:scale-95 transition-all"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <div className="grid grid-cols-7 gap-1 mb-1">
-                {WEEK_DAYS.map((day, i) => (
-                  <span key={i} className="text-center text-[10px] font-black text-zinc-500">{day}</span>
-                ))}
-              </div>
-              <div className="grid grid-cols-7 gap-y-2 gap-x-1 justify-items-center">
-                {renderCalendarDays()}
-              </div>
-            </div>
-
-            <button 
-              type="button"
-              onClick={() => {
-                handleSetToday();
-                setIsCalendarOpen(false);
-              }}
-              className="w-full h-12 rounded-xl border border-emerald-500/30 text-emerald-400 font-bold text-sm bg-emerald-500/10 hover:bg-emerald-500/20 transition-all active:scale-95"
-            >
-              Ir para Hoje
-            </button>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }
