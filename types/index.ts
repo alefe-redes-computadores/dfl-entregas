@@ -61,6 +61,9 @@ export interface Customer {
   last_confirmation_code?: string;
   createdAt?: string;
   updated_at?: string;
+  // 🔥 NOVO: RANKING & FIDELIDADE
+  orderCount?: number; 
+  totalSpent?: number; 
 }
 
 export interface Motoboy {
