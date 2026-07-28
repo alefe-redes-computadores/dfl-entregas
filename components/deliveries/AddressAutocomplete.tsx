@@ -23,37 +23,62 @@ export function AddressAutocomplete({
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [isGoogleReady, setIsGoogleReady] = useState(false);
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
 
-  // Inicializa o serviço do Google Places com segurança
-  const initService = () => {
-    if (typeof window !== 'undefined' && window.google?.maps?.places) {
-      if (!autocompleteService.current) {
-        autocompleteService.current = new google.maps.places.AutocompleteService();
-      }
-      return true;
-    }
-    return false;
-  };
-
+  // 🔥 INJEÇÃO DINÂMICA: O próprio componente carrega o Google Maps
   useEffect(() => {
-    // Tenta carregar imediatamente e faz novas tentativas caso o script do layout demore a injetar
-    if (!initService()) {
-      const timer = setInterval(() => {
-        if (initService()) {
-          clearInterval(timer);
+    const loadGoogleMapsScript = () => {
+      if (typeof window === 'undefined') return;
+
+      if (window.google?.maps?.places) {
+        if (!autocompleteService.current) {
+          autocompleteService.current = new window.google.maps.places.AutocompleteService();
         }
-      }, 500);
-      return () => clearInterval(timer);
-    }
+        setIsGoogleReady(true);
+        return;
+      }
+
+      const existingScript = document.getElementById('google-maps-script');
+      if (existingScript) {
+        existingScript.addEventListener('load', () => {
+          autocompleteService.current = new window.google.maps.places.AutocompleteService();
+          setIsGoogleReady(true);
+        });
+        return;
+      }
+
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        toast.error("Chave da API do Google não encontrada no .env");
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.id = 'google-maps-script';
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        autocompleteService.current = new window.google.maps.places.AutocompleteService();
+        setIsGoogleReady(true);
+      };
+      
+      script.onerror = () => {
+        toast.error("Ocorreu um erro ao carregar o script do Google Maps no dispositivo.");
+      };
+
+      document.head.appendChild(script);
+    };
+
+    loadGoogleMapsScript();
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     onChange(val);
 
-    // Se o serviço do Google ainda não estiver pronto, apenas atualiza o texto sem travar
-    if (!val.trim() || !initService() || !autocompleteService.current) {
+    if (!val.trim() || !isGoogleReady || !autocompleteService.current) {
       setSuggestions([]);
       setIsOpen(false);
       setIsLoading(false);
@@ -62,11 +87,10 @@ export function AddressAutocomplete({
 
     setIsLoading(true);
 
-    // 🔥 TRAVA DE EMERGÊNCIA: Mata o loading se o Google pendurar por mais de 4 segundos
     const timeoutId = setTimeout(() => {
       setIsLoading((prev) => {
         if (prev) {
-          toast.error("O Google Maps não respondeu. Verifique se a tag <script> com a chave foi colocada no app/layout.tsx.");
+          toast.error("O Google Maps demorou demais para responder. Verifique sua internet ou bloqueios.");
           return false;
         }
         return prev;
@@ -82,7 +106,7 @@ export function AddressAutocomplete({
           radius: 30000, 
         },
         (predictions, status) => {
-          clearTimeout(timeoutId); // Cancela o timeout se respondeu a tempo
+          clearTimeout(timeoutId);
           setIsLoading(false);
 
           if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
@@ -113,7 +137,6 @@ export function AddressAutocomplete({
     }
   };
 
-  // 🎙️ DISPARADOR REAL DE DITADO POR VOZ (WEB SPEECH API / ANDROID CHROME)
   const handleVoiceInput = () => {
     const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -188,7 +211,6 @@ export function AddressAutocomplete({
         </button>
       </div>
 
-      {/* Caixa de Sugestões Suspensas do Google Maps */}
       {isOpen && suggestions.length > 0 && (
         <div className="absolute top-20 z-50 w-full flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
           {suggestions.map((item) => (
