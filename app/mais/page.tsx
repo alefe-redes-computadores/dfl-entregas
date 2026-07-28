@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Trash2, CheckSquare, Moon, LogOut, Eye, EyeOff } from 'lucide-react';
+import { RefreshCw, Trash2, CheckSquare, Moon, LogOut, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -11,8 +12,9 @@ export default function MaisPage() {
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
   
-  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
-  const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
+  // Estado para o Modal de Exclusão Segura
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
 
   const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Álefe';
   const fullName = user?.displayName || 'Álefe Jôhsefe';
@@ -23,10 +25,23 @@ export default function MaisPage() {
     });
   };
 
-  const handleClear = () => {
+  const handleOpenClearModal = () => {
+    setConfirmText(''); // Limpa o texto ao abrir
+    setIsClearModalOpen(true);
+  };
+
+  const handleConfirmClear = () => {
+    if (confirmText.trim().toLowerCase() !== 'excluir') {
+      toast.error('Texto incorreto. Digite "excluir" para confirmar.');
+      return;
+    }
+    
+    // Como a limpeza está bloqueada nessa fase, mostramos a mensagem de desabilitada
+    // Se no futuro você liberar a função real no store, é só colocar a chamada aqui!
     toast.error('Função desabilitada', {
       description: 'Por segurança, a limpeza de dados está bloqueada nesta fase.',
     });
+    setIsClearModalOpen(false);
   };
 
   const handleLogout = async () => {
@@ -59,16 +74,15 @@ export default function MaisPage() {
         </div>
       </div>
 
-      {/* OPERAÇÃO (Modo Privacidade e iFood) */}
+      {/* OPERAÇÃO (Apenas iFood) */}
       <div className="flex flex-col gap-2">
         <h3 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
           Operação Diária
         </h3>
         <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
-          
           <button
             onClick={() => router.push('/confirmar')}
-            className="flex w-full items-center gap-4 p-4 border-b border-zinc-800/80 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30"
+            className="flex w-full items-center gap-4 p-4 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
               <CheckSquare size={20} />
@@ -76,24 +90,6 @@ export default function MaisPage() {
             <div className="flex-1 text-left">
               <p className="font-semibold text-zinc-100">Confirmar Entregas</p>
               <p className="text-xs text-zinc-500">Portal do iFood embutido</p>
-            </div>
-          </button>
-
-          <button
-            onClick={togglePrivacyMode}
-            className="flex w-full items-center justify-between gap-4 p-4 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30"
-          >
-            <div className="flex items-center gap-4">
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors ${isPrivacyMode ? 'bg-sky-500/15 text-sky-500' : 'bg-zinc-800 text-zinc-400'}`}>
-                {isPrivacyMode ? <EyeOff size={20} /> : <Eye size={20} />}
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-zinc-100">Modo Privacidade</p>
-                <p className="text-xs text-zinc-500">Ocultar faturamento na Home</p>
-              </div>
-            </div>
-            <div className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${isPrivacyMode ? 'bg-sky-500' : 'bg-zinc-700'}`}>
-              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${isPrivacyMode ? 'translate-x-6' : 'translate-x-1'}`} />
             </div>
           </button>
         </div>
@@ -130,7 +126,7 @@ export default function MaisPage() {
           </button>
 
           <button
-            onClick={handleClear}
+            onClick={handleOpenClearModal}
             className="flex w-full items-center gap-4 p-4 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-500">
@@ -151,6 +147,59 @@ export default function MaisPage() {
         <LogOut size={16} />
         Sair da conta
       </button>
+
+      {/* ========================================================= */}
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO (ESTILO FIREBASE)        */}
+      {/* ========================================================= */}
+      {isClearModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-sm bg-zinc-950 border border-red-500/30 rounded-3xl p-6 shadow-2xl flex flex-col gap-5">
+            
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="h-14 w-14 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                <AlertTriangle size={28} />
+              </div>
+              <div>
+                <h3 className="font-heading text-lg font-black text-zinc-50">Apagar Dados Locais</h3>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Isso removerá todas as rotas e entregas do seu aparelho. Essa ação <strong className="text-red-400">não pode ser desfeita</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 mt-2">
+              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-wider text-center">
+                Digite "excluir" para confirmar
+              </label>
+              <input
+                type="text"
+                placeholder="excluir"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                className="h-12 rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-center text-zinc-100 font-bold tracking-widest placeholder:text-zinc-700 placeholder:font-normal focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none transition-all"
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="flex gap-3 mt-2">
+              <button
+                onClick={() => setIsClearModalOpen(false)}
+                className="flex-1 h-12 rounded-xl bg-zinc-800 text-zinc-300 font-bold hover:bg-zinc-700 active:scale-95 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmClear}
+                disabled={confirmText.trim().toLowerCase() !== 'excluir'}
+                className="flex-1 h-12 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all active:scale-95 disabled:opacity-40 disabled:active:scale-100 disabled:cursor-not-allowed shadow-lg shadow-red-500/20"
+              >
+                Apagar Tudo
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
