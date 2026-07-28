@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, Store, Smartphone, Trash2, Banknote, QrCode, CreditCard, ChevronDown } from 'lucide-react';
+import { ChevronLeft, Store, Smartphone, Trash2, Banknote, QrCode, CreditCard, ChevronDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
@@ -35,6 +35,7 @@ function DeliveryDetailsForm() {
   const [mapsLink, setMapsLink] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<Delivery['payment_method']>('dinheiro');
   const [isPaid, setIsPaid] = useState(false);
+  const [isUrgent, setIsUrgent] = useState(false); // 🔥 NOVO ESTADO DE URGÊNCIA
   const [changeFor, setChangeFor] = useState('');
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
@@ -77,7 +78,7 @@ function DeliveryDetailsForm() {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l);
     let extractedStreet = '';
     let extractedNeighborhood = '';
-    let extractedObs = observation; // Mantém o que já estiver digitado
+    let extractedObs = observation; 
 
     let addressLines: string[] = [];
 
@@ -163,6 +164,7 @@ function DeliveryDetailsForm() {
       setPaymentMethod(method as any);
       
       setIsPaid(delivery.is_paid);
+      setIsUrgent((delivery as any).is_urgent || false); // 🔥 CARREGA ESTADO DE URGÊNCIA
       setChangeFor(delivery.change_for ? delivery.change_for.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
       setDrinks(delivery.drinks || '');
       setObservation(delivery.observation || '');
@@ -215,6 +217,7 @@ function DeliveryDetailsForm() {
         customer_id: customerId || '',
         value: cleanValue,
         is_paid: isPaid,
+        is_urgent: isUrgent, // 🔥 SALVA O ESTADO DE URGÊNCIA
         payment_method: paymentMethod,
         change_for: cleanChangeFor,
         address_string: fullAddressString,
@@ -369,7 +372,7 @@ function DeliveryDetailsForm() {
           <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800 mt-2">
             <div className="flex flex-col">
               <span className="font-bold text-zinc-200">Pedido já está pago?</span>
-              <span className="text-xs text-zinc-500">Marque se já foi recebido no iFood/Loja</span>
+              <span className="text-xs text-zinc-500">Marque se já foi recebido</span>
             </div>
             <button type="button" onClick={() => setIsPaid(!isPaid)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 ${isPaid ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
               <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${isPaid ? 'translate-x-7' : 'translate-x-1'}`} />
@@ -384,12 +387,25 @@ function DeliveryDetailsForm() {
           </div>
         )}
 
+        {/* 🔥 TOGGLE URGENTE AQUI 🔥 */}
+        <div className={`flex items-center justify-between p-4 rounded-2xl mt-4 transition-all border ${isUrgent ? 'bg-red-500/10 border-red-500/30' : 'bg-zinc-900/50 border-zinc-800'}`}>
+          <div className="flex flex-col">
+            <span className={`font-bold flex items-center gap-2 ${isUrgent ? 'text-red-400' : 'text-zinc-300'}`}>
+              <AlertTriangle size={18} className={isUrgent ? "text-red-500" : "text-zinc-500"} /> 
+              Entrega Urgente?
+            </span>
+            <span className="text-[10px] text-zinc-500 mt-0.5">Prioridade máxima na rota inteligente</span>
+          </div>
+          <button type="button" onClick={() => setIsUrgent(!isUrgent)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 ${isUrgent ? 'bg-red-500' : 'bg-zinc-700'}`}>
+            <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${isUrgent ? 'translate-x-7' : 'translate-x-1'}`} />
+          </button>
+        </div>
+
         <div className="flex flex-col gap-2 border-t border-zinc-800 pt-5 mt-2">
           <label className="text-sm font-semibold text-zinc-400">Bebidas (Opcional)</label>
           <input type="text" placeholder="Ex: 1 Coca 2L" value={drinks} onChange={(e) => setDrinks(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
         </div>
 
-        {/* CAMPO DO MAPS REINSERIDO */}
         <div className="flex flex-col gap-2 border-t border-zinc-800 pt-5 mt-2">
           <label className="text-sm font-semibold text-zinc-400">Link do Maps (Opcional)</label>
           <input type="text" placeholder="Ex: https://maps.app.goo.gl/..." value={mapsLink} onChange={(e) => setMapsLink(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
