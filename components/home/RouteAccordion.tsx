@@ -9,6 +9,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { DeliveryCard } from '@/components/home/DeliveryCard';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { copyFullRouteToClipboard } from '@/lib/whatsapp'; // 🔥 FUNÇÃO IMPORTADA AQUI
 
 interface RouteAccordionProps {
   route: Route;
@@ -46,8 +47,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   // Filtra as pendentes e já ordena (Urgentes > Ordem Manual > Data)
   const pendingDeliveries = [...deliveries].filter(d => !d.completed).sort((a, b) => {
-    const aUrgent = (a as any).is_urgent ? 1 : 0;
-    const bUrgent = (b as any).is_urgent ? 1 : 0;
+    const aUrgent = a.is_urgent ? 1 : 0;
+    const bUrgent = b.is_urgent ? 1 : 0;
     
     if (aUrgent !== bUrgent) return bUrgent - aUrgent;
     
@@ -123,7 +124,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     toast.success('Maps aberto com fura-fila aplicado! 🗺️');
   };
 
-  // 🧠 O CÉREBRO DA ROTA COMPLETA NO WHATSAPP
+  // 🔥 CHAMA A FUNÇÃO LIMPA DO NOSSO ARQUIVO WHATSAPP 🔥
   const handleShareFullRoute = async () => {
     if (pendingDeliveries.length === 0) {
       toast.error('Não há entregas pendentes para compartilhar.');
@@ -131,80 +132,20 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     }
 
     const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-    let hasFuzzyAddresses = false;
-    const parts: string[] = [];
+    const { success, hasFuzzyAddresses } = await copyFullRouteToClipboard(
+      route, 
+      pendingDeliveries, 
+      storeAddr, 
+      getCustomerById
+    );
     
-    parts.push(`🏍️ *ROTA DE ENTREGA - ${route.motoboy_name.toUpperCase()}*`);
-    parts.push(`📍 *Base:* ${storeAddr}\n`);
-
-    // Geração do Link do Maps com Waypoints
-    const waypoints = pendingDeliveries.map(d => encodeURIComponent(d.address_string)).join('/');
-    const mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(storeAddr)}/${waypoints}`;
-    parts.push(`🗺️ *LINK DO MAPA (Siga a Ordem):*`);
-    parts.push(`${mapUrl}\n`);
-    parts.push(`📦 *RESUMO DAS PARADAS:*\n`);
-
-    const fuzzyDeliveries: any[] = [];
-
-    // Loop de Montagem das Entregas
-    pendingDeliveries.forEach((delivery, index) => {
-      const customer = getCustomerById(delivery.customer_id);
-      const name = customer?.name || 'Cliente Desconhecido';
-      const isUrgent = (delivery as any).is_urgent;
-      
-      // Heurística de Endereço Impreciso (Sem número e sem link exato do maps)
-      const hasNumber = /\d/.test(delivery.address_string);
-      const isFuzzy = !hasNumber && !delivery.maps_link;
-
-      if (isFuzzy) {
-        hasFuzzyAddresses = true;
-        fuzzyDeliveries.push({ index: index + 1, name, address: delivery.address_string, neighborhood: customer?.neighborhood });
-      }
-
-      // Título da Parada
-      parts.push(`*${index + 1}. ${name}* ${isUrgent ? '🚨 (URGENTE)' : ''}`);
-      
-      // Endereço
-      parts.push(`📍 ${delivery.address_string}`);
-      if (delivery.observation) parts.push(`*OBS:* ${delivery.observation}`);
-
-      // Pagamento
-      const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
-      if (delivery.is_paid) {
-        parts.push(`💳 *PAGO*`);
-      } else {
-        const pMethod = delivery.payment_method.toUpperCase().replace('_', ' ');
-        if (delivery.payment_method === 'dinheiro' && delivery.change_for) {
-          parts.push(`💵 *${pMethod}* - R$ ${valueStr} (Levar troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})`);
-        } else {
-          parts.push(`💵 *${pMethod}* - R$ ${valueStr}`);
-        }
-      }
-
-      // Bebidas
-      if (delivery.drinks) parts.push(`🥤 *${delivery.drinks.trim()}*`);
-      
-      parts.push(''); // Pula uma linha entre entregas
-    });
-
-    // Se encontrou endereços problemáticos, cria um rodapé de alerta
-    if (fuzzyDeliveries.length > 0) {
-      parts.push(`⚠️ *ATENÇÃO: ENDEREÇOS POSSIVELMENTE IMPRECISOS (Rua Nova/S/N)*`);
-      fuzzyDeliveries.forEach(fd => {
-        parts.push(`- *Parada ${fd.index} (${fd.name}):* O GPS pode falhar. Procure pelo bairro: *${fd.neighborhood || 'Não informado'}*.`);
-      });
-    }
-
-    const textToCopy = parts.join('\n');
-
-    try {
-      await navigator.clipboard.writeText(textToCopy);
+    if (success) {
       if (hasFuzzyAddresses) {
         toast.warning('Rota copiada! Algumas entregas parecem não ter número e foram alertadas na mensagem.', { duration: 5000 });
       } else {
         toast.success('Resumo da rota copiado com sucesso! Pronto para colar no WhatsApp.');
       }
-    } catch (error) {
+    } else {
       toast.error('Erro ao copiar a rota para a área de transferência.');
     }
   };
@@ -302,7 +243,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
           <div className="mt-2 flex flex-col gap-2">
             
-            {/* 🔥 BOTÕES DE AÇÃO INTELIGENTES 🔥 */}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && (
               <div className="grid grid-cols-2 gap-2 mb-1">
                 <button
