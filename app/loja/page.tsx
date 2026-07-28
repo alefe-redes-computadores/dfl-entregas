@@ -11,6 +11,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; // 🔥 IMPORTAÇÃO DO AUTOCOMPLETE
 
 const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -41,7 +42,7 @@ export default function LojaPage() {
   const [activeDays, setActiveDays] = useState<number[]>([1, 2, 3, 4, 5, 6, 0]); 
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   
-  // Novo estado para o endereço base
+  // Endereço base integrado com o Autocomplete
   const [storeAddress, setStoreAddress] = useState('Patos de Minas, MG');
 
   // Estados dos Spinners Customizados
@@ -292,17 +293,13 @@ export default function LojaPage() {
         
         <form onSubmit={handleSaveSchedule} className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden p-4 gap-5">
           
-          {/* NOVO CAMPO: ENDEREÇO DA LANCHONETE (PONTO DE ORIGEM DA ROTA) */}
+          {/* ENDEREÇO DA LANCHONETE INTEGRADO COM GOOGLE MAPS AUTOCOMPLETE & VOZ */}
           <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-zinc-400 uppercase tracking-wider">
-              <MapPin size={14} className="text-indigo-400" /> Endereço Base (Origem)
-            </label>
-            <input 
-              type="text"
+            <AddressAutocomplete 
               value={storeAddress}
-              onChange={(e) => setStoreAddress(e.target.value)}
+              onChange={setStoreAddress}
               placeholder="Rua, Número, Bairro, Cidade - MG"
-              className="h-12 w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 text-sm font-semibold text-zinc-100 placeholder:text-zinc-600 focus:border-indigo-500 outline-none transition-all"
+              label="Endereço Base (Origem)"
             />
             <p className="text-[10px] text-zinc-500 leading-tight">Este endereço será usado como ponto de partida para organizar a rota inteligente dos motoboys no mapa.</p>
           </div>
