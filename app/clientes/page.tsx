@@ -14,7 +14,7 @@ export default function ClientesPage() {
   const updateCustomer = useAppStore((state) => state.updateCustomer);
   
   const [search, setSearch] = useState('');
-  const [originFilter, setOriginFilter] = useState<'all' | 'ifood' | 'loja' | 'ranking'>('all'); // 🔥 NOVO FILTRO RANKING
+  const [originFilter, setOriginFilter] = useState<'all' | 'ifood' | 'loja' | 'ranking'>('all');
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   // Estados do Modal de Edição
@@ -41,10 +41,12 @@ export default function ClientesPage() {
     if (originFilter === 'ifood') return matchesSearch && isIfood;
     if (originFilter === 'loja') return matchesSearch && !isIfood;
     
-    // O ranking ignora origem, mas respeita a busca
+    // 🔥 CORREÇÃO: No Ranking, SÓ ENTRA quem tiver pelo menos 1 pedido!
+    if (originFilter === 'ranking') return matchesSearch && (c.orderCount || 0) > 0;
+    
     return matchesSearch;
   }).sort((a, b) => {
-    // 🔥 ORDENAÇÃO: Se o filtro for 'ranking', ordena pelo maior número de pedidos primeiro
+    // 🔥 ORDENAÇÃO: O Ranking ordena do maior para o menor número de pedidos
     if (originFilter === 'ranking') {
        const countA = a.orderCount || 0;
        const countB = b.orderCount || 0;
@@ -110,7 +112,7 @@ export default function ClientesPage() {
         />
       </div>
 
-      {/* Filtros Rápidos (Todos / iFood / Loja / Ranking) */}
+      {/* Filtros Rápidos (Todos / Ranking / iFood / Loja) */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
         <button
           onClick={() => setOriginFilter('all')}
@@ -123,7 +125,6 @@ export default function ClientesPage() {
           <Filter size={14} /> Todos ({customers.length})
         </button>
         
-        {/* 🔥 NOVO BOTÃO DE RANKING */}
         <button
           onClick={() => setOriginFilter('ranking')}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
@@ -157,11 +158,23 @@ export default function ClientesPage() {
         </button>
       </div>
 
-      {/* Lista de Clientes */}
+      {/* Lista de Clientes ou Tela Vazia */}
       <div className="flex flex-col gap-3 pb-10">
         {filtered.length === 0 ? (
-          <div className="py-10 text-center text-sm text-zinc-500">
-            {search || originFilter !== 'all' ? 'Nenhum cliente encontrado com esses filtros.' : 'Nenhum cliente cadastrado ainda.'}
+          <div className="py-14 flex flex-col items-center justify-center gap-3 text-center px-6 border border-dashed border-zinc-800/80 rounded-[28px] bg-zinc-950/30">
+            {originFilter === 'ranking' ? (
+              <>
+                <div className="h-16 w-16 bg-amber-500/10 text-amber-500 flex items-center justify-center rounded-full mb-2 border border-amber-500/20">
+                  <Trophy size={28} />
+                </div>
+                <p className="text-zinc-300 font-bold text-lg">O Pódio está vazio!</p>
+                <p className="text-xs text-zinc-500 leading-relaxed">Nenhum cliente contabilizou pedidos ainda.<br/>Lance novas entregas para ver o ranking ganhar vida.</p>
+              </>
+            ) : (
+              <p className="text-sm text-zinc-500">
+                {search || originFilter !== 'all' ? 'Nenhum cliente encontrado com esses filtros.' : 'Nenhum cliente cadastrado ainda.'}
+              </p>
+            )}
           </div>
         ) : (
           filtered.map((client, index) => {
@@ -267,7 +280,7 @@ export default function ClientesPage() {
         )}
       </div>
 
-      {/* MODAL DE EDIÇÃO PERMANECE INTACTO */}
+      {/* MODAL DE EDIÇÃO */}
       {editingCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-5 shadow-2xl">
