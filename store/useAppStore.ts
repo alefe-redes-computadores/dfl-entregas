@@ -17,6 +17,7 @@ interface AppState {
   motoboys: Motoboy[];
   selectedDate: Date;
   isSyncing: boolean;
+  syncError: boolean; // <-- NOVO: ESTADO DE ERRO DE CONEXÃO
   isPrivacyMode: boolean; 
   routeAlertsEnabled: boolean;
   theme: 'dark' | 'light' | 'system';
@@ -80,6 +81,7 @@ export const useAppStore = create<AppState>()(
       motoboys: [],
       selectedDate: new Date(),
       isSyncing: false,
+      syncError: false, // <-- INICIA SEM ERRO
       isPrivacyMode: false,
       routeAlertsEnabled: false,
       theme: 'system',
@@ -131,7 +133,10 @@ export const useAppStore = create<AppState>()(
 
       initData: async () => {
         if (!get().hasHydrated) return;
-        set({ isSyncing: true });
+        
+        // Zera o erro e inicia a sincronização
+        set({ isSyncing: true, syncError: false }); 
+        
         try {
           const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
@@ -180,11 +185,13 @@ export const useAppStore = create<AppState>()(
             deliveries: mergedDeliveries,
             customers: mergedCustomers,
             motoboys: mergedMotoboys,
-            isSyncing: false
+            isSyncing: false,
+            syncError: false // TUDO DEU CERTO!
           });
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
-          set({ isSyncing: false });
+          // SE DEU ERRO (SEM INTERNET OU FIREBASE CAIU), ELE AVISA AQUI:
+          set({ isSyncing: false, syncError: true }); 
         }
       },
 
@@ -467,7 +474,7 @@ export const useAppStore = create<AppState>()(
         isPrivacyMode: state.isPrivacyMode,
         routeAlertsEnabled: state.routeAlertsEnabled,
         theme: state.theme,
-        storeSettings: state.storeSettings // <-- ADICIONADO AQUI NA PERSISTÊNCIA
+        storeSettings: state.storeSettings // Mantive perfeitamente!
       }),
       onRehydrateStorage: () => (state) => { 
         state?.setHasHydrated(true); 
