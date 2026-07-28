@@ -2,10 +2,11 @@
 // DFL Entregas — Tipagens Globais
 // ============================================================================
 
-export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debito';
+export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debito' | 'cartao';
 export type RouteStatus = 'aberta' | 'fechada';
 export type OrderOrigin = 'ifood' | 'loja';
 export type PaymentRuleType = 'fixed' | 'per_delivery' | 'fixed_plus_variable';
+export type MotoboyType = 'fixo' | 'avulso'; // 🔥 Tipagem do tipo de motoboy
 
 export interface MotoboyPaymentRule {
   type: PaymentRuleType;
@@ -45,6 +46,7 @@ export interface Delivery {
   drinks?: string;
   completed?: boolean;
   order_index?: number; 
+  is_urgent?: boolean; // 🔥 AQUI ESTÁ A CHAVE DA URGÊNCIA (FURA-FILA)
   updated_at?: string;
 }
 
@@ -65,6 +67,7 @@ export interface Motoboy {
   id: string;
   name: string;
   active: boolean; 
+  type?: MotoboyType; // 🔥 Agora o TypeScript sabe que o motoboy pode ser fixo ou avulso
   payment_rule?: MotoboyPaymentRule; // <-- Cérebro Financeiro do Motoboy
   createdAt?: string;
   updated_at?: string;
