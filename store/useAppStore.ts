@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from '@/lib/firebase';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor } from '@core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import type { Route, Delivery, Customer, OrderOrigin, Motoboy } from '@/types';
 
@@ -301,34 +301,9 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
           await setDoc(doc(db, 'deliveries', delivery.id), safeData);
-
-          // 🔥 SISTEMA DE RANKING & FIDELIDADE (Auto-Incremento)
-          if (delivery.customer_id) {
-            const state = get();
-            const customer = state.customers.find(c => c.id === delivery.customer_id);
-            
-            if (customer) {
-              const currentOrders = customer.orderCount || 0;
-              const currentSpent = customer.totalSpent || 0;
-              
-              const updatedCustomerData = {
-                orderCount: currentOrders + 1,
-                totalSpent: currentSpent + (delivery.value || 0),
-                updated_at: now
-              };
-
-              // Atualiza o estado local do Zustand
-              set((prev) => ({
-                customers: prev.customers.map((c) => 
-                  c.id === customer.id ? { ...c, ...updatedCustomerData } : c
-                )
-              }));
-
-              // Salva na nuvem (Firebase)
-              const safeCustomerData = sanitizeForFirebase(updatedCustomerData);
-              await updateDoc(doc(db, 'customers', customer.id), safeCustomerData);
-            }
-          }
+          
+          // NOTA: O incremento do ranking foi removido daqui a pedido do desenvolvedor 
+          // e movido para a função updateDelivery (quando a entrega é concluída).
         } catch (error) { 
           console.error(error); 
         }
@@ -336,6 +311,9 @@ export const useAppStore = create<AppState>()(
 
       updateDelivery: async (id, updatedData) => {
         const dataWithTimestamp: Partial<Delivery> = { ...updatedData, updated_at: new Date().toISOString() };
+        
+        const state = get();
+        const deliveryToUpdate = state.deliveries.find((d) => d.id === id);
         
         set((state) => ({
           deliveries: state.deliveries.map((d) => d.id === id ? { ...d, ...dataWithTimestamp } as Delivery : d)
@@ -345,17 +323,49 @@ export const useAppStore = create<AppState>()(
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await updateDoc(doc(db, 'deliveries', id), safeData);
 
-          if (updatedData.completed === true) {
-            const state = get();
-            const delivery = state.deliveries.find(d => d.id === id);
-            if (delivery) {
-              const routeDeliveries = state.deliveries.filter(d => d.route_id === delivery.route_id);
-              const allDone = routeDeliveries.length > 0 && routeDeliveries.every(d => d.completed);
-              if (allDone) {
-                const route = state.routes.find(r => r.id === delivery.route_id);
-                if (route && route.status === 'aberta') {
-                  await state.closeRoute(route.id);
-                }
+          // 🔥 LÓGICA DO RANKING VIP NO FECHAMENTO DA ENTREGA
+          if (updatedData.completed !== undefined && deliveryToUpdate?.customer_id) {
+             const customer = state.customers.find(c => c.id === deliveryToUpdate.customer_id);
+             
+             if (customer) {
+               let newCount = customer.orderCount || 0;
+               let newSpent = customer.totalSpent || 0;
+               const deliveryValue = deliveryToUpdate.value || 0;
+
+               if (updatedData.completed === true) {
+                 newCount += 1; // Soma pedido
+                 newSpent += deliveryValue; // Soma valor
+               } else if (updatedData.completed === false) {
+                 newCount = Math.max(0, newCount - 1); // Remove pedido (Desfazer)
+                 newSpent = Math.max(0, newSpent - deliveryValue); // Remove valor (Desfazer)
+               }
+
+               const updatedCustomerData = {
+                 orderCount: newCount,
+                 totalSpent: newSpent,
+                 updated_at: new Date().toISOString()
+               };
+
+               set((prev) => ({
+                 customers: prev.customers.map((c) => 
+                   c.id === customer.id ? { ...c, ...updatedCustomerData } : c
+                 )
+               }));
+
+               const safeCustomerData = sanitizeForFirebase(updatedCustomerData);
+               await updateDoc(doc(db, 'customers', customer.id), safeCustomerData);
+             }
+          }
+
+          // Lógica de fechamento automático da rota 
+          if (updatedData.completed === true && deliveryToUpdate) {
+            const currentState = get();
+            const routeDeliveries = currentState.deliveries.filter(d => d.route_id === deliveryToUpdate.route_id);
+            const allDone = routeDeliveries.length > 0 && routeDeliveries.every(d => d.completed);
+            if (allDone) {
+              const route = currentState.routes.find(r => r.id === deliveryToUpdate.route_id);
+              if (route && route.status === 'aberta') {
+                await currentState.closeRoute(route.id);
               }
             }
           }
