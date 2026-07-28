@@ -5,6 +5,12 @@ export async function copyDeliveryToClipboard(delivery: Delivery): Promise<boole
     const parts: string[] = [];
     const isIfood = delivery.origin === 'ifood' || !delivery.origin;
     const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
+    const isUrgent = (delivery as any).is_urgent;
+
+    // 🔥 ALERTA DE URGÊNCIA NO TOPO DA MENSAGEM
+    if (isUrgent) {
+      parts.push(`🚨 *ENTREGA URGENTE* 🚨\n`);
+    }
 
     // 1. Número do pedido e ID lado a lado em negrito (SOMENTE IFOOD)
     if (isIfood) {
