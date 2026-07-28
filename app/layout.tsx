@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import Script from 'next/script'; // 🔥 IMPORT DO SCRIPT DO NEXT.JS
 import './globals.css';
 
 const poppins = Poppins({
@@ -66,13 +67,16 @@ export default function RootLayout({
           </AuthGuard>
         </ErrorBoundary>
 
-        {/* 🗺️ SCRIPT GLOBAL DO GOOGLE MAPS (PLACES AUTOCOMPLETE) */}
-        {googleMapsApiKey && (
-          <script 
+        {/* 🗺️ SCRIPT GLOBAL DO GOOGLE MAPS CORRIGIDO */}
+        {googleMapsApiKey ? (
+          <Script 
             src={`https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places`}
-            async
-            defer
+            strategy="beforeInteractive"
           />
+        ) : (
+          <Script id="google-maps-missing-key" strategy="afterInteractive">
+            {`console.error('🚨 CHAVE DO GOOGLE MAPS AUSENTE: Verifique se o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY está no seu arquivo .env durante o build.');`}
+          </Script>
         )}
       </body>
     </html>
