@@ -44,11 +44,11 @@ export function AddressAutocomplete({
 
     setIsLoading(true);
     
-    autocompleteService.current.getPlacePredictions(
+        autocompleteService.current.getPlacePredictions(
       {
         input: val,
         componentRestrictions: { country: 'br' },
-        location: new google.maps.LatLng(-18.5789, -46.5181),
+        location: new google.maps.LatLng(-18.5789, -46.5181), // Foco em Patos de Minas
         radius: 30000, 
       },
       (predictions, status) => {
@@ -59,10 +59,15 @@ export function AddressAutocomplete({
         } else {
           setSuggestions([]);
           setIsOpen(false);
+          
+          // 🔥 ALARME NA TELA: Mostra o erro exato do Google
+          if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+             toast.error(`Bloqueio do Google Maps: ${status}`);
+          }
         }
       }
     );
-  };
+
 
   const handleSelectPrediction = (prediction: google.maps.places.AutocompletePrediction) => {
     onChange(prediction.description);
