@@ -61,31 +61,47 @@ export function AddressAutocomplete({
     }
 
     setIsLoading(true);
-    
-    // Dispara a busca no Google Maps
-    autocompleteService.current.getPlacePredictions(
-      {
-        input: val,
-        componentRestrictions: { country: 'br' },
-        location: new google.maps.LatLng(-18.5789, -46.5181), // Coordenadas de Patos de Minas
-        radius: 30000, 
-      },
-      (predictions, status) => {
-        setIsLoading(false);
-        if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
-          setSuggestions(predictions);
-          setIsOpen(true);
-        } else {
-          setSuggestions([]);
-          setIsOpen(false);
-          
-          // 🔥 ALARME NA TELA: Mostra o erro exato do Google se não for apenas "sem resultados"
-          if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-             toast.error(`Bloqueio do Google Maps: ${status}`);
+
+    // 🔥 TRAVA DE EMERGÊNCIA: Mata o loading se o Google pendurar por mais de 4 segundos
+    const timeoutId = setTimeout(() => {
+      setIsLoading((prev) => {
+        if (prev) {
+          toast.error("O Google Maps não respondeu. Verifique se a tag <script> com a chave foi colocada no app/layout.tsx.");
+          return false;
+        }
+        return prev;
+      });
+    }, 4000);
+
+    try {
+      autocompleteService.current.getPlacePredictions(
+        {
+          input: val,
+          componentRestrictions: { country: 'br' },
+          location: new google.maps.LatLng(-18.5789, -46.5181),
+          radius: 30000, 
+        },
+        (predictions, status) => {
+          clearTimeout(timeoutId); // Cancela o timeout se respondeu a tempo
+          setIsLoading(false);
+
+          if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+            setSuggestions(predictions);
+            setIsOpen(true);
+          } else {
+            setSuggestions([]);
+            setIsOpen(false);
+            if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+               toast.error(`Bloqueio do Google Maps: ${status}`);
+            }
           }
         }
-      }
-    );
+      );
+    } catch (error) {
+      clearTimeout(timeoutId);
+      setIsLoading(false);
+      toast.error("Erro interno ao tentar contatar o Google Maps.");
+    }
   };
 
   const handleSelectPrediction = (prediction: google.maps.places.AutocompletePrediction) => {
