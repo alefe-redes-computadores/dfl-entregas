@@ -6,6 +6,7 @@ import { ChevronLeft, Store, Smartphone, Banknote, QrCode, CreditCard, ChevronDo
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
+import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; // 🔥 ADICIONADO
 import type { Delivery, OrderOrigin, Customer } from '@/types';
 
 export default function NovaEntregaPage() {
@@ -29,7 +30,7 @@ export default function NovaEntregaPage() {
   const [mapsLink, setMapsLink] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<Delivery['payment_method']>('dinheiro');
   const [isPaid, setIsPaid] = useState(false);
-  const [isUrgent, setIsUrgent] = useState(false); // 🔥 NOVO ESTADO DE URGÊNCIA
+  const [isUrgent, setIsUrgent] = useState(false);
   const [changeFor, setChangeFor] = useState('');
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
@@ -62,7 +63,7 @@ export default function NovaEntregaPage() {
     toast.success('Endereço preenchido automaticamente! 🪄');
   };
 
-  // 🧠 FATIADOR DE ENDEREÇO 2.0 (CIRÚRGICO)
+  // 🧠 FATIADOR DE ENDEREÇO 2.0 (CIRÚRGICO) - Mantido como fallback
   const handleAddressPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const text = e.clipboardData.getData('text');
@@ -167,7 +168,7 @@ export default function NovaEntregaPage() {
         customer_id: customerId || '',
         value: cleanValue,
         is_paid: isPaid,
-        is_urgent: isUrgent, // 🔥 AGORA O TYPESCRIPT DEIXA PASSAR
+        is_urgent: isUrgent,
         payment_method: paymentMethod,
         change_for: cleanChangeFor,
         address_string: fullAddressString,
@@ -283,10 +284,15 @@ export default function NovaEntregaPage() {
           </div>
         </div>
 
+        {/* 🔥 BLOCO DE ENDEREÇO SUBSTITUÍDO 🔥 */}
         <div className="flex flex-col gap-4 border-t border-zinc-800 pt-4">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-zinc-400">Rua e Número*</label>
-            <input type="text" placeholder="Ex: Rua Sonilda Casimiro Silva, 43" value={streetAddress} onChange={(e) => setStreetAddress(e.target.value)} onPaste={handleAddressPaste} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" required />
+            <AddressAutocomplete 
+              value={streetAddress} 
+              onChange={setStreetAddress} 
+              placeholder="Ex: Rua Sonilda Casimiro Silva, 43"
+              label="Rua e Número*"
+            />
           </div>
           
           <div className="flex flex-col gap-2">
@@ -332,7 +338,7 @@ export default function NovaEntregaPage() {
           </div>
         )}
 
-        {/* 🔥 TOGGLE URGENTE AQUI 🔥 */}
+        {/* TOGGLE URGENTE */}
         <div className={`flex items-center justify-between p-4 rounded-2xl mt-4 transition-all border ${isUrgent ? 'bg-red-500/10 border-red-500/30' : 'bg-zinc-900/50 border-zinc-800'}`}>
           <div className="flex flex-col">
             <span className={`font-bold flex items-center gap-2 ${isUrgent ? 'text-red-400' : 'text-zinc-300'}`}>
