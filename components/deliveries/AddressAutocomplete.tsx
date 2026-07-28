@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { MapPin, Mic, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface AddressAutocompleteProps {
   value: string;
@@ -23,9 +24,26 @@ export function AddressAutocomplete({
   const [isOpen, setIsOpen] = useState(false);
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
 
+  // Inicializa o serviço do Google Places com segurança
+  const initService = () => {
+    if (typeof window !== 'undefined' && window.google?.maps?.places) {
+      if (!autocompleteService.current) {
+        autocompleteService.current = new google.maps.places.AutocompleteService();
+      }
+      return true;
+    }
+    return false;
+  };
+
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
-      autocompleteService.current = new google.maps.places.AutocompleteService();
+    // Tenta carregar imediatamente e faz novas tentativas caso o script do layout demore a injetar
+    if (!initService()) {
+      const timer = setInterval(() => {
+        if (initService()) {
+          clearInterval(timer);
+        }
+      }, 500);
+      return () => clearInterval(timer);
     }
   }, []);
 
@@ -33,7 +51,8 @@ export function AddressAutocomplete({
     const val = e.target.value;
     onChange(val);
 
-    if (!val.trim() || !autocompleteService.current) {
+    // Se o serviço do Google ainda não estiver pronto, apenas atualiza o texto sem travar
+    if (!val.trim() || !initService() || !autocompleteService.current) {
       setSuggestions([]);
       setIsOpen(false);
       setIsLoading(false);
@@ -42,7 +61,6 @@ export function AddressAutocomplete({
 
     setIsLoading(true);
     
-    // Restringe e prioriza a busca em Patos de Minas - MG
     autocompleteService.current.getPlacePredictions(
       {
         input: val,
@@ -56,8 +74,6 @@ export function AddressAutocomplete({
           setSuggestions(predictions);
           setIsOpen(true);
         } else {
-          // Loga no console o status exato caso o Google recuse (ex: REQUEST_DENIED)
-          console.warn("Status do Google Places Autocomplete:", status);
           setSuggestions([]);
           setIsOpen(false);
         }
@@ -74,10 +90,14 @@ export function AddressAutocomplete({
     }
   };
 
+  // Foca no input e avisa sobre o microfone nativo do teclado Samsung / Gboard
   const handleVoiceInput = () => {
-    const inputElement = document.getElementById('address-input-field');
+    const inputElement = document.getElementById('address-input-field') as HTMLInputElement;
     if (inputElement) {
       inputElement.focus();
+      toast.info("Toque no microfone na barra inferior do seu teclado para ditar!", {
+        duration: 3000,
+      });
     }
   };
 
@@ -103,7 +123,7 @@ export function AddressAutocomplete({
           type="button"
           onClick={handleVoiceInput}
           className="absolute right-3 p-2 text-zinc-400 hover:text-indigo-400 transition-colors cursor-pointer"
-          title="Ativar Voz"
+          title="Ativar Instrução de Voz"
         >
           {isLoading ? <Loader2 size={18} className="animate-spin text-indigo-400" /> : <Mic size={18} />}
         </button>
