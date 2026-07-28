@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Bike, Wallet, PackageCheck, CheckCircle2, Clock, RotateCcw, Timer } from 'lucide-react';
+import { ChevronDown, Bike, Wallet, PackageCheck, CheckCircle2, Clock, RotateCcw, Timer, MapPin, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import type { Route } from '@/types';
@@ -37,11 +37,24 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const closeRoute = useAppStore((state) => state.closeRoute);
   const reopenRoute = useAppStore((state) => state.reopenRoute);
   const startRoute = useAppStore((state) => state.startRoute); 
-  const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled); // <-- LÊ A CONFIGURAÇÃO DE ALERTA
+  const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
+  const storeSettings = useAppStore((state) => state.storeSettings);
 
   const deliveries = getDeliveriesByRoute(route.id);
   const pendingCount = deliveries.filter((d) => !d.is_paid).length;
   const duration = formatRouteDuration(route.started_at || route.departure_time, route.end_time);
+
+  // Filtra as pendentes e já ordena (Urgentes > Ordem Manual > Data)
+  const pendingDeliveries = [...deliveries].filter(d => !d.completed).sort((a, b) => {
+    const aUrgent = (a as any).is_urgent ? 1 : 0;
+    const bUrgent = (b as any).is_urgent ? 1 : 0;
+    
+    if (aUrgent !== bUrgent) return bUrgent - aUrgent;
+    
+    const aOrder = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
+    const bOrder = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
+    return aOrder - bOrder;
+  });
 
   const sortedDeliveries = [...deliveries].sort((a, b) => {
     if (a.completed && !b.completed) return 1;
@@ -69,7 +82,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     });
     setIsOpen(false);
 
-    // 🔔 DISPARADOR DE NOTIFICAÇÃO NATIVA (SE ATIVADO NA LOJA)
     if (routeAlertsEnabled && Capacitor.isNativePlatform()) {
       try {
         await LocalNotifications.schedule({
@@ -77,8 +89,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             {
               title: 'Rota Finalizada ✅',
               body: `O motoboy ${route.motoboy_name} encerrou a rota com ${deliveries.length} entregas.`,
-              id: Math.floor(Math.random() * 100000), // Garante um ID único para o alarme
-              schedule: { at: new Date(Date.now() + 1000) }, // Toca 1 segundo após fechar
+              id: Math.floor(Math.random() * 100000), 
+              schedule: { at: new Date(Date.now() + 1000) }, 
             }
           ]
         });
@@ -93,6 +105,108 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     toast.success('Rota reaberta!', {
       description: 'Você pode adicionar novas entregas agora.',
     });
+  };
+
+  const handleOptimizeRoute = () => {
+    const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
+    const pendingForMap = deliveries.filter(d => !d.completed && d.address_string);
+    
+    if (pendingForMap.length === 0) {
+       toast.error('Nenhuma entrega pendente com endereço para otimizar.');
+       return;
+    }
+
+    const waypoints = pendingDeliveries.map(d => encodeURIComponent(d.address_string)).join('/');
+    const mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(storeAddr)}/${waypoints}`;
+    
+    window.open(mapUrl, '_blank');
+    toast.success('Maps aberto com fura-fila aplicado! 🗺️');
+  };
+
+  // 🧠 O CÉREBRO DA ROTA COMPLETA NO WHATSAPP
+  const handleShareFullRoute = async () => {
+    if (pendingDeliveries.length === 0) {
+      toast.error('Não há entregas pendentes para compartilhar.');
+      return;
+    }
+
+    const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
+    let hasFuzzyAddresses = false;
+    const parts: string[] = [];
+    
+    parts.push(`🏍️ *ROTA DE ENTREGA - ${route.motoboy_name.toUpperCase()}*`);
+    parts.push(`📍 *Base:* ${storeAddr}\n`);
+
+    // Geração do Link do Maps com Waypoints
+    const waypoints = pendingDeliveries.map(d => encodeURIComponent(d.address_string)).join('/');
+    const mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(storeAddr)}/${waypoints}`;
+    parts.push(`🗺️ *LINK DO MAPA (Siga a Ordem):*`);
+    parts.push(`${mapUrl}\n`);
+    parts.push(`📦 *RESUMO DAS PARADAS:*\n`);
+
+    const fuzzyDeliveries: any[] = [];
+
+    // Loop de Montagem das Entregas
+    pendingDeliveries.forEach((delivery, index) => {
+      const customer = getCustomerById(delivery.customer_id);
+      const name = customer?.name || 'Cliente Desconhecido';
+      const isUrgent = (delivery as any).is_urgent;
+      
+      // Heurística de Endereço Impreciso (Sem número e sem link exato do maps)
+      const hasNumber = /\d/.test(delivery.address_string);
+      const isFuzzy = !hasNumber && !delivery.maps_link;
+
+      if (isFuzzy) {
+        hasFuzzyAddresses = true;
+        fuzzyDeliveries.push({ index: index + 1, name, address: delivery.address_string, neighborhood: customer?.neighborhood });
+      }
+
+      // Título da Parada
+      parts.push(`*${index + 1}. ${name}* ${isUrgent ? '🚨 (URGENTE)' : ''}`);
+      
+      // Endereço
+      parts.push(`📍 ${delivery.address_string}`);
+      if (delivery.observation) parts.push(`*OBS:* ${delivery.observation}`);
+
+      // Pagamento
+      const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
+      if (delivery.is_paid) {
+        parts.push(`💳 *PAGO*`);
+      } else {
+        const pMethod = delivery.payment_method.toUpperCase().replace('_', ' ');
+        if (delivery.payment_method === 'dinheiro' && delivery.change_for) {
+          parts.push(`💵 *${pMethod}* - R$ ${valueStr} (Levar troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})`);
+        } else {
+          parts.push(`💵 *${pMethod}* - R$ ${valueStr}`);
+        }
+      }
+
+      // Bebidas
+      if (delivery.drinks) parts.push(`🥤 *${delivery.drinks.trim()}*`);
+      
+      parts.push(''); // Pula uma linha entre entregas
+    });
+
+    // Se encontrou endereços problemáticos, cria um rodapé de alerta
+    if (fuzzyDeliveries.length > 0) {
+      parts.push(`⚠️ *ATENÇÃO: ENDEREÇOS POSSIVELMENTE IMPRECISOS (Rua Nova/S/N)*`);
+      fuzzyDeliveries.forEach(fd => {
+        parts.push(`- *Parada ${fd.index} (${fd.name}):* O GPS pode falhar. Procure pelo bairro: *${fd.neighborhood || 'Não informado'}*.`);
+      });
+    }
+
+    const textToCopy = parts.join('\n');
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      if (hasFuzzyAddresses) {
+        toast.warning('Rota copiada! Algumas entregas parecem não ter número e foram alertadas na mensagem.', { duration: 5000 });
+      } else {
+        toast.success('Resumo da rota copiado com sucesso! Pronto para colar no WhatsApp.');
+      }
+    } catch (error) {
+      toast.error('Erro ao copiar a rota para a área de transferência.');
+    }
   };
 
   return (
@@ -187,6 +301,28 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           )}
 
           <div className="mt-2 flex flex-col gap-2">
+            
+            {/* 🔥 BOTÕES DE AÇÃO INTELIGENTES 🔥 */}
+            {sortedDeliveries.length > 0 && route.status === 'aberta' && (
+              <div className="grid grid-cols-2 gap-2 mb-1">
+                <button
+                  onClick={handleOptimizeRoute}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-[20px] bg-indigo-600 border border-indigo-500/50 py-3.5 text-[13px] font-bold text-white transition-all hover:bg-indigo-500 active:scale-95 shadow-lg shadow-indigo-500/20"
+                >
+                  <MapPin size={16} />
+                  Otimizar (Maps)
+                </button>
+                
+                <button
+                  onClick={handleShareFullRoute}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-[20px] bg-emerald-600 border border-emerald-500/50 py-3.5 text-[13px] font-bold text-white transition-all hover:bg-emerald-500 active:scale-95 shadow-lg shadow-emerald-500/20"
+                >
+                  <Share2 size={16} />
+                  Copiar P/ Whats
+                </button>
+              </div>
+            )}
+
             {route.status === 'aberta' ? (
               !route.started_at ? (
                 <button
