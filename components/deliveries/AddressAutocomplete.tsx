@@ -1,4 +1,3 @@
-'use type'; // Se seu projeto usa 'use client', mantenha abaixo
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -9,13 +8,15 @@ interface AddressAutocompleteProps {
   onChange: (value: string) => void;
   onSelectAddress?: (fullAddress: string) => void;
   placeholder?: string;
+  label?: string;
 }
 
 export function AddressAutocomplete({
   value,
   onChange,
   onSelectAddress,
-  placeholder = "Ex: Rua Major Gote, 100"
+  placeholder = "Ex: Rua Major Gote, 100",
+  label = "Endereço de Entrega*"
 }: AddressAutocompleteProps) {
   const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,12 +40,11 @@ export function AddressAutocomplete({
     }
 
     setIsLoading(true);
-    // Restringe a busca para Patos de Minas / MG para assertividade máxima
+    // Restringe e prioriza a busca em Patos de Minas - MG
     autocompleteService.current.getPlacePredictions(
       {
         input: val,
         componentRestrictions: { country: 'br' },
-        // Coordenadas aproximadas de Patos de Minas para dar preferência local
         location: new google.maps.LatLng(-18.5789, -46.5181),
         radius: 30000, 
       },
@@ -70,9 +70,7 @@ export function AddressAutocomplete({
     }
   };
 
-  // Simula o acionamento do ditado por voz nativo do teclado mobile
   const handleVoiceInput = () => {
-    // Em navegadores mobile modernos, focar no input abre o teclado que já possui o botão de microfone integrado (Gboard/Samsung Keyboard)
     const inputElement = document.getElementById('address-input-field');
     if (inputElement) {
       inputElement.focus();
@@ -82,7 +80,7 @@ export function AddressAutocomplete({
   return (
     <div className="relative flex flex-col gap-2">
       <label className="text-sm font-semibold text-zinc-400 flex items-center justify-between">
-        <span className="flex items-center gap-1.5"><MapPin size={14} className="text-indigo-400" /> Endereço de Entrega*</span>
+        <span className="flex items-center gap-1.5"><MapPin size={14} className="text-indigo-400" /> {label}</span>
         <span className="text-[10px] text-zinc-500 font-normal">Toque no mic do teclado para ditar 🎙️</span>
       </label>
 
@@ -107,7 +105,6 @@ export function AddressAutocomplete({
         </button>
       </div>
 
-      {/* Caixa de Sugestões Suspensas do Google Maps */}
       {isOpen && suggestions.length > 0 && (
         <div className="absolute top-20 z-50 w-full flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
           {suggestions.map((item) => (
