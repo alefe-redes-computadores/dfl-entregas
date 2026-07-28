@@ -301,7 +301,37 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
           await setDoc(doc(db, 'deliveries', delivery.id), safeData);
-        } catch (error) { console.error(error); }
+
+          // 🔥 SISTEMA DE RANKING & FIDELIDADE (Auto-Incremento)
+          if (delivery.customer_id) {
+            const state = get();
+            const customer = state.customers.find(c => c.id === delivery.customer_id);
+            
+            if (customer) {
+              const currentOrders = customer.orderCount || 0;
+              const currentSpent = customer.totalSpent || 0;
+              
+              const updatedCustomerData = {
+                orderCount: currentOrders + 1,
+                totalSpent: currentSpent + (delivery.value || 0),
+                updated_at: now
+              };
+
+              // Atualiza o estado local do Zustand
+              set((prev) => ({
+                customers: prev.customers.map((c) => 
+                  c.id === customer.id ? { ...c, ...updatedCustomerData } : c
+                )
+              }));
+
+              // Salva na nuvem (Firebase)
+              const safeCustomerData = sanitizeForFirebase(updatedCustomerData);
+              await updateDoc(doc(db, 'customers', customer.id), safeCustomerData);
+            }
+          }
+        } catch (error) { 
+          console.error(error); 
+        }
       },
 
       updateDelivery: async (id, updatedData) => {
