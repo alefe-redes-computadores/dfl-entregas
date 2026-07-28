@@ -40,6 +40,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+
   return (
     <html lang="pt-BR" className={`${poppins.variable} ${inter.variable} dark`} suppressHydrationWarning>
       <body>
@@ -63,6 +65,15 @@ export default function RootLayout({
             />
           </AuthGuard>
         </ErrorBoundary>
+
+        {/* 🗺️ SCRIPT GLOBAL DO GOOGLE MAPS (PLACES AUTOCOMPLETE) */}
+        {googleMapsApiKey && (
+          <script 
+            src={`https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places`}
+            async
+            defer
+          />
+        )}
       </body>
     </html>
   );
