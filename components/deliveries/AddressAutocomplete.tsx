@@ -24,7 +24,7 @@ export function AddressAutocomplete({
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
 
   useEffect(() => {
-    if (window.google && window.google.maps && window.google.maps.places) {
+    if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
       autocompleteService.current = new google.maps.places.AutocompleteService();
     }
   }, []);
@@ -40,7 +40,6 @@ export function AddressAutocomplete({
     }
 
     setIsLoading(true);
-    // Restringe e prioriza a busca em Patos de Minas - MG
     autocompleteService.current.getPlacePredictions(
       {
         input: val,
