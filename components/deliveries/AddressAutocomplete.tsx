@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, Mic, Loader2 } from 'lucide-react';
+import { MapPin, Mic, Loader2, MicOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface AddressAutocompleteProps {
@@ -21,29 +21,13 @@ export function AddressAutocomplete({
 }: AddressAutocompleteProps) {
   const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
 
-  // Inicializa o serviço do Google Places com segurança
-  const initService = () => {
-    if (typeof window !== 'undefined' && window.google?.maps?.places) {
-      if (!autocompleteService.current) {
-        autocompleteService.current = new google.maps.places.AutocompleteService();
-      }
-      return true;
-    }
-    return false;
-  };
-
   useEffect(() => {
-    // Tenta carregar imediatamente e faz novas tentativas caso o script do layout demore a injetar
-    if (!initService()) {
-      const timer = setInterval(() => {
-        if (initService()) {
-          clearInterval(timer);
-        }
-      }, 500);
-      return () => clearInterval(timer);
+    if (typeof window !== 'undefined' && window.google?.maps?.places) {
+      autocompleteService.current = new google.maps.places.AutocompleteService();
     }
   }, []);
 
@@ -51,8 +35,7 @@ export function AddressAutocomplete({
     const val = e.target.value;
     onChange(val);
 
-    // Se o serviço do Google ainda não estiver pronto, apenas atualiza o texto sem travar
-    if (!val.trim() || !initService() || !autocompleteService.current) {
+    if (!val.trim() || !autocompleteService.current) {
       setSuggestions([]);
       setIsOpen(false);
       setIsLoading(false);
@@ -90,14 +73,48 @@ export function AddressAutocomplete({
     }
   };
 
-  // Foca no input e avisa sobre o microfone nativo do teclado Samsung / Gboard
+  // 🎙️ DISPARADOR REAL DE DITADO POR VOZ (WEB SPEECH API / ANDROID CHROME)
   const handleVoiceInput = () => {
-    const inputElement = document.getElementById('address-input-field') as HTMLInputElement;
-    if (inputElement) {
-      inputElement.focus();
-      toast.info("Toque no microfone na barra inferior do seu teclado para ditar!", {
-        duration: 3000,
-      });
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionAPI) {
+      toast.error("O reconhecimento de voz não é suportado neste navegador.");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognitionAPI();
+      recognition.lang = 'pt-BR';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        toast.message("Ouvindo... Pode falar o endereço! 🎙️");
+      };
+
+      recognition.onresult = (event: any) => {
+        const speechText = event.results[0][0].transcript;
+        onChange(speechText);
+        setIsListening(false);
+        toast.success("Endereço capturado por voz! ✨");
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error("Erro no reconhecimento de voz:", event.error);
+        setIsListening(false);
+        toast.error("Não foi possível capturar a voz. Tente novamente.");
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (error) {
+      console.error("Erro ao iniciar o microfone:", error);
+      setIsListening(false);
+      toast.error("Erro ao ativar o microfone.");
     }
   };
 
@@ -105,7 +122,7 @@ export function AddressAutocomplete({
     <div className="relative flex flex-col gap-2">
       <label className="text-sm font-semibold text-zinc-400 flex items-center justify-between">
         <span className="flex items-center gap-1.5"><MapPin size={14} className="text-indigo-400" /> {label}</span>
-        <span className="text-[10px] text-zinc-500 font-normal">Toque no mic do teclado para ditar 🎙️</span>
+        <span className="text-[10px] text-zinc-500 font-normal">Toque no mic para ditar por voz 🎙️</span>
       </label>
 
       <div className="relative flex items-center">
@@ -122,10 +139,12 @@ export function AddressAutocomplete({
         <button 
           type="button"
           onClick={handleVoiceInput}
-          className="absolute right-3 p-2 text-zinc-400 hover:text-indigo-400 transition-colors cursor-pointer"
-          title="Ativar Instrução de Voz"
+          className={`absolute right-3 p-2 transition-colors cursor-pointer rounded-xl ${
+            isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'text-zinc-400 hover:text-indigo-400'
+          }`}
+          title="Falar Endereço"
         >
-          {isLoading ? <Loader2 size={18} className="animate-spin text-indigo-400" /> : <Mic size={18} />}
+          {isListening ? <MicOff size={18} className="text-red-500" /> : isLoading ? <Loader2 size={18} className="animate-spin text-indigo-400" /> : <Mic size={18} />}
         </button>
       </div>
 
