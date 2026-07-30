@@ -116,12 +116,10 @@ export default function LojaPage() {
       try {
         await LocalNotifications.requestPermissions();
         
-        // 🔥 CÁLCULO REAL: Agenda para 30 minutos antes do horário de abertura configurado
         const now = new Date();
         const openingDate = new Date();
         openingDate.setHours(openHour, openMin - 30, 0, 0);
 
-        // Se o horário de abertura de hoje já passou, agenda para amanhã
         if (openingDate.getTime() <= now.getTime()) {
           openingDate.setDate(openingDate.getDate() + 1);
         }
@@ -173,7 +171,6 @@ export default function LojaPage() {
         to="/"
       />
 
-      {/* BOTÃO MESTRE - STATUS DA LOJA */}
       <button 
         onClick={toggleStore}
         className={`relative overflow-hidden flex items-center justify-between p-5 rounded-[28px] border transition-all duration-500 cursor-pointer ${
@@ -199,7 +196,6 @@ export default function LojaPage() {
         </div>
       </button>
 
-      {/* RESUMO DA OPERAÇÃO & ESCALA */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2">
           <TrendingUp size={14} /> Desempenho de Hoje
@@ -259,7 +255,6 @@ export default function LojaPage() {
         </div>
       </div>
 
-      {/* AUTOMAÇÃO & HORÁRIOS */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Automação & Expediente</h2>
         
