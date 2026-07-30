@@ -6,7 +6,7 @@ export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debi
 export type RouteStatus = 'aberta' | 'fechada';
 export type OrderOrigin = 'ifood' | 'loja';
 export type PaymentRuleType = 'fixed' | 'per_delivery' | 'fixed_plus_variable';
-export type MotoboyType = 'fixo' | 'avulso'; // 🔥 Tipagem do tipo de motoboy
+export type MotoboyType = 'fixo' | 'avulso'; 
 
 export interface MotoboyPaymentRule {
   type: PaymentRuleType;
@@ -33,8 +33,9 @@ export interface Delivery {
   id: string;
   route_id: string;
   order_id?: string;
+  ifood_id?: string; // 🔥 ADICIONADO: O ID de 8 dígitos do iFood
   origin: OrderOrigin;
-  confirmation_code?: string;
+  confirmation_code?: string; // Mantido para o código de 4 dígitos
   customer_id: string;
   value: number;
   is_paid: boolean;
@@ -46,7 +47,7 @@ export interface Delivery {
   drinks?: string;
   completed?: boolean;
   order_index?: number; 
-  is_urgent?: boolean; // 🔥 AQUI ESTÁ A CHAVE DA URGÊNCIA (FURA-FILA)
+  is_urgent?: boolean; 
   updated_at?: string;
 }
 
@@ -61,7 +62,6 @@ export interface Customer {
   last_confirmation_code?: string;
   createdAt?: string;
   updated_at?: string;
-  // 🔥 NOVO: RANKING & FIDELIDADE
   orderCount?: number; 
   totalSpent?: number; 
 }
@@ -70,8 +70,8 @@ export interface Motoboy {
   id: string;
   name: string;
   active: boolean; 
-  type?: MotoboyType; // 🔥 Agora o TypeScript sabe que o motoboy pode ser fixo ou avulso
-  payment_rule?: MotoboyPaymentRule; // <-- Cérebro Financeiro do Motoboy
+  type?: MotoboyType; 
+  payment_rule?: MotoboyPaymentRule; 
   createdAt?: string;
   updated_at?: string;
 }
