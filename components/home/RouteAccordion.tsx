@@ -9,7 +9,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { DeliveryCard } from '@/components/home/DeliveryCard';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { copyFullRouteToClipboard } from '@/lib/whatsapp'; // 🔥 FUNÇÃO IMPORTADA AQUI
+import { copyFullRouteToClipboard } from '@/lib/whatsapp';
 
 interface RouteAccordionProps {
   route: Route;
@@ -45,13 +45,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const pendingCount = deliveries.filter((d) => !d.is_paid).length;
   const duration = formatRouteDuration(route.started_at || route.departure_time, route.end_time);
 
-  // Filtra as pendentes e já ordena (Urgentes > Ordem Manual > Data)
   const pendingDeliveries = [...deliveries].filter(d => !d.completed).sort((a, b) => {
     const aUrgent = a.is_urgent ? 1 : 0;
     const bUrgent = b.is_urgent ? 1 : 0;
-    
     if (aUrgent !== bUrgent) return bUrgent - aUrgent;
-    
     const aOrder = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
     const bOrder = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
     return aOrder - bOrder;
@@ -60,10 +57,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const sortedDeliveries = [...deliveries].sort((a, b) => {
     if (a.completed && !b.completed) return 1;
     if (!a.completed && b.completed) return -1;
-    
     const timeA = new Date(a.updated_at || 0).getTime();
     const timeB = new Date(b.updated_at || 0).getTime();
-
     const aOrder = a.order_index !== undefined ? a.order_index : timeA;
     const bOrder = b.order_index !== undefined ? b.order_index : timeB;
     return aOrder - bOrder;
@@ -83,12 +78,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     });
     setIsOpen(false);
 
+    // 🔥 NOTIFICAÇÃO 2: Rota Finalizada Concluída
     if (routeAlertsEnabled && Capacitor.isNativePlatform()) {
       try {
         await LocalNotifications.schedule({
           notifications: [
             {
-              title: 'Rota Finalizada ✅',
+              title: '🎉 Rota Finalizada com Sucesso!',
               body: `O motoboy ${route.motoboy_name} encerrou a rota com ${deliveries.length} entregas.`,
               id: Math.floor(Math.random() * 100000), 
               schedule: { at: new Date(Date.now() + 1000) }, 
@@ -96,7 +92,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           ]
         });
       } catch (error) {
-        console.error('Erro ao disparar alarme nativo:', error);
+        console.error('Erro ao disparar notificação de rota:', error);
       }
     }
   };
@@ -124,7 +120,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     toast.success('Maps aberto com fura-fila aplicado! 🗺️');
   };
 
-  // 🔥 CHAMA A FUNÇÃO LIMPA DO NOSSO ARQUIVO WHATSAPP 🔥
   const handleShareFullRoute = async () => {
     if (pendingDeliveries.length === 0) {
       toast.error('Não há entregas pendentes para compartilhar.');
