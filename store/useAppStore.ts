@@ -111,7 +111,6 @@ export const useAppStore = create<AppState>()(
         // SALVA NO FIREBASE (Backup/Nuvem)
         try {
           const safeData = sanitizeForFirebase(newSettings);
-          // Usa 'store_settings' como ID do documento para evitar confusão com subcoleções
           await setDoc(doc(db, 'store', 'store_settings'), safeData, { merge: true });
         } catch (error) {
           console.error('Erro ao salvar configurações da loja na nuvem:', error);
@@ -156,7 +155,7 @@ export const useAppStore = create<AppState>()(
             getDocs(collection(db, 'deliveries')),
             getDocs(collection(db, 'customers')),
             getDocs(collection(db, 'motoboys')),
-            getDoc(doc(db, 'store', 'store_settings')) // Busca do ID correto 'store_settings'
+            getDoc(doc(db, 'store', 'store_settings'))
           ]);
 
           const fbRoutes = routesSnap.docs.map(d => d.data() as Route);
@@ -196,10 +195,18 @@ export const useAppStore = create<AppState>()(
             if (!mergedMotoboys.some(m => m.id === local.id)) mergedMotoboys.push(local);
           });
 
-          // Se houver configurações na nuvem, mescla com o padrão local (Dando preferência para a Nuvem)
+          // 🔥 BLINDAGEM DA LOJA: Garante que se a nuvem tiver dados parciais, ela não zera o padrão
+          const defaultSettings = get().storeSettings;
           const finalStoreSettings = cloudStoreSettings 
-            ? { ...get().storeSettings, ...cloudStoreSettings }
-            : get().storeSettings;
+            ? { 
+                ...defaultSettings, 
+                ...cloudStoreSettings,
+                activeDays: (cloudStoreSettings as any).activeDays || defaultSettings.activeDays,
+                openingTime: (cloudStoreSettings as any).openingTime || defaultSettings.openingTime,
+                closingTime: (cloudStoreSettings as any).closingTime || defaultSettings.closingTime,
+                storeAddress: (cloudStoreSettings as any).storeAddress || defaultSettings.storeAddress
+              }
+            : defaultSettings;
 
           set({
             routes: mergedRoutes,
@@ -301,9 +308,6 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
           await setDoc(doc(db, 'deliveries', delivery.id), safeData);
-          
-          // NOTA: O incremento do ranking foi removido daqui a pedido do desenvolvedor 
-          // e movido para a função updateDelivery (quando a entrega é concluída).
         } catch (error) { 
           console.error(error); 
         }
@@ -323,7 +327,6 @@ export const useAppStore = create<AppState>()(
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await updateDoc(doc(db, 'deliveries', id), safeData);
 
-          // 🔥 LÓGICA DO RANKING VIP NO FECHAMENTO DA ENTREGA
           if (updatedData.completed !== undefined && deliveryToUpdate?.customer_id) {
              const customer = state.customers.find(c => c.id === deliveryToUpdate.customer_id);
              
@@ -333,11 +336,11 @@ export const useAppStore = create<AppState>()(
                const deliveryValue = deliveryToUpdate.value || 0;
 
                if (updatedData.completed === true) {
-                 newCount += 1; // Soma pedido
-                 newSpent += deliveryValue; // Soma valor
+                 newCount += 1;
+                 newSpent += deliveryValue;
                } else if (updatedData.completed === false) {
-                 newCount = Math.max(0, newCount - 1); // Remove pedido (Desfazer)
-                 newSpent = Math.max(0, newSpent - deliveryValue); // Remove valor (Desfazer)
+                 newCount = Math.max(0, newCount - 1);
+                 newSpent = Math.max(0, newSpent - deliveryValue);
                }
 
                const updatedCustomerData = {
@@ -357,7 +360,6 @@ export const useAppStore = create<AppState>()(
              }
           }
 
-          // Lógica de fechamento automático da rota 
           if (updatedData.completed === true && deliveryToUpdate) {
             const currentState = get();
             const routeDeliveries = currentState.deliveries.filter(d => d.route_id === deliveryToUpdate.route_id);
