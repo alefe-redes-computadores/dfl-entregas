@@ -6,7 +6,7 @@ import { ChevronLeft, Store, Smartphone, Trash2, Banknote, QrCode, CreditCard, C
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
-import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; // 🔥 NOVO IMPORT
+import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; 
 import type { Delivery, OrderOrigin, Customer } from '@/types';
 
 function DeliveryDetailsForm() {
@@ -28,6 +28,7 @@ function DeliveryDetailsForm() {
   
   const [customerName, setCustomerName] = useState('');
   const [orderId, setOrderId] = useState('');
+  const [ifoodId, setIfoodId] = useState(''); // 🔥 NOVO ESTADO: ID de 8 dígitos
   const [value, setValue] = useState('');
   
   const [streetAddress, setStreetAddress] = useState('');
@@ -55,7 +56,6 @@ function DeliveryDetailsForm() {
     let street = c.address || '';
     const hood = c.neighborhood || '';
 
-    // Limpeza de bairro duplicado
     if (street && hood) {
       const suffix1 = `, ${hood}`;
       const suffix2 = ` - ${hood}`;
@@ -68,66 +68,6 @@ function DeliveryDetailsForm() {
     if (c.observation) setObservation(c.observation);
     
     toast.success('Endereço preenchido automaticamente! 🪄');
-  };
-
-  // 🧠 FATIADOR DE ENDEREÇO 2.0 (CIRÚRGICO) - Mantido para compatibilidade com o AddressAutocomplete
-  const handleAddressPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData('text');
-    if (!text) return;
-    
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-    let extractedStreet = '';
-    let extractedNeighborhood = '';
-    let extractedObs = observation; 
-
-    let addressLines: string[] = [];
-
-    for (const line of lines) {
-      const lower = line.toLowerCase();
-      if (lower.includes('endereço de entrega')) continue;
-      if (line.match(/\d{5}-\d{3}/) || lower.includes('cep')) continue;
-      
-      if (lower.startsWith('obs:') || lower.startsWith('observação:') || lower.startsWith('referência:')) {
-        const obsText = line.replace(/^(obs|observação|referência):\s*/i, '').trim();
-        extractedObs = extractedObs ? `${extractedObs} | ${obsText}` : obsText;
-        continue;
-      }
-
-      addressLines.push(line);
-    }
-
-    let fullAddress = addressLines.join(' - ');
-    fullAddress = fullAddress.replace(/[-,\s]*patos de minas\s*[-,\s]*mg/i, '').trim();
-
-    const parts = fullAddress.split('-').map(p => p.trim()).filter(p => p);
-
-    if (parts.length > 0) {
-      extractedStreet = parts[0]; 
-      
-      if (parts.length > 1) {
-        extractedNeighborhood = parts[parts.length - 1]; 
-        
-        if (parts.length > 2) {
-          const complement = parts.slice(1, -1).join(' - ');
-          extractedObs = extractedObs ? `${complement} | ${extractedObs}` : complement;
-        }
-      }
-    }
-
-    if (!extractedNeighborhood && extractedStreet.includes(',')) {
-       const stParts = extractedStreet.split(',').map(p => p.trim());
-       if (stParts.length > 2) {
-           extractedNeighborhood = stParts.pop() || '';
-           extractedStreet = stParts.join(', ');
-       }
-    }
-
-    if (extractedStreet) setStreetAddress(extractedStreet);
-    if (extractedNeighborhood) setNeighborhood(extractedNeighborhood);
-    if (extractedObs) setObservation(extractedObs);
-
-    toast.success('Endereço fatiado perfeitamente! ✨');
   };
 
   const handlePaymentMethodChange = (method: string) => {
@@ -143,6 +83,7 @@ function DeliveryDetailsForm() {
       setOrigin(delivery.origin || 'ifood');
       setRouteId(delivery.route_id);
       setOrderId(delivery.order_id || '');
+      setIfoodId(delivery.ifood_id || ''); // 🔥 CARREGA O ID GRANDE
       setValue(delivery.value ? delivery.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
       
       let street = delivery.address_string;
@@ -186,7 +127,7 @@ function DeliveryDetailsForm() {
       return;
     }
     if (origin === 'ifood' && !orderId) {
-      toast.error('Pedidos do iFood exigem o Número do Pedido.');
+      toast.error('Pedidos do iFood exigem o Número do Pedido (Curto).');
       return;
     }
 
@@ -214,6 +155,7 @@ function DeliveryDetailsForm() {
         route_id: routeId,
         origin,
         order_id: origin === 'ifood' ? (orderId || undefined) : undefined,
+        ifood_id: origin === 'ifood' ? (ifoodId || undefined) : undefined, // 🔥 SALVA O ID GRANDE
         confirmation_code: origin === 'ifood' ? (confirmationCode || undefined) : undefined,
         customer_id: customerId || '',
         value: cleanValue,
@@ -267,7 +209,7 @@ function DeliveryDetailsForm() {
           <button type="button" onClick={() => setOrigin('ifood')} className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Smartphone size={18} /> iFood
           </button>
-          <button type="button" onClick={() => { setOrigin('loja'); setOrderId(''); setConfirmationCode(''); }} className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'loja' ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button type="button" onClick={() => { setOrigin('loja'); setOrderId(''); setIfoodId(''); setConfirmationCode(''); }} className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'loja' ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Store size={18} /> Loja Própria
           </button>
         </div>
@@ -325,7 +267,7 @@ function DeliveryDetailsForm() {
               type="text" 
               inputMode="numeric" 
               placeholder="Ex: 4821" 
-              maxLength={4} 
+              maxLength={5} 
               value={orderId} 
               onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ''))} 
               disabled={origin === 'loja'}
@@ -340,7 +282,6 @@ function DeliveryDetailsForm() {
         </div>
 
         <div className="flex flex-col gap-4 border-t border-zinc-800 pt-4">
-          {/* 🔥 SUBSTITUÍDO PELO AddressAutocomplete 🔥 */}
           <div className="flex flex-col gap-2">
             <AddressAutocomplete 
               value={streetAddress} 
@@ -393,7 +334,6 @@ function DeliveryDetailsForm() {
           </div>
         )}
 
-        {/* TOGGLE URGENTE */}
         <div className={`flex items-center justify-between p-4 rounded-2xl mt-4 transition-all border ${isUrgent ? 'bg-red-500/10 border-red-500/30' : 'bg-zinc-900/50 border-zinc-800'}`}>
           <div className="flex flex-col">
             <span className={`font-bold flex items-center gap-2 ${isUrgent ? 'text-red-400' : 'text-zinc-300'}`}>
@@ -417,7 +357,19 @@ function DeliveryDetailsForm() {
           <input type="text" placeholder="Ex: https://maps.app.goo.gl/..." value={mapsLink} onChange={(e) => setMapsLink(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
         </div>
 
+        {/* 🔥 BLOCO REFEITO COM OS 2 CÓDIGOS LADO A LADO 🔥 */}
         <div className="grid grid-cols-2 gap-4 mt-2">
+          <div className="flex flex-col gap-2">
+            <label className={`text-sm font-semibold transition-colors ${origin === 'ifood' ? 'text-zinc-400' : 'text-zinc-600'}`}>ID do Pedido</label>
+            <input 
+              type="text" 
+              placeholder="Ex: 12345678" 
+              value={ifoodId} 
+              onChange={(e) => setIfoodId(e.target.value.replace(/\D/g, ''))} 
+              disabled={origin === 'loja'}
+              className={`h-14 rounded-2xl border px-4 transition-all focus:outline-none ${origin === 'loja' ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-600 cursor-not-allowed' : 'border-zinc-800 bg-zinc-900/50 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500'}`} 
+            />
+          </div>
           <div className="flex flex-col gap-2">
             <label className={`text-sm font-semibold transition-colors ${origin === 'ifood' ? 'text-zinc-400' : 'text-zinc-600'}`}>Cód. Confirmação</label>
             <input 
@@ -431,10 +383,11 @@ function DeliveryDetailsForm() {
               className={`h-14 rounded-2xl border px-4 transition-all focus:outline-none ${origin === 'loja' ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-600 cursor-not-allowed' : 'border-zinc-800 bg-zinc-900/50 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500'}`} 
             />
           </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-zinc-400">Observação / Complemento</label>
-            <input type="text" placeholder="Ex: Apto 4, Portão azul..." value={observation} onChange={(e) => setObservation(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
-          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 mt-2">
+          <label className="text-sm font-semibold text-zinc-400">Observação / Complemento</label>
+          <input type="text" placeholder="Ex: Apto 4, Portão azul..." value={observation} onChange={(e) => setObservation(e.target.value)} className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
         </div>
 
         <div className="flex flex-col gap-3 mt-6">
