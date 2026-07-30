@@ -19,15 +19,11 @@ export default function LojaPage() {
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   
-  // ------------------------------------------------------------------
-  // ESTADOS GLOBAIS (ZUSTAND)
-  // ------------------------------------------------------------------
   const deliveries = useAppStore((state) => state.deliveries);
   const motoboys = useAppStore((state) => state.motoboys);
   const updateMotoboy = useAppStore((state) => state.updateMotoboy);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
 
-  // A TRAVA DE HIDRATAÇÃO: Só carrega depois que o banco local acordou
   const hasHydrated = useAppStore((state) => state.hasHydrated);
   const storeSettings = useAppStore((state) => state.storeSettings) || {};
   const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
@@ -35,23 +31,16 @@ export default function LojaPage() {
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
 
-  // ------------------------------------------------------------------
-  // ESTADOS LOCAIS (SINCRONIZADOS COM A MEMÓRIA)
-  // ------------------------------------------------------------------
   const [isStoreOpen, setIsStoreOpen] = useState(false);
   const [activeDays, setActiveDays] = useState<number[]>([1, 2, 3, 4, 5, 6, 0]); 
   const [alertsEnabled, setAlertsEnabled] = useState(false);
-  
-  // Endereço base integrado com o Autocomplete
   const [storeAddress, setStoreAddress] = useState('Patos de Minas, MG');
 
-  // Estados dos Spinners Customizados
   const [openHour, setOpenHour] = useState(18);
   const [openMin, setOpenMin] = useState(0);
   const [closeHour, setCloseHour] = useState(23);
   const [closeMin, setCloseMin] = useState(59);
 
-  // Sincroniza a memória global com a tela assim que a hidratação terminar
   useEffect(() => {
     setIsMounted(true);
     if (hasHydrated && storeSettings) {
@@ -60,7 +49,6 @@ export default function LojaPage() {
       setAlertsEnabled(storeSettings.alertsEnabled ?? false);
       setStoreAddress(storeSettings.storeAddress || 'Patos de Minas, MG');
       
-      // 🔥 CORREÇÃO DO BUG DE HORÁRIO AQUI 🔥
       if (storeSettings.openingTime) {
         const [h, m] = storeSettings.openingTime.split(':').map(Number);
         setOpenHour(isNaN(h) ? 18 : h);
@@ -74,9 +62,6 @@ export default function LojaPage() {
     }
   }, [storeSettings, hasHydrated]);
 
-  // ------------------------------------------------------------------
-  // INTELIGÊNCIA: RESUMO DO DIA & ESCALA
-  // ------------------------------------------------------------------
   const todayStr = new Date().toDateString();
   const todaysDeliveries = deliveries.filter(d => {
     const dDateStr = new Date(d.updated_at || Date.now()).toDateString();
@@ -86,9 +71,6 @@ export default function LojaPage() {
   const totalEntregas = todaysDeliveries.length;
   const faturamentoTotal = todaysDeliveries.reduce((acc, d) => acc + (d.value || 0), 0);
 
-  // ------------------------------------------------------------------
-  // AÇÕES E SALVAMENTO
-  // ------------------------------------------------------------------
   const toggleStore = async () => {
     const newState = !isStoreOpen;
     setIsStoreOpen(newState);
@@ -133,18 +115,29 @@ export default function LojaPage() {
     if (alertsEnabled && Capacitor.isNativePlatform()) {
       try {
         await LocalNotifications.requestPermissions();
+        
+        // 🔥 CÁLCULO REAL: Agenda para 30 minutos antes do horário de abertura configurado
+        const now = new Date();
+        const openingDate = new Date();
+        openingDate.setHours(openHour, openMin - 30, 0, 0);
+
+        // Se o horário de abertura de hoje já passou, agenda para amanhã
+        if (openingDate.getTime() <= now.getTime()) {
+          openingDate.setDate(openingDate.getDate() + 1);
+        }
+
         await LocalNotifications.schedule({
           notifications: [
             {
               title: 'Prepara a chapa! 🍔',
               body: 'Faltam 30 minutos para abrir a lanchonete!',
-              id: 1,
-              schedule: { at: new Date(Date.now() + 1000 * 5) },
+              id: 101,
+              schedule: { at: openingDate },
             }
           ]
         });
       } catch (error) {
-        console.error("Erro na notificação", error);
+        console.error("Erro na notificação de abertura", error);
       }
     }
   };
@@ -266,35 +259,12 @@ export default function LojaPage() {
         </div>
       </div>
 
-      {/* ATALHOS DE GESTÃO RÁPIDA */}
-      <div className="flex flex-col gap-3">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Gestão Rápida</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => router.push('/motoboys')} className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left cursor-pointer">
-            <Bike className="text-sky-400" size={24} />
-            <div>
-              <p className="font-bold text-zinc-100">Equipe</p>
-              <p className="text-[10px] text-zinc-500">Motoboys e Acertos</p>
-            </div>
-          </button>
-          
-          <button onClick={() => router.push('/clientes')} className="flex flex-col gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-[24px] hover:bg-zinc-800/80 active:scale-95 transition-all text-left cursor-pointer">
-            <Users className="text-amber-400" size={24} />
-            <div>
-              <p className="font-bold text-zinc-100">Clientes</p>
-              <p className="text-[10px] text-zinc-500">Endereços e Códigos</p>
-            </div>
-          </button>
-        </div>
-      </div>
-
       {/* AUTOMAÇÃO & HORÁRIOS */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Automação & Expediente</h2>
         
         <form onSubmit={handleSaveSchedule} className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden p-4 gap-5">
           
-          {/* ENDEREÇO DA LANCHONETE INTEGRADO COM GOOGLE MAPS AUTOCOMPLETE & VOZ */}
           <div className="flex flex-col gap-2">
             <AddressAutocomplete 
               value={storeAddress}
@@ -307,7 +277,6 @@ export default function LojaPage() {
 
           <div className="h-px w-full bg-zinc-800/80" />
 
-          {/* DIAS DA SEMANA */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-zinc-300">
               <Calendar size={16} className="text-indigo-400" />
@@ -334,10 +303,8 @@ export default function LojaPage() {
             </div>
           </div>
 
-          {/* SPINNERS DE HORA CUSTOMIZADOS (AGORA COM TRAVA DE MÚLTIPLOS DE 5) */}
           <div className="grid grid-cols-2 gap-3 border-t border-zinc-800/80 pt-5">
             
-            {/* SPINNER: ABERTURA */}
             <div className="flex flex-col bg-zinc-950 border border-zinc-800 p-3 rounded-2xl gap-2">
               <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider text-center">Abertura</span>
               <div className="flex items-center justify-center gap-2">
@@ -355,7 +322,6 @@ export default function LojaPage() {
               </div>
             </div>
 
-            {/* SPINNER: FECHAMENTO */}
             <div className="flex flex-col bg-zinc-950 border border-zinc-800 p-3 rounded-2xl gap-2">
               <span className="text-[10px] font-black uppercase text-red-400 tracking-wider text-center">Fechamento</span>
               <div className="flex items-center justify-center gap-2">
@@ -375,7 +341,6 @@ export default function LojaPage() {
 
           </div>
 
-          {/* TOGGLES DE NOTIFICAÇÃO */}
           <div className="flex flex-col bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden mt-2">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800/80">
               <div className="flex items-center gap-3">
