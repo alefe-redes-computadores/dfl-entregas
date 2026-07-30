@@ -67,7 +67,7 @@ export default function HomePage() {
   const closedRoutes = routesDoDia.filter((r) => r.status === 'fechada');
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 pb-32">
       <div className="flex items-center justify-between rounded-[20px] border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
         <button
           onClick={goToPreviousDay}
