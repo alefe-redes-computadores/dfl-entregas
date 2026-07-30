@@ -15,15 +15,13 @@ export async function copyDeliveryToClipboard(delivery: Delivery): Promise<boole
     }
 
     if (isIfood) {
-      if (delivery.order_id && delivery.confirmation_code) {
-        parts.push(`*#${delivery.order_id}* - *ID: ${delivery.confirmation_code}*`);
-      } else if (delivery.order_id) {
-         parts.push(`*#${delivery.order_id}*`);
-      } else if (delivery.confirmation_code) {
-         parts.push(`*ID: ${delivery.confirmation_code}*`);
-      }
+      const ifoodParts = [];
+      if (delivery.order_id) ifoodParts.push(`*#${delivery.order_id}*`);
+      if (delivery.ifood_id) ifoodParts.push(`*ID: ${delivery.ifood_id}*`);
+      if (delivery.confirmation_code) ifoodParts.push(`*Cód: ${delivery.confirmation_code}*`);
       
-      if (delivery.order_id || delivery.confirmation_code) {
+      if (ifoodParts.length > 0) {
+          parts.push(ifoodParts.join(' - '));
           parts.push(''); 
       }
     }
@@ -98,7 +96,6 @@ export async function copyFullRouteToClipboard(
       const name = customer?.name || 'Cliente Desconhecido';
       const isUrgent = (delivery as any).is_urgent;
       
-      // Heurística de Endereço Impreciso (Sem número e sem link exato do maps)
       const hasNumber = /\d/.test(delivery.address_string);
       const isFuzzy = !hasNumber && !delivery.maps_link;
 
@@ -106,27 +103,28 @@ export async function copyFullRouteToClipboard(
         hasFuzzyAddresses = true;
         fuzzyDeliveries.push({ index: index + 1, name, address: delivery.address_string, neighborhood: customer?.neighborhood });
       } else {
-        // Só adiciona na string do mapa se for um endereço confiável
         deliveriesInMap.push(encodeURIComponent(delivery.address_string));
       }
 
-      // Título da Parada numerado
+      // 🔥 TÍTULO COM OS 3 DADOS SEPARADOS (Nº, ID e CÓDIGO)
       let title = `*${index + 1}️⃣ ${name}*`;
-      if (delivery.origin === 'ifood' && delivery.order_id) {
-          title += ` (iFood #${delivery.order_id})`;
+      if (delivery.origin === 'ifood') {
+          title += ` (iFood`;
+          if (delivery.order_id) title += ` #${delivery.order_id}`;
+          if (delivery.ifood_id) title += ` - ID: ${delivery.ifood_id}`;
+          if (delivery.confirmation_code) title += ` - Cód: ${delivery.confirmation_code}`;
+          title += `)`;
       } else {
           title += ` (Loja)`;
       }
       if (isUrgent) title += ' 🚨';
+      
       parts.push(title);
       
-      // Endereço e Link individual para cada parada
       parts.push(`🏠 Endereço: ${delivery.address_string}`);
       
-      // Observação
       if (delivery.observation) parts.push(`⚠️ *OBS:* ${delivery.observation}`);
 
-      // Pagamento
       const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
       if (delivery.is_paid) {
         parts.push(`📱 Pagamento: Pago no App ✅`);
@@ -139,20 +137,17 @@ export async function copyFullRouteToClipboard(
         }
       }
 
-      // Bebidas
       if (delivery.drinks) parts.push(`🥤 Bebida: ${delivery.drinks.trim()}`);
       
-      // Aviso se o endereço foi isolado da Rota Inteligente
       if (isFuzzy) {
           parts.push(`❌ *Atenção:* Esta entrega não possui número no endereço e não está inclusa no link automático abaixo.`);
       }
 
-      parts.push(''); // Pula uma linha entre entregas
+      parts.push('');
     });
 
     parts.push(`━━━━━━━━━━━━━━━━━━━━━━`);
 
-    // Geração do Link do Maps com Waypoints na ordem exata APENAS com endereços válidos
     if (deliveriesInMap.length > 0) {
         const waypoints = deliveriesInMap.join('/');
         const mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(storeAddress)}/${waypoints}`;
@@ -160,7 +155,6 @@ export async function copyFullRouteToClipboard(
         parts.push(`${mapUrl}\n`);
     }
 
-    // Se encontrou endereços problemáticos, cria o rodapé de alerta para não passar batido
     if (fuzzyDeliveries.length > 0) {
       parts.push(`*(🚨 Nota: ${fuzzyDeliveries.length === 1 ? 'A entrega' : 'As entregas'} ${fuzzyDeliveries.map(f => f.index).join(', ')} não ${fuzzyDeliveries.length === 1 ? 'está inclusa' : 'estão inclusas'} no link automático. Verifique o endereço manualmente).*`);
     }
