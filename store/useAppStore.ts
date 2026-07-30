@@ -5,6 +5,7 @@ import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, Use
 import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import type { Route, Delivery, Customer, OrderOrigin, Motoboy } from '@/types';
 
 interface AppState {
@@ -220,6 +221,24 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false, syncError: true }); 
+
+          // 🔥 NOTIFICAÇÃO NATIVA DE ERRO DE SINCRONIZAÇÃO
+          if (Capacitor.isNativePlatform()) {
+            try {
+              await LocalNotifications.schedule({
+                notifications: [
+                  {
+                    title: '⚠️ Falha de Sincronização',
+                    body: 'Não foi possível atualizar os dados com a nuvem. Verifique sua conexão.',
+                    id: 999,
+                    schedule: { at: new Date(Date.now() + 1000) },
+                  }
+                ]
+              });
+            } catch (e) {
+              console.error('Erro ao disparar notificação de falha de sync:', e);
+            }
+          }
         }
       },
 
