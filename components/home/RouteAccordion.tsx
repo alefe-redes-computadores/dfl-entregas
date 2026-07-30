@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Bike, Wallet, PackageCheck, CheckCircle2, Clock, RotateCcw, Timer, MapPin, Share2 } from 'lucide-react';
+import { ChevronDown, Bike, Wallet, PackageCheck, CheckCircle2, Clock, RotateCcw, Timer, MapPin, Share2, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import type { Route } from '@/types';
@@ -205,7 +205,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       </button>
 
       {isOpen && (
-        <div className="flex flex-col gap-3 border-t border-zinc-800/80 p-4 pt-3">
+        <div className="flex flex-col gap-3 border-t border-zinc-800/80 p-4 pt-3 pb-6">
           {(route.change_money > 0 || pendingCount > 0) && (
             <div className="flex flex-wrap items-center gap-2 pb-1">
               {route.change_money > 0 && (
@@ -238,22 +238,26 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
           <div className="mt-2 flex flex-col gap-2">
             
+            {/* BARRA FLUTUANTE DE AÇÕES GLOBAIS DA ROTA */}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && (
-              <div className="grid grid-cols-2 gap-2 mb-1">
-                <button
-                  onClick={handleOptimizeRoute}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-[20px] bg-indigo-600 border border-indigo-500/50 py-3.5 text-[13px] font-bold text-white transition-all hover:bg-indigo-500 active:scale-95 shadow-lg shadow-indigo-500/20"
-                >
-                  <MapPin size={16} />
-                  Otimizar (Maps)
-                </button>
+              <div className="fixed bottom-24 left-0 right-0 z-40 mx-auto flex w-full max-w-[92%] items-center justify-between gap-3 rounded-[24px] border border-zinc-700/80 bg-zinc-900/95 px-4 py-3 backdrop-blur-xl shadow-2xl shadow-black/50">
                 
+                {/* Botão Secundário: Copiar Rota Inteira */}
                 <button
                   onClick={handleShareFullRoute}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-[20px] bg-emerald-600 border border-emerald-500/50 py-3.5 text-[13px] font-bold text-white transition-all hover:bg-emerald-500 active:scale-95 shadow-lg shadow-emerald-500/20"
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800/80 text-sm font-semibold text-zinc-300 transition-all active:scale-95 hover:bg-zinc-700"
                 >
-                  <Share2 size={16} />
-                  Copiar P/ Whats
+                  <Copy size={18} className="text-emerald-500" />
+                  <span className="truncate">Copiar Tudo</span>
+                </button>
+
+                {/* Botão Primário: Otimizar Rota */}
+                <button
+                  onClick={handleOptimizeRoute}
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition-all active:scale-95 hover:bg-indigo-500"
+                >
+                  <MapPin size={18} />
+                  <span className="truncate">Otimizar (Maps)</span>
                 </button>
               </div>
             )}
