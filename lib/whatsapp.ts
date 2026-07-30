@@ -3,64 +3,78 @@ import type { Delivery, Route, Customer } from '@/types';
 // ============================================================================
 // 1. COPIAR ENTREGA ÚNICA
 // ============================================================================
-export async function copyDeliveryToClipboard(delivery: Delivery): Promise<boolean> {
+export async function copyDeliveryToClipboard(
+  delivery: Delivery,
+  customerName?: string
+): Promise<boolean> {
   try {
     const parts: string[] = [];
     const isIfood = delivery.origin === 'ifood' || !delivery.origin;
     const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
     const isUrgent = (delivery as any).is_urgent;
 
+    parts.push(`📦 *DADOS DA ENTREGA* 📦`);
+    
     if (isUrgent) {
-      parts.push(`🚨 *ENTREGA URGENTE* 🚨\n`);
+      parts.push(`🚨 *ATENÇÃO: ENTREGA URGENTE* 🚨`);
+    }
+    
+    parts.push('');
+
+    if (customerName) {
+      parts.push(`👤 *Cliente:* ${customerName}`);
     }
 
+    // Origem e IDs
     if (isIfood) {
-      const ifoodParts = [];
-      if (delivery.order_id) ifoodParts.push(`*#${delivery.order_id}*`);
-      if (delivery.ifood_id) ifoodParts.push(`*ID: ${delivery.ifood_id}*`);
-      if (delivery.confirmation_code) ifoodParts.push(`*Cód: ${delivery.confirmation_code}*`);
-      
-      if (ifoodParts.length > 0) {
-          parts.push(ifoodParts.join(' - '));
-          parts.push(''); 
+      let ifoodInfo = `🛒 *Origem:* iFood`;
+      if (delivery.order_id) ifoodInfo += ` (#${delivery.order_id})`;
+      if (delivery.ifood_id) ifoodInfo += ` - ID: ${delivery.ifood_id}`;
+      if (delivery.confirmation_code) ifoodInfo += ` - Cód: ${delivery.confirmation_code}`;
+      parts.push(ifoodInfo);
+    } else {
+      parts.push(`🛒 *Origem:* Loja Própria`);
+    }
+
+    // Endereço e Observação
+    parts.push(`🏠 *Endereço:* ${delivery.address_string}`);
+    if (delivery.observation) {
+      parts.push(`⚠️ *OBS:* ${delivery.observation}`);
+    }
+
+    // Pagamento
+    if (delivery.is_paid) {
+      parts.push(`📱 *Pagamento:* Pago no App ✅`);
+    } else {
+      const pMethod = delivery.payment_method?.toUpperCase().replace('_', ' ') || 'PAGAMENTO';
+      if (delivery.payment_method === 'dinheiro') {
+        if (delivery.change_for) {
+          parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})`);
+        } else {
+          parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Trocado)`);
+        }
+      } else if (delivery.payment_method?.includes('cartao') || (delivery.payment_method as string) === 'cartao') {
+        parts.push(`💳 *Pagamento:* CARTÃO - R$ ${valueStr} (Levar maquininha)`);
+      } else if (delivery.payment_method === 'pix') {
+        parts.push(`💠 *Pagamento:* PIX QR Code - R$ ${valueStr} (Na maquininha)`);
+      } else {
+        parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr}`);
       }
     }
 
-    parts.push(delivery.address_string);
-
-    if (delivery.observation) {
-      parts.push(`*OBS:* ${delivery.observation}`);
-    }
-
-    if (delivery.maps_link) {
-      parts.push(`🗺️ ${delivery.maps_link}`);
-    } else if (delivery.address_string) {
-      const encodedAddress = encodeURIComponent(`${delivery.address_string}, Patos de Minas - MG`);
-      parts.push(`🗺️ https://maps.google.com/?q=${encodedAddress}`);
+    // Bebidas
+    if (delivery.drinks) {
+      parts.push(`🥤 *Bebida:* ${delivery.drinks.trim()}`);
     }
 
     parts.push(''); 
 
-    if (delivery.is_paid) {
-      parts.push(`- *PAGO*`);
-    } else {
-      if (delivery.payment_method === 'dinheiro') {
-        if (delivery.change_for) {
-          parts.push(`- *DINHEIRO* - R$ ${valueStr} (Levar troco para R$ ${delivery.change_for.toFixed(2).replace('.', ',')})`);
-        } else {
-          parts.push(`- *DINHEIRO* - R$ ${valueStr} (Trocado)`);
-        }
-      } else if (delivery.payment_method?.includes('cartao') || (delivery.payment_method as string) === 'cartao') {
-        parts.push(`- *CARTÃO* - R$ ${valueStr} (Levar maquininha)`);
-      } else if (delivery.payment_method === 'pix') {
-        parts.push(`- *PIX QR Code na maquininha* - R$ ${valueStr}`);
-      } else {
-        parts.push(`- *${delivery.payment_method?.toUpperCase() || 'PAGAMENTO'}* - R$ ${valueStr}`);
-      }
-    }
-
-    if (delivery.drinks) {
-      parts.push(`- *${delivery.drinks.trim()}*`);
+    // Mapa
+    if (delivery.maps_link) {
+      parts.push(`🗺️ *Mapa:* ${delivery.maps_link}`);
+    } else if (delivery.address_string) {
+      const encodedAddress = encodeURIComponent(`${delivery.address_string}, Patos de Minas - MG`);
+      parts.push(`🗺️ *Mapa:* https://maps.google.com/?q=${encodedAddress}`);
     }
 
     const textToCopy = parts.join('\n');
