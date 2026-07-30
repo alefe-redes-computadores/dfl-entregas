@@ -33,7 +33,8 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
   const isUrgent = (delivery as any).is_urgent; 
 
   async function handleCopy() {
-    const success = await copyDeliveryToClipboard(delivery);
+    // 🔥 Alteração feita aqui: adicionado o customer?.name
+    const success = await copyDeliveryToClipboard(delivery, customer?.name);
     if (success) {
       toast.success('Dados copiados!', { description: 'Pronto para enviar ao cliente.' });
     } else {
