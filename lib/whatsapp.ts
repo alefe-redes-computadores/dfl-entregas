@@ -8,7 +8,7 @@ export async function copyDeliveryToClipboard(delivery: Delivery): Promise<boole
     const parts: string[] = [];
     const isIfood = delivery.origin === 'ifood' || !delivery.origin;
     const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
-    const isUrgent = delivery.is_urgent;
+    const isUrgent = (delivery as any).is_urgent;
 
     if (isUrgent) {
       parts.push(`🚨 *ENTREGA URGENTE* 🚨\n`);
@@ -87,22 +87,16 @@ export async function copyFullRouteToClipboard(
     const parts: string[] = [];
     let hasFuzzyAddresses = false;
     const fuzzyDeliveries: any[] = [];
+    const deliveriesInMap: string[] = [];
 
     parts.push(`🏍️ *ROTA DE ENTREGA - ${route.motoboy_name.toUpperCase()}*`);
     parts.push(`📍 *Base:* ${storeAddress}\n`);
-
-    // Geração do Link do Maps com Waypoints na ordem exata
-    const waypoints = deliveries.map(d => encodeURIComponent(d.address_string)).join('/');
-    const mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(storeAddress)}/${waypoints}`;
-    
-    parts.push(`🗺️ *LINK DO MAPA (Siga a Ordem):*`);
-    parts.push(`${mapUrl}\n`);
     parts.push(`📦 *RESUMO DAS PARADAS:*\n`);
 
     deliveries.forEach((delivery, index) => {
       const customer = getCustomerById(delivery.customer_id);
       const name = customer?.name || 'Cliente Desconhecido';
-      const isUrgent = delivery.is_urgent;
+      const isUrgent = (delivery as any).is_urgent;
       
       // Heurística de Endereço Impreciso (Sem número e sem link exato do maps)
       const hasNumber = /\d/.test(delivery.address_string);
@@ -111,40 +105,64 @@ export async function copyFullRouteToClipboard(
       if (isFuzzy) {
         hasFuzzyAddresses = true;
         fuzzyDeliveries.push({ index: index + 1, name, address: delivery.address_string, neighborhood: customer?.neighborhood });
+      } else {
+        // Só adiciona na string do mapa se for um endereço confiável
+        deliveriesInMap.push(encodeURIComponent(delivery.address_string));
       }
 
       // Título da Parada numerado
-      parts.push(`*${index + 1}. ${name}* ${isUrgent ? '🚨 (URGENTE)' : ''}`);
+      let title = `*${index + 1}️⃣ ${name}*`;
+      if (delivery.origin === 'ifood' && delivery.order_id) {
+          title += ` (iFood #${delivery.order_id})`;
+      } else {
+          title += ` (Loja)`;
+      }
+      if (isUrgent) title += ' 🚨';
+      parts.push(title);
       
-      // Endereço
-      parts.push(`📍 ${delivery.address_string}`);
-      if (delivery.observation) parts.push(`*OBS:* ${delivery.observation}`);
+      // Endereço e Link individual para cada parada
+      parts.push(`🏠 Endereço: ${delivery.address_string}`);
+      
+      // Observação
+      if (delivery.observation) parts.push(`⚠️ *OBS:* ${delivery.observation}`);
 
       // Pagamento
       const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
       if (delivery.is_paid) {
-        parts.push(`💳 *PAGO*`);
+        parts.push(`📱 Pagamento: Pago no App ✅`);
       } else {
         const pMethod = delivery.payment_method.toUpperCase().replace('_', ' ');
         if (delivery.payment_method === 'dinheiro' && delivery.change_for) {
-          parts.push(`💵 *${pMethod}* - R$ ${valueStr} (Levar troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})`);
+          parts.push(`💵 Pagamento: ${pMethod} - R$ ${valueStr} (Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})`);
         } else {
-          parts.push(`💵 *${pMethod}* - R$ ${valueStr}`);
+          parts.push(`💵 Pagamento: ${pMethod} - R$ ${valueStr}`);
         }
       }
 
       // Bebidas
-      if (delivery.drinks) parts.push(`🥤 *${delivery.drinks.trim()}*`);
+      if (delivery.drinks) parts.push(`🥤 Bebida: ${delivery.drinks.trim()}`);
       
+      // Aviso se o endereço foi isolado da Rota Inteligente
+      if (isFuzzy) {
+          parts.push(`❌ *Atenção:* Esta entrega não possui número no endereço e não está inclusa no link automático abaixo.`);
+      }
+
       parts.push(''); // Pula uma linha entre entregas
     });
 
-    // Se encontrou endereços problemáticos, cria um rodapé de alerta para não passar batido
+    parts.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+
+    // Geração do Link do Maps com Waypoints na ordem exata APENAS com endereços válidos
+    if (deliveriesInMap.length > 0) {
+        const waypoints = deliveriesInMap.join('/');
+        const mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(storeAddress)}/${waypoints}`;
+        parts.push(`🗺️ *ROTA INTELIGENTE (Google Maps):*`);
+        parts.push(`${mapUrl}\n`);
+    }
+
+    // Se encontrou endereços problemáticos, cria o rodapé de alerta para não passar batido
     if (fuzzyDeliveries.length > 0) {
-      parts.push(`⚠️ *ATENÇÃO: ENDEREÇOS POSSIVELMENTE IMPRECISOS (Sem número/Link)*`);
-      fuzzyDeliveries.forEach(fd => {
-        parts.push(`- *Parada ${fd.index} (${fd.name}):* O GPS pode falhar. Procure pelo bairro: *${fd.neighborhood || 'Não informado'}*.`);
-      });
+      parts.push(`*(🚨 Nota: ${fuzzyDeliveries.length === 1 ? 'A entrega' : 'As entregas'} ${fuzzyDeliveries.map(f => f.index).join(', ')} não ${fuzzyDeliveries.length === 1 ? 'está inclusa' : 'estão inclusas'} no link automático. Verifique o endereço manualmente).*`);
     }
 
     const textToCopy = parts.join('\n');
