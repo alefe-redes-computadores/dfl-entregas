@@ -11,22 +11,51 @@ export default function MaisPage() {
   
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
+  const initData = useAppStore((state) => state.initData); // 🔥 BUSCAMOS A FUNÇÃO REAL DO BANCO
+  const isSyncing = useAppStore((state) => state.isSyncing); // 🔥 PEGAMOS O ESTADO DE LOADING
+  const syncError = useAppStore((state) => state.syncError); // 🔥 PEGAMOS SE HOUVE ERRO
   
-  // Estado para o Modal de Exclusão Segura
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
 
   const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Álefe';
   const fullName = user?.displayName || 'Álefe Jôhsefe';
 
-  const handleSync = () => {
-    toast.success('Sincronizado com sucesso!', {
-      description: 'Todos os dados estão salvos localmente e na nuvem.',
-    });
+  // 🔥 AGORA O BOTÃO FAZ A SINCRONIZAÇÃO DE VERDADE
+  const handleSync = async () => {
+    if (isSyncing) return; // Evita duplo clique se já estiver carregando
+    
+    toast.loading('Sincronizando com a nuvem...', { id: 'sync-toast' });
+    
+    try {
+      await initData();
+      
+      // O Zustand atualiza o syncError logo após o initData terminar. 
+      // Damos um leve delay de meio segundo só pra garantir que o React leu a variável atualizada
+      setTimeout(() => {
+          const currentState = useAppStore.getState();
+          if (currentState.syncError) {
+             toast.error('Erro na sincronização!', { 
+                 id: 'sync-toast',
+                 description: 'Não foi possível conectar. Você está offline ou o Firebase bloqueou o acesso.',
+                 duration: 4000
+             });
+          } else {
+             toast.success('Sincronizado com sucesso! ✅', { 
+                 id: 'sync-toast',
+                 description: 'Rotas, clientes e entregas estão atualizados com a nuvem.',
+                 duration: 3000
+             });
+          }
+      }, 500);
+
+    } catch (error) {
+      toast.error('Erro inesperado', { id: 'sync-toast', description: 'Algo deu muito errado ao tentar buscar os dados.' });
+    }
   };
 
   const handleOpenClearModal = () => {
-    setConfirmText(''); // Limpa o texto ao abrir
+    setConfirmText(''); 
     setIsClearModalOpen(true);
   };
 
@@ -36,8 +65,6 @@ export default function MaisPage() {
       return;
     }
     
-    // Como a limpeza está bloqueada nessa fase, mostramos a mensagem de desabilitada
-    // Se no futuro você liberar a função real no store, é só colocar a chamada aqui!
     toast.error('Função desabilitada', {
       description: 'Por segurança, a limpeza de dados está bloqueada nesta fase.',
     });
@@ -114,14 +141,19 @@ export default function MaisPage() {
 
           <button
             onClick={handleSync}
-            className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30"
+            disabled={isSyncing}
+            className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
-              <RefreshCw size={20} />
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${syncError ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+              <RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-semibold text-zinc-100">Sincronizar agora</p>
-              <p className="text-xs text-zinc-500">Forçar sincronização de cache</p>
+              <p className={`font-semibold ${syncError ? 'text-red-400' : 'text-zinc-100'}`}>
+                {isSyncing ? 'Buscando dados...' : (syncError ? 'Falha na Última Sincronização' : 'Sincronizar agora')}
+              </p>
+              <p className="text-xs text-zinc-500">
+                {isSyncing ? 'Aguarde um momento' : 'Forçar sincronização com a nuvem'}
+              </p>
             </div>
           </button>
 
