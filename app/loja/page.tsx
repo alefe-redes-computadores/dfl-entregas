@@ -196,6 +196,47 @@ export default function LojaPage() {
         </div>
       </button>
 
+      {/* 🔥 SEÇÃO DE GESTÃO & CADASTROS (ATALHOS MOTOBOYS & CLIENTES) */}
+      <div className="flex flex-col gap-3">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2">
+          <Users size={14} /> Gestão & Cadastros
+        </h2>
+        
+        <div className="grid grid-cols-2 gap-3">
+          <button 
+            onClick={() => router.push('/motoboys')}
+            className="bg-zinc-900/60 border border-zinc-800 hover:border-amber-500/50 p-4 rounded-[24px] flex flex-col gap-2 text-left transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Bike size={18} />
+              </div>
+              <span className="text-[10px] font-bold text-zinc-500 uppercase">Equipe</span>
+            </div>
+            <div>
+              <p className="font-heading font-bold text-zinc-100 text-sm">Motoboys</p>
+              <p className="text-[11px] text-zinc-500">Gerenciar e cadastrar</p>
+            </div>
+          </button>
+
+          <button 
+            onClick={() => router.push('/clientes')}
+            className="bg-zinc-900/60 border border-zinc-800 hover:border-sky-500/50 p-4 rounded-[24px] flex flex-col gap-2 text-left transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="h-10 w-10 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Users size={18} />
+              </div>
+              <span className="text-[10px] font-bold text-zinc-500 uppercase">Base</span>
+            </div>
+            <div>
+              <p className="font-heading font-bold text-zinc-100 text-sm">Clientes</p>
+              <p className="text-[11px] text-zinc-500">Endereços salvos</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2">
           <TrendingUp size={14} /> Desempenho de Hoje
@@ -222,13 +263,13 @@ export default function LojaPage() {
         <div className="bg-zinc-900/40 border border-zinc-800 p-4 rounded-[24px] flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5">
-              <Bike size={14} className="text-amber-500" /> Escala de Motoboys (Hoje)
+              <Bike size={14} className="text-amber-500" /> Escala Rápida de Motoboys (Hoje)
             </span>
             <button 
               onClick={() => router.push('/motoboys')} 
               className="text-[11px] font-bold text-sky-400 hover:text-sky-300 cursor-pointer"
             >
-              Gerenciar ➔
+              Ver todos ➔
             </button>
           </div>
 
