@@ -78,7 +78,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     });
     setIsOpen(false);
 
-    // 🔥 NOTIFICAÇÃO NATIVA DE ROTA CONCLUÍDA
     if (routeAlertsEnabled && Capacitor.isNativePlatform()) {
       try {
         await LocalNotifications.schedule({
@@ -236,13 +235,16 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             ))
           )}
 
-          <div className="mt-2 flex flex-col gap-2">
+          {/* 🔥 Alteração feita aqui: Adicionado um espaço fantasma (pb-24) se a barra estiver visível */}
+          <div className={clsx(
+            "mt-2 flex flex-col gap-2",
+            sortedDeliveries.length > 0 && route.status === 'aberta' && "pb-24"
+          )}>
             
             {/* BARRA FLUTUANTE DE AÇÕES GLOBAIS DA ROTA */}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && (
               <div className="fixed bottom-24 left-0 right-0 z-40 mx-auto flex w-full max-w-[92%] items-center justify-between gap-3 rounded-[24px] border border-zinc-700/80 bg-zinc-900/95 px-4 py-3 backdrop-blur-xl shadow-2xl shadow-black/50">
                 
-                {/* Botão Secundário: Copiar Rota Inteira */}
                 <button
                   onClick={handleShareFullRoute}
                   className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800/80 text-sm font-semibold text-zinc-300 transition-all active:scale-95 hover:bg-zinc-700"
@@ -251,7 +253,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   <span className="truncate">Copiar Tudo</span>
                 </button>
 
-                {/* Botão Primário: Otimizar Rota */}
                 <button
                   onClick={handleOptimizeRoute}
                   className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition-all active:scale-95 hover:bg-indigo-500"
