@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Copy, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, Smartphone, Store, CheckCircle, ArrowUp, ArrowDown, AlertTriangle } from 'lucide-react';
+import { Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, Smartphone, Store, CheckCircle, ArrowUp, ArrowDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import type { Delivery, Customer } from '@/types';
@@ -30,14 +30,14 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
   const isIfood = delivery.origin === 'ifood' || !delivery.origin; 
-  const isUrgent = (delivery as any).is_urgent; // 🔥 PUXA STATUS DE URGÊNCIA
+  const isUrgent = (delivery as any).is_urgent; 
 
   async function handleCopy() {
     const success = await copyDeliveryToClipboard(delivery);
     if (success) {
-      toast.success('Entrega copiada!', { description: 'Pronto pra colar no WhatsApp.' });
+      toast.success('Dados copiados!', { description: 'Pronto para enviar ao cliente.' });
     } else {
-      toast.error('Não foi possível copiar', { description: 'Tenta novamente ou copia manualmente.' });
+      toast.error('Não foi possível copiar', { description: 'Tente novamente ou copie manualmente.' });
     }
   }
 
@@ -53,7 +53,7 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
       className={clsx(
         "overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/60 backdrop-blur-sm transition-all duration-500",
         delivery.completed && "opacity-50 grayscale",
-        isUrgent && !delivery.completed && "border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.05)]" // Destaque extra na borda
+        isUrgent && !delivery.completed && "border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.05)]"
       )}
     >
       <div className="flex flex-col p-4">
@@ -70,7 +70,6 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
               </span>
             )}
 
-            {/* 🔥 SELO DE URGÊNCIA 🔥 */}
             {isUrgent && (
               <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-500 text-white text-[10px] font-black uppercase tracking-wider shadow-md shadow-red-500/30">
                 <AlertTriangle size={12} /> Urgente
@@ -195,8 +194,8 @@ export function DeliveryCard({ delivery, customer }: DeliveryCardProps) {
           <Link href={`/entregas/details?id=${delivery.id}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-800 text-zinc-300 transition-transform hover:bg-zinc-700 active:scale-90">
             <Pencil size={15} />
           </Link>
-          <button onClick={handleCopy} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-zinc-950 transition-transform active:scale-90 shadow-lg shadow-emerald-500/20">
-            <Copy size={16} strokeWidth={2.5} />
+          <button onClick={handleCopy} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-800 text-zinc-300 transition-transform hover:bg-zinc-700 active:scale-90">
+            <Share2 size={16} strokeWidth={2.5} />
           </button>
         </div>
       </div>
