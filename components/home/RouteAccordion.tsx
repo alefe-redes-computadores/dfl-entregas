@@ -235,11 +235,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             ))
           )}
 
-          {/* 🔥 Alteração feita aqui: Adicionado um espaço fantasma (pb-24) se a barra estiver visível */}
-          <div className={clsx(
-            "mt-2 flex flex-col gap-2",
-            sortedDeliveries.length > 0 && route.status === 'aberta' && "pb-24"
-          )}>
+          <div className="mt-2 flex flex-col gap-2">
             
             {/* BARRA FLUTUANTE DE AÇÕES GLOBAIS DA ROTA */}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && (
