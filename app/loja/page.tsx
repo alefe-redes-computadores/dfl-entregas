@@ -11,7 +11,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; // 🔥 IMPORTAÇÃO DO AUTOCOMPLETE
+import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 
 const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -60,15 +60,16 @@ export default function LojaPage() {
       setAlertsEnabled(storeSettings.alertsEnabled ?? false);
       setStoreAddress(storeSettings.storeAddress || 'Patos de Minas, MG');
       
+      // 🔥 CORREÇÃO DO BUG DE HORÁRIO AQUI 🔥
       if (storeSettings.openingTime) {
         const [h, m] = storeSettings.openingTime.split(':').map(Number);
-        setOpenHour(h || 18);
-        setOpenMin(m || 0);
+        setOpenHour(isNaN(h) ? 18 : h);
+        setOpenMin(isNaN(m) ? 0 : m);
       }
       if (storeSettings.closingTime) {
         const [h, m] = storeSettings.closingTime.split(':').map(Number);
-        setCloseHour(h || 23);
-        setCloseMin(m || 59);
+        setCloseHour(isNaN(h) ? 23 : h);
+        setCloseMin(isNaN(m) ? 59 : m);
       }
     }
   }, [storeSettings, hasHydrated]);
@@ -168,7 +169,7 @@ export default function LojaPage() {
     setFn(current % 5 !== 0 ? rounded : rounded - 5);
   };
 
-  if (!isMounted || !hasHydrated) return null; // Aguarda a tela brilhar com dados reais
+  if (!isMounted || !hasHydrated) return null;
 
   return (
     <div className="flex flex-col gap-6 pb-24 animate-in fade-in duration-300 relative">
