@@ -78,7 +78,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     });
     setIsOpen(false);
 
-    // 🔥 NOTIFICAÇÃO 2: Rota Finalizada Concluída
+    // 🔥 NOTIFICAÇÃO NATIVA DE ROTA CONCLUÍDA
     if (routeAlertsEnabled && Capacitor.isNativePlatform()) {
       try {
         await LocalNotifications.schedule({
