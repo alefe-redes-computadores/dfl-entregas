@@ -25,7 +25,6 @@ export async function copyDeliveryToClipboard(
       parts.push(`👤 *Cliente:* ${customerName}`);
     }
 
-    // Origem e IDs
     if (isIfood) {
       let ifoodInfo = `🛒 *Origem:* iFood`;
       if (delivery.order_id) ifoodInfo += ` (#${delivery.order_id})`;
@@ -36,13 +35,11 @@ export async function copyDeliveryToClipboard(
       parts.push(`🛒 *Origem:* Loja Própria`);
     }
 
-    // Endereço e Observação
     parts.push(`🏠 *Endereço:* ${delivery.address_string}`);
     if (delivery.observation) {
       parts.push(`⚠️ *OBS:* ${delivery.observation}`);
     }
 
-    // Pagamento
     if (delivery.is_paid) {
       parts.push(`📱 *Pagamento:* Pago no App ✅`);
     } else {
@@ -62,14 +59,12 @@ export async function copyDeliveryToClipboard(
       }
     }
 
-    // Bebidas
     if (delivery.drinks) {
       parts.push(`🥤 *Bebida:* ${delivery.drinks.trim()}`);
     }
 
     parts.push(''); 
 
-    // Mapa
     if (delivery.maps_link) {
       parts.push(`🗺️ *Mapa:* ${delivery.maps_link}`);
     } else if (delivery.address_string) {
@@ -87,7 +82,7 @@ export async function copyDeliveryToClipboard(
 }
 
 // ============================================================================
-// 2. COPIAR ROTA COMPLETA (MAPA DE GUERRA)
+// 2. COPIAR ROTA COMPLETA (MAPA DE GUERRA COM SOMA DE BEBIDAS)
 // ============================================================================
 export async function copyFullRouteToClipboard(
   route: Route,
@@ -100,6 +95,9 @@ export async function copyFullRouteToClipboard(
     let hasFuzzyAddresses = false;
     const fuzzyDeliveries: any[] = [];
     const deliveriesInMap: string[] = [];
+    
+    // Lógica para somar bebidas
+    const drinksSummary: Record<string, { qty: number, name: string }> = {};
 
     parts.push(`🏍️ *ROTA DE ENTREGA - ${route.motoboy_name.toUpperCase()}*`);
     parts.push(`📍 *Base:* ${storeAddress}\n`);
@@ -120,7 +118,6 @@ export async function copyFullRouteToClipboard(
         deliveriesInMap.push(encodeURIComponent(delivery.address_string));
       }
 
-      // 🔥 TÍTULO COM OS 3 DADOS SEPARADOS (Nº, ID e CÓDIGO)
       let title = `*${index + 1}️⃣ ${name}*`;
       if (delivery.origin === 'ifood') {
           title += ` (iFood`;
@@ -134,7 +131,6 @@ export async function copyFullRouteToClipboard(
       if (isUrgent) title += ' 🚨';
       
       parts.push(title);
-      
       parts.push(`🏠 Endereço: ${delivery.address_string}`);
       
       if (delivery.observation) parts.push(`⚠️ *OBS:* ${delivery.observation}`);
@@ -151,7 +147,27 @@ export async function copyFullRouteToClipboard(
         }
       }
 
-      if (delivery.drinks) parts.push(`🥤 Bebida: ${delivery.drinks.trim()}`);
+      // Separação inteligente de bebidas
+      if (delivery.drinks) {
+        const rawDrinkStr = delivery.drinks.trim();
+        parts.push(`🥤 Bebida: ${rawDrinkStr}`);
+
+        // Expressão regular para pegar a quantidade (se existir) no começo do texto
+        const match = rawDrinkStr.match(/^(\d+)\s+(.+)$/);
+        let qty = 1;
+        let drinkName = rawDrinkStr;
+
+        if (match) {
+          qty = parseInt(match[1], 10);
+          drinkName = match[2].trim();
+        }
+
+        const key = drinkName.toLowerCase();
+        if (!drinksSummary[key]) {
+          drinksSummary[key] = { qty: 0, name: drinkName };
+        }
+        drinksSummary[key].qty += qty;
+      }
       
       if (isFuzzy) {
           parts.push(`❌ *Atenção:* Esta entrega não possui número no endereço e não está inclusa no link automático abaixo.`);
@@ -159,6 +175,16 @@ export async function copyFullRouteToClipboard(
 
       parts.push('');
     });
+
+    // Anexando o resumo das bebidas caso existam
+    const drinkKeys = Object.keys(drinksSummary);
+    if (drinkKeys.length > 0) {
+      parts.push(`🥤 *RESUMO DE BEBIDAS (MOCHILA):*`);
+      drinkKeys.forEach(key => {
+        parts.push(`• ${drinksSummary[key].qty} ${drinksSummary[key].name}`);
+      });
+      parts.push('');
+    }
 
     parts.push(`━━━━━━━━━━━━━━━━━━━━━━`);
 
