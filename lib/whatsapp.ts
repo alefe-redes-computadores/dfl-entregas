@@ -176,12 +176,12 @@ export async function copyFullRouteToClipboard(
       parts.push('');
     });
 
-    // Anexando o resumo das bebidas caso existam
+    // Anexando o resumo das bebidas com a nova formatação do WhatsApp
     const drinkKeys = Object.keys(drinksSummary);
     if (drinkKeys.length > 0) {
       parts.push(`🥤 *RESUMO DE BEBIDAS (MOCHILA):*`);
       drinkKeys.forEach(key => {
-        parts.push(`• ${drinksSummary[key].qty} ${drinksSummary[key].name}`);
+        parts.push(`- *${drinksSummary[key].qty} ${drinksSummary[key].name}*`);
       });
       parts.push('');
     }
