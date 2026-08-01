@@ -133,7 +133,6 @@ export default function MotoboysPage() {
     const rule = m.payment_rule || { type: 'fixed_plus_variable', fixed_amount: 100, threshold: 15, extra_fee: 7 };
     setRuleType(rule.type);
     
-    // CORREÇÃO: Lê o valor bruto e aplica apenas a formatação visual sem multiplicar indevidamente
     setRuleFixedAmount((rule.fixed_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     setRuleDeliveryFee((rule.delivery_fee || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     setRuleThreshold(rule.threshold?.toString() || '0');
@@ -170,7 +169,7 @@ export default function MotoboysPage() {
   };
 
   // ------------------------------------------------------------------
-  // MÁQUINA DE CALCULAR ACERTO (FILTRO BLINDADO)
+  // MÁQUINA DE CALCULAR ACERTO (FILTRO BLINDADO E CORRIGIDO - FUSO HORÁRIO)
   // ------------------------------------------------------------------
   const acertoData = useMemo(() => {
     if (!selectedMotoboy) return null;
@@ -179,12 +178,14 @@ export default function MotoboysPage() {
 
     const getSafeDate = (rawDate: any) => {
       if (!rawDate) return '';
-      if (typeof rawDate === 'string' && rawDate.includes('T')) {
-        return rawDate.split('T')[0]; 
-      }
+      // CORREÇÃO: Força o Date a ler a string ISO e converter para o fuso local (Brasil)
       const d = new Date(rawDate);
       if (isNaN(d.getTime())) return '';
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
     };
 
     const todaysRoutes = routes.filter(r => {
@@ -197,9 +198,11 @@ export default function MotoboysPage() {
     const routeIds = new Set(todaysRoutes.map(r => r.id));
 
     const todaysDeliveries = deliveries.filter(d => {
+      // 1. Prioridade para rota (mesmo que a entrega passe da meia noite, se a rota abriu no dia, conta pro dia)
       const belongsToRoute = d.route_id && routeIds.has(d.route_id);
       if (belongsToRoute) return true;
 
+      // 2. Se a entrega for avulsa, verifica o motoboy e a data local exata
       const dMotoboy = ((d as any).motoboy_name || '').toLowerCase().trim();
       const isSameMotoboy = dMotoboy === motoboyNameLower;
       if (!isSameMotoboy) return false;
@@ -381,7 +384,9 @@ export default function MotoboysPage() {
       {/* MODAL / PAINEL DO MOTOBOY */}
       {selectedMotoboy && (
         <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="flex items-center justify-between p-4 border-b border-zinc-900 bg-zinc-950">
+          
+          {/* CORREÇÃO DO CABEÇALHO AQUI (pt-12 para afastar do relógio) */}
+          <div className="flex items-center justify-between px-4 pb-4 pt-12 border-b border-zinc-900 bg-zinc-950 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-400 font-bold">
                 {selectedMotoboy.name.charAt(0).toUpperCase()}
@@ -391,7 +396,7 @@ export default function MotoboysPage() {
                 <p className="text-xs text-zinc-500">Central de Fechamento e Regras</p>
               </div>
             </div>
-            <button onClick={() => setSelectedMotoboy(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white cursor-pointer">
+            <button onClick={() => setSelectedMotoboy(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white cursor-pointer active:scale-90 transition-transform">
               <X size={20} />
             </button>
           </div>
@@ -405,7 +410,8 @@ export default function MotoboysPage() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
+          {/* CORREÇÃO DO RODAPÉ (pb-12 para afastar da barra de navegação) */}
+          <div className="flex-1 overflow-y-auto px-4 pt-4 pb-12 flex flex-col gap-5">
             
             {/* --- ABA 1: ACERTO DIÁRIO (COM NAVEGAÇÃO CUSTOMIZADA) --- */}
             {activeTab === 'acerto' && acertoData && (
