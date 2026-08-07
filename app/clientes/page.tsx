@@ -1,4 +1,3 @@
-// app/clientes/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -8,6 +7,9 @@ import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import type { Customer, OrderOrigin } from '@/types';
+
+// Avatares específicos para perfil de clientes (Casas, Perfil, VIPs)
+const CUSTOMER_AVATARS = ['⭐', '👑', '🏠', '🏢', '👨', '👩', '👴', '👵', '🧑‍🎓', '💼', '🍕', '🍔'];
 
 export default function ClientesPage() {
   const customers = useAppStore((state) => state.customers);
@@ -23,6 +25,7 @@ export default function ClientesPage() {
   const [editNeighborhood, setEditNeighborhood] = useState('');
   const [editCode, setEditCode] = useState('');
   const [editOrigin, setEditOrigin] = useState<OrderOrigin>('ifood');
+  const [editAvatar, setEditAvatar] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   const searchLower = search.toLowerCase().trim();
@@ -37,22 +40,17 @@ export default function ClientesPage() {
 
     const matchesSearch = !searchLower || nameMatch || neighborhoodMatch || addressMatch || originTextMatch;
 
-    // Filtros por botões
     if (originFilter === 'ifood') return matchesSearch && isIfood;
     if (originFilter === 'loja') return matchesSearch && !isIfood;
-    
-    // 🔥 CORREÇÃO: No Ranking, SÓ ENTRA quem tiver pelo menos 1 pedido!
     if (originFilter === 'ranking') return matchesSearch && (c.orderCount || 0) > 0;
     
     return matchesSearch;
   }).sort((a, b) => {
-    // 🔥 ORDENAÇÃO: O Ranking ordena do maior para o menor número de pedidos
     if (originFilter === 'ranking') {
        const countA = a.orderCount || 0;
        const countB = b.orderCount || 0;
        return countB - countA;
     }
-    // Caso padrão: A-Z
     return a.name.localeCompare(b.name);
   });
 
@@ -63,6 +61,7 @@ export default function ClientesPage() {
     setEditNeighborhood(client.neighborhood || '');
     setEditCode(client.last_confirmation_code || '');
     setEditOrigin(client.origin || 'ifood');
+    setEditAvatar(client.avatar || '');
   };
 
   const closeEditModal = () => {
@@ -79,7 +78,8 @@ export default function ClientesPage() {
         address: editAddress,
         neighborhood: editNeighborhood,
         last_confirmation_code: editCode,
-        origin: editOrigin
+        origin: editOrigin,
+        avatar: editAvatar
       });
       toast.success('Cliente atualizado!');
       closeEditModal();
@@ -89,6 +89,26 @@ export default function ClientesPage() {
       setIsSaving(false);
     }
   };
+
+  // Componente de Seleção de Avatar reaproveitável
+  const AvatarPicker = ({ value, onChange }: { value: string, onChange: (v: string) => void }) => (
+    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none snap-x">
+      {CUSTOMER_AVATARS.map(avatar => (
+        <button
+          key={avatar}
+          type="button"
+          onClick={() => onChange(avatar)}
+          className={`h-11 w-11 shrink-0 snap-center rounded-full flex items-center justify-center text-xl transition-all ${
+            value === avatar 
+              ? 'bg-amber-500/20 border-2 border-amber-500 shadow-md' 
+              : 'bg-zinc-900 border border-zinc-800 opacity-60 hover:opacity-100'
+          }`}
+        >
+          {avatar}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-5 relative pb-24">
@@ -108,7 +128,7 @@ export default function ClientesPage() {
           placeholder="Buscar por nome, bairro ou rua..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-12 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+          className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-12 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
         />
       </div>
 
@@ -199,7 +219,7 @@ export default function ClientesPage() {
                 
                 {/* Ícone de Pódio (1º, 2º, 3º) */}
                 {isPodium && (
-                  <div className={`absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full text-xs font-black shadow-lg ${
+                  <div className={`absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full text-xs font-black shadow-lg z-10 ${
                     index === 0 ? 'bg-amber-400 text-amber-950' : 
                     index === 1 ? 'bg-zinc-300 text-zinc-900' : 
                     'bg-amber-700 text-amber-100'
@@ -209,23 +229,33 @@ export default function ClientesPage() {
                 )}
 
                 <div className="flex items-start justify-between">
-                  <div className="flex flex-col gap-1.5 pr-8">
-                    <div className="flex items-center gap-2">
-                      <User size={16} className={isIfood ? 'text-red-500' : 'text-emerald-500'} />
-                      <p className="font-semibold text-zinc-100">{client.name}</p>
+                  <div className="flex items-center gap-3 pr-8">
+                    
+                    {/* 🎨 AVATAR DO CLIENTE */}
+                    <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 border ${
+                      isIfood ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+                    }`}>
+                      {client.avatar ? <span className="text-xl">{client.avatar}</span> : (
+                        <User size={18} />
+                      )}
                     </div>
-                    {client.address && (
-                      <div className="flex items-center gap-2 text-xs text-zinc-400">
-                        <MapPin size={14} className="text-zinc-500 shrink-0" />
-                        <p className="line-clamp-1">{client.address}{client.neighborhood ? ` - ${client.neighborhood}` : ''}</p>
-                      </div>
-                    )}
-                    {!client.address && client.neighborhood && (
-                      <div className="flex items-center gap-2 text-xs text-zinc-500">
-                        <MapPin size={14} />
-                        <p>{client.neighborhood}</p>
-                      </div>
-                    )}
+
+                    <div className="flex flex-col gap-1">
+                      <p className="font-semibold text-zinc-100">{client.name}</p>
+                      
+                      {client.address && (
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                          <MapPin size={12} className="text-zinc-500 shrink-0" />
+                          <p className="line-clamp-1">{client.address}{client.neighborhood ? ` - ${client.neighborhood}` : ''}</p>
+                        </div>
+                      )}
+                      {!client.address && client.neighborhood && (
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                          <MapPin size={12} />
+                          <p>{client.neighborhood}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex flex-col items-end gap-2 shrink-0">
@@ -283,7 +313,7 @@ export default function ClientesPage() {
       {/* MODAL DE EDIÇÃO */}
       {editingCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-5 shadow-2xl">
+          <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-5 shadow-2xl overflow-y-auto max-h-[90vh]">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-xl font-heading font-bold text-zinc-50">Editar Cliente</h2>
               <button onClick={closeEditModal} className="text-zinc-500 hover:text-zinc-300">
@@ -309,13 +339,19 @@ export default function ClientesPage() {
                 </button>
               </div>
 
+              {/* 🎨 SELEÇÃO DE AVATAR */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-zinc-400">Ícone/Avatar do Cliente</label>
+                <AvatarPicker value={editAvatar} onChange={setEditAvatar} />
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-zinc-400">Nome do Cliente</label>
                 <input 
                   type="text" 
                   value={editName} 
                   onChange={(e) => setEditName(e.target.value)} 
-                  className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" 
+                  className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-amber-500 focus:outline-none" 
                   required 
                 />
               </div>
@@ -336,7 +372,7 @@ export default function ClientesPage() {
                     type="text" 
                     value={editNeighborhood} 
                     onChange={(e) => setEditNeighborhood(e.target.value)} 
-                    className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" 
+                    className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-amber-500 focus:outline-none" 
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -347,7 +383,7 @@ export default function ClientesPage() {
                     inputMode="numeric" 
                     value={editCode} 
                     onChange={(e) => setEditCode(e.target.value.replace(/\D/g, ''))} 
-                    className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" 
+                    className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-amber-500 focus:outline-none" 
                   />
                 </div>
               </div>
