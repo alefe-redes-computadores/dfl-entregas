@@ -22,7 +22,7 @@ interface ValeItem {
 // ============================================================================
 // CONFIGURAÇÃO DOS AVATARES (LUCIDE ICONS + TAILWIND COLORS)
 // ============================================================================
-export const AVATAR_OPTIONS = [
+const AVATAR_OPTIONS = [
   { id: 'man-blue', type: 'user', color: 'text-blue-500', bg: 'bg-blue-500/10', label: 'Rapaz (Azul)' },
   { id: 'man-emerald', type: 'user', color: 'text-emerald-500', bg: 'bg-emerald-500/10', label: 'Rapaz (Verde)' },
   { id: 'man-amber', type: 'user', color: 'text-amber-500', bg: 'bg-amber-500/10', label: 'Rapaz (Laranja)' },
@@ -33,7 +33,7 @@ export const AVATAR_OPTIONS = [
   { id: 'bike-sky', type: 'bike', color: 'text-sky-500', bg: 'bg-sky-500/10', label: 'Moto (Azul)' },
 ];
 
-export const RenderAvatarIcon = ({ id, size = 20, className = '' }: { id?: string, size?: number, className?: string }) => {
+const RenderAvatarIcon = ({ id, size = 20, className = '' }: { id?: string, size?: number, className?: string }) => {
   const config = AVATAR_OPTIONS.find(a => a.id === id) || AVATAR_OPTIONS[0];
   let Icon = User;
   if (config.type === 'user-round') Icon = UserRound;
