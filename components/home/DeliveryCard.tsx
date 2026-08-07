@@ -120,30 +120,30 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
         isExpanded ? "bg-zinc-900/80 border border-zinc-700/80" : "bg-zinc-900/40 border border-zinc-800/80"
       )}
     >
+      {/* BACKGROUND DINÂMICO CORRIGIDO (Com cores vivas e textos visíveis ao arrastar) */}
       <div className={clsx(
-        "absolute inset-0 flex items-center justify-between px-6 -z-10 transition-colors duration-150",
-        isDraggingRight && "bg-sky-500/20",
-        isDraggingLeft && "bg-emerald-500/30",
-        !isDraggingRight && !isDraggingLeft && "bg-zinc-950"
+        "absolute inset-0 flex items-center justify-between px-6 transition-colors duration-150",
+        isDraggingRight ? "bg-sky-500/40" : isDraggingLeft ? "bg-emerald-500/50" : "bg-zinc-950"
       )}>
-        <div className={clsx("flex items-center gap-2 font-bold transition-all", swipeOffset > 20 ? "opacity-100 text-sky-400 scale-105" : "opacity-30 text-zinc-500")}>
+        <div className={clsx("flex items-center gap-2 font-bold transition-all", isDraggingRight ? "opacity-100 text-sky-200 scale-110" : "opacity-40 text-zinc-400")}>
           {isExpanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
           <span className="text-xs">{isExpanded ? 'Minimizar' : 'Expandir'}</span>
         </div>
         
-        <div className={clsx("flex items-center gap-2 font-bold transition-all", swipeOffset < -20 ? "opacity-100 text-emerald-400 scale-105" : "opacity-30 text-zinc-500")}>
+        <div className={clsx("flex items-center gap-2 font-bold transition-all", isDraggingLeft ? "opacity-100 text-emerald-200 scale-110" : "opacity-40 text-zinc-400")}>
           <span className="text-xs">Dar Baixa</span>
           <CheckCircle2 size={20} />
         </div>
       </div>
 
+      {/* CONTAINER PRINCIPAL DO CARD (Com z-10 para flutuar acima do fundo) */}
       <div 
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         style={{ transform: `translateX(${swipeOffset}px)` }}
         className={clsx(
-          "flex flex-col bg-zinc-900/90 backdrop-blur-md h-full w-full",
+          "relative z-10 flex flex-col bg-zinc-900 h-full w-full",
           !isSwiping && "transition-transform duration-200"
         )}
       >
