@@ -65,7 +65,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
 
     await updateDelivery(delivery.id, updatePayload);
 
-    // Se houver código e cliente, atualiza o código no cadastro do cliente também
     if (codeToSave && delivery.customer_id) {
       await findOrCreateCustomer(customer?.name || 'Cliente', { confirmationCode: codeToSave });
     }
@@ -75,7 +74,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
     setInputCode('');
     toast.success('Baixa Realizada! ✅', { duration: 1500 });
 
-    // Auto-fechamento da rota se for a última pendente
     const routeDeliveries = getDeliveriesByRoute(route.id);
     const remainingPending = routeDeliveries.filter(d => d.id !== delivery.id && !d.completed).length;
     if (remainingPending === 0) {
@@ -84,40 +82,42 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
     }
   };
 
-  async function handleToggleCompleted() {
-    if (route.status === 'fechada') {
-      toast.error('Rota já está fechada!');
-      return;
-    }
-    if (!route.started_at) {
-      toast.error('Inicie a rota (Cronômetro) antes de dar baixa!');
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
-      return;
-    }
+  async function handleTriggerAction(actionType: 'complete' | 'expand') {
+    if (actionType === 'complete') {
+      if (route.status === 'fechada') {
+        toast.error('Rota já está fechada!');
+        return;
+      }
+      if (!route.started_at) {
+        toast.error('Inicie a rota (Cronômetro) antes de dar baixa!');
+        if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+        return;
+      }
 
-    const newStatus = !delivery.completed;
+      const newStatus = !delivery.completed;
+      if (!newStatus) {
+        if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+        await updateDelivery(delivery.id, { completed: false });
+        toast.success('Baixa desfeita!');
+        return;
+      }
 
-    // Se está desfazendo a baixa, apenas executa
-    if (!newStatus) {
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-      await updateDelivery(delivery.id, { completed: false });
-      toast.success('Baixa desfeita!');
-      return;
-    }
+      // Se for iFood e não tiver código, abre o modal na hora
+      if (isIfood && !delivery.confirmation_code) {
+        setInputCode('');
+        setIsIfoodModalOpen(true);
+        if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+        return;
+      }
 
-    // REGRA DO IFOOD: Se for iFood, não tiver código ainda e estiver concluindo, abre o modal bonito
-    if (isIfood && !delivery.confirmation_code) {
-      setInputCode('');
-      setIsIfoodModalOpen(true);
+      await executeCompletion();
+    } else {
       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-      return;
+      setIsExpanded(!isExpanded);
     }
-
-    // Caso contrário (Loja própria ou iFood que já tem código), conclui direto
-    await executeCompletion();
   }
 
-  const SWIPE_THRESHOLD = 75;
+  const SWIPE_THRESHOLD = 60;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -136,14 +136,17 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
 
   const handleTouchEnd = async () => {
     const diff = touchCurrentX.current - touchStartX.current;
+    const finalOffset = swipeOffset;
     setSwipeOffset(0);
     setIsSwiping(false);
 
-    if (diff > SWIPE_THRESHOLD) {
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-      setIsExpanded(!isExpanded);
-    } else if (diff < -SWIPE_THRESHOLD) {
-      handleToggleCompleted();
+    // Se arrastou para a esquerda com força suficiente
+    if (diff < -SWIPE_THRESHOLD || finalOffset < -50) {
+      handleTriggerAction('complete');
+    } 
+    // Se arrastou para a direita com força suficiente
+    else if (diff > SWIPE_THRESHOLD || finalOffset > 50) {
+      handleTriggerAction('expand');
     }
   };
 
@@ -260,7 +263,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                 </div>
 
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <button onClick={handleToggleCompleted} className={clsx("flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold transition-all active:scale-95", delivery.completed ? "bg-zinc-800 text-zinc-400 border border-zinc-700" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20")}>
+                  <button onClick={() => handleTriggerAction('complete')} className={clsx("flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold transition-all active:scale-95", delivery.completed ? "bg-zinc-800 text-zinc-400 border border-zinc-700" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20")}>
                     <CheckCircle2 size={14} />{delivery.completed ? 'Desfazer' : 'Dar Baixa'}
                   </button>
 
@@ -341,7 +344,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                 type="button"
                 onClick={async () => {
                   if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                  await executeCompletion(); // Pula sem código e conclui
+                  await executeCompletion();
                 }}
                 className="flex h-12 w-full items-center justify-center rounded-2xl bg-zinc-800/80 font-semibold text-zinc-300 hover:bg-zinc-800 active:scale-95 transition-all text-sm"
               >
