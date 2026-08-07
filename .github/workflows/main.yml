@@ -1,4 +1,4 @@
-name: Build Android APK DFL Entregas
+Name: Build Android APK DFL Entregas
 
 on:
   push:
@@ -71,3 +71,4 @@ jobs:
         with:
           name: DFL-Entregas-App
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 1
