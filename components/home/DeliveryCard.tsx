@@ -19,7 +19,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 interface DeliveryCardProps {
   delivery: Delivery;
   customer?: Customer;
-  isNeighbor?: boolean; // Tag visual para entregas no mesmo bairro
+  isNeighbor?: boolean;
 }
 
 const PAYMENT_CONFIG = {
@@ -35,10 +35,8 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
   const reorderDelivery = useAppStore((state) => state.reorderDelivery);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode); 
   
-  // Controle de Visualização
   const [isExpanded, setIsExpanded] = useState(false);
   
-  // Controle de Gestos (Swipe)
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const touchStartX = useRef(0);
@@ -49,7 +47,6 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
   const isIfood = delivery.origin === 'ifood' || !delivery.origin; 
   const isUrgent = (delivery as any).is_urgent; 
 
-  // Ícone Minimalista do Cliente
   let ClientIcon = User;
   if (customer?.avatar?.includes('woman')) ClientIcon = UserRound;
   if (customer?.avatar?.includes('star')) ClientIcon = Star;
@@ -61,15 +58,12 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
     const newStatus = !delivery.completed;
     await updateDelivery(delivery.id, { completed: newStatus });
     if (newStatus) {
-      setIsExpanded(false); // Auto-recolhe se der baixa
+      setIsExpanded(false);
       toast.success('Baixa Realizada! ✅', { duration: 1500 });
     }
   }
 
-  // ==========================================
-  // LÓGICA DOS GESTOS (SWIPE)
-  // ==========================================
-  const SWIPE_THRESHOLD = 75; // Distância mínima para acionar a ação
+  const SWIPE_THRESHOLD = 75;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -81,9 +75,8 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
     touchCurrentX.current = e.touches[0].clientX;
     const diff = touchCurrentX.current - touchStartX.current;
     
-    // Limita o arraste visual a 100px para os lados
-    if (diff > 100) setSwipeOffset(100);
-    else if (diff < -100) setSwipeOffset(-100);
+    if (diff > 120) setSwipeOffset(120);
+    else if (diff < -120) setSwipeOffset(-120);
     else setSwipeOffset(diff);
   };
 
@@ -93,14 +86,16 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
     setIsSwiping(false);
 
     if (diff > SWIPE_THRESHOLD) {
-      // ➔ Deslizou para a DIREITA (Expandir/Minimizar)
       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
       setIsExpanded(!isExpanded);
     } else if (diff < -SWIPE_THRESHOLD) {
-      // ⬅ Deslizou para a ESQUERDA (Dar Baixa)
       handleToggleCompleted();
     }
   };
+
+  // Calcula a cor e opacidade do fundo dinamicamente baseada no arraste
+  const isDraggingRight = swipeOffset > 15;
+  const isDraggingLeft = swipeOffset < -15;
 
   return (
     <div className={clsx(
@@ -110,19 +105,25 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
         isExpanded ? "bg-zinc-900/80 border border-zinc-700/80" : "bg-zinc-900/40 border border-zinc-800/80"
       )}
     >
-      {/* BACKGROUNDS DE AÇÃO (Revelados durante o Swipe) */}
-      <div className="absolute inset-0 flex items-center justify-between px-6 -z-10 bg-zinc-950">
-        <div className={clsx("flex items-center gap-2 font-bold transition-opacity", swipeOffset > 0 ? "opacity-100 text-sky-500" : "opacity-0")}>
+      {/* BACKGROUND DINÂMICO DE FEEDBACK AO ARRASTAR */}
+      <div className={clsx(
+        "absolute inset-0 flex items-center justify-between px-6 -z-10 transition-colors duration-150",
+        isDraggingRight && "bg-sky-500/20",
+        isDraggingLeft && "bg-emerald-500/30",
+        !isDraggingRight && !isDraggingLeft && "bg-zinc-950"
+      )}>
+        <div className={clsx("flex items-center gap-2 font-bold transition-all", swipeOffset > 20 ? "opacity-100 text-sky-400 scale-105" : "opacity-30 text-zinc-500")}>
           {isExpanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
-          <span className="text-sm">{isExpanded ? 'Minimizar' : 'Expandir'}</span>
+          <span className="text-xs">{isExpanded ? 'Minimizar' : 'Expandir'}</span>
         </div>
-        <div className={clsx("flex items-center gap-2 font-bold transition-opacity", swipeOffset < 0 ? "opacity-100 text-emerald-500" : "opacity-0")}>
-          <span className="text-sm">Baixa</span>
+        
+        <div className={clsx("flex items-center gap-2 font-bold transition-all", swipeOffset < -20 ? "opacity-100 text-emerald-400 scale-105" : "opacity-30 text-zinc-500")}>
+          <span className="text-xs">Dar Baixa</span>
           <CheckCircle2 size={20} />
         </div>
       </div>
 
-      {/* CONTAINER PRINCIPAL DO CARD (Que se move) */}
+      {/* CONTAINER PRINCIPAL DO CARD */}
       <div 
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -130,13 +131,10 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
         style={{ transform: `translateX(${swipeOffset}px)` }}
         className={clsx(
           "flex flex-col bg-zinc-900/90 backdrop-blur-md h-full w-full",
-          !isSwiping && "transition-transform duration-200" // Suaviza a volta do card
+          !isSwiping && "transition-transform duration-200"
         )}
       >
         
-        {/* ========================================================= */}
-        {/* CABEÇALHO COMPACTO (Sempre Visível)                       */}
-        {/* ========================================================= */}
         <div className="flex flex-col p-3">
           <div className="flex justify-between items-center">
             
@@ -170,9 +168,6 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
           </div>
         </div>
 
-        {/* ========================================================= */}
-        {/* CORPO EXPANDIDO (Revelado no clique ou Swipe para direita)*/}
-        {/* ========================================================= */}
         {isExpanded && (
           <div className="animate-in slide-in-from-top-2 fade-in duration-200">
             
