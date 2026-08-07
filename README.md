@@ -16,6 +16,8 @@ Abre em `http://localhost:3000`.
 
 ## O que já funciona nesta fase
 
+
+
 - **`types/index.ts`** — interfaces `Route`, `Delivery`, `Customer`.
 - **`store/useAppStore.ts`** — Zustand com dados mockados (`lib/mock-data.ts`), filtro de data e seletores (`getDeliveriesByRoute`, `getCustomerById`).
 - **`components/layout/Header.tsx`** — saudação dinâmica (bom dia/tarde/noite), avatar e bolinha verde pulsante de sincronização.
