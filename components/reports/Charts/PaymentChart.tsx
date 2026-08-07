@@ -10,7 +10,7 @@ interface PaymentChartProps {
 
 export function PaymentChart({ data }: PaymentChartProps) {
   const [mounted, setMounted] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false); // Magia da tela cheia
+  const [isExpanded, setIsExpanded] = useState(false); 
 
   useEffect(() => setMounted(true), []);
 
@@ -48,23 +48,25 @@ export function PaymentChart({ data }: PaymentChartProps) {
         <PieChart>
           <Pie
             data={data}
-            nameKey="method" // MATADOR DE BUGS: Ensina o Recharts a ler a palavra certa!
+            nameKey="method" 
             dataKey="count"
             cx="50%"
             cy="50%"
-            innerRadius={isExpanded ? 100 : 60}
-            outerRadius={isExpanded ? 140 : 80}
+            // DIMINUÍ O RAIO AQUI PARA NÃO CORTAR AS LETRAS NO CELULAR
+            innerRadius={isExpanded ? 80 : 45} 
+            outerRadius={isExpanded ? 110 : 65}
             paddingAngle={5}
             animationDuration={1500}
-            label={({ method, percent }) => `${method} ${(percent * 100).toFixed(0)}%`} // Escreve direto na tela!
+            label={({ method, percent }) => `${method} ${(percent * 100).toFixed(0)}%`} 
             labelLine={false}
+            style={{ fontSize: '11px', fontWeight: 'bold', fill: '#a1a1aa' }} // Fonte ajustada
           >
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
             ))}
           </Pie>
           <Tooltip content={<CustomTooltip />} />
-          <Legend wrapperStyle={{ color: '#a1a1aa', fontSize: 14, paddingTop: 20 }} />
+          <Legend wrapperStyle={{ color: '#a1a1aa', fontSize: 13, paddingTop: 10 }} />
         </PieChart>
       </ResponsiveContainer>
     </>
