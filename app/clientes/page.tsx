@@ -11,7 +11,7 @@ import type { Customer, OrderOrigin } from '@/types';
 // ============================================================================
 // CONFIGURAÇÃO DOS AVATARES PARA CLIENTES (LUCIDE ICONS)
 // ============================================================================
-export const CUSTOMER_AVATARS = [
+const CUSTOMER_AVATARS = [
   { id: 'user-emerald', type: 'user', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   { id: 'user-amber', type: 'user', color: 'text-amber-500', bg: 'bg-amber-500/10' },
   { id: 'user-blue', type: 'user', color: 'text-blue-500', bg: 'bg-blue-500/10' },
@@ -22,7 +22,7 @@ export const CUSTOMER_AVATARS = [
   { id: 'store-indigo', type: 'store', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
 ];
 
-export const RenderCustomerAvatar = ({ id, size = 20, className = '' }: { id?: string, size?: number, className?: string }) => {
+const RenderCustomerAvatar = ({ id, size = 20, className = '' }: { id?: string, size?: number, className?: string }) => {
   const config = CUSTOMER_AVATARS.find(a => a.id === id) || { type: 'user', color: 'text-zinc-400', bg: 'bg-zinc-800' };
   let Icon = User;
   if (config.type === 'user-round') Icon = UserRound;
