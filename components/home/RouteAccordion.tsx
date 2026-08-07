@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Bike, Wallet, PackageCheck, CheckCircle2, Clock, RotateCcw, Timer, MapPin, Share2, Copy } from 'lucide-react';
+import { ChevronDown, Bike, Wallet, CheckCircle2, RotateCcw, Timer, MapPin, Copy, User, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import type { Route } from '@/types';
@@ -9,25 +9,12 @@ import { useAppStore } from '@/store/useAppStore';
 import { DeliveryCard } from '@/components/home/DeliveryCard';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { copyFullRouteToClipboard } from '@/lib/whatsapp';
 
 interface RouteAccordionProps {
   route: Route;
   defaultOpen?: boolean;
-}
-
-function formatRouteDuration(departureTime: string, endTime?: string) {
-  if (!endTime) return null;
-  const start = new Date(departureTime).getTime();
-  const end = new Date(endTime).getTime();
-  const diffMinutes = Math.floor((end - start) / (1000 * 60));
-  
-  if (diffMinutes < 0) return null;
-  const hours = Math.floor(diffMinutes / 60);
-  const minutes = diffMinutes % 60;
-
-  if (hours === 0) return `${minutes} min`;
-  return `${hours}h ${minutes > 0 ? `${minutes}min` : ''}`;
 }
 
 export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionProps) {
@@ -40,10 +27,22 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const startRoute = useAppStore((state) => state.startRoute); 
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const storeSettings = useAppStore((state) => state.storeSettings);
+  const motoboys = useAppStore(state => state.motoboys);
 
   const deliveries = getDeliveriesByRoute(route.id);
-  const pendingCount = deliveries.filter((d) => !d.is_paid).length;
-  const duration = formatRouteDuration(route.started_at || route.departure_time, route.end_time);
+  const totalDeliveries = deliveries.length;
+  // NOVO: Contador real de pendências (Entregas não concluídas)
+  const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
+  const progressPercent = totalDeliveries > 0 ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
+
+  // Lógica Semáforo (Cores)
+  const isNotStarted = route.status === 'aberta' && !route.started_at;
+  const isInProgress = route.status === 'aberta' && !!route.started_at;
+  const isCompleted = route.status === 'fechada';
+
+  // Buscar avatar do motoboy
+  const motoboyObj = motoboys.find(m => m.name === route.motoboy_name);
+  const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
   const pendingDeliveries = [...deliveries].filter(d => !d.completed).sort((a, b) => {
     const aUrgent = a.is_urgent ? 1 : 0;
@@ -59,231 +58,135 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (!a.completed && b.completed) return -1;
     const timeA = new Date(a.updated_at || 0).getTime();
     const timeB = new Date(b.updated_at || 0).getTime();
-    const aOrder = a.order_index !== undefined ? a.order_index : timeA;
-    const bOrder = b.order_index !== undefined ? b.order_index : timeB;
-    return aOrder - bOrder;
+    return (a.order_index ?? timeA) - (b.order_index ?? timeB);
   });
 
-  const handleStartRoute = () => {
+  const handleStartRoute = async () => {
     startRoute(route.id);
-    toast.success('Rota Iniciada! 🚀', {
-      description: 'O cronômetro de performance está valendo.',
-    });
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+    toast.success('Rota Iniciada! 🚀', { description: 'O cronômetro de performance está valendo.' });
   };
 
   const handleCloseRoute = async () => {
+    if (Capacitor.isNativePlatform()) await Haptics.notification({ type: NotificationType.Success });
     closeRoute(route.id);
-    toast.success('Rota finalizada!', {
-      description: 'Ela foi enviada para o histórico do dia.',
-    });
+    toast.success('Rota finalizada!', { description: 'Enviada para as rotas concluídas.' });
     setIsOpen(false);
 
     if (routeAlertsEnabled && Capacitor.isNativePlatform()) {
-      try {
-        await LocalNotifications.schedule({
-          notifications: [
-            {
-              title: '🎉 Rota Finalizada com Sucesso!',
-              body: `O motoboy ${route.motoboy_name} encerrou a rota com ${deliveries.length} entregas.`,
-              id: Math.floor(Math.random() * 100000), 
-              schedule: { at: new Date(Date.now() + 1000) }, 
-            }
-          ]
-        });
-      } catch (error) {
-        console.error('Erro ao disparar notificação de rota:', error);
-      }
-    }
-  };
-
-  const handleReopenRoute = () => {
-    reopenRoute(route.id);
-    toast.success('Rota reaberta!', {
-      description: 'Você pode adicionar novas entregas agora.',
-    });
-  };
-
-  const handleOptimizeRoute = () => {
-    const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-    const pendingForMap = deliveries.filter(d => !d.completed && d.address_string);
-    
-    if (pendingForMap.length === 0) {
-       toast.error('Nenhuma entrega pendente com endereço para otimizar.');
-       return;
-    }
-
-    const waypoints = pendingDeliveries.map(d => encodeURIComponent(d.address_string)).join('/');
-    const mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(storeAddr)}/${waypoints}`;
-    
-    window.open(mapUrl, '_blank');
-    toast.success('Maps aberto com fura-fila aplicado! 🗺️');
-  };
-
-  const handleShareFullRoute = async () => {
-    if (pendingDeliveries.length === 0) {
-      toast.error('Não há entregas pendentes para compartilhar.');
-      return;
-    }
-
-    const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-    const { success, hasFuzzyAddresses } = await copyFullRouteToClipboard(
-      route, 
-      pendingDeliveries, 
-      storeAddr, 
-      getCustomerById
-    );
-    
-    if (success) {
-      if (hasFuzzyAddresses) {
-        toast.warning('Rota copiada! Algumas entregas parecem não ter número e foram alertadas na mensagem.', { duration: 5000 });
-      } else {
-        toast.success('Resumo da rota copiado com sucesso! Pronto para colar no WhatsApp.');
-      }
-    } else {
-      toast.error('Erro ao copiar a rota para a área de transferência.');
+      LocalNotifications.schedule({
+        notifications: [{
+          title: '🎉 Rota Finalizada!',
+          body: `O motoboy ${route.motoboy_name} encerrou a rota.`,
+          id: Math.floor(Math.random() * 100000), 
+          schedule: { at: new Date(Date.now() + 1000) }, 
+        }]
+      });
     }
   };
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-900/40">
-      <button
-        onClick={() => setIsOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-3 p-4"
-      >
+    <div className={clsx(
+      "overflow-hidden rounded-[28px] border transition-all duration-300 relative",
+      isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : 
+      isInProgress ? "bg-sky-900/10 border-sky-500/30" : 
+      "bg-emerald-900/10 border-emerald-500/30 opacity-75 grayscale"
+    )}>
+      
+      {/* BARRA DE PROGRESSO NO TOPO */}
+      {totalDeliveries > 0 && !isCompleted && (
+        <div className="absolute top-0 left-0 h-1 bg-zinc-800 w-full">
+          <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
+        </div>
+      )}
+
+      <button onClick={() => setIsOpen((prev) => !prev)} className="flex w-full items-center justify-between gap-3 p-4 pt-5">
         <div className="flex items-center gap-3">
-          <div
-            className={clsx(
-              'flex h-11 w-11 items-center justify-center rounded-full',
-              route.status === 'aberta'
-                ? 'bg-emerald-500/15 text-emerald-500'
-                : 'bg-zinc-800 text-zinc-500'
-            )}
-          >
-            <Bike size={20} />
+          
+          <div className={clsx('flex h-12 w-12 items-center justify-center rounded-full transition-colors',
+            isNotStarted ? 'bg-zinc-800 text-zinc-400' : 
+            isInProgress ? 'bg-sky-500/20 text-sky-400' : 
+            'bg-emerald-500/20 text-emerald-500'
+          )}>
+            <Bike size={22} />
           </div>
 
           <div className="text-left">
             <div className="flex items-center gap-2">
-              <p className="font-heading text-base font-bold text-zinc-50">{route.name}</p>
-              <span
-                className={clsx(
-                  'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
-                  route.status === 'aberta'
-                    ? 'bg-emerald-500/15 text-emerald-500'
-                    : 'bg-zinc-800 text-zinc-500'
-                )}
-              >
-                {route.status}
-              </span>
+              <p className={clsx("font-heading text-lg font-bold", isCompleted ? "text-emerald-400" : "text-zinc-50")}>
+                {route.name}
+              </p>
+              {isNotStarted && <span className="rounded-full bg-zinc-700 px-2 py-0.5 text-[9px] font-bold uppercase text-zinc-300">Montando</span>}
+              {isInProgress && <span className="rounded-full bg-sky-500 px-2 py-0.5 text-[9px] font-bold uppercase text-white shadow-sm shadow-sky-500/30">Na Rua</span>}
             </div>
             
-            <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-xs text-zinc-500">{route.motoboy_name}</p>
-              {route.status === 'fechada' && duration && (
-                <span className="flex items-center gap-1 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
-                  <Clock size={10} /> {duration}
-                </span>
-              )}
+            <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-zinc-400">
+              <MotoIcon size={12} className={isInProgress ? 'text-sky-400' : 'text-zinc-500'} />
+              {route.motoboy_name}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 text-xs text-zinc-500">
-            <PackageCheck size={14} />
-            {deliveries.length}
-          </div>
-          <ChevronDown
-            size={18}
-            className={clsx(
-              'text-zinc-500 transition-transform duration-200',
-              isOpen && 'rotate-180'
-            )}
-          />
+          {/* BADGE DE PENDÊNCIAS CORRETO */}
+          {!isCompleted ? (
+            <span className={clsx("rounded-full px-2.5 py-1 text-xs font-bold", 
+              pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white" :
+              isInProgress ? "bg-sky-500/20 text-sky-400" : "bg-zinc-800 text-zinc-400"
+            )}>
+              {pendingDeliveriesCount === 0 && totalDeliveries > 0 ? 'Concluída!' : `${pendingDeliveriesCount} pendente${pendingDeliveriesCount !== 1 ? 's' : ''}`}
+            </span>
+          ) : (
+             <CheckCircle2 size={20} className="text-emerald-500" />
+          )}
+
+          <ChevronDown size={18} className={clsx('text-zinc-500 transition-transform duration-200', isOpen && 'rotate-180')} />
         </div>
       </button>
 
       {isOpen && (
         <div className="flex flex-col gap-3 border-t border-zinc-800/80 p-4 pt-3 pb-6">
-          {(route.change_money > 0 || pendingCount > 0) && (
-            <div className="flex flex-wrap items-center gap-2 pb-1">
-              {route.change_money > 0 && (
-                <span className="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-500">
-                  <Wallet size={13} />
-                  Troco: R$ {route.change_money.toFixed(2).replace('.', ',')}
-                </span>
-              )}
-              {pendingCount > 0 && (
-                <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-xs text-zinc-400">
-                  {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
+          {route.change_money > 0 && (
+            <span className="self-start flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-500">
+              <Wallet size={13} /> Levar Troco: R$ {route.change_money.toFixed(2).replace('.', ',')}
+            </span>
           )}
 
           {sortedDeliveries.length === 0 ? (
-            <p className="py-4 text-center text-sm text-zinc-600">
-              Nenhuma entrega nesta rota ainda.
-            </p>
+            <p className="py-4 text-center text-sm text-zinc-600">Nenhuma entrega nesta rota ainda.</p>
           ) : (
             sortedDeliveries.map((delivery) => (
-              <DeliveryCard
-                key={delivery.id}
-                delivery={delivery}
-                customer={getCustomerById(delivery.customer_id)}
-              />
+              <DeliveryCard key={delivery.id} delivery={delivery} customer={getCustomerById(delivery.customer_id)} />
             ))
           )}
 
           <div className="mt-2 flex flex-col gap-2">
             
-            {/* BARRA FLUTUANTE DE AÇÕES GLOBAIS DA ROTA */}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && (
               <div className="fixed bottom-24 left-0 right-0 z-40 mx-auto flex w-full max-w-[92%] items-center justify-between gap-3 rounded-[24px] border border-zinc-700/80 bg-zinc-900/95 px-4 py-3 backdrop-blur-xl shadow-2xl shadow-black/50">
-                
-                <button
-                  onClick={handleShareFullRoute}
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800/80 text-sm font-semibold text-zinc-300 transition-all active:scale-95 hover:bg-zinc-700"
-                >
-                  <Copy size={18} className="text-emerald-500" />
-                  <span className="truncate">Copiar Tudo</span>
+                <button onClick={() => copyFullRouteToClipboard(route, pendingDeliveries, storeSettings?.storeAddress || 'Patos de Minas, MG', getCustomerById)} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800/80 text-sm font-semibold text-zinc-300 active:scale-95">
+                  <Copy size={18} className="text-emerald-500" /><span className="truncate">Copiar Tudo</span>
                 </button>
-
-                <button
-                  onClick={handleOptimizeRoute}
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition-all active:scale-95 hover:bg-indigo-500"
-                >
-                  <MapPin size={18} />
-                  <span className="truncate">Otimizar (Maps)</span>
+                <button onClick={() => window.open(`https://www.google.com/maps/dir/${encodeURIComponent(storeSettings?.storeAddress || 'Patos de Minas, MG')}/${pendingDeliveries.map(d => encodeURIComponent(d.address_string)).join('/')}`, '_blank')} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 active:scale-95">
+                  <MapPin size={18} /><span className="truncate">Otimizar (Maps)</span>
                 </button>
               </div>
             )}
 
             {route.status === 'aberta' ? (
               !route.started_at ? (
-                <button
-                  onClick={handleStartRoute}
-                  className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-sky-500/10 border border-sky-500/20 py-3.5 text-sm font-bold text-sky-500 transition-all hover:bg-sky-500/20 active:scale-95"
-                >
-                  <Timer size={18} />
-                  Iniciar Rota (Cronômetro)
+                <button onClick={handleStartRoute} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-sky-500/10 border border-sky-500/20 py-3.5 text-sm font-bold text-sky-500 hover:bg-sky-500/20 active:scale-95">
+                  <Timer size={18} /> Iniciar Rota (Cronômetro)
                 </button>
               ) : (
-                <button
-                  onClick={handleCloseRoute}
-                  className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-800/80 py-3.5 text-sm font-semibold text-zinc-300 transition-colors active:bg-zinc-800"
-                >
-                  <CheckCircle2 size={18} className="text-emerald-500" />
-                  Finalizar Rota
+                <button onClick={handleCloseRoute} className={clsx("flex w-full items-center justify-center gap-2 rounded-[20px] py-3.5 text-sm font-bold active:scale-95 transition-all", pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 animate-pulse" : "bg-zinc-800/80 text-zinc-300")}>
+                  <CheckCircle2 size={18} className={pendingDeliveriesCount === 0 ? "text-white" : "text-emerald-500"} /> 
+                  {pendingDeliveriesCount === 0 ? 'Tudo Entregue! Fechar Rota' : 'Finalizar Rota'}
                 </button>
               )
             ) : (
-              <button
-                onClick={handleReopenRoute}
-                className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-800/40 py-3.5 text-sm font-semibold text-zinc-400 hover:bg-zinc-800 transition-colors active:bg-zinc-800/60"
-              >
-                <RotateCcw size={16} />
-                Reabrir Rota
+              <button onClick={() => reopenRoute(route.id)} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-800/40 py-3.5 text-sm font-semibold text-zinc-400 hover:bg-zinc-800 active:scale-95">
+                <RotateCcw size={16} /> Reabrir Rota
               </button>
             )}
           </div>
