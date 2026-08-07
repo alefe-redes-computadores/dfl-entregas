@@ -60,6 +60,7 @@ export interface Customer {
   maps_link?: string;
   observation?: string;
   last_confirmation_code?: string;
+  avatar?: string; // 🔥 ADICIONADO: Avatar do cliente (Emoji)
   createdAt?: string;
   updated_at?: string;
   orderCount?: number; 
@@ -71,6 +72,7 @@ export interface Motoboy {
   name: string;
   active: boolean; 
   type?: MotoboyType; 
+  avatar?: string; // 🔥 ADICIONADO: Avatar do motoboy (Emoji)
   payment_rule?: MotoboyPaymentRule; 
   createdAt?: string;
   updated_at?: string;
