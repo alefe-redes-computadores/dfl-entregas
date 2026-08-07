@@ -16,6 +16,7 @@ export function PaymentChart({ data }: PaymentChartProps) {
 
   if (!mounted || data.length === 0) return null;
 
+  // Cores padronizadas: [0] Pix = Verde, [1] Dinheiro = Amarelo, [2] Cartão = Azul
   const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899'];
 
   const CustomTooltip = ({ active, payload }: any) => {
@@ -44,7 +45,7 @@ export function PaymentChart({ data }: PaymentChartProps) {
         </button>
       </div>
       
-      <ResponsiveContainer width="100%" height={isExpanded ? '80%' : 300}>
+      <ResponsiveContainer width="100%" height={isExpanded ? '80%': 300}>
         <PieChart>
           <Pie
             data={data}
@@ -52,21 +53,28 @@ export function PaymentChart({ data }: PaymentChartProps) {
             dataKey="count"
             cx="50%"
             cy="50%"
-            // DIMINUÍ O RAIO AQUI PARA NÃO CORTAR AS LETRAS NO CELULAR
             innerRadius={isExpanded ? 80 : 45} 
             outerRadius={isExpanded ? 110 : 65}
             paddingAngle={5}
             animationDuration={1500}
             label={({ method, percent }) => `${method} ${(percent * 100).toFixed(0)}%`} 
             labelLine={false}
-            style={{ fontSize: '11px', fontWeight: 'bold', fill: '#a1a1aa' }} // Fonte ajustada
+            // CORRIGIDO: Removido o fill global cinza para o texto assumir as cores das fatias
+            style={{ fontSize: '11px', fontWeight: 'bold' }} 
           >
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
             ))}
           </Pie>
           <Tooltip content={<CustomTooltip />} />
-          <Legend wrapperStyle={{ color: '#a1a1aa', fontSize: 13, paddingTop: 10 }} />
+          <Legend 
+            wrapperStyle={{ fontSize: 13, paddingTop: 10 }} 
+            formatter={(value, entry: any) => {
+              // Faz a legenda inferior colorir o texto combinando com a cor do gráfico
+              const { color } = entry;
+              return <span style={{ color, fontWeight: 'bold' }}>{value}</span>;
+            }}
+          />
         </PieChart>
       </ResponsiveContainer>
     </>
