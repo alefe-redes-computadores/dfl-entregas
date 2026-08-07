@@ -18,6 +18,9 @@ interface ValeItem {
   amount: number;
 }
 
+// Lista de Avatares disponíveis (Emojis garantem leveza e sincronia perfeita)
+const AVATARS = ['🏍️', '🛵', '👨', '👩', '🧔', '👱‍♀️', '👲', '🥷', '🚀', '⚡', '🔥', '👑'];
+
 // Utilitário para Máscara de Moeda em Reais (R$)
 const formatCurrencyInput = (value: string): string => {
   const numbers = value.replace(/\D/g, '');
@@ -43,6 +46,7 @@ export default function MotoboysPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [newMotoboyName, setNewMotoboyName] = useState('');
   const [newMotoboyType, setNewMotoboyType] = useState<'fixo' | 'avulso'>('fixo');
+  const [newMotoboyAvatar, setNewMotoboyAvatar] = useState('🏍️'); // Avatar padrão ao criar
   
   const [selectedMotoboy, setSelectedMotoboy] = useState<Motoboy & { type?: 'fixo' | 'avulso' } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('acerto');
@@ -67,9 +71,10 @@ export default function MotoboysPage() {
   const [ruleThreshold, setRuleThreshold] = useState('');
   const [ruleExtraFee, setRuleExtraFee] = useState('');
   const [editType, setEditType] = useState<'fixo' | 'avulso'>('fixo');
+  const [editAvatar, setEditAvatar] = useState('');
 
   // ------------------------------------------------------------------
-  // CONTROLE CUSTOMIZADO DE DATA (SUBSTITUI O CALENDÁRIO NATIVO)
+  // CONTROLE CUSTOMIZADO DE DATA
   // ------------------------------------------------------------------
   const handleShiftDate = (days: number) => {
     const [year, month, day] = acertoDate.split('-').map(Number);
@@ -111,6 +116,7 @@ export default function MotoboysPage() {
       name: newMotoboyName.trim(),
       active: true,
       type: newMotoboyType,
+      avatar: newMotoboyAvatar,
       payment_rule: {
         type: 'fixed_plus_variable',
         fixed_amount: 100,
@@ -120,6 +126,7 @@ export default function MotoboysPage() {
     };
     await addMotoboy(newM as Motoboy);
     setNewMotoboyName('');
+    setNewMotoboyAvatar('🏍️');
     setIsAdding(false);
     toast.success('Motoboy cadastrado com sucesso!');
   };
@@ -129,6 +136,7 @@ export default function MotoboysPage() {
     setActiveTab('acerto');
     setVales([]);
     setEditType(m.type || 'fixo');
+    setEditAvatar(m.avatar || '');
     
     const rule = m.payment_rule || { type: 'fixed_plus_variable', fixed_amount: 100, threshold: 15, extra_fee: 7 };
     setRuleType(rule.type);
@@ -153,7 +161,8 @@ export default function MotoboysPage() {
 
     await updateMotoboy(selectedMotoboy.id, { 
       payment_rule: newRule,
-      type: editType 
+      type: editType,
+      avatar: editAvatar 
     } as any);
 
     toast.success('Configurações salvas e aplicadas na nuvem!');
@@ -169,7 +178,7 @@ export default function MotoboysPage() {
   };
 
   // ------------------------------------------------------------------
-  // MÁQUINA DE CALCULAR ACERTO (FILTRO BLINDADO E CORRIGIDO - FUSO HORÁRIO)
+  // MÁQUINA DE CALCULAR ACERTO 
   // ------------------------------------------------------------------
   const acertoData = useMemo(() => {
     if (!selectedMotoboy) return null;
@@ -178,7 +187,6 @@ export default function MotoboysPage() {
 
     const getSafeDate = (rawDate: any) => {
       if (!rawDate) return '';
-      // CORREÇÃO: Força o Date a ler a string ISO e converter para o fuso local (Brasil)
       const d = new Date(rawDate);
       if (isNaN(d.getTime())) return '';
       
@@ -198,11 +206,9 @@ export default function MotoboysPage() {
     const routeIds = new Set(todaysRoutes.map(r => r.id));
 
     const todaysDeliveries = deliveries.filter(d => {
-      // 1. Prioridade para rota (mesmo que a entrega passe da meia noite, se a rota abriu no dia, conta pro dia)
       const belongsToRoute = d.route_id && routeIds.has(d.route_id);
       if (belongsToRoute) return true;
 
-      // 2. Se a entrega for avulsa, verifica o motoboy e a data local exata
       const dMotoboy = ((d as any).motoboy_name || '').toLowerCase().trim();
       const isSameMotoboy = dMotoboy === motoboyNameLower;
       if (!isSameMotoboy) return false;
@@ -293,6 +299,26 @@ export default function MotoboysPage() {
     setValeAmount('');
   };
 
+  // Componente de Seleção de Avatar reaproveitável
+  const AvatarPicker = ({ value, onChange }: { value: string, onChange: (v: string) => void }) => (
+    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none snap-x">
+      {AVATARS.map(avatar => (
+        <button
+          key={avatar}
+          type="button"
+          onClick={() => onChange(avatar)}
+          className={`h-11 w-11 shrink-0 snap-center rounded-full flex items-center justify-center text-xl transition-all ${
+            value === avatar 
+              ? 'bg-sky-500/20 border-2 border-sky-500 shadow-md' 
+              : 'bg-zinc-900 border border-zinc-800 opacity-60 hover:opacity-100'
+          }`}
+        >
+          {avatar}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-5 relative pb-24">
       
@@ -308,7 +334,11 @@ export default function MotoboysPage() {
         </button>
       ) : (
         <div className="flex flex-col gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl animate-in fade-in">
-          <div className="flex gap-2">
+          
+          <label className="text-xs font-semibold text-zinc-400">Avatar do Motoboy</label>
+          <AvatarPicker value={newMotoboyAvatar} onChange={setNewMotoboyAvatar} />
+
+          <div className="flex gap-2 mt-1">
             <input 
               type="text" 
               placeholder="Nome do motoboy..." 
@@ -334,7 +364,7 @@ export default function MotoboysPage() {
               </button>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 mt-2">
             <button onClick={handleAddMotoboy} className="flex-1 h-11 rounded-xl bg-sky-500 text-zinc-950 font-bold text-sm hover:bg-sky-400 cursor-pointer">
               Salvar Motoboy
             </button>
@@ -356,9 +386,11 @@ export default function MotoboysPage() {
               className={`flex items-center justify-between p-4 rounded-[24px] border border-zinc-800/80 transition-all cursor-pointer ${m.active ? 'bg-zinc-900/40 hover:bg-zinc-800/60' : 'bg-zinc-950/50 opacity-60 grayscale'}`}
             >
               <div className="flex items-center gap-3">
+                {/* 🎨 RENDERIZAÇÃO DO AVATAR NA LISTA */}
                 <div className={`h-11 w-11 rounded-full flex items-center justify-center font-bold text-base ${m.active ? 'bg-sky-500/10 text-sky-500' : 'bg-zinc-800 text-zinc-500'}`}>
-                  {m.name.charAt(0).toUpperCase()}
+                  {m.avatar ? <span className="text-xl">{m.avatar}</span> : m.name.charAt(0).toUpperCase()}
                 </div>
+                
                 <div className="flex flex-col items-start gap-1">
                   <span className="font-bold text-zinc-100 text-base">{m.name}</span>
                   <div className="flex items-center gap-2">
@@ -385,11 +417,11 @@ export default function MotoboysPage() {
       {selectedMotoboy && (
         <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-md animate-in fade-in duration-200">
           
-          {/* CORREÇÃO DO CABEÇALHO AQUI (pt-12 para afastar do relógio) */}
           <div className="flex items-center justify-between px-4 pb-4 pt-12 border-b border-zinc-900 bg-zinc-950 shadow-sm">
             <div className="flex items-center gap-3">
+              {/* 🎨 RENDERIZAÇÃO DO AVATAR NO HEADER DO MODAL */}
               <div className="h-10 w-10 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-400 font-bold">
-                {selectedMotoboy.name.charAt(0).toUpperCase()}
+                {selectedMotoboy.avatar ? <span className="text-xl">{selectedMotoboy.avatar}</span> : selectedMotoboy.name.charAt(0).toUpperCase()}
               </div>
               <div>
                 <h2 className="text-lg font-black text-zinc-50">{selectedMotoboy.name}</h2>
@@ -410,7 +442,6 @@ export default function MotoboysPage() {
             </button>
           </div>
 
-          {/* CORREÇÃO DO RODAPÉ (pb-12 para afastar da barra de navegação) */}
           <div className="flex-1 overflow-y-auto px-4 pt-4 pb-12 flex flex-col gap-5">
             
             {/* --- ABA 1: ACERTO DIÁRIO (COM NAVEGAÇÃO CUSTOMIZADA) --- */}
@@ -533,6 +564,12 @@ export default function MotoboysPage() {
             {activeTab === 'config' && (
               <form onSubmit={handleSaveConfig} className="flex flex-col gap-4 animate-in slide-in-from-left-4">
                 
+                {/* 🎨 SELEÇÃO DE AVATAR NA EDIÇÃO */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-zinc-400">Alterar Avatar</label>
+                  <AvatarPicker value={editAvatar} onChange={setEditAvatar} />
+                </div>
+
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-zinc-400">Tipo de Contratação (Etiqueta)</label>
                   <div className="grid grid-cols-2 gap-2">
