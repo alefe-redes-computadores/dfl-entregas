@@ -4,12 +4,12 @@ import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { 
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, 
-  Smartphone, Store, CheckCircle, ArrowUp, ArrowDown, AlertTriangle, 
+  Smartphone, Store, ArrowUp, ArrowDown, AlertTriangle, 
   User, UserRound, Star, Crown, Maximize2, Minimize2, MapPin
 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import type { Delivery, Customer } from '@/types';
+import type { Delivery, Customer, Route } from '@/types';
 import { copyDeliveryToClipboard } from '@/lib/whatsapp';
 import { MiniMap } from '@/components/deliveries/MiniMap';
 import { useAppStore } from '@/store/useAppStore';
@@ -19,6 +19,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 interface DeliveryCardProps {
   delivery: Delivery;
   customer?: Customer;
+  route: Route; // Recebe a rota para validar se foi iniciada
   isNeighbor?: boolean;
 }
 
@@ -30,13 +31,14 @@ const PAYMENT_CONFIG = {
   cartao_debito: { label: 'Cartão', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10' },
 } as const;
 
-export function DeliveryCard({ delivery, customer, isNeighbor = false }: DeliveryCardProps) {
+export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: DeliveryCardProps) {
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const reorderDelivery = useAppStore((state) => state.reorderDelivery);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode); 
+  const closeRoute = useAppStore((state) => state.closeRoute);
+  const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   
   const [isExpanded, setIsExpanded] = useState(false);
-  
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const touchStartX = useRef(0);
@@ -47,19 +49,33 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
   const isIfood = delivery.origin === 'ifood' || !delivery.origin; 
   const isUrgent = (delivery as any).is_urgent; 
 
-  let ClientIcon = User;
-  if (customer?.avatar?.includes('woman')) ClientIcon = UserRound;
-  if (customer?.avatar?.includes('star')) ClientIcon = Star;
-  if (customer?.avatar?.includes('crown')) ClientIcon = Crown;
-  if (customer?.avatar?.includes('store')) ClientIcon = Store;
-
   async function handleToggleCompleted() {
+    // TRAVA DE SEGURANÇA: Impede baixa se rota estiver fechada ou não iniciada
+    if (route.status === 'fechada') {
+      toast.error('Rota já está fechada!');
+      return;
+    }
+    if (!route.started_at) {
+      toast.error('Inicie a rota (Cronômetro) antes de dar baixa!');
+      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+      return;
+    }
+
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
     const newStatus = !delivery.completed;
     await updateDelivery(delivery.id, { completed: newStatus });
+    
     if (newStatus) {
       setIsExpanded(false);
       toast.success('Baixa Realizada! ✅', { duration: 1500 });
+
+      // AUTO-FECHAMENTO DA ROTA SE FOR A ÚLTIMA PENDENTE
+      const routeDeliveries = getDeliveriesByRoute(route.id);
+      const remainingPending = routeDeliveries.filter(d => d.id !== delivery.id && !d.completed).length;
+      if (remainingPending === 0) {
+        closeRoute(route.id);
+        toast.success('🎉 Todas entregas concluídas! Rota fechada automaticamente.');
+      }
     }
   }
 
@@ -93,7 +109,6 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
     }
   };
 
-  // Calcula a cor e opacidade do fundo dinamicamente baseada no arraste
   const isDraggingRight = swipeOffset > 15;
   const isDraggingLeft = swipeOffset < -15;
 
@@ -101,11 +116,10 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
     <div className={clsx(
         "relative overflow-hidden rounded-[20px] transition-all duration-300",
         delivery.completed ? "opacity-50 grayscale" : "shadow-sm",
-        isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)]",
+        isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
         isExpanded ? "bg-zinc-900/80 border border-zinc-700/80" : "bg-zinc-900/40 border border-zinc-800/80"
       )}
     >
-      {/* BACKGROUND DINÂMICO DE FEEDBACK AO ARRASTAR */}
       <div className={clsx(
         "absolute inset-0 flex items-center justify-between px-6 -z-10 transition-colors duration-150",
         isDraggingRight && "bg-sky-500/20",
@@ -123,7 +137,6 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
         </div>
       </div>
 
-      {/* CONTAINER PRINCIPAL DO CARD */}
       <div 
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -134,10 +147,8 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
           !isSwiping && "transition-transform duration-200"
         )}
       >
-        
         <div className="flex flex-col p-3">
           <div className="flex justify-between items-center">
-            
             <div className="flex items-center gap-1.5 overflow-hidden">
               <span className={clsx("flex items-center justify-center h-6 w-6 rounded-full shrink-0 border", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
                 {isIfood ? <Smartphone size={12} /> : <Store size={12} />}
@@ -147,7 +158,6 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
                 <p className="font-heading text-sm font-bold tracking-tight text-zinc-50 truncate max-w-[160px]">
                   {isIfood ? `#${delivery.order_id}` : customer?.name || 'Sem Nome'}
                 </p>
-                
                 <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 truncate">
                   {delivery.completed && <span className="text-emerald-500 font-bold">Entregue •</span>}
                   <span className="truncate">{customer?.neighborhood || 'Sem bairro'}</span>
@@ -160,17 +170,15 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
                 {isPrivacyMode ? 'R$ •••••' : `R$ ${delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}`}
               </p>
               <div className="flex items-center gap-1">
-                {isUrgent && <AlertTriangle size={10} className="text-red-500" />}
+                {isUrgent && <span className="rounded bg-red-500/20 text-red-400 text-[9px] px-1 font-bold uppercase">Urgente</span>}
                 {isNeighbor && <MapPin size={10} className="text-sky-400" />}
               </div>
             </div>
-
           </div>
         </div>
 
         {isExpanded && (
           <div className="animate-in slide-in-from-top-2 fade-in duration-200">
-            
             <div className="px-3 pb-3 flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 {isIfood && delivery.confirmation_code && (
@@ -186,7 +194,6 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
               </div>
 
               <p className="text-[11px] text-zinc-400">{delivery.address_string}</p>
-              
               <div className="mt-1">
                 <MiniMap address={delivery.address_string} mapsLink={delivery.maps_link} />
               </div>
@@ -230,10 +237,8 @@ export function DeliveryCard({ delivery, customer, isNeighbor = false }: Deliver
                 <button onClick={() => copyDeliveryToClipboard(delivery, customer?.name)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-800 text-zinc-300 hover:bg-zinc-700 active:scale-90"><Share2 size={14} strokeWidth={2.5} /></button>
               </div>
             </div>
-            
           </div>
         )}
-
       </div>
     </div>
   );
