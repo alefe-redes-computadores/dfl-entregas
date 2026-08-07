@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import type { Route } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { DeliveryCard } from '@/components/home/DeliveryCard';
+import { useOptimizedDeliveries } from '@/hooks/useOptimizedDeliveries';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
@@ -31,35 +32,18 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   const deliveries = getDeliveriesByRoute(route.id);
   const totalDeliveries = deliveries.length;
-  // NOVO: Contador real de pendências (Entregas não concluídas)
   const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
   const progressPercent = totalDeliveries > 0 ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
 
-  // Lógica Semáforo (Cores)
   const isNotStarted = route.status === 'aberta' && !route.started_at;
   const isInProgress = route.status === 'aberta' && !!route.started_at;
   const isCompleted = route.status === 'fechada';
 
-  // Buscar avatar do motoboy
   const motoboyObj = motoboys.find(m => m.name === route.motoboy_name);
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
-  const pendingDeliveries = [...deliveries].filter(d => !d.completed).sort((a, b) => {
-    const aUrgent = a.is_urgent ? 1 : 0;
-    const bUrgent = b.is_urgent ? 1 : 0;
-    if (aUrgent !== bUrgent) return bUrgent - aUrgent;
-    const aOrder = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
-    const bOrder = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
-    return aOrder - bOrder;
-  });
-
-  const sortedDeliveries = [...deliveries].sort((a, b) => {
-    if (a.completed && !b.completed) return 1;
-    if (!a.completed && b.completed) return -1;
-    const timeA = new Date(a.updated_at || 0).getTime();
-    const timeB = new Date(b.updated_at || 0).getTime();
-    return (a.order_index ?? timeA) - (b.order_index ?? timeB);
-  });
+  // Consumindo a inteligência do Hook na raiz
+  const { sortedDeliveries, pendingDeliveries, neighborhoodCounts } = useOptimizedDeliveries(deliveries, getCustomerById);
 
   const handleStartRoute = async () => {
     startRoute(route.id);
@@ -93,7 +77,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       "bg-emerald-900/10 border-emerald-500/30 opacity-75 grayscale"
     )}>
       
-      {/* BARRA DE PROGRESSO NO TOPO */}
       {totalDeliveries > 0 && !isCompleted && (
         <div className="absolute top-0 left-0 h-1 bg-zinc-800 w-full">
           <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
@@ -102,7 +85,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
       <button onClick={() => setIsOpen((prev) => !prev)} className="flex w-full items-center justify-between gap-3 p-4 pt-5">
         <div className="flex items-center gap-3">
-          
           <div className={clsx('flex h-12 w-12 items-center justify-center rounded-full transition-colors',
             isNotStarted ? 'bg-zinc-800 text-zinc-400' : 
             isInProgress ? 'bg-sky-500/20 text-sky-400' : 
@@ -128,7 +110,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         </div>
 
         <div className="flex items-center gap-3">
-          {/* BADGE DE PENDÊNCIAS CORRETO */}
           {!isCompleted ? (
             <span className={clsx("rounded-full px-2.5 py-1 text-xs font-bold", 
               pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white" :
@@ -155,13 +136,24 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           {sortedDeliveries.length === 0 ? (
             <p className="py-4 text-center text-sm text-zinc-600">Nenhuma entrega nesta rota ainda.</p>
           ) : (
-            sortedDeliveries.map((delivery) => (
-              <DeliveryCard key={delivery.id} delivery={delivery} customer={getCustomerById(delivery.customer_id)} />
-            ))
+            sortedDeliveries.map((delivery) => {
+              const cust = getCustomerById(delivery.customer_id);
+              const neighborhoodKey = cust?.neighborhood?.trim().toLowerCase();
+              const isNeighbor = neighborhoodKey ? (neighborhoodCounts[neighborhoodKey] > 1) : false;
+
+              return (
+                <DeliveryCard 
+                  key={delivery.id} 
+                  delivery={delivery} 
+                  customer={cust} 
+                  route={route}
+                  isNeighbor={isNeighbor}
+                />
+              );
+            })
           )}
 
           <div className="mt-2 flex flex-col gap-2">
-            
             {sortedDeliveries.length > 0 && route.status === 'aberta' && (
               <div className="fixed bottom-24 left-0 right-0 z-40 mx-auto flex w-full max-w-[92%] items-center justify-between gap-3 rounded-[24px] border border-zinc-700/80 bg-zinc-900/95 px-4 py-3 backdrop-blur-xl shadow-2xl shadow-black/50">
                 <button onClick={() => copyFullRouteToClipboard(route, pendingDeliveries, storeSettings?.storeAddress || 'Patos de Minas, MG', getCustomerById)} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800/80 text-sm font-semibold text-zinc-300 active:scale-95">
