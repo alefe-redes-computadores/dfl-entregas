@@ -58,21 +58,26 @@ export function MotoboyChart({ data }: MotoboyChartProps) {
         </button>
       </div>
       
+      {/* Margem bottom aumentada para 45 para dar espaço ao texto inclinado */}
       <ResponsiveContainer width="100%" height={isExpanded ? '80%' : 300}>
-        <BarChart data={sortedData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <BarChart data={sortedData} margin={{ top: 10, right: 10, left: -20, bottom: 45 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+          
           <XAxis 
             dataKey="name" 
             stroke="#71717a"
-            tick={{ fill: '#e4e4e7', fontSize: 13, fontWeight: 500 }}
+            tick={{ fill: '#e4e4e7', fontSize: 11, fontWeight: 500 }}
+            angle={-35}
+            textAnchor="end"
             axisLine={false}
             tickLine={false}
           />
+          
           <YAxis yAxisId="left" stroke="#71717a" tick={{ fill: '#71717a', fontSize: 12 }} axisLine={false} tickLine={false} />
           <YAxis yAxisId="right" orientation="right" stroke="#71717a" tick={{ fill: '#71717a', fontSize: 12 }} axisLine={false} tickLine={false} />
           
           <Tooltip content={<CustomTooltip />} cursor={{ fill: '#27272a', opacity: 0.4 }} />
-          <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '12px', color: '#a1a1aa' }} />
+          <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '12px', color: '#a1a1aa' }} />
           
           <Bar yAxisId="left" dataKey="deliveries" name="Entregas" fill="#3b82f6" radius={[4, 4, 0, 0]} animationDuration={1500} />
           <Bar yAxisId="right" dataKey="revenue" name="Faturamento" fill="#10b981" radius={[4, 4, 0, 0]} animationDuration={1500} />
@@ -92,7 +97,7 @@ export function MotoboyChart({ data }: MotoboyChartProps) {
   }
 
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-[24px] p-6 shadow-sm">
+    <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-[24px] p-6 shadow-sm overflow-hidden">
       {ChartContent}
     </div>
   );
