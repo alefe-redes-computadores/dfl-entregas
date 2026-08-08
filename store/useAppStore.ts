@@ -13,7 +13,7 @@ interface AppState {
   authLoaded: boolean;
   hasHydrated: boolean;
   routes: Route[];
-  deliveries: Delivery[];
+  deliveries: (Delivery & { is_expanded?: boolean })[]; // Expandimos o tipo localmente
   customers: Customer[];
   motoboys: Motoboy[];
   selectedDate: Date;
@@ -50,6 +50,7 @@ interface AppState {
   closeRoute: (routeId: string) => Promise<void>;
   reopenRoute: (routeId: string) => Promise<void>;
   reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
+  toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void; // Nova função local
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
   addMotoboy: (motoboy: Motoboy) => Promise<void>;
@@ -68,7 +69,10 @@ interface AppState {
 }
 
 const sanitizeForFirebase = (obj: any) => {
-  return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
+  const sanitized = Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
+  // Removemos o is_expanded antes de mandar pro Firebase, ele é só local!
+  delete sanitized.is_expanded;
+  return sanitized;
 };
 
 export const useAppStore = create<AppState>()(
@@ -101,15 +105,12 @@ export const useAppStore = create<AppState>()(
       setRouteAlertsEnabled: (enabled) => set({ routeAlertsEnabled: enabled }), 
       setTheme: (theme) => set({ theme }),
       
-      // Sincroniza as configurações da loja localmente e na nuvem (Firebase)
       updateStoreSettings: async (settings) => {
         const currentSettings = get().storeSettings;
         const newSettings = { ...currentSettings, ...settings };
         
-        // SALVA LOCALMENTE NO ZUSTAND
         set({ storeSettings: newSettings });
 
-        // SALVA NO FIREBASE (Backup/Nuvem)
         try {
           const safeData = sanitizeForFirebase(newSettings);
           await setDoc(doc(db, 'store', 'store_settings'), safeData, { merge: true });
@@ -171,7 +172,15 @@ export const useAppStore = create<AppState>()(
             if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
           });
 
-          let mergedDeliveries = [...fbDeliveries];
+          // Preserva o estado de is_expanded local ao mesclar com a nuvem
+          let mergedDeliveries = [...fbDeliveries].map(fbDel => {
+            const localDel = get().deliveries.find(l => l.id === fbDel.id);
+            return {
+              ...fbDel,
+              is_expanded: localDel ? localDel.is_expanded : false
+            };
+          });
+
           get().deliveries.forEach(local => {
             if (!mergedDeliveries.some(m => m.id === local.id)) mergedDeliveries.push(local);
           });
@@ -186,6 +195,13 @@ export const useAppStore = create<AppState>()(
              return d;
           });
 
+          // 🔥 ORDENAÇÃO FORÇADA: Garante que os recarregamentos obedeçam sua reordenação manual
+          mergedDeliveries.sort((a, b) => {
+             const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
+             const orderB = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
+             return orderA - orderB;
+          });
+
           const mergedCustomers = [...fbCustomers];
           get().customers.forEach(local => {
             if (!mergedCustomers.some(m => m.id === local.id)) mergedCustomers.push(local);
@@ -196,7 +212,6 @@ export const useAppStore = create<AppState>()(
             if (!mergedMotoboys.some(m => m.id === local.id)) mergedMotoboys.push(local);
           });
 
-          // 🔥 BLINDAGEM DA LOJA: Garante que se a nuvem tiver dados parciais, ela não zera o padrão
           const defaultSettings = get().storeSettings;
           const finalStoreSettings = cloudStoreSettings 
             ? { 
@@ -222,7 +237,6 @@ export const useAppStore = create<AppState>()(
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false, syncError: true }); 
 
-          // 🔥 NOTIFICAÇÃO NATIVA DE ERRO DE SINCRONIZAÇÃO
           if (Capacitor.isNativePlatform()) {
             try {
               await LocalNotifications.schedule({
@@ -460,6 +474,13 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           console.error('Erro ao salvar reordenação:', error);
         }
+      },
+
+      // 🔥 NOVA FUNÇÃO LÍQUIDA (SÓ LOCAL) PARA PERSISTIR A EXPANSÃO DOS CARDS
+      toggleDeliveryExpansion: (id, isExpanded) => {
+        set((state) => ({
+          deliveries: state.deliveries.map(d => d.id === id ? { ...d, is_expanded: isExpanded } : d)
+        }));
       },
 
       addCustomer: async (customer) => {
