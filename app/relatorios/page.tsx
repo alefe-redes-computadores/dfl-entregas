@@ -21,7 +21,7 @@ type TabType = 'geral' | 'financeiro' | 'operacao';
 export default function RelatoriosPage() {
   const router = useRouter();
   const [selectedPeriod, setSelectedPeriod] = useState('all'); 
-  const [isPeriodModalOpen, setIsPeriodModalOpen] = useState(false); // NOVO: Controle do Modal Bonito
+  const [isPeriodModalOpen, setIsPeriodModalOpen] = useState(false); 
   const [activeTab, setActiveTab] = useState<TabType>('geral');
   const [drilldownDay, setDrilldownDay] = useState<{ day: number; date: string } | null>(null);
 
@@ -29,7 +29,6 @@ export default function RelatoriosPage() {
   const routes = useAppStore(state => state.routes);
   const reports = useReportsData();
 
-  // Dicionário para o botão exibir o nome bonito do período selecionado
   const periodLabels: Record<string, string> = {
     'all': 'Todo Período',
     'today': 'Hoje',
@@ -41,14 +40,17 @@ export default function RelatoriosPage() {
   // 1. FILTRO FANTASMA (LIMPEZA) E FILTRO DE TEMPO
   const filteredDeliveries = useMemo(() => {
     const countByDay: Record<string, number> = {};
+    
     deliveries.forEach(d => {
-      const day = new Date((d as any).createdAt || d.updated_at).toLocaleDateString();
-      countByDay[day] = (countByDay[day] || 0) + 1;
+      // Usando ISO string para evitar bugs de fuso horário na virada do dia
+      const dateStr = new Date((d as any).createdAt || d.updated_at).toISOString().split('T')[0];
+      countByDay[dateStr] = (countByDay[dateStr] || 0) + 1;
     });
 
     const cleanDeliveries = deliveries.filter(d => {
-      const day = new Date((d as any).createdAt || d.updated_at).toLocaleDateString();
-      return countByDay[day] < 55; 
+      const dateStr = new Date((d as any).createdAt || d.updated_at).toISOString().split('T')[0];
+      // CORTA DIAS COM 40 ENTREGAS OU MAIS (Remove dias de testes inflados)
+      return countByDay[dateStr] < 40; 
     });
 
     const now = new Date();
@@ -143,7 +145,6 @@ export default function RelatoriosPage() {
           <h1 className="font-heading text-xl font-black tracking-tight text-zinc-50">Dashboard</h1>
         </div>
         
-        {/* NOVO BOTÃO QUE ABRE O MODAL BONITO */}
         <button 
           onClick={() => setIsPeriodModalOpen(true)}
           className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 text-emerald-500 text-xs font-bold py-2.5 px-4 rounded-full active:scale-95 transition-all shadow-sm"
@@ -199,7 +200,6 @@ export default function RelatoriosPage() {
         )}
       </div>
 
-      {/* MODAL DE DETALHES DO DIA (DRILLDOWN) */}
       {drilldownDay && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-zinc-950/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-zinc-900 border-t border-zinc-800 rounded-t-[32px] p-6 max-h-[80vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
@@ -233,7 +233,7 @@ export default function RelatoriosPage() {
         </div>
       )}
 
-      {/* NOVO MODAL PREMIUM DE SELEÇÃO DE PERÍODO */}
+      {/* MODAL PREMIUM DE SELEÇÃO DE PERÍODO */}
       {isPeriodModalOpen && (
         <div className="fixed inset-0 z-[70] flex flex-col justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-zinc-900 border-t border-zinc-800 rounded-t-[32px] p-6 pb-12 flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
