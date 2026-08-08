@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Bike, Wallet, CheckCircle2, RotateCcw, Timer, MapPin, Copy, User, UserRound } from 'lucide-react';
+import { ChevronDown, Bike, Wallet, CheckCircle2, RotateCcw, Timer, MapPin, Copy, User, UserRound, AlertTriangle, Edit3, X } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import type { Route } from '@/types';
+import type { Route, Delivery } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { DeliveryCard } from '@/components/home/DeliveryCard';
 import { useOptimizedDeliveries } from '@/hooks/useOptimizedDeliveries';
@@ -21,6 +21,11 @@ interface RouteAccordionProps {
 export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   
+  // Estados para o Modal de Alerta de Endereços Imprecisos / Fuzzy
+  const [fuzzyModalOpen, setFuzzyModalOpen] = useState(false);
+  const [currentFuzzyList, setCurrentFuzzyList] = useState<any[]>([]);
+  const [pendingActionType, setPendingActionType] = useState<'copy' | 'maps' | null>(null);
+
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const closeRoute = useAppStore((state) => state.closeRoute);
@@ -42,7 +47,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const motoboyObj = motoboys.find(m => m.name === route.motoboy_name);
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
-  // Consumindo a inteligência do Hook na raiz
   const { sortedDeliveries, pendingDeliveries, neighborhoodCounts } = useOptimizedDeliveries(deliveries, getCustomerById);
 
   const handleStartRoute = async () => {
@@ -66,6 +70,39 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           schedule: { at: new Date(Date.now() + 1000) }, 
         }]
       });
+    }
+  };
+
+  // Verificação Inteligente antes de Copiar ou Abrir o Maps
+  const triggerRouteAction = async (actionType: 'copy' | 'maps') => {
+    const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
+    const result = await copyFullRouteToClipboard(route, pendingDeliveries, storeAddr, getCustomerById);
+
+    if (result.hasFuzzyAddresses && result.fuzzyList.length > 0) {
+      setCurrentFuzzyList(result.fuzzyList);
+      setPendingActionType(actionType);
+      setFuzzyModalOpen(true);
+      return;
+    }
+
+    // Se estiver tudo ok, executa direto a ação desejada
+    executeConfirmedAction(actionType);
+  };
+
+  const executeConfirmedAction = (actionType: 'copy' | 'maps') => {
+    setFuzzyModalOpen(false);
+    const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
+    const cleanStore = storeAddr.toLowerCase().includes('patos de minas') ? storeAddr : `${storeAddr}, Patos de Minas - MG`;
+
+    if (actionType === 'copy') {
+      toast.success('Rota completa copiada com sucesso!');
+    } else {
+      const mapAddresses = pendingDeliveries.map(d => {
+        if (d.maps_link) return d.maps_link;
+        return d.address_string.toLowerCase().includes('patos de minas') ? d.address_string : `${d.address_string}, Patos de Minas - MG`;
+      });
+      const mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(cleanStore)}/${mapAddresses.join('/')}`;
+      window.open(mapUrl, '_blank');
     }
   };
 
@@ -156,10 +193,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <div className="mt-2 flex flex-col gap-2">
             {sortedDeliveries.length > 0 && route.status === 'aberta' && (
               <div className="fixed bottom-24 left-0 right-0 z-40 mx-auto flex w-full max-w-[92%] items-center justify-between gap-3 rounded-[24px] border border-zinc-700/80 bg-zinc-900/95 px-4 py-3 backdrop-blur-xl shadow-2xl shadow-black/50">
-                <button onClick={() => copyFullRouteToClipboard(route, pendingDeliveries, storeSettings?.storeAddress || 'Patos de Minas, MG', getCustomerById)} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800/80 text-sm font-semibold text-zinc-300 active:scale-95">
+                <button onClick={() => triggerRouteAction('copy')} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800/80 text-sm font-semibold text-zinc-300 active:scale-95">
                   <Copy size={18} className="text-emerald-500" /><span className="truncate">Copiar Tudo</span>
                 </button>
-                <button onClick={() => window.open(`https://www.google.com/maps/dir/${encodeURIComponent(storeSettings?.storeAddress || 'Patos de Minas, MG')}/${pendingDeliveries.map(d => encodeURIComponent(d.address_string)).join('/')}`, '_blank')} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 active:scale-95">
+                <button onClick={() => triggerRouteAction('maps')} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 active:scale-95">
                   <MapPin size={18} /><span className="truncate">Otimizar (Maps)</span>
                 </button>
               </div>
@@ -181,6 +218,51 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 <RotateCcw size={16} /> Reabrir Rota
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ALERTA DE ENDEREÇOS IMPRECISOS / SEM NÚMERO */}
+      {fuzzyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 text-amber-400">
+                <AlertTriangle size={24} />
+                <h3 className="text-lg font-bold text-zinc-50">Endereços Incompletos</h3>
+              </div>
+              <button onClick={() => setFuzzyModalOpen(false)} className="text-zinc-500 hover:text-zinc-300"><X size={20}/></button>
+            </div>
+
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Encontramos <strong className="text-zinc-200">{currentFuzzyList.length}</strong> {currentFuzzyList.length === 1 ? 'entrega' : 'entregas'} sem número explícito ou link de mapa exato. O Google Maps pode se confundir.
+            </p>
+
+            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+              {currentFuzzyList.map((item, idx) => (
+                <div key={idx} className="bg-zinc-950 border border-zinc-800 p-3 rounded-2xl flex flex-col gap-1">
+                  <span className="text-xs font-bold text-zinc-200">{item.index}️⃣ {item.name}</span>
+                  <span className="text-[11px] text-zinc-400 truncate">🏠 {item.address}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-col gap-2.5 pt-2">
+              <button 
+                onClick={() => {
+                  if (pendingActionType) executeConfirmedAction(pendingActionType);
+                }}
+                className="w-full h-12 bg-sky-500 hover:bg-sky-400 rounded-xl font-bold text-zinc-950 text-sm active:scale-95 transition-all shadow-lg shadow-sky-500/20"
+              >
+                Prosseguir Mesmo Assim
+              </button>
+              <button 
+                onClick={() => setFuzzyModalOpen(false)}
+                className="w-full h-11 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-semibold text-zinc-300 text-xs active:scale-95 transition-all"
+              >
+                Cancelar e Inserir Links Manuais
+              </button>
+            </div>
           </div>
         </div>
       )}
