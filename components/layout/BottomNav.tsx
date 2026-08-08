@@ -26,7 +26,7 @@ export function BottomNav() {
   return (
     <>
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-md items-center justify-between px-6 py-2">
+        <div className="mx-auto flex max-w-md items-center justify-between px-2 py-2">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isFab = item.href === '__fab__';
@@ -34,14 +34,15 @@ export function BottomNav() {
 
             if (isFab) {
               return (
-                <button
-                  key={item.label}
-                  onClick={() => setShowAddSheet(true)}
-                  aria-label="Adicionar"
-                  className="-mt-7 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-zinc-950 shadow-lg shadow-amber-500/30 transition-transform active:scale-90"
-                >
-                  <Icon size={26} strokeWidth={2.5} />
-                </button>
+                <div key={item.label} className="flex flex-1 justify-center">
+                  <button
+                    onClick={() => setShowAddSheet(true)}
+                    aria-label="Adicionar"
+                    className="-mt-7 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-zinc-950 shadow-lg shadow-amber-500/30 transition-transform active:scale-90"
+                  >
+                    <Icon size={26} strokeWidth={2.5} />
+                  </button>
+                </div>
               );
             }
 
@@ -49,7 +50,7 @@ export function BottomNav() {
               <button
                 key={item.href}
                 onClick={() => router.push(item.href)}
-                className="flex flex-col items-center gap-1 px-2 py-1.5 transition-colors active:scale-95"
+                className="flex flex-1 flex-col items-center gap-1 px-1 py-1.5 transition-colors active:scale-95"
               >
                 <Icon
                   size={22}
@@ -58,7 +59,7 @@ export function BottomNav() {
                 />
                 <span
                   className={clsx(
-                    'text-[11px] font-medium',
+                    'text-[11px] font-medium truncate w-full text-center',
                     isActive ? 'text-emerald-500' : 'text-zinc-500'
                   )}
                 >
