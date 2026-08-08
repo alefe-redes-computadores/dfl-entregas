@@ -33,13 +33,13 @@ export default function RelatoriosPage() {
     // Passo A: Identificar os dias bugados (Dias com +55 entregas artificiais)
     const countByDay: Record<string, number> = {};
     deliveries.forEach(d => {
-      const day = new Date(d.createdAt || d.updated_at).toLocaleDateString();
+      const day = new Date((d as any).createdAt || d.updated_at).toLocaleDateString();
       countByDay[day] = (countByDay[day] || 0) + 1;
     });
 
     // Passo B: Filtrar os bugs e aplicar o período
     const cleanDeliveries = deliveries.filter(d => {
-      const day = new Date(d.createdAt || d.updated_at).toLocaleDateString();
+      const day = new Date((d as any).createdAt || d.updated_at).toLocaleDateString();
       return countByDay[day] < 55; // Remove os dias inflados dos testes
     });
 
@@ -49,7 +49,7 @@ export default function RelatoriosPage() {
     return cleanDeliveries.filter(d => {
       if (selectedPeriod === 'all') return true;
       
-      const dDate = new Date(d.createdAt || d.updated_at);
+      const dDate = new Date((d as any).createdAt || d.updated_at);
       const targetDate = new Date(dDate.getFullYear(), dDate.getMonth(), dDate.getDate());
       const diffTime = today.getTime() - targetDate.getTime();
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -122,7 +122,7 @@ export default function RelatoriosPage() {
 
   const drilldownDeliveries = useMemo(() => {
     if (!drilldownDay) return [];
-    return filteredDeliveries.filter(d => reports.formatDate(d.createdAt || d.updated_at).getDate() === drilldownDay.day);
+    return filteredDeliveries.filter(d => reports.formatDate((d as any).createdAt || d.updated_at).getDate() === drilldownDay.day);
   }, [drilldownDay, filteredDeliveries, reports]);
 
   return (
