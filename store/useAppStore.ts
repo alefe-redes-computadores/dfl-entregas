@@ -172,8 +172,8 @@ export const useAppStore = create<AppState>()(
             if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
           });
 
-          // Preserva o estado de is_expanded local ao mesclar com a nuvem
-          let mergedDeliveries = [...fbDeliveries].map(fbDel => {
+          // 🔥 CORREÇÃO DE TIPAGEM: Declaramos explicitamente o tipo do array resultante
+          let mergedDeliveries: (Delivery & { is_expanded?: boolean })[] = [...fbDeliveries].map(fbDel => {
             const localDel = get().deliveries.find(l => l.id === fbDel.id);
             return {
               ...fbDel,
@@ -187,7 +187,8 @@ export const useAppStore = create<AppState>()(
           
           mergedDeliveries = mergedDeliveries.map(d => {
              if (!(d as any).createdAt) {
-                const fixedDelivery = { ...d, createdAt: d.updated_at || new Date().toISOString() } as Delivery;
+                // Tipagem explícita também aqui para não dar erro
+                const fixedDelivery = { ...d, createdAt: d.updated_at || new Date().toISOString() } as (Delivery & { is_expanded?: boolean });
                 const safeData = sanitizeForFirebase(fixedDelivery);
                 setDoc(doc(db, 'deliveries', fixedDelivery.id), safeData).catch(() => {});
                 return fixedDelivery;
