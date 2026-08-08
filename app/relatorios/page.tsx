@@ -2,11 +2,10 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, BarChart3, Wallet, Map as MapIcon, Activity, X, CheckCircle } from 'lucide-react';
+import { ChevronLeft, BarChart3, Wallet, Map as MapIcon, Activity, X, CheckCircle, ChevronDown } from 'lucide-react';
 import { useReportsData } from '@/hooks/useReportsData';
 import { useAppStore } from '@/store/useAppStore';
 
-import { MonthSelector } from '@/components/reports/MonthSelector';
 import { SummaryCard } from '@/components/reports/SummaryCard';
 import { PaymentChart } from '@/components/reports/Charts/PaymentChart';
 import { NeighborhoodChart } from '@/components/reports/Charts/NeighborhoodChart';
@@ -15,24 +14,57 @@ import { MotoboyChart } from '@/components/reports/Charts/MotoboyChart';
 import { DayOfWeekChart } from '@/components/reports/Charts/DayOfWeekChart';
 import { OriginChart } from '@/components/reports/Charts/OriginChart';
 import { PeakHoursChart } from '@/components/reports/Charts/PeakHoursChart';
-import { LogisticsTimeChart } from '@/components/reports/Charts/LogisticsTimeChart'; // <-- IMPORTANTE!
+import { LogisticsTimeChart } from '@/components/reports/Charts/LogisticsTimeChart';
 
 type TabType = 'geral' | 'financeiro' | 'operacao';
 
 export default function RelatoriosPage() {
   const router = useRouter();
-  const [selectedMonth, setSelectedMonth] = useState('all');
+  const [selectedPeriod, setSelectedPeriod] = useState('all'); // Padrão: Todo o Período
   const [activeTab, setActiveTab] = useState<TabType>('geral');
   const [drilldownDay, setDrilldownDay] = useState<{ day: number; date: string } | null>(null);
 
   const deliveries = useAppStore(state => state.deliveries);
-  const routes = useAppStore(state => state.routes); // <-- NOVO: Puxando rotas
+  const routes = useAppStore(state => state.routes);
   const reports = useReportsData();
 
-  const filteredDeliveries = useMemo(() => reports.getFilteredDeliveries({ month: selectedMonth }), [reports, selectedMonth]);
-  const metrics = useMemo(() => reports.getMainMetrics(filteredDeliveries, deliveries as any, selectedMonth), [reports, filteredDeliveries, deliveries, selectedMonth]);
-  
-  const dailyData = useMemo(() => reports.getDailyEvolution(filteredDeliveries, selectedMonth), [reports, filteredDeliveries, selectedMonth]);
+  // 1. FILTRO FANTASMA (LIMPEZA) E FILTRO DE TEMPO
+  const filteredDeliveries = useMemo(() => {
+    // Passo A: Identificar os dias bugados (Dias com +55 entregas artificiais)
+    const countByDay: Record<string, number> = {};
+    deliveries.forEach(d => {
+      const day = new Date(d.createdAt || d.updated_at).toLocaleDateString();
+      countByDay[day] = (countByDay[day] || 0) + 1;
+    });
+
+    // Passo B: Filtrar os bugs e aplicar o período
+    const cleanDeliveries = deliveries.filter(d => {
+      const day = new Date(d.createdAt || d.updated_at).toLocaleDateString();
+      return countByDay[day] < 55; // Remove os dias inflados dos testes
+    });
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    return cleanDeliveries.filter(d => {
+      if (selectedPeriod === 'all') return true;
+      
+      const dDate = new Date(d.createdAt || d.updated_at);
+      const targetDate = new Date(dDate.getFullYear(), dDate.getMonth(), dDate.getDate());
+      const diffTime = today.getTime() - targetDate.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+      if (selectedPeriod === 'today') return diffDays === 0;
+      if (selectedPeriod === '7d') return diffDays <= 7;
+      if (selectedPeriod === '14d') return diffDays <= 14;
+      if (selectedPeriod === '30d') return diffDays <= 30;
+      return true;
+    });
+  }, [deliveries, selectedPeriod]);
+
+  // Passando os dados limpos para os hooks geradores de relatórios
+  const metrics = useMemo(() => reports.getMainMetrics(filteredDeliveries, filteredDeliveries as any, 'all'), [reports, filteredDeliveries]);
+  const dailyData = useMemo(() => reports.getDailyEvolution(filteredDeliveries, 'all'), [reports, filteredDeliveries]);
   const paymentData = useMemo(() => reports.getPaymentStats(filteredDeliveries), [reports, filteredDeliveries]);
   const neighborhoodData = useMemo(() => reports.getNeighborhoodStats(filteredDeliveries), [reports, filteredDeliveries]);
   const motoboyData = useMemo(() => reports.getMotoboyStats(filteredDeliveries), [reports, filteredDeliveries]);
@@ -40,33 +72,38 @@ export default function RelatoriosPage() {
   const peakHoursData = useMemo(() => reports.getPeakHoursStats(filteredDeliveries), [reports, filteredDeliveries]);
   const originData = useMemo(() => reports.getOriginStats(filteredDeliveries), [reports, filteredDeliveries]);
 
-  // 🧠 CÁLCULO DE LOGÍSTICA EXTREMA (Velocidade)
+  // CÁLCULO DE LOGÍSTICA (Baseado apenas no período filtrado e sem os dias bugados)
   const logisticsTimeData = useMemo(() => {
     const statsMap = new Map<string, { totalMinutes: number; totalDeliveries: number }>();
-    const [year, month] = selectedMonth === 'all' ? [null, null] : selectedMonth.split('-').map(Number);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     routes.forEach(route => {
-      // Regra 1: Filtra o Diretor Operacional (Não calcula métricas para as suas retiradas)
       const name = route.motoboy_name.toLowerCase();
       if (name.includes('álefe') || name.includes('alefe')) return;
-      
-      // Regra 2: Apenas rotas fechadas que possuem tempo final
       if (route.status !== 'fechada' || !route.end_time) return;
 
-      const date = new Date(route.updated_at || route.departure_time);
-      if (year && month) {
-        if (date.getMonth() !== month - 1 || date.getFullYear() !== year) return;
-      }
+      const rDate = new Date(route.updated_at || route.departure_time);
+      const targetDate = new Date(rDate.getFullYear(), rDate.getMonth(), rDate.getDate());
+      const diffTime = today.getTime() - targetDate.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-      // Usa o novo `started_at` se existir, senão usa o `departure_time`
+      let inPeriod = false;
+      if (selectedPeriod === 'all') inPeriod = true;
+      else if (selectedPeriod === 'today') inPeriod = diffDays === 0;
+      else if (selectedPeriod === '7d') inPeriod = diffDays <= 7;
+      else if (selectedPeriod === '14d') inPeriod = diffDays <= 14;
+      else if (selectedPeriod === '30d') inPeriod = diffDays <= 30;
+
+      if (!inPeriod) return;
+
       const startTime = new Date(route.started_at || route.departure_time).getTime();
       const endTime = new Date(route.end_time).getTime();
       const minutes = (endTime - startTime) / (1000 * 60);
 
-      // Trava de segurança para dados corrompidos
       if (minutes < 0 || minutes > 600) return; 
 
-      const routeDeliveries = deliveries.filter(d => d.route_id === route.id);
+      const routeDeliveries = filteredDeliveries.filter(d => d.route_id === route.id);
       if (routeDeliveries.length === 0) return;
 
       const current = statsMap.get(route.motoboy_name) || { totalMinutes: 0, totalDeliveries: 0 };
@@ -80,8 +117,8 @@ export default function RelatoriosPage() {
       name,
       avgTimePerDelivery: data.totalDeliveries > 0 ? (data.totalMinutes / data.totalDeliveries) : 0,
       totalDeliveries: data.totalDeliveries
-    })).sort((a, b) => a.avgTimePerDelivery - b.avgTimePerDelivery); // Do mais rápido pro mais lento
-  }, [routes, deliveries, selectedMonth]);
+    })).sort((a, b) => a.avgTimePerDelivery - b.avgTimePerDelivery);
+  }, [routes, filteredDeliveries, selectedPeriod]);
 
   const drilldownDeliveries = useMemo(() => {
     if (!drilldownDay) return [];
@@ -97,7 +134,22 @@ export default function RelatoriosPage() {
           </button>
           <h1 className="font-heading text-xl font-black tracking-tight text-zinc-50">Dashboard</h1>
         </div>
-        <MonthSelector selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />
+        
+        {/* NOVO SELETOR DE PERÍODO GERAL */}
+        <div className="relative">
+          <select 
+            value={selectedPeriod}
+            onChange={(e) => setSelectedPeriod(e.target.value)}
+            className="appearance-none bg-zinc-900 border border-zinc-800 text-emerald-500 text-xs font-bold py-2.5 pl-4 pr-9 rounded-full focus:outline-none focus:border-emerald-500/50 shadow-sm transition-all"
+          >
+            <option value="all">Todo Período</option>
+            <option value="today">Hoje</option>
+            <option value="7d">Últimos 7 dias</option>
+            <option value="14d">Últimos 14 dias</option>
+            <option value="30d">Últimos 30 dias</option>
+          </select>
+          <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 pointer-events-none" />
+        </div>
       </div>
 
       <div className="flex bg-zinc-900/60 p-1.5 rounded-full border border-zinc-800/80 mx-1">
