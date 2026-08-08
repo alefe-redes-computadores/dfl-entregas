@@ -1,16 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend
-} from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { Users, Maximize2, Minimize2 } from 'lucide-react';
 
 interface MotoboyChartProps {
@@ -58,9 +49,9 @@ export function MotoboyChart({ data }: MotoboyChartProps) {
         </button>
       </div>
       
-      {/* Margem bottom aumentada para 45 para dar espaço ao texto inclinado */}
+      {/* Margem bottom aumentada para 60 para não cortar os nomes */}
       <ResponsiveContainer width="100%" height={isExpanded ? '80%' : 300}>
-        <BarChart data={sortedData} margin={{ top: 10, right: 10, left: -20, bottom: 45 }}>
+        <BarChart data={sortedData} margin={{ top: 10, right: 10, left: -20, bottom: 60 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
           
           <XAxis 
@@ -69,6 +60,8 @@ export function MotoboyChart({ data }: MotoboyChartProps) {
             tick={{ fill: '#e4e4e7', fontSize: 11, fontWeight: 500 }}
             angle={-35}
             textAnchor="end"
+            interval={0}
+            tickMargin={25}
             axisLine={false}
             tickLine={false}
           />
