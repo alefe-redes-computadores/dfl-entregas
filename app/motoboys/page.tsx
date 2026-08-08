@@ -261,8 +261,7 @@ export default function MotoboysPage() {
     let text = `🏍️ *ACERTO DIÁRIO | DFL ENTREGAS* 🏍️\n`;
     text += `👤 *Motoboy:* ${selectedMotoboy.name}\n`;
     text += `📅 *Data:* ${formattedDate}\n\n`;
-    text += `📦 *Entregas Realizadas:* ${acertoData.totalDeliveries}\n`;
-    text += `💰 *Valor Bruto em Caixa:* R$ ${acertoData.deliveriesRevenue.toFixed(2).replace('.', ',')}\n\n`;
+    text += `📦 *Entregas Realizadas:* ${acertoData.totalDeliveries}\n\n`;
     text += `📈 *Cálculo do Repasse:*\n`;
     text += `   ↳ ${acertoData.calculationDesc} = *R$ ${acertoData.calculatedAmount.toFixed(2).replace('.', ',')}*\n\n`;
     if (vales.length > 0) {
@@ -425,10 +424,10 @@ export default function MotoboysPage() {
 
                 <div className="border-t border-zinc-800 pt-4 flex flex-col gap-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Abatimentos / Vales (Opcional)</h3>
-                  <div className="flex gap-2">
-                    <input type="text" placeholder="Ex: Lanche" value={valeDesc} onChange={(e)=>setValeDesc(e.target.value)} className="flex-[2] h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100" />
-                    <input type="text" placeholder="R$ 0,00" value={valeAmount} onChange={(e)=>setValeAmount(formatCurrencyInput(e.target.value))} className="flex-1 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 font-bold" />
-                    <button onClick={handleAddVale} className="h-11 w-11 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300"><PlusCircle size={18}/></button>
+                  <div className="flex items-center gap-2 w-full">
+                    <input type="text" placeholder="Ex: Lanche" value={valeDesc} onChange={(e)=>setValeDesc(e.target.value)} className="flex-[2] min-w-0 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100" />
+                    <input type="text" placeholder="R$ 0,00" value={valeAmount} onChange={(e)=>setValeAmount(formatCurrencyInput(e.target.value))} className="flex-1 min-w-0 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 font-bold" />
+                    <button onClick={handleAddVale} className="h-11 w-11 shrink-0 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300"><PlusCircle size={18}/></button>
                   </div>
                   {vales.length > 0 && (<div className="flex flex-col gap-2">{vales.map(v => (<div key={v.id} className="flex justify-between items-center bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl"><span className="text-xs text-red-400 font-semibold">{v.description}</span><div className="flex items-center gap-3"><span className="text-xs text-red-400 font-bold">- R$ {v.amount.toFixed(2).replace('.', ',')}</span><button onClick={()=>setVales(vales.filter(x => x.id !== v.id))} className="text-red-500/50 hover:text-red-500"><Trash2 size={14}/></button></div></div>))}</div>)}
                 </div>
