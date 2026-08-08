@@ -20,7 +20,8 @@ type TabType = 'geral' | 'financeiro' | 'operacao';
 
 export default function RelatoriosPage() {
   const router = useRouter();
-  const [selectedPeriod, setSelectedPeriod] = useState('all'); // Padrão: Todo o Período
+  const [selectedPeriod, setSelectedPeriod] = useState('all'); 
+  const [isPeriodModalOpen, setIsPeriodModalOpen] = useState(false); // NOVO: Controle do Modal Bonito
   const [activeTab, setActiveTab] = useState<TabType>('geral');
   const [drilldownDay, setDrilldownDay] = useState<{ day: number; date: string } | null>(null);
 
@@ -28,19 +29,26 @@ export default function RelatoriosPage() {
   const routes = useAppStore(state => state.routes);
   const reports = useReportsData();
 
+  // Dicionário para o botão exibir o nome bonito do período selecionado
+  const periodLabels: Record<string, string> = {
+    'all': 'Todo Período',
+    'today': 'Hoje',
+    '7d': 'Últimos 7 dias',
+    '14d': 'Últimos 14 dias',
+    '30d': 'Últimos 30 dias'
+  };
+
   // 1. FILTRO FANTASMA (LIMPEZA) E FILTRO DE TEMPO
   const filteredDeliveries = useMemo(() => {
-    // Passo A: Identificar os dias bugados (Dias com +55 entregas artificiais)
     const countByDay: Record<string, number> = {};
     deliveries.forEach(d => {
       const day = new Date((d as any).createdAt || d.updated_at).toLocaleDateString();
       countByDay[day] = (countByDay[day] || 0) + 1;
     });
 
-    // Passo B: Filtrar os bugs e aplicar o período
     const cleanDeliveries = deliveries.filter(d => {
       const day = new Date((d as any).createdAt || d.updated_at).toLocaleDateString();
-      return countByDay[day] < 55; // Remove os dias inflados dos testes
+      return countByDay[day] < 55; 
     });
 
     const now = new Date();
@@ -72,7 +80,7 @@ export default function RelatoriosPage() {
   const peakHoursData = useMemo(() => reports.getPeakHoursStats(filteredDeliveries), [reports, filteredDeliveries]);
   const originData = useMemo(() => reports.getOriginStats(filteredDeliveries), [reports, filteredDeliveries]);
 
-  // CÁLCULO DE LOGÍSTICA (Baseado apenas no período filtrado e sem os dias bugados)
+  // CÁLCULO DE LOGÍSTICA
   const logisticsTimeData = useMemo(() => {
     const statsMap = new Map<string, { totalMinutes: number; totalDeliveries: number }>();
     const now = new Date();
@@ -135,21 +143,14 @@ export default function RelatoriosPage() {
           <h1 className="font-heading text-xl font-black tracking-tight text-zinc-50">Dashboard</h1>
         </div>
         
-        {/* NOVO SELETOR DE PERÍODO GERAL */}
-        <div className="relative">
-          <select 
-            value={selectedPeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value)}
-            className="appearance-none bg-zinc-900 border border-zinc-800 text-emerald-500 text-xs font-bold py-2.5 pl-4 pr-9 rounded-full focus:outline-none focus:border-emerald-500/50 shadow-sm transition-all"
-          >
-            <option value="all">Todo Período</option>
-            <option value="today">Hoje</option>
-            <option value="7d">Últimos 7 dias</option>
-            <option value="14d">Últimos 14 dias</option>
-            <option value="30d">Últimos 30 dias</option>
-          </select>
-          <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500 pointer-events-none" />
-        </div>
+        {/* NOVO BOTÃO QUE ABRE O MODAL BONITO */}
+        <button 
+          onClick={() => setIsPeriodModalOpen(true)}
+          className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 text-emerald-500 text-xs font-bold py-2.5 px-4 rounded-full active:scale-95 transition-all shadow-sm"
+        >
+          <span>{periodLabels[selectedPeriod]}</span>
+          <ChevronDown size={14} className="text-emerald-500" />
+        </button>
       </div>
 
       <div className="flex bg-zinc-900/60 p-1.5 rounded-full border border-zinc-800/80 mx-1">
@@ -198,6 +199,7 @@ export default function RelatoriosPage() {
         )}
       </div>
 
+      {/* MODAL DE DETALHES DO DIA (DRILLDOWN) */}
       {drilldownDay && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-zinc-950/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-zinc-900 border-t border-zinc-800 rounded-t-[32px] p-6 max-h-[80vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
@@ -225,6 +227,51 @@ export default function RelatoriosPage() {
                     <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">{d.payment_method}</p>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOVO MODAL PREMIUM DE SELEÇÃO DE PERÍODO */}
+      {isPeriodModalOpen && (
+        <div className="fixed inset-0 z-[70] flex flex-col justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border-t border-zinc-800 rounded-t-[32px] p-6 pb-12 flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-700" />
+            
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-zinc-50">Selecionar Período</h2>
+              <button 
+                onClick={() => setIsPeriodModalOpen(false)} 
+                className="p-2 bg-zinc-800 text-zinc-400 rounded-full hover:bg-zinc-700 active:scale-95 transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex flex-col gap-2.5">
+              {[
+                { value: 'all', label: 'Todo Período' },
+                { value: 'today', label: 'Hoje' },
+                { value: '7d', label: 'Últimos 7 dias' },
+                { value: '14d', label: 'Últimos 14 dias' },
+                { value: '30d', label: 'Últimos 30 dias' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    setSelectedPeriod(opt.value);
+                    setIsPeriodModalOpen(false);
+                  }}
+                  className={`flex items-center justify-between p-4 rounded-[20px] border transition-all active:scale-[0.98] ${
+                    selectedPeriod === opt.value
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-sm'
+                      : 'bg-zinc-950/50 border-zinc-800 text-zinc-300 hover:bg-zinc-800'
+                  }`}
+                >
+                  <span className="font-bold text-sm">{opt.label}</span>
+                  {selectedPeriod === opt.value && <CheckCircle size={18} className="text-emerald-500" />}
+                </button>
               ))}
             </div>
           </div>
