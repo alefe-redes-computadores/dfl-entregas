@@ -44,6 +44,7 @@ interface AppState {
   getCustomerById: (customerId?: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
   startRoute: (routeId: string) => Promise<void>; 
+  deleteRoute: (routeId: string) => Promise<void>; // NOVO: Deletar rota vazia
   addDelivery: (delivery: Delivery) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
@@ -300,6 +301,14 @@ export const useAppStore = create<AppState>()(
         try {
           await updateDoc(doc(db, 'routes', routeId), { started_at: now, updated_at: now });
         } catch (error) { console.error(error); }
+      },
+
+      // 🔥 NOVA FUNÇÃO: DELETAR ROTA
+      deleteRoute: async (routeId) => {
+        set((state) => ({ routes: state.routes.filter((r) => r.id !== routeId) }));
+        try {
+          await deleteDoc(doc(db, 'routes', routeId));
+        } catch (error) { console.error('Erro ao excluir rota:', error); }
       },
 
       addMotoboy: async (motoboy) => {
