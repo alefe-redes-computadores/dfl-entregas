@@ -6,6 +6,7 @@ import { BottomNav } from '@/components/layout/BottomNav';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import ClientInit from '@/components/ClientInit'; // 🔥 IMPORTAÇÃO PARA INICIALIZAR O STATUS BAR NATIVO
+import { StoreAutomation } from '@/components/StoreAutomation'; // 🔥 MOTOR DE AUTOMAÇÃO DE EXPEDIENTE
 import './globals.css';
 
 const poppins = Poppins({
@@ -45,6 +46,7 @@ export default function RootLayout({
     <html lang="pt-BR" className={`${poppins.variable} ${inter.variable} dark`} suppressHydrationWarning>
       <body>
         <ClientInit /> {/* 🔥 EXECUTA O CONFIG DO CAPACITOR NO CLIENTE */}
+        <StoreAutomation /> {/* 🔥 RODA AS NOTIFICAÇÕES E ABERTURA/FECHAMENTO AUTOMÁTICO */}
         <ErrorBoundary>
           <AuthGuard>
             <div className="mx-auto flex min-h-screen max-w-md flex-col bg-zinc-950 text-zinc-100">
