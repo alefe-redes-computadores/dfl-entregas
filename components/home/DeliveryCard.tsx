@@ -46,7 +46,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   const touchStartX = useRef(0);
   const touchCurrentX = useRef(0);
 
-  // ESTADOS DO MODAL DO IFOOD
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
 
@@ -54,6 +53,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   const PaymentIcon = payment.icon;
   const isIfood = delivery.origin === 'ifood' || !delivery.origin; 
   const isUrgent = (delivery as any).is_urgent; 
+
+  const shortAddress = delivery.address_string.split('-')[0].trim(); // Extrai apenas a rua e o número
 
   const executeCompletion = async (codeToSave?: string) => {
     const updatePayload: Partial<Delivery> = { completed: true };
@@ -67,7 +68,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
       await findOrCreateCustomer(customer?.name || 'Cliente', { confirmationCode: codeToSave });
     }
 
-    // Ao dar baixa, a gente minimiza o card direto pra limpar a tela
     toggleDeliveryExpansion(delivery.id, false);
     setIsIfoodModalOpen(false);
     setInputCode('');
@@ -92,7 +92,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
         return;
       }
       if (!route.started_at) {
-        toast.error('Inicie a rota (Cronômetro) antes de dar baixa!');
+        toast.error('Inicie a rota antes de dar baixa!');
         return;
       }
 
@@ -103,7 +103,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
         return;
       }
 
-      // LÓGICA IFOOD: Pula o modal se já existir código salvo na entrega ou no cadastro do cliente!
       if (isIfood && !delivery.confirmation_code && !customer?.last_confirmation_code) {
         setInputCode('');
         setIsIfoodModalOpen(true);
@@ -128,7 +127,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   const handleTouchMove = (e: React.TouchEvent) => {
     touchCurrentX.current = e.touches[0].clientX;
     const diff = touchCurrentX.current - touchStartX.current;
-    
     if (diff > 120) setSwipeOffset(120);
     else if (diff < -120) setSwipeOffset(-120);
     else setSwipeOffset(diff);
@@ -142,8 +140,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
 
     if (diff < -SWIPE_THRESHOLD || finalOffset < -50) {
       handleTriggerAction('complete');
-    } 
-    else if (diff > SWIPE_THRESHOLD || finalOffset > 50) {
+    } else if (diff > SWIPE_THRESHOLD || finalOffset > 50) {
       handleTriggerAction('expand');
     }
   };
@@ -160,7 +157,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
           isExpanded ? "bg-zinc-900/80 border border-zinc-700/80" : "bg-zinc-900/40 border border-zinc-800/80"
         )}
       >
-        {/* BACKGROUND AO ARRASTAR */}
         <div className={clsx(
           "absolute inset-0 flex items-center justify-between px-6 transition-colors duration-150",
           isDraggingRight ? "bg-sky-500/40" : isDraggingLeft ? "bg-emerald-500/50" : "bg-zinc-950"
@@ -169,75 +165,61 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
             {isExpanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
             <span className="text-xs">{isExpanded ? 'Minimizar' : 'Expandir'}</span>
           </div>
-          
           <div className={clsx("flex items-center gap-2 font-bold transition-all", isDraggingLeft ? "opacity-100 text-emerald-200 scale-110" : "opacity-40 text-zinc-400")}>
             <span className="text-xs">Dar Baixa</span>
             <CheckCircle2 size={20} />
           </div>
         </div>
 
-        {/* CONTAINER DO CARD - AGORA MAIS RICO QUANDO MINIMIZADO */}
         <div 
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           style={{ transform: `translateX(${swipeOffset}px)` }}
-          className={clsx(
-            "relative z-10 flex flex-col bg-zinc-900 h-full w-full",
-            !isSwiping && "transition-transform duration-200"
-          )}
+          className={clsx("relative z-10 flex flex-col bg-zinc-900 h-full w-full", !isSwiping && "transition-transform duration-200")}
         >
-          <div className="flex flex-col p-3.5 gap-2">
-            
-            {/* LINHA SUPERIOR: Ícone + Nome/ID + Valor */}
-            <div className="flex justify-between items-start">
-              <div className="flex items-start gap-2.5 overflow-hidden">
-                <span className={clsx("flex items-center justify-center h-8 w-8 rounded-full shrink-0 border mt-0.5", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
-                  {isIfood ? <Smartphone size={16} /> : <Store size={16} />}
-                </span>
+          <div className="flex flex-col p-3.5">
+            <div className="flex items-start gap-3">
+              <span className={clsx("flex items-center justify-center h-10 w-10 rounded-full shrink-0 border mt-0.5", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
+                {isIfood ? <Smartphone size={18} /> : <Store size={18} />}
+              </span>
 
-                <div className="flex flex-col truncate pt-0.5">
-                  <p className="font-heading text-sm font-bold tracking-tight text-zinc-50 truncate max-w-[170px]">
+              <div className="flex flex-col flex-1 truncate">
+                <div className="flex justify-between items-start">
+                  <p className="font-heading text-[15px] font-bold tracking-tight text-zinc-50 truncate max-w-[160px]">
                     {customer?.name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
                   </p>
-                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 truncate">
-                    {isIfood && delivery.order_id && <span className="font-mono text-zinc-500">#{delivery.order_id} •</span>}
-                    <span className="truncate">{customer?.neighborhood || 'Sem Bairro'}</span>
-                  </div>
+                  <p className="text-[14px] font-bold text-emerald-400 tracking-tight shrink-0">
+                    {isPrivacyMode ? 'R$ •••••' : `R$ ${delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}`}
+                  </p>
                 </div>
-              </div>
+                
+                <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 truncate mt-0.5">
+                  {isIfood && delivery.order_id && <span className="font-mono text-zinc-500">#{delivery.order_id} •</span>}
+                  <span className="truncate">{customer?.neighborhood || 'Sem Bairro'}</span>
+                  {isUrgent && <span className="ml-1 rounded bg-red-500/20 text-red-400 text-[9px] px-1 font-bold uppercase">Urgente</span>}
+                </div>
 
-              <div className="flex flex-col items-end shrink-0 gap-1 pt-1">
-                <p className="text-[15px] font-bold text-emerald-400 tracking-tight">
-                  {isPrivacyMode ? 'R$ •••••' : `R$ ${delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}`}
-                </p>
-                {isUrgent && <span className="rounded bg-red-500/20 text-red-400 text-[9px] px-1 font-bold uppercase">Urgente</span>}
+                {!isExpanded && (
+                  <div className="flex items-center gap-2 mt-2.5 truncate w-full">
+                    {delivery.is_paid ? (
+                      <span className="flex items-center gap-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 px-1.5 py-0.5 text-[10px] font-bold shrink-0"><CheckCircle2 size={10} /> Pago</span>
+                    ) : (
+                      <span className={clsx("flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold shrink-0", payment.className)}>
+                        <PaymentIcon size={10} />{payment.label}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-zinc-300 font-medium truncate w-full">{shortAddress}</span>
+                  </div>
+                )}
               </div>
             </div>
-
-            {/* LINHA INFERIOR (RESUMO) NO CARD MINIMIZADO */}
-            {!isExpanded && (
-               <div className="flex items-center gap-2 pl-[42px] pr-2 w-full truncate">
-                 {delivery.is_paid ? (
-                   <span className="flex items-center gap-1 rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-500 shrink-0"><CheckCircle2 size={10} /> Pago</span>
-                 ) : (
-                   <span className={clsx("flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold shrink-0", payment.className)}>
-                     <PaymentIcon size={10} />{payment.label}
-                   </span>
-                 )}
-                 <p className="text-[11px] text-zinc-500 truncate w-full">
-                    {delivery.address_string}
-                 </p>
-               </div>
-            )}
           </div>
 
-          {/* ÁREA EXPANDIDA COM TODOS OS CONTROLES */}
           {isExpanded && (
             <div className="animate-in slide-in-from-top-2 fade-in duration-200">
               <div className="px-3.5 pb-3 flex flex-col gap-2.5">
-                
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 pl-12">
                   {isIfood && (delivery.confirmation_code || customer?.last_confirmation_code) && (
                     <span className="rounded bg-zinc-800 px-2 py-1 text-[11px] font-mono tracking-wider text-amber-500 font-bold border border-amber-500/20 shadow-inner">
                       Conf: {delivery.confirmation_code || customer?.last_confirmation_code}
@@ -250,16 +232,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                   )}
                 </div>
 
-                <p className="text-xs text-zinc-300 bg-zinc-950/50 p-2.5 rounded-xl border border-zinc-800/80 leading-relaxed">
-                   {delivery.address_string}
-                </p>
-                <div className="mt-1">
+                <div className="ml-12 mt-1">
                   <MiniMap address={delivery.address_string} mapsLink={delivery.maps_link} />
                 </div>
               </div>
 
               {delivery.observation && (
-                <div className="mx-3.5 mb-2.5 rounded-xl bg-amber-500/5 border border-amber-500/10 px-3 py-2">
+                <div className="ml-14 mr-3.5 mb-2.5 rounded-xl bg-amber-500/5 border border-amber-500/10 px-3 py-2">
                   <p className="text-xs text-zinc-300">
                     <span className="font-bold text-amber-500">OBS: </span>
                     {delivery.observation}
@@ -301,11 +280,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
         </div>
       </div>
 
-      {/* MODAL IFOOD (AGORA COM HAPTICS EM TUDO) */}
       {isIfoodModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
           <div className="w-full max-w-sm rounded-[32px] border border-zinc-700 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-5">
-            
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/10 text-red-500 border border-red-500/20">
@@ -316,59 +293,24 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                   <p className="text-xs text-zinc-400">Pedido #{delivery.order_id}</p>
                 </div>
               </div>
-              <button 
-                onClick={async () => {
-                  if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                  setIsIfoodModalOpen(false);
-                }} 
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-              >
+              <button onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); setIsIfoodModalOpen(false); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 hover:text-zinc-200">
                 <X size={16} />
               </button>
             </div>
 
             <div className="flex flex-col gap-2">
               <label className="text-xs font-semibold text-zinc-400">Digite os 4 dígitos informados pelo cliente</label>
-              <input 
-                type="text"
-                inputMode="numeric"
-                maxLength={4}
-                autoFocus
-                placeholder="Ex: 5821"
-                value={inputCode}
-                onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ''))}
-                className="h-16 w-full rounded-2xl border-2 border-red-500/50 bg-zinc-950 px-4 text-center font-mono text-2xl font-bold tracking-widest text-zinc-50 focus:border-red-500 focus:outline-none transition-colors"
-              />
+              <input type="text" inputMode="numeric" maxLength={4} autoFocus placeholder="Ex: 5821" value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ''))} className="h-16 w-full rounded-2xl border-2 border-red-500/50 bg-zinc-950 px-4 text-center font-mono text-2xl font-bold tracking-widest text-zinc-50 focus:border-red-500 focus:outline-none transition-colors" />
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <button 
-                type="button"
-                onClick={async () => {
-                  if (inputCode.length < 4) {
-                    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
-                    toast.error('Digite os 4 dígitos ou clique em Pular.');
-                    return;
-                  }
-                  await executeCompletion(inputCode);
-                }}
-                className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-bold text-zinc-950 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
-              >
+              <button type="button" onClick={async () => { if (inputCode.length < 4) { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy }); toast.error('Digite os 4 dígitos ou clique em Pular.'); return; } await executeCompletion(inputCode); }} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-bold text-zinc-950 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
                 <ShieldCheck size={18} /> Concluir com Código
               </button>
-
-              <button 
-                type="button"
-                onClick={async () => {
-                  if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                  await executeCompletion();
-                }}
-                className="flex h-12 w-full items-center justify-center rounded-2xl bg-zinc-800/80 font-semibold text-zinc-300 hover:bg-zinc-700 active:scale-95 transition-all text-sm"
-              >
+              <button type="button" onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); await executeCompletion(); }} className="flex h-12 w-full items-center justify-center rounded-2xl bg-zinc-800/80 font-semibold text-zinc-300 hover:bg-zinc-700 active:scale-95 transition-all text-sm">
                 Pular (Sem Código)
               </button>
             </div>
-
           </div>
         </div>
       )}
