@@ -84,7 +84,7 @@ export async function copyDeliveryToClipboard(
 }
 
 // ============================================================================
-// 2. COPIAR ROTA COMPLETA (COM SUPORTE A LINK MANUAL E FORÇAR PATOS DE MINAS)
+// 2. COPIAR ROTA COMPLETA (AGRUPAMENTO INTELIGENTE + GOOGLE MAPS API OFICIAL)
 // ============================================================================
 export async function copyFullRouteToClipboard(
   route: Route,
@@ -96,8 +96,21 @@ export async function copyFullRouteToClipboard(
     const parts: string[] = [];
     let hasFuzzyAddresses = false;
     const fuzzyDeliveries: any[] = [];
-    const deliveriesInMap: string[] = [];
     
+    // AGRUPAMENTO DE ENDEREÇOS IGUAIS (Mescla múltiplos pedidos para o mesmo endereço)
+    const groupedDeliveries: Delivery[][] = [];
+    const addressMap = new Map<string, number>();
+
+    deliveries.forEach(d => {
+      const key = d.address_string.toLowerCase().trim();
+      if (addressMap.has(key)) {
+          groupedDeliveries[addressMap.get(key)!].push(d);
+      } else {
+          addressMap.set(key, groupedDeliveries.length);
+          groupedDeliveries.push([d]);
+      }
+    });
+
     const drinksSummary: Record<string, { qty: number, name: string }> = {};
 
     parts.push(`🏍️ *ROTA DE ENTREGA - ${route.motoboy_name.toUpperCase()}*`);
@@ -105,79 +118,90 @@ export async function copyFullRouteToClipboard(
     parts.push(`📍 *Base:* ${cleanStoreAddress}\n`);
     parts.push(`📦 *RESUMO DAS PARADAS:*\n`);
 
-    deliveries.forEach((delivery, index) => {
-      const customer = getCustomerById(delivery.customer_id);
-      const name = customer?.name || 'Cliente Desconhecido';
-      const isUrgent = (delivery as any).is_urgent;
+    const routeMapAddresses: string[] = []; // Endereços para o link do Maps (sem shortlinks)
+
+    groupedDeliveries.forEach((group, index) => {
+      // Pega dados base da primeira entrega do grupo
+      const firstDelivery = group[0];
+      const customer = getCustomerById(firstDelivery.customer_id);
       
-      const hasNumber = /\d/.test(delivery.address_string);
-      const isFuzzy = !hasNumber && !delivery.maps_link;
+      const hasNumber = /\d/.test(firstDelivery.address_string);
+      const isFuzzy = !hasNumber && !firstDelivery.maps_link;
+
+      // Nomes de clientes combinados e sem repetir
+      const uniqueNames = Array.from(new Set(group.map(d => getCustomerById(d.customer_id)?.name || 'Cliente')));
+      const namesStr = uniqueNames.join(' & ');
 
       if (isFuzzy) {
         hasFuzzyAddresses = true;
-        fuzzyDeliveries.push({ id: delivery.id, index: index + 1, name, address: delivery.address_string, neighborhood: customer?.neighborhood });
+        fuzzyDeliveries.push({ id: firstDelivery.id, index: index + 1, name: namesStr, address: firstDelivery.address_string, neighborhood: customer?.neighborhood });
       }
 
-      // Prioridade máxima para link manual se existir, senão usa o endereço completo ancorado em Patos de Minas
-      if (delivery.maps_link) {
-        deliveriesInMap.push(delivery.maps_link);
-      } else {
-        const fullAddr = delivery.address_string.toLowerCase().includes('patos de minas') 
-          ? delivery.address_string 
-          : `${delivery.address_string}, Patos de Minas - MG`;
-        deliveriesInMap.push(encodeURIComponent(fullAddr));
+      // Adiciona ao mapa usando o endereço textual para não quebrar a API de multi-paradas
+      const fullAddr = firstDelivery.address_string.toLowerCase().includes('patos de minas') 
+        ? firstDelivery.address_string 
+        : `${firstDelivery.address_string}, Patos de Minas - MG`;
+      routeMapAddresses.push(fullAddr);
+
+      // Tratamento de IDs do iFood
+      const ifoodIds = group.filter(d => d.order_id).map(d => `#${d.order_id}`).join(', ');
+      let originTitle = '';
+      if (ifoodIds) {
+          originTitle = `(iFood ${ifoodIds})`;
+      } else if (group.some(d => d.origin === 'loja')) {
+          originTitle = `(Loja)`;
       }
 
-      let title = `*${index + 1}️⃣ ${name}*`;
-      if (delivery.origin === 'ifood') {
-          title += ` (iFood`;
-          if (delivery.order_id) title += ` #${delivery.order_id}`;
-          if (delivery.ifood_id) title += ` - ID: ${delivery.ifood_id}`;
-          if (delivery.confirmation_code) title += ` - Cód: ${delivery.confirmation_code}`;
-          title += `)`;
-      } else {
-          title += ` (Loja)`;
-      }
+      const isUrgent = group.some(d => (d as any).is_urgent);
+      
+      let title = `*${index + 1}️⃣ ${namesStr}* ${originTitle}`;
       if (isUrgent) title += ' 🚨';
+      if (group.length > 1) title += ' 📦*(MÚLTIPLA)*';
       
       parts.push(title);
-      parts.push(`🏠 Endereço: ${delivery.address_string}`);
+      parts.push(`🏠 Endereço: ${firstDelivery.address_string}`);
       
-      if (delivery.observation) parts.push(`⚠️ *OBS:* ${delivery.observation}`);
+      // Junta observações
+      const obsList = group.filter(d => d.observation).map(d => d.observation);
+      if (obsList.length > 0) {
+        parts.push(`⚠️ *OBS:* ${obsList.join(' | ')}`);
+      }
 
-      const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
-      if (delivery.is_paid) {
+      // Soma dos valores
+      const totalValue = group.reduce((acc, d) => acc + (d.value || 0), 0);
+      const valueStr = totalValue.toFixed(2).replace('.', ',');
+
+      // Pagamentos Mesclados
+      const allPaid = group.every(d => d.is_paid);
+      if (allPaid) {
         parts.push(`📱 Pagamento: Pago no App ✅`);
       } else {
-        const pMethod = delivery.payment_method ? delivery.payment_method.toUpperCase().replace('_', ' ') : 'DINHEIRO';
-        if (delivery.payment_method === 'dinheiro' && delivery.change_for) {
-          parts.push(`💵 Pagamento: ${pMethod} - R$ ${valueStr} (Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})`);
-        } else {
-          parts.push(`💵 Pagamento: ${pMethod} - R$ ${valueStr}`);
-        }
+        const methods = group.map(d => {
+            if (d.is_paid) return 'Pago App';
+            if (d.payment_method === 'dinheiro' && d.change_for) {
+               return `Dinheiro (Troco p/ R$ ${d.change_for.toFixed(2).replace('.', ',')})`;
+            }
+            return d.payment_method ? d.payment_method.toUpperCase().replace('_', ' ') : 'DINHEIRO';
+        });
+        const methodsStr = Array.from(new Set(methods)).join(' + ');
+        parts.push(`💵 Pagamento: ${methodsStr} - TOTAL: R$ ${valueStr}`);
       }
 
-      if (delivery.drinks) {
-        const rawDrinkStr = delivery.drinks.trim();
-        parts.push(`🥤 Bebida: ${rawDrinkStr}`);
-
-        const match = rawDrinkStr.match(/^(\d+)\s+(.+)$/);
-        let qty = 1;
-        let drinkName = rawDrinkStr;
-
-        if (match) {
-          qty = parseInt(match[1], 10);
-          drinkName = match[2].trim();
+      // Bebidas Mescladas
+      group.forEach(d => {
+        if (d.drinks) {
+          const rawDrinkStr = d.drinks.trim();
+          parts.push(`🥤 Bebida: ${rawDrinkStr}`);
+          const match = rawDrinkStr.match(/^(\d+)\s+(.+)$/);
+          let qty = 1; let drinkName = rawDrinkStr;
+          if (match) { qty = parseInt(match[1], 10); drinkName = match[2].trim(); }
+          const key = drinkName.toLowerCase();
+          if (!drinksSummary[key]) drinksSummary[key] = { qty: 0, name: drinkName };
+          drinksSummary[key].qty += qty;
         }
-
-        const key = drinkName.toLowerCase();
-        if (!drinksSummary[key]) {
-          drinksSummary[key] = { qty: 0, name: drinkName };
-        }
-        drinksSummary[key].qty += qty;
-      }
+      });
       
-      if (isFuzzy && !delivery.maps_link) {
+      if (isFuzzy && !firstDelivery.maps_link) {
           parts.push(`❌ *Atenção:* Endereço incompleto/sem número. Verifique no mapa.`);
       }
 
@@ -195,15 +219,22 @@ export async function copyFullRouteToClipboard(
 
     parts.push(`━━━━━━━━━━━━━━━━━━━━━━`);
 
-    if (deliveriesInMap.length > 0) {
-        // Se houver links manuais misturados com endereços, construímos o maps dir de forma segura
-        const mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(cleanStoreAddress)}/${deliveriesInMap.join('/')}`;
-        parts.push(`🗺️ *ROTA INTELIGENTE (Google Maps):*`);
-        parts.push(`${mapUrl}\n`);
+    // GERADOR OFICIAL GOOGLE MAPS DIREÇÕES (INFALÍVEL NO ANDROID/IOS)
+    if (routeMapAddresses.length > 0) {
+      let mapUrl = '';
+      if (routeMapAddresses.length === 1) {
+        mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(cleanStoreAddress)}&destination=${encodeURIComponent(routeMapAddresses[0])}`;
+      } else {
+        const destination = routeMapAddresses[routeMapAddresses.length - 1];
+        const waypoints = routeMapAddresses.slice(0, -1);
+        mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(cleanStoreAddress)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints.join('|'))}`;
+      }
+      parts.push(`🗺️ *ROTA INTELIGENTE (Google Maps):*`);
+      parts.push(`${mapUrl}\n`);
     }
 
     if (fuzzyDeliveries.length > 0) {
-      parts.push(`*(🚨 Nota: ${fuzzyDeliveries.length === 1 ? 'A entrega' : 'As entregas'} ${fuzzyDeliveries.map(f => f.index).join(', ')} possuem endereços simplificados).*`);
+      parts.push(`*(🚨 Nota: ${fuzzyDeliveries.length === 1 ? 'A parada' : 'As paradas'} ${fuzzyDeliveries.map(f => f.index).join(', ')} possuem endereços simplificados).*`);
     }
 
     const textToCopy = parts.join('\n');
