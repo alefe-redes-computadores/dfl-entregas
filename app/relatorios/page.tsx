@@ -121,10 +121,16 @@ export default function RelatoriosPage() {
       return new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
     })).size || 1;
 
-    return rawData.map(p => ({
-      time: p.time,
-      deliveries: selectedPeriod === 'today' ? p.deliveries : Math.ceil(p.deliveries / uniqueDaysCount)
-    }));
+    // 🔥 CORREÇÃO: Utilizando os nomes corretos retornados pelo hook (hour e count) e flexibilizando a tipagem
+    return rawData.map((p: any) => {
+      const timeLabel = p.hour || p.time || '00h';
+      const deliveriesCount = p.count !== undefined ? p.count : (p.deliveries || 0);
+
+      return {
+        time: timeLabel,
+        deliveries: selectedPeriod === 'today' ? deliveriesCount : Math.ceil(deliveriesCount / uniqueDaysCount)
+      };
+    });
   }, [filteredDeliveries, reports, selectedPeriod]);
 
   const logisticsTimeData = useMemo(() => {
@@ -214,7 +220,6 @@ export default function RelatoriosPage() {
               <SummaryCard title="Melhor Dia" value={metrics.bestDay.day} subtitle={`R$ ${metrics.bestDay.revenue.toFixed(2)}`} icon={<BarChart3 size={20} />} accentColor="pink" />
             </div>
 
-            {/* AQUI ENTRA SEU NOVO COMPONENTE */}
             <BossSavingsCard deliveriesCount={alefeDeliveries.length} savedAmount={savedAmount} />
 
             <PaymentChart data={paymentData} />
