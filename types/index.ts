@@ -10,10 +10,10 @@ export type MotoboyType = 'fixo' | 'avulso';
 
 export interface MotoboyPaymentRule {
   type: PaymentRuleType;
-  fixed_amount?: number;    // Ex: R$ 100
-  delivery_fee?: number;    // Ex: R$ 6 por entrega
-  threshold?: number;       // Ex: 15 entregas (limite da base fixa)
-  extra_fee?: number;       // Ex: R$ 7 por entrega após o limite
+  fixed_amount?: number;    
+  delivery_fee?: number;    
+  threshold?: number;       
+  extra_fee?: number;       
 }
 
 export interface Route {
@@ -33,9 +33,9 @@ export interface Delivery {
   id: string;
   route_id: string;
   order_id?: string;
-  ifood_id?: string; // 🔥 ADICIONADO: O ID de 8 dígitos do iFood
+  ifood_id?: string; 
   origin: OrderOrigin;
-  confirmation_code?: string; // Mantido para o código de 4 dígitos
+  confirmation_code?: string; 
   customer_id: string;
   value: number;
   is_paid: boolean;
@@ -60,7 +60,7 @@ export interface Customer {
   maps_link?: string;
   observation?: string;
   last_confirmation_code?: string;
-  avatar?: string; // 🔥 ADICIONADO: Avatar do cliente (Emoji)
+  avatar?: string; 
   createdAt?: string;
   updated_at?: string;
   orderCount?: number; 
@@ -72,8 +72,32 @@ export interface Motoboy {
   name: string;
   active: boolean; 
   type?: MotoboyType; 
-  avatar?: string; // 🔥 ADICIONADO: Avatar do motoboy (Emoji)
+  avatar?: string; 
   payment_rule?: MotoboyPaymentRule; 
   createdAt?: string;
   updated_at?: string;
+}
+
+// 🔥 NOVAS TIPAGENS DE EXPEDIENTE (PADRÃO IFOOD)
+export interface Shift {
+  start: string;
+  end: string;
+}
+
+export interface DaySchedule {
+  active: boolean;
+  shifts: Shift[];
+}
+
+export interface StorePause {
+  id: string;
+  start_date: string;
+  end_date: string;
+  reason?: string;
+}
+
+export interface HolidayOverride {
+  date: string; // YYYY-MM-DD
+  active: boolean;
+  shifts: Shift[];
 }
