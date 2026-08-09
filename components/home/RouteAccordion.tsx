@@ -20,8 +20,6 @@ interface RouteAccordionProps {
 
 export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  
-  // Estados para o Modal de Alerta de Endereços Imprecisos / Fuzzy
   const [fuzzyModalOpen, setFuzzyModalOpen] = useState(false);
   const [currentFuzzyList, setCurrentFuzzyList] = useState<any[]>([]);
   const [pendingActionType, setPendingActionType] = useState<'copy' | 'maps' | null>(null);
@@ -73,7 +71,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     }
   };
 
-  // Verificação Inteligente antes de Copiar ou Abrir o Maps
   const triggerRouteAction = async (actionType: 'copy' | 'maps') => {
     const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
     const result = await copyFullRouteToClipboard(route, pendingDeliveries, storeAddr, getCustomerById);
@@ -85,7 +82,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       return;
     }
 
-    // Se estiver tudo ok, executa direto a ação desejada
     executeConfirmedAction(actionType);
   };
 
@@ -97,11 +93,24 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (actionType === 'copy') {
       toast.success('Rota completa copiada com sucesso!');
     } else {
-      const mapAddresses = pendingDeliveries.map(d => {
-        if (d.maps_link) return d.maps_link;
-        return d.address_string.toLowerCase().includes('patos de minas') ? d.address_string : `${d.address_string}, Patos de Minas - MG`;
-      });
-      const mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(cleanStore)}/${mapAddresses.join('/')}`;
+      // MAPS URL INFALÍVEL
+      const uniqueAddresses = Array.from(new Set(pendingDeliveries.map(d => {
+        return d.address_string.toLowerCase().includes('patos de minas') 
+          ? d.address_string 
+          : `${d.address_string}, Patos de Minas - MG`;
+      })));
+
+      if (uniqueAddresses.length === 0) return;
+
+      let mapUrl = '';
+      if (uniqueAddresses.length === 1) {
+        mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(cleanStore)}&destination=${encodeURIComponent(uniqueAddresses[0])}`;
+      } else {
+        const destination = uniqueAddresses[uniqueAddresses.length - 1];
+        const waypoints = uniqueAddresses.slice(0, -1);
+        mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(cleanStore)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints.join('|'))}`;
+      }
+      
       window.open(mapUrl, '_blank');
     }
   };
@@ -222,9 +231,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         </div>
       )}
 
-      {/* MODAL DE ALERTA DE ENDEREÇOS IMPRECISOS / SEM NÚMERO */}
       {fuzzyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5 text-amber-400">
@@ -235,7 +243,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             </div>
 
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Encontramos <strong className="text-zinc-200">{currentFuzzyList.length}</strong> {currentFuzzyList.length === 1 ? 'entrega' : 'entregas'} sem número explícito ou link de mapa exato. O Google Maps pode se confundir.
+              Encontramos <strong className="text-zinc-200">{currentFuzzyList.length}</strong> {currentFuzzyList.length === 1 ? 'parada' : 'paradas'} sem número explícito. O Google Maps pode se confundir.
             </p>
 
             <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
@@ -248,18 +256,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             </div>
 
             <div className="flex flex-col gap-2.5 pt-2">
-              <button 
-                onClick={() => {
-                  if (pendingActionType) executeConfirmedAction(pendingActionType);
-                }}
-                className="w-full h-12 bg-sky-500 hover:bg-sky-400 rounded-xl font-bold text-zinc-950 text-sm active:scale-95 transition-all shadow-lg shadow-sky-500/20"
-              >
+              <button onClick={() => { if (pendingActionType) executeConfirmedAction(pendingActionType); }} className="w-full h-12 bg-sky-500 hover:bg-sky-400 rounded-xl font-bold text-zinc-950 text-sm active:scale-95 transition-all shadow-lg shadow-sky-500/20">
                 Prosseguir Mesmo Assim
               </button>
-              <button 
-                onClick={() => setFuzzyModalOpen(false)}
-                className="w-full h-11 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-semibold text-zinc-300 text-xs active:scale-95 transition-all"
-              >
+              <button onClick={() => setFuzzyModalOpen(false)} className="w-full h-11 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-semibold text-zinc-300 text-xs active:scale-95 transition-all">
                 Cancelar e Inserir Links Manuais
               </button>
             </div>
