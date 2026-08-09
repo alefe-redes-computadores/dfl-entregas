@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Power, Users, BellRing, Bike, TrendingUp, 
-  Package, Calendar, AlertTriangle, Check, ChevronUp, ChevronDown, MapPin
+  Package, Calendar, AlertTriangle, Check, ChevronUp, ChevronDown, MapPin, X, Banknote, CreditCard, QrCode
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 
@@ -19,7 +20,12 @@ export default function LojaPage() {
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   
+  // Modais Premium
+  const [isLogisticsModalOpen, setIsLogisticsModalOpen] = useState(false);
+  const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
+  
   const deliveries = useAppStore((state) => state.deliveries);
+  const routes = useAppStore((state) => state.routes);
   const motoboys = useAppStore((state) => state.motoboys);
   const updateMotoboy = useAppStore((state) => state.updateMotoboy);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
@@ -62,16 +68,53 @@ export default function LojaPage() {
     }
   }, [storeSettings, hasHydrated]);
 
-  const todayStr = new Date().toDateString();
-  const todaysDeliveries = deliveries.filter(d => {
-    const dDateStr = new Date(d.updated_at || Date.now()).toDateString();
-    return dDateStr === todayStr;
-  });
+  // Filtra as entregas e rotas apenas de "Hoje" (Fuso BRT)
+  const todayDeliveries = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getTime() - 3 * 3600000).toISOString().split('T')[0];
+    
+    return deliveries.filter(d => {
+      const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
+      const brtDate = new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
+      return brtDate === today;
+    });
+  }, [deliveries]);
 
-  const totalEntregas = todaysDeliveries.length;
-  const faturamentoTotal = todaysDeliveries.reduce((acc, d) => acc + (d.value || 0), 0);
+  const totalEntregas = todayDeliveries.length;
+  const faturamentoTotal = todayDeliveries.reduce((acc, d) => acc + (d.value || 0), 0);
+
+  // Cálculos para o Modal Financeiro
+  const revenueByMethod = useMemo(() => {
+    return todayDeliveries.reduce((acc, d) => {
+      const m = d.payment_method || 'dinheiro';
+      acc[m] = (acc[m] || 0) + (d.value || 0);
+      return acc;
+    }, {} as Record<string, number>);
+  }, [todayDeliveries]);
+
+  // Cálculos para o Modal Logístico
+  const routesSummary = useMemo(() => {
+    const summary = new Map();
+    todayDeliveries.forEach(d => {
+      if (!d.route_id) return;
+      const route = routes.find(r => r.id === d.route_id);
+      if (!route) return;
+      
+      if (!summary.has(route.id)) {
+        summary.set(route.id, {
+          name: route.name,
+          motoboy: route.motoboy_name,
+          status: route.status,
+          deliveries: []
+        });
+      }
+      summary.get(route.id).deliveries.push(d);
+    });
+    return Array.from(summary.values());
+  }, [todayDeliveries, routes]);
 
   const toggleStore = async () => {
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
     const newState = !isStoreOpen;
     setIsStoreOpen(newState);
     await updateStoreSettings({ isOpen: newState });
@@ -82,6 +125,7 @@ export default function LojaPage() {
   };
 
   const toggleDay = (index: number) => {
+    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light });
     setActiveDays(prev => 
       prev.includes(index) ? prev.filter(d => d !== index) : [...prev, index]
     );
@@ -89,6 +133,7 @@ export default function LojaPage() {
 
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
     
     if (!storeAddress.trim()) {
       toast.error('O endereço da lanchonete é obrigatório!');
@@ -109,49 +154,25 @@ export default function LojaPage() {
     });
 
     toast.success('Configurações Salvas com Sucesso!', {
-      description: 'Expediente e Endereço de Base atualizados.'
+      description: 'Expediente, Automações e Endereço atualizados.'
     });
-
-    if (alertsEnabled && Capacitor.isNativePlatform()) {
-      try {
-        await LocalNotifications.requestPermissions();
-        
-        const now = new Date();
-        const openingDate = new Date();
-        openingDate.setHours(openHour, openMin - 30, 0, 0);
-
-        if (openingDate.getTime() <= now.getTime()) {
-          openingDate.setDate(openingDate.getDate() + 1);
-        }
-
-        await LocalNotifications.schedule({
-          notifications: [
-            {
-              title: 'Prepara a chapa! 🍔',
-              body: 'Faltam 30 minutos para abrir a lanchonete!',
-              id: 101,
-              schedule: { at: openingDate },
-            }
-          ]
-        });
-      } catch (error) {
-        console.error("Erro na notificação de abertura", error);
-      }
-    }
   };
 
   const handleToggleMotoboyScale = async (motoboyId: string, currentActiveStatus: boolean) => {
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
     await updateMotoboy(motoboyId, { active: !currentActiveStatus } as any);
     toast.success(!currentActiveStatus ? 'Motoboy escalado para hoje!' : 'Motoboy removido da escala.');
   };
 
   const handleMinUp = (current: number, setFn: (val: number) => void) => {
+    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light });
     const next = current + 5;
     const rounded = next - (next % 5);
     setFn(rounded >= 60 ? 0 : rounded);
   };
 
   const handleMinDown = (current: number, setFn: (val: number) => void) => {
+    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light });
     if (current === 0) {
       setFn(55);
       return;
@@ -160,20 +181,26 @@ export default function LojaPage() {
     setFn(current % 5 !== 0 ? rounded : rounded - 5);
   };
 
+  const openLogisticsModal = async () => {
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+    setIsLogisticsModalOpen(true);
+  };
+
+  const openRevenueModal = async () => {
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+    setIsRevenueModalOpen(true);
+  };
+
   if (!isMounted || !hasHydrated) return null;
 
   return (
     <div className="flex flex-col gap-6 pb-24 animate-in fade-in duration-300 relative">
       
-      <PageHeader 
-        title="Minha Loja" 
-        subtitle="Centro de comando da Da Família Lanches" 
-        to="/"
-      />
+      <PageHeader title="Minha Loja" subtitle="Centro de comando da Da Família Lanches" to="/" />
 
       <button 
         onClick={toggleStore}
-        className={`relative overflow-hidden flex items-center justify-between p-5 rounded-[28px] border transition-all duration-500 cursor-pointer ${
+        className={`relative overflow-hidden flex items-center justify-between p-5 rounded-[28px] border transition-all duration-500 cursor-pointer active:scale-95 ${
           isStoreOpen 
             ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.1)]' 
             : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800/80'
@@ -196,80 +223,45 @@ export default function LojaPage() {
         </div>
       </button>
 
-      {/* 🔥 SEÇÃO DE GESTÃO & CADASTROS (ATALHOS MOTOBOYS & CLIENTES) */}
-      <div className="flex flex-col gap-3">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2">
-          <Users size={14} /> Gestão & Cadastros
-        </h2>
-        
-        <div className="grid grid-cols-2 gap-3">
-          <button 
-            onClick={() => router.push('/motoboys')}
-            className="bg-zinc-900/60 border border-zinc-800 hover:border-amber-500/50 p-4 rounded-[24px] flex flex-col gap-2 text-left transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between">
-              <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Bike size={18} />
-              </div>
-              <span className="text-[10px] font-bold text-zinc-500 uppercase">Equipe</span>
-            </div>
-            <div>
-              <p className="font-heading font-bold text-zinc-100 text-sm">Motoboys</p>
-              <p className="text-[11px] text-zinc-500">Gerenciar e cadastrar</p>
-            </div>
-          </button>
-
-          <button 
-            onClick={() => router.push('/clientes')}
-            className="bg-zinc-900/60 border border-zinc-800 hover:border-sky-500/50 p-4 rounded-[24px] flex flex-col gap-2 text-left transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between">
-              <div className="h-10 w-10 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Users size={18} />
-              </div>
-              <span className="text-[10px] font-bold text-zinc-500 uppercase">Base</span>
-            </div>
-            <div>
-              <p className="font-heading font-bold text-zinc-100 text-sm">Clientes</p>
-              <p className="text-[11px] text-zinc-500">Endereços salvos</p>
-            </div>
-          </button>
-        </div>
-      </div>
-
+      {/* DESEMPENHO INTERATIVO */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2">
           <TrendingUp size={14} /> Desempenho de Hoje
         </h2>
         
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-zinc-900/60 border border-zinc-800 p-4 rounded-[24px] flex flex-col gap-1.5">
+          <button 
+            onClick={openLogisticsModal}
+            className="bg-zinc-900/60 border border-zinc-800 hover:border-sky-500/40 p-4 rounded-[24px] flex flex-col gap-1.5 text-left transition-all active:scale-95 cursor-pointer"
+          >
             <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase">
-              <Package size={14} className="text-sky-500" /> Entregas
+              <Package size={14} className="text-sky-500" /> Resumo de Rotas
             </span>
             <span className="font-heading text-2xl font-black text-zinc-100">{totalEntregas}</span>
-          </div>
+            <span className="text-[10px] text-zinc-500">Ver logística completa ➔</span>
+          </button>
           
-          <div className="bg-zinc-900/60 border border-zinc-800 p-4 rounded-[24px] flex flex-col gap-1.5">
+          <button 
+            onClick={openRevenueModal}
+            className="bg-zinc-900/60 border border-zinc-800 hover:border-emerald-500/40 p-4 rounded-[24px] flex flex-col gap-1.5 text-left transition-all active:scale-95 cursor-pointer"
+          >
             <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase">
               <TrendingUp size={14} className="text-emerald-500" /> Faturamento
             </span>
-            <span className="font-heading text-xl font-black text-emerald-400">
+            <span className="font-heading text-xl font-black text-emerald-400 truncate w-full">
               {isPrivacyMode ? 'R$ •••••' : `R$ ${faturamentoTotal.toFixed(2).replace('.', ',')}`}
             </span>
-          </div>
+            <span className="text-[10px] text-zinc-500">Ver extrato financeiro ➔</span>
+          </button>
         </div>
 
         <div className="bg-zinc-900/40 border border-zinc-800 p-4 rounded-[24px] flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5">
-              <Bike size={14} className="text-amber-500" /> Escala Rápida de Motoboys (Hoje)
+              <Bike size={14} className="text-amber-500" /> Escala Rápida de Motoboys
             </span>
-            <button 
-              onClick={() => router.push('/motoboys')} 
-              className="text-[11px] font-bold text-sky-400 hover:text-sky-300 cursor-pointer"
-            >
-              Ver todos ➔
+            <button onClick={() => router.push('/motoboys')} className="text-[11px] font-bold text-sky-400 hover:text-sky-300">
+              Gerenciar ➔
             </button>
           </div>
 
@@ -279,10 +271,8 @@ export default function LojaPage() {
                 <button
                   key={m.id}
                   onClick={() => handleToggleMotoboyScale(m.id, m.active)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    m.active 
-                      ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-sm' 
-                      : 'bg-zinc-950 border border-zinc-800 text-zinc-600 opacity-60'
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-90 ${
+                    m.active ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-sm' : 'bg-zinc-950 border border-zinc-800 text-zinc-600 opacity-60'
                   }`}
                 >
                   <span>{m.name}</span>
@@ -300,15 +290,9 @@ export default function LojaPage() {
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2">Automação & Expediente</h2>
         
         <form onSubmit={handleSaveSchedule} className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden p-4 gap-5">
-          
           <div className="flex flex-col gap-2">
-            <AddressAutocomplete 
-              value={storeAddress}
-              onChange={setStoreAddress}
-              placeholder="Rua, Número, Bairro, Cidade - MG"
-              label="Endereço Base (Origem)"
-            />
-            <p className="text-[10px] text-zinc-500 leading-tight">Este endereço será usado como ponto de partida para organizar a rota inteligente dos motoboys no mapa.</p>
+            <AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" />
+            <p className="text-[10px] text-zinc-500 leading-tight">Será usado como ponto de partida para as rotas inteligentes.</p>
           </div>
 
           <div className="h-px w-full bg-zinc-800/80" />
@@ -316,22 +300,15 @@ export default function LojaPage() {
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-zinc-300">
               <Calendar size={16} className="text-indigo-400" />
-              <span className="text-sm font-bold">Dias de Funcionamento</span>
+              <span className="text-sm font-bold">Dias de Funcionamento Automático</span>
             </div>
             <div className="flex flex-wrap gap-1.5 justify-between">
               {DAYS_OF_WEEK.map((day, index) => {
                 const isActive = activeDays.includes(index);
                 return (
-                  <button 
-                    key={day}
-                    type="button"
-                    onClick={() => toggleDay(index)}
-                    className={`flex-1 h-11 min-w-[40px] rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center ${
-                      isActive 
-                        ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20' 
-                        : 'bg-zinc-950 border border-zinc-800 text-zinc-500 hover:bg-zinc-800'
-                    }`}
-                  >
+                  <button key={day} type="button" onClick={() => toggleDay(index)} className={`flex-1 h-11 min-w-[40px] rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center active:scale-95 ${
+                      isActive ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20' : 'bg-zinc-950 border border-zinc-800 text-zinc-500 hover:bg-zinc-800'
+                    }`}>
                     {day}
                   </button>
                 );
@@ -340,20 +317,19 @@ export default function LojaPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 border-t border-zinc-800/80 pt-5">
-            
             <div className="flex flex-col bg-zinc-950 border border-zinc-800 p-3 rounded-2xl gap-2">
               <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider text-center">Abertura</span>
               <div className="flex items-center justify-center gap-2">
                 <div className="flex flex-col items-center gap-1">
-                  <button type="button" onClick={() => setOpenHour(h => h >= 23 ? 0 : h + 1)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronUp size={18}/></button>
+                  <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setOpenHour(h => h >= 23 ? 0 : h + 1); }} className="p-1.5 bg-zinc-900 rounded-lg text-zinc-400 active:scale-90"><ChevronUp size={18}/></button>
                   <span className="text-xl font-black text-zinc-100 w-8 text-center">{String(openHour).padStart(2, '0')}</span>
-                  <button type="button" onClick={() => setOpenHour(h => h <= 0 ? 23 : h - 1)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronDown size={18}/></button>
+                  <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setOpenHour(h => h <= 0 ? 23 : h - 1); }} className="p-1.5 bg-zinc-900 rounded-lg text-zinc-400 active:scale-90"><ChevronDown size={18}/></button>
                 </div>
                 <span className="text-xl font-black text-zinc-600 mb-1">:</span>
                 <div className="flex flex-col items-center gap-1">
-                  <button type="button" onClick={() => handleMinUp(openMin, setOpenMin)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronUp size={18}/></button>
+                  <button type="button" onClick={() => handleMinUp(openMin, setOpenMin)} className="p-1.5 bg-zinc-900 rounded-lg text-zinc-400 active:scale-90"><ChevronUp size={18}/></button>
                   <span className="text-xl font-black text-zinc-100 w-8 text-center">{String(openMin).padStart(2, '0')}</span>
-                  <button type="button" onClick={() => handleMinDown(openMin, setOpenMin)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronDown size={18}/></button>
+                  <button type="button" onClick={() => handleMinDown(openMin, setOpenMin)} className="p-1.5 bg-zinc-900 rounded-lg text-zinc-400 active:scale-90"><ChevronDown size={18}/></button>
                 </div>
               </div>
             </div>
@@ -362,70 +338,166 @@ export default function LojaPage() {
               <span className="text-[10px] font-black uppercase text-red-400 tracking-wider text-center">Fechamento</span>
               <div className="flex items-center justify-center gap-2">
                 <div className="flex flex-col items-center gap-1">
-                  <button type="button" onClick={() => setCloseHour(h => h >= 23 ? 0 : h + 1)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronUp size={18}/></button>
+                  <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setCloseHour(h => h >= 23 ? 0 : h + 1); }} className="p-1.5 bg-zinc-900 rounded-lg text-zinc-400 active:scale-90"><ChevronUp size={18}/></button>
                   <span className="text-xl font-black text-zinc-100 w-8 text-center">{String(closeHour).padStart(2, '0')}</span>
-                  <button type="button" onClick={() => setCloseHour(h => h <= 0 ? 23 : h - 1)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronDown size={18}/></button>
+                  <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setCloseHour(h => h <= 0 ? 23 : h - 1); }} className="p-1.5 bg-zinc-900 rounded-lg text-zinc-400 active:scale-90"><ChevronDown size={18}/></button>
                 </div>
                 <span className="text-xl font-black text-zinc-600 mb-1">:</span>
                 <div className="flex flex-col items-center gap-1">
-                  <button type="button" onClick={() => handleMinUp(closeMin, setCloseMin)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronUp size={18}/></button>
+                  <button type="button" onClick={() => handleMinUp(closeMin, setCloseMin)} className="p-1.5 bg-zinc-900 rounded-lg text-zinc-400 active:scale-90"><ChevronUp size={18}/></button>
                   <span className="text-xl font-black text-zinc-100 w-8 text-center">{String(closeMin).padStart(2, '0')}</span>
-                  <button type="button" onClick={() => handleMinDown(closeMin, setCloseMin)} className="p-1.5 bg-zinc-900 rounded-lg hover:bg-zinc-800 text-zinc-400 cursor-pointer active:scale-95"><ChevronDown size={18}/></button>
+                  <button type="button" onClick={() => handleMinDown(closeMin, setCloseMin)} className="p-1.5 bg-zinc-900 rounded-lg text-zinc-400 active:scale-90"><ChevronDown size={18}/></button>
                 </div>
               </div>
             </div>
-
           </div>
 
           <div className="flex flex-col bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden mt-2">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800/80">
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 bg-sky-500/10 text-sky-400 rounded-full flex items-center justify-center shrink-0">
-                  <BellRing size={16} />
-                </div>
+                <div className="h-9 w-9 bg-sky-500/10 text-sky-400 rounded-full flex items-center justify-center shrink-0"><BellRing size={16} /></div>
                 <div className="text-left">
-                  <p className="font-bold text-zinc-100 text-xs">Lembrete de Abertura</p>
-                  <p className="text-[10px] text-zinc-500">Notifica 30 min antes</p>
+                  <p className="font-bold text-zinc-100 text-xs">Vigia de Expediente</p>
+                  <p className="text-[10px] text-zinc-500">Notificações e auto-abertura</p>
                 </div>
               </div>
-              <button 
-                type="button"
-                onClick={() => setAlertsEnabled(!alertsEnabled)}
-                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 cursor-pointer ${alertsEnabled ? 'bg-sky-500' : 'bg-zinc-800 border border-zinc-700'}`}
-              >
+              <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setAlertsEnabled(!alertsEnabled); }} className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 cursor-pointer ${alertsEnabled ? 'bg-sky-500' : 'bg-zinc-800 border border-zinc-700'}`}>
                 <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${alertsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
 
             <div className="flex items-center justify-between p-4">
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center shrink-0">
-                  <AlertTriangle size={16} />
-                </div>
+                <div className="h-9 w-9 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center shrink-0"><AlertTriangle size={16} /></div>
                 <div className="text-left">
                   <p className="font-bold text-zinc-100 text-xs">Alerta de Rota Fechada</p>
                   <p className="text-[10px] text-zinc-500">Quando motoboy voltar</p>
                 </div>
               </div>
-              <button 
-                type="button"
-                onClick={() => setRouteAlertsEnabled(!routeAlertsEnabled)}
-                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 cursor-pointer ${routeAlertsEnabled ? 'bg-amber-500' : 'bg-zinc-800 border border-zinc-700'}`}
-              >
+              <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setRouteAlertsEnabled(!routeAlertsEnabled); }} className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 cursor-pointer ${routeAlertsEnabled ? 'bg-amber-500' : 'bg-zinc-800 border border-zinc-700'}`}>
                 <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${routeAlertsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
           </div>
 
-          <button 
-            type="submit"
-            className="w-full h-14 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl text-sm transition-all shadow-lg cursor-pointer active:scale-[0.98] mt-2 uppercase tracking-wide"
-          >
-            Salvar Todas as Configurações
+          <button type="submit" className="w-full h-14 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl text-sm transition-all shadow-lg active:scale-[0.98] mt-2 uppercase tracking-wide">
+            Salvar Automações
           </button>
         </form>
-
       </div>
+
+      {/* ================================================================================================= */}
+      {/* MODAL 1: RESUMO DE LOGÍSTICA (Cego Financeiro) */}
+      {/* ================================================================================================= */}
+      {isLogisticsModalOpen && (
+        <div className="fixed inset-0 z-[70] flex flex-col bg-zinc-950/95 backdrop-blur-md animate-in slide-in-from-bottom duration-300 pb-20">
+          <div className="flex items-center justify-between p-6 border-b border-zinc-800/80 bg-zinc-900/50">
+            <div>
+              <h2 className="text-xl font-bold text-zinc-50 flex items-center gap-2">
+                <Package size={20} className="text-sky-500" /> Resumo Logístico
+              </h2>
+              <p className="text-xs text-zinc-400 mt-1">Hoje: {totalEntregas} entregas finalizadas e em rota</p>
+            </div>
+            <button onClick={() => setIsLogisticsModalOpen(false)} className="p-2 bg-zinc-800 text-zinc-400 rounded-full active:scale-90"><X size={20}/></button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+            {routesSummary.length === 0 ? (
+              <p className="text-center text-zinc-500 text-sm mt-10">Nenhuma rota montada hoje.</p>
+            ) : (
+              routesSummary.map((r, i) => (
+                <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                  <div className="bg-zinc-800/40 p-3 flex items-center justify-between border-b border-zinc-800/80">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-full bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0"><Bike size={16}/></div>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-zinc-200 text-sm">{r.name}</span>
+                        <span className="text-[10px] text-zinc-400 font-semibold">{r.motoboy}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${r.status === 'fechada' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-500'}`}>
+                        {r.status}
+                      </span>
+                      <span className="text-xs font-bold text-zinc-500">{r.deliveries.length} Paradas</span>
+                    </div>
+                  </div>
+                  <div className="p-3 flex flex-col gap-2">
+                    {r.deliveries.map((d: any, idx: number) => (
+                      <div key={d.id} className="flex items-start gap-2 bg-zinc-950 p-2 rounded-lg">
+                        <span className="text-sky-500 font-bold text-xs mt-0.5">{idx + 1}.</span>
+                        <div className="flex flex-col truncate">
+                          <span className="text-[11px] font-bold text-zinc-300 truncate">{d.address_string.split('-')[0]}</span>
+                          <span className="text-[10px] text-zinc-500 truncate">{d.address_string}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================================================= */}
+      {/* MODAL 2: EXTRATO FINANCEIRO (Detalhado) */}
+      {/* ================================================================================================= */}
+      {isRevenueModalOpen && (
+        <div className="fixed inset-0 z-[70] flex flex-col bg-zinc-950/95 backdrop-blur-md animate-in slide-in-from-bottom duration-300 pb-20">
+          <div className="flex items-center justify-between p-6 border-b border-zinc-800/80 bg-zinc-900/50">
+            <div>
+              <h2 className="text-xl font-bold text-zinc-50 flex items-center gap-2">
+                <Wallet size={20} className="text-emerald-500" /> Extrato do Dia
+              </h2>
+              <p className="text-xs text-zinc-400 mt-1">Faturamento total da operação hoje</p>
+            </div>
+            <button onClick={() => setIsRevenueModalOpen(false)} className="p-2 bg-zinc-800 text-zinc-400 rounded-full active:scale-90"><X size={20}/></button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
+            <div className="flex flex-col items-center justify-center bg-emerald-500/10 border border-emerald-500/20 rounded-[24px] py-6 gap-1">
+              <span className="text-xs font-bold text-emerald-500 uppercase tracking-widest">Total Arrecadado</span>
+              <span className="text-4xl font-black text-emerald-400">
+                {isPrivacyMode ? '•••••' : `R$ ${faturamentoTotal.toFixed(2).replace('.', ',')}`}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 flex flex-col gap-1 items-center">
+                <QrCode size={18} className="text-emerald-400 mb-1" />
+                <span className="text-[10px] text-zinc-500 font-bold uppercase">Pix</span>
+                <span className="text-sm font-bold text-zinc-200">R$ {isPrivacyMode ? '••' : (revenueByMethod['pix'] || 0).toFixed(2)}</span>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 flex flex-col gap-1 items-center">
+                <Banknote size={18} className="text-amber-500 mb-1" />
+                <span className="text-[10px] text-zinc-500 font-bold uppercase">Dinheiro</span>
+                <span className="text-sm font-bold text-zinc-200">R$ {isPrivacyMode ? '••' : (revenueByMethod['dinheiro'] || 0).toFixed(2)}</span>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 flex flex-col gap-1 items-center">
+                <CreditCard size={18} className="text-sky-400 mb-1" />
+                <span className="text-[10px] text-zinc-500 font-bold uppercase">Cartão</span>
+                <span className="text-sm font-bold text-zinc-200">R$ {isPrivacyMode ? '••' : ((revenueByMethod['cartao'] || 0) + (revenueByMethod['cartao_credito'] || 0) + (revenueByMethod['cartao_debito'] || 0)).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 mt-2">
+              <span className="text-xs font-bold text-zinc-500 uppercase px-1">Lançamentos Recentes</span>
+              {todayDeliveries.slice().reverse().map((d, i) => (
+                <div key={i} className="flex items-center justify-between bg-zinc-900 border border-zinc-800/80 p-3 rounded-2xl">
+                  <div className="flex flex-col truncate pr-2">
+                    <span className="text-xs font-bold text-zinc-200 truncate">{d.address_string.split('-')[0]}</span>
+                    <span className="text-[10px] text-zinc-500 capitalize">{d.payment_method?.replace('_', ' ') || 'Dinheiro'}</span>
+                  </div>
+                  <span className="text-sm font-bold text-emerald-400 shrink-0">
+                    + R$ {isPrivacyMode ? '••' : (d.value || 0).toFixed(2).replace('.', ',')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
