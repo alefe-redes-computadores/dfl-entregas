@@ -7,7 +7,7 @@ import { useReportsData } from '@/hooks/useReportsData';
 import { useAppStore } from '@/store/useAppStore';
 
 import { SummaryCard } from '@/components/reports/SummaryCard';
-import { BossSavingsCard } from '@/components/reports/BossSavingsCard'; // <-- IMPORTANDO O COMPONENTE NOVO
+import { BossSavingsCard } from '@/components/reports/Charts/BossSavingsCard';
 import { PaymentChart } from '@/components/reports/Charts/PaymentChart';
 import { NeighborhoodChart } from '@/components/reports/Charts/NeighborhoodChart';
 import { DailyEvolutionChart } from '@/components/reports/Charts/DailyEvolutionChart';
