@@ -2,11 +2,12 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, BarChart3, Wallet, Map as MapIcon, Activity, X, CheckCircle, ChevronDown, PiggyBank } from 'lucide-react';
+import { ChevronLeft, BarChart3, Wallet, Map as MapIcon, Activity, X, CheckCircle, ChevronDown } from 'lucide-react';
 import { useReportsData } from '@/hooks/useReportsData';
 import { useAppStore } from '@/store/useAppStore';
 
 import { SummaryCard } from '@/components/reports/SummaryCard';
+import { BossSavingsCard } from '@/components/reports/BossSavingsCard'; // <-- IMPORTANDO O COMPONENTE NOVO
 import { PaymentChart } from '@/components/reports/Charts/PaymentChart';
 import { NeighborhoodChart } from '@/components/reports/Charts/NeighborhoodChart';
 import { DailyEvolutionChart } from '@/components/reports/Charts/DailyEvolutionChart';
@@ -37,10 +38,9 @@ export default function RelatoriosPage() {
     '30d': 'Últimos 30 dias'
   };
 
-  // VALOR DA TAXA ECONOMIZADA (Pode alterar aqui se a taxa mudar)
   const TAXA_ECONOMIZADA_POR_ENTREGA = 7.00;
 
-  // 1. FILTRO CIRÚRGICO ANTI-BUG (Por Motoboy e por Fuso Horário BRT)
+  // 1. FILTRO CIRÚRGICO ANTI-BUG
   const filteredDeliveries = useMemo(() => {
     const countByMotoboyDay = new Map<string, number>();
 
@@ -60,10 +60,8 @@ export default function RelatoriosPage() {
       const brtDate = new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
       const key = `${brtDate}_${mName}`;
 
-      // SE UM ÚNICO MOTOBOY TEM > 32 ENTREGAS NO DIA, É DADO FALSO DOS TESTES (IGNORA)
       if ((countByMotoboyDay.get(key) || 0) > 32) return false;
 
-      // SE A ROTA DUROU MENOS DE 5 MINUTOS, IGNORA (CADASTRO RÁPIDO/CORREÇÃO)
       if (route && route.status === 'fechada' && route.end_time) {
         const start = new Date(route.started_at || route.departure_time).getTime();
         const end = new Date(route.end_time).getTime();
@@ -74,7 +72,7 @@ export default function RelatoriosPage() {
     });
 
     const now = new Date();
-    const today = new Date(now.getTime() - 3 * 3600000); // Hoje em BRT
+    const today = new Date(now.getTime() - 3 * 3600000); 
 
     return cleanDeliveries.filter(d => {
       if (selectedPeriod === 'all') return true;
@@ -96,7 +94,7 @@ export default function RelatoriosPage() {
     });
   }, [deliveries, routes, selectedPeriod]);
 
-  // SEPARA ENTREGAS DO CHEFE PARA ECONOMIA (Tirando dos outros gráficos)
+  // SEPARA ENTREGAS DO CHEFE
   const alefeDeliveries = useMemo(() => {
     return filteredDeliveries.filter(d => {
       const r = routes.find(x => x.id === d.route_id);
@@ -105,7 +103,6 @@ export default function RelatoriosPage() {
   }, [filteredDeliveries, routes]);
 
   const savedAmount = alefeDeliveries.length * TAXA_ECONOMIZADA_POR_ENTREGA;
-
   const motoboyFilteredDeliveries = filteredDeliveries.filter(d => !alefeDeliveries.includes(d));
 
   const metrics = useMemo(() => reports.getMainMetrics(filteredDeliveries, filteredDeliveries as any, 'all'), [reports, filteredDeliveries]);
@@ -115,10 +112,8 @@ export default function RelatoriosPage() {
   const dayOfWeekData = useMemo(() => reports.getDayOfWeekStats(filteredDeliveries), [reports, filteredDeliveries]);
   const originData = useMemo(() => reports.getOriginStats(filteredDeliveries), [reports, filteredDeliveries]);
   
-  // MOTBOYS (Removendo o Álefe para não sujar a média deles)
   const motoboyData = useMemo(() => reports.getMotoboyStats(motoboyFilteredDeliveries), [reports, motoboyFilteredDeliveries]);
 
-  // HORÁRIOS DE PICO (TRANSFORMADO EM MÉDIA DIÁRIA EM VEZ DE SOMA ABSOLUTA)
   const peakHoursData = useMemo(() => {
     const rawData = reports.getPeakHoursStats(filteredDeliveries);
     const uniqueDaysCount = new Set(filteredDeliveries.map(d => {
@@ -132,7 +127,6 @@ export default function RelatoriosPage() {
     }));
   }, [filteredDeliveries, reports, selectedPeriod]);
 
-  // CÁLCULO DE LOGÍSTICA (Apenas rotas verdadeiras)
   const logisticsTimeData = useMemo(() => {
     const statsMap = new Map<string, { totalMinutes: number; totalDeliveries: number }>();
     
@@ -220,18 +214,8 @@ export default function RelatoriosPage() {
               <SummaryCard title="Melhor Dia" value={metrics.bestDay.day} subtitle={`R$ ${metrics.bestDay.revenue.toFixed(2)}`} icon={<BarChart3 size={20} />} accentColor="pink" />
             </div>
 
-            {/* CARD DE ECONOMIA DO CHEFE */}
-            {alefeDeliveries.length > 0 && (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-[24px] p-5 flex items-center justify-between shadow-sm animate-in fade-in">
-                <div className="flex flex-col">
-                  <span className="flex items-center gap-1.5 text-emerald-500 font-bold text-xs uppercase tracking-wider">
-                    <PiggyBank size={16} /> Economia (A Pé)
-                  </span>
-                  <span className="text-3xl font-black text-emerald-400 mt-1">R$ {savedAmount.toFixed(2).replace('.', ',')}</span>
-                  <span className="text-xs text-emerald-500/70 mt-1 font-medium">{alefeDeliveries.length} entregas realizadas por você</span>
-                </div>
-              </div>
-            )}
+            {/* AQUI ENTRA SEU NOVO COMPONENTE */}
+            <BossSavingsCard deliveriesCount={alefeDeliveries.length} savedAmount={savedAmount} />
 
             <PaymentChart data={paymentData} />
             <DayOfWeekChart data={dayOfWeekData} />
