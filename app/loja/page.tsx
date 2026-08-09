@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Power, Users, BellRing, Bike, TrendingUp, 
+  Power, Users, BellRing, Bike, TrendingUp, Wallet,
   Package, Calendar, AlertTriangle, Check, ChevronUp, ChevronDown, MapPin, X, Banknote, CreditCard, QrCode
 } from 'lucide-react';
 import { toast } from 'sonner';
