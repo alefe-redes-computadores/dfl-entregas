@@ -37,31 +37,51 @@ export default function RelatoriosPage() {
     '30d': 'Últimos 30 dias'
   };
 
-  // 1. FILTRO FANTASMA (LIMPEZA) E FILTRO DE TEMPO
+  // 1. FILTRO FANTASMA AVANÇADO (Fuso Horário BRT + Rotas Falsas)
   const filteredDeliveries = useMemo(() => {
-    const countByDay: Record<string, number> = {};
-    
+    // Identifica rotas que foram abertas e fechadas em menos de 5 minutos (Cadastros de Correção)
+    const fakeRouteIds = new Set(
+      routes.filter(r => {
+        if (r.status !== 'fechada' || !r.end_time) return false;
+        const start = new Date(r.started_at || r.departure_time).getTime();
+        const end = new Date(r.end_time).getTime();
+        return (end - start) < 5 * 60 * 1000; // < 5 minutos
+      }).map(r => r.id)
+    );
+
+    const countByDayBRT: Record<string, number> = {};
     deliveries.forEach(d => {
-      // Usando ISO string para evitar bugs de fuso horário na virada do dia
-      const dateStr = new Date((d as any).createdAt || d.updated_at).toISOString().split('T')[0];
-      countByDay[dateStr] = (countByDay[dateStr] || 0) + 1;
+      const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
+      // Aplica UTC-3 (Horário de Brasília) para não quebrar na madrugada
+      const brtDate = new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
+      countByDayBRT[brtDate] = (countByDayBRT[brtDate] || 0) + 1;
     });
 
     const cleanDeliveries = deliveries.filter(d => {
-      const dateStr = new Date((d as any).createdAt || d.updated_at).toISOString().split('T')[0];
-      // CORTA DIAS COM 40 ENTREGAS OU MAIS (Remove dias de testes inflados)
-      return countByDay[dateStr] < 40; 
+      const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
+      const brtDate = new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
+      
+      // IGNORA DIAS COM MAIS DE 60 ENTREGAS (Sexta do Bug)
+      if (countByDayBRT[brtDate] > 60) return false;
+      // IGNORA ENTREGAS EM ROTAS FALSAS (Feitas só pra cadastrar rápido)
+      if (d.route_id && fakeRouteIds.has(d.route_id)) return false;
+      
+      return true;
     });
 
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = new Date(now.getTime() - 3 * 3600000); // Hoje em BRT
 
     return cleanDeliveries.filter(d => {
       if (selectedPeriod === 'all') return true;
       
-      const dDate = new Date((d as any).createdAt || d.updated_at);
+      const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
+      const dDate = new Date(dTime - 3 * 3600000);
+      
       const targetDate = new Date(dDate.getFullYear(), dDate.getMonth(), dDate.getDate());
-      const diffTime = today.getTime() - targetDate.getTime();
+      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      
+      const diffTime = todayDate.getTime() - targetDate.getTime();
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
       if (selectedPeriod === 'today') return diffDays === 0;
@@ -70,9 +90,9 @@ export default function RelatoriosPage() {
       if (selectedPeriod === '30d') return diffDays <= 30;
       return true;
     });
-  }, [deliveries, selectedPeriod]);
+  }, [deliveries, routes, selectedPeriod]);
 
-  // Passando os dados limpos para os hooks geradores de relatórios
+  // Passando os dados limpos para os hooks geradores
   const metrics = useMemo(() => reports.getMainMetrics(filteredDeliveries, filteredDeliveries as any, 'all'), [reports, filteredDeliveries]);
   const dailyData = useMemo(() => reports.getDailyEvolution(filteredDeliveries, 'all'), [reports, filteredDeliveries]);
   const paymentData = useMemo(() => reports.getPaymentStats(filteredDeliveries), [reports, filteredDeliveries]);
@@ -82,36 +102,21 @@ export default function RelatoriosPage() {
   const peakHoursData = useMemo(() => reports.getPeakHoursStats(filteredDeliveries), [reports, filteredDeliveries]);
   const originData = useMemo(() => reports.getOriginStats(filteredDeliveries), [reports, filteredDeliveries]);
 
-  // CÁLCULO DE LOGÍSTICA
+  // CÁLCULO DE LOGÍSTICA (Apenas rotas verdadeiras)
   const logisticsTimeData = useMemo(() => {
     const statsMap = new Map<string, { totalMinutes: number; totalDeliveries: number }>();
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
+    
     routes.forEach(route => {
       const name = route.motoboy_name.toLowerCase();
       if (name.includes('álefe') || name.includes('alefe')) return;
       if (route.status !== 'fechada' || !route.end_time) return;
 
-      const rDate = new Date(route.updated_at || route.departure_time);
-      const targetDate = new Date(rDate.getFullYear(), rDate.getMonth(), rDate.getDate());
-      const diffTime = today.getTime() - targetDate.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-      let inPeriod = false;
-      if (selectedPeriod === 'all') inPeriod = true;
-      else if (selectedPeriod === 'today') inPeriod = diffDays === 0;
-      else if (selectedPeriod === '7d') inPeriod = diffDays <= 7;
-      else if (selectedPeriod === '14d') inPeriod = diffDays <= 14;
-      else if (selectedPeriod === '30d') inPeriod = diffDays <= 30;
-
-      if (!inPeriod) return;
-
       const startTime = new Date(route.started_at || route.departure_time).getTime();
       const endTime = new Date(route.end_time).getTime();
       const minutes = (endTime - startTime) / (1000 * 60);
 
-      if (minutes < 0 || minutes > 600) return; 
+      // Ignora as rotas de correção (< 5 min) e as corrompidas (> 10h)
+      if (minutes < 5 || minutes > 600) return; 
 
       const routeDeliveries = filteredDeliveries.filter(d => d.route_id === route.id);
       if (routeDeliveries.length === 0) return;
@@ -128,7 +133,7 @@ export default function RelatoriosPage() {
       avgTimePerDelivery: data.totalDeliveries > 0 ? (data.totalMinutes / data.totalDeliveries) : 0,
       totalDeliveries: data.totalDeliveries
     })).sort((a, b) => a.avgTimePerDelivery - b.avgTimePerDelivery);
-  }, [routes, filteredDeliveries, selectedPeriod]);
+  }, [routes, filteredDeliveries]);
 
   const drilldownDeliveries = useMemo(() => {
     if (!drilldownDay) return [];
