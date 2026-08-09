@@ -1,16 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend
-} from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { Timer, Maximize2, Minimize2 } from 'lucide-react';
 
 interface LogisticsTimeChartProps {
@@ -56,22 +47,15 @@ export function LogisticsTimeChart({ data }: LogisticsTimeChartProps) {
         </button>
       </div>
       
-      <ResponsiveContainer width="100%" height={isExpanded ? '80%' : 260}>
-        <BarChart data={data} layout="vertical" margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={isExpanded ? '80%' : 300}>
+        <BarChart data={data} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-          <XAxis type="number" stroke="#71717a" tick={{ fill: '#71717a', fontSize: 12 }} hide />
-          <YAxis 
-            type="category" 
-            dataKey="name" 
-            stroke="#71717a" 
-            tick={{ fill: '#e4e4e7', fontSize: 12, fontWeight: 500 }} 
-            tickLine={false}
-            axisLine={false}
-            width={85} 
-          />
-          <Tooltip content={<CustomTooltip />} cursor={{fill: '#27272a', opacity: 0.4}} />
+          <XAxis type="number" stroke="#71717a" tick={{ fill: '#71717a', fontSize: 12 }} axisLine={false} tickLine={false} />
+          {/* width={90} garante que os nomes compostos vão caber inteiros */}
+          <YAxis type="category" dataKey="name" stroke="#71717a" tick={{ fill: '#e4e4e7', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} width={90} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: '#27272a', opacity: 0.4 }} />
           <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '12px', color: '#a1a1aa' }} />
-          <Bar dataKey="avgTimePerDelivery" name="Minutos por Entrega" fill="#38bdf8" radius={[0, 4, 4, 0]} animationDuration={1500} barSize={isExpanded ? 30 : 20} />
+          <Bar dataKey="avgTimePerDelivery" name="Minutos por Entrega" fill="#0ea5e9" radius={[0, 4, 4, 0]} animationDuration={1500} />
         </BarChart>
       </ResponsiveContainer>
     </>
