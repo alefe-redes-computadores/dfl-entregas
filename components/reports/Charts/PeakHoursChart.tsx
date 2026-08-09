@@ -1,44 +1,57 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, CartesianGrid } from 'recharts';
 import { Clock, Maximize2, Minimize2 } from 'lucide-react';
 
 interface PeakHoursChartProps {
-  data: Array<{ hour: string; count: number }>;
+  data: Array<{
+    time: string;
+    deliveries: number;
+  }>;
 }
 
 export function PeakHoursChart({ data }: PeakHoursChartProps) {
   const [mounted, setMounted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   if (!mounted || data.length === 0) return null;
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-zinc-900/95 border border-zinc-700/50 rounded-xl p-3 backdrop-blur-sm shadow-lg">
+          <p className="text-sm font-medium text-zinc-200 mb-2 border-b border-zinc-700/50 pb-1">{label}</p>
+          {/* TEXTO ATUALIZADO PARA EXPLICAR QUE É UMA MÉDIA */}
+          <p className="text-sm text-sky-400 font-semibold">{`Média : ${payload[0].value} pedidos / dia`}</p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   const ChartContent = (
     <>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Clock className="w-5 h-5 text-sky-400" />
-          <h3 className="text-lg font-bold text-zinc-200">Horários de Pico</h3>
+          <Clock className="w-5 h-5 text-sky-500" />
+          <h3 className="text-lg font-bold text-zinc-200">Horários de Pico (Média)</h3>
         </div>
         <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-colors text-zinc-400">
           {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
       </div>
-      <ResponsiveContainer width="100%" height={isExpanded ? '80%' : 220}>
+      
+      <ResponsiveContainer width="100%" height={isExpanded ? '80%' : 250}>
         <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-          <XAxis dataKey="hour" stroke="#71717a" tick={{ fill: '#e4e4e7', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} />
-          <YAxis stroke="#71717a" tick={{ fill: '#71717a', fontSize: 12 }} axisLine={false} tickLine={false} />
-          <Tooltip 
-            cursor={{ fill: '#27272a', opacity: 0.4 }}
-            contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '12px', color: '#fff', fontWeight: 'bold' }}
-            formatter={(value: number) => [`${value} pedidos`, 'Volume']}
-            labelStyle={{ color: '#38bdf8', marginBottom: '4px' }}
-          />
-          <Bar dataKey="count" fill="#38bdf8" radius={[4, 4, 0, 0]} barSize={24} animationDuration={1000} />
+          <XAxis dataKey="time" stroke="#71717a" tick={{ fill: '#e4e4e7', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: '#27272a', opacity: 0.4 }} />
+          <Bar dataKey="deliveries" fill="#38bdf8" radius={[4, 4, 0, 0]} animationDuration={1500} />
         </BarChart>
       </ResponsiveContainer>
     </>
