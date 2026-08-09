@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, BarChart3, Wallet, Map as MapIcon, Activity, X, CheckCircle, ChevronDown } from 'lucide-react';
+import { ChevronLeft, BarChart3, Wallet, Map as MapIcon, Activity, X, CheckCircle, ChevronDown, PiggyBank } from 'lucide-react';
 import { useReportsData } from '@/hooks/useReportsData';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -37,35 +37,39 @@ export default function RelatoriosPage() {
     '30d': 'Últimos 30 dias'
   };
 
-  // 1. FILTRO FANTASMA AVANÇADO (Fuso Horário BRT + Rotas Falsas)
-  const filteredDeliveries = useMemo(() => {
-    // Identifica rotas que foram abertas e fechadas em menos de 5 minutos (Cadastros de Correção)
-    const fakeRouteIds = new Set(
-      routes.filter(r => {
-        if (r.status !== 'fechada' || !r.end_time) return false;
-        const start = new Date(r.started_at || r.departure_time).getTime();
-        const end = new Date(r.end_time).getTime();
-        return (end - start) < 5 * 60 * 1000; // < 5 minutos
-      }).map(r => r.id)
-    );
+  // VALOR DA TAXA ECONOMIZADA (Pode alterar aqui se a taxa mudar)
+  const TAXA_ECONOMIZADA_POR_ENTREGA = 7.00;
 
-    const countByDayBRT: Record<string, number> = {};
+  // 1. FILTRO CIRÚRGICO ANTI-BUG (Por Motoboy e por Fuso Horário BRT)
+  const filteredDeliveries = useMemo(() => {
+    const countByMotoboyDay = new Map<string, number>();
+
     deliveries.forEach(d => {
+      const route = routes.find(r => r.id === d.route_id);
+      const mName = route ? route.motoboy_name.toLowerCase() : 'avulso';
       const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
-      // Aplica UTC-3 (Horário de Brasília) para não quebrar na madrugada
       const brtDate = new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
-      countByDayBRT[brtDate] = (countByDayBRT[brtDate] || 0) + 1;
+      const key = `${brtDate}_${mName}`;
+      countByMotoboyDay.set(key, (countByMotoboyDay.get(key) || 0) + 1);
     });
 
     const cleanDeliveries = deliveries.filter(d => {
+      const route = routes.find(r => r.id === d.route_id);
+      const mName = route ? route.motoboy_name.toLowerCase() : 'avulso';
       const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
       const brtDate = new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
-      
-      // IGNORA DIAS COM MAIS DE 60 ENTREGAS (Sexta do Bug)
-      if (countByDayBRT[brtDate] > 60) return false;
-      // IGNORA ENTREGAS EM ROTAS FALSAS (Feitas só pra cadastrar rápido)
-      if (d.route_id && fakeRouteIds.has(d.route_id)) return false;
-      
+      const key = `${brtDate}_${mName}`;
+
+      // SE UM ÚNICO MOTOBOY TEM > 32 ENTREGAS NO DIA, É DADO FALSO DOS TESTES (IGNORA)
+      if ((countByMotoboyDay.get(key) || 0) > 32) return false;
+
+      // SE A ROTA DUROU MENOS DE 5 MINUTOS, IGNORA (CADASTRO RÁPIDO/CORREÇÃO)
+      if (route && route.status === 'fechada' && route.end_time) {
+        const start = new Date(route.started_at || route.departure_time).getTime();
+        const end = new Date(route.end_time).getTime();
+        if ((end - start) < 5 * 60 * 1000) return false;
+      }
+
       return true;
     });
 
@@ -92,15 +96,41 @@ export default function RelatoriosPage() {
     });
   }, [deliveries, routes, selectedPeriod]);
 
-  // Passando os dados limpos para os hooks geradores
+  // SEPARA ENTREGAS DO CHEFE PARA ECONOMIA (Tirando dos outros gráficos)
+  const alefeDeliveries = useMemo(() => {
+    return filteredDeliveries.filter(d => {
+      const r = routes.find(x => x.id === d.route_id);
+      return r && (r.motoboy_name.toLowerCase().includes('álefe') || r.motoboy_name.toLowerCase().includes('alefe'));
+    });
+  }, [filteredDeliveries, routes]);
+
+  const savedAmount = alefeDeliveries.length * TAXA_ECONOMIZADA_POR_ENTREGA;
+
+  const motoboyFilteredDeliveries = filteredDeliveries.filter(d => !alefeDeliveries.includes(d));
+
   const metrics = useMemo(() => reports.getMainMetrics(filteredDeliveries, filteredDeliveries as any, 'all'), [reports, filteredDeliveries]);
   const dailyData = useMemo(() => reports.getDailyEvolution(filteredDeliveries, 'all'), [reports, filteredDeliveries]);
   const paymentData = useMemo(() => reports.getPaymentStats(filteredDeliveries), [reports, filteredDeliveries]);
   const neighborhoodData = useMemo(() => reports.getNeighborhoodStats(filteredDeliveries), [reports, filteredDeliveries]);
-  const motoboyData = useMemo(() => reports.getMotoboyStats(filteredDeliveries), [reports, filteredDeliveries]);
   const dayOfWeekData = useMemo(() => reports.getDayOfWeekStats(filteredDeliveries), [reports, filteredDeliveries]);
-  const peakHoursData = useMemo(() => reports.getPeakHoursStats(filteredDeliveries), [reports, filteredDeliveries]);
   const originData = useMemo(() => reports.getOriginStats(filteredDeliveries), [reports, filteredDeliveries]);
+  
+  // MOTBOYS (Removendo o Álefe para não sujar a média deles)
+  const motoboyData = useMemo(() => reports.getMotoboyStats(motoboyFilteredDeliveries), [reports, motoboyFilteredDeliveries]);
+
+  // HORÁRIOS DE PICO (TRANSFORMADO EM MÉDIA DIÁRIA EM VEZ DE SOMA ABSOLUTA)
+  const peakHoursData = useMemo(() => {
+    const rawData = reports.getPeakHoursStats(filteredDeliveries);
+    const uniqueDaysCount = new Set(filteredDeliveries.map(d => {
+      const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
+      return new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
+    })).size || 1;
+
+    return rawData.map(p => ({
+      time: p.time,
+      deliveries: selectedPeriod === 'today' ? p.deliveries : Math.ceil(p.deliveries / uniqueDaysCount)
+    }));
+  }, [filteredDeliveries, reports, selectedPeriod]);
 
   // CÁLCULO DE LOGÍSTICA (Apenas rotas verdadeiras)
   const logisticsTimeData = useMemo(() => {
@@ -115,7 +145,6 @@ export default function RelatoriosPage() {
       const endTime = new Date(route.end_time).getTime();
       const minutes = (endTime - startTime) / (1000 * 60);
 
-      // Ignora as rotas de correção (< 5 min) e as corrompidas (> 10h)
       if (minutes < 5 || minutes > 600) return; 
 
       const routeDeliveries = filteredDeliveries.filter(d => d.route_id === route.id);
@@ -190,6 +219,20 @@ export default function RelatoriosPage() {
               <SummaryCard title="Ticket Médio" value={`R$ ${metrics.averageTicket.toFixed(2)}`} icon={<Wallet size={20} />} accentColor="blue" />
               <SummaryCard title="Melhor Dia" value={metrics.bestDay.day} subtitle={`R$ ${metrics.bestDay.revenue.toFixed(2)}`} icon={<BarChart3 size={20} />} accentColor="pink" />
             </div>
+
+            {/* CARD DE ECONOMIA DO CHEFE */}
+            {alefeDeliveries.length > 0 && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-[24px] p-5 flex items-center justify-between shadow-sm animate-in fade-in">
+                <div className="flex flex-col">
+                  <span className="flex items-center gap-1.5 text-emerald-500 font-bold text-xs uppercase tracking-wider">
+                    <PiggyBank size={16} /> Economia (A Pé)
+                  </span>
+                  <span className="text-3xl font-black text-emerald-400 mt-1">R$ {savedAmount.toFixed(2).replace('.', ',')}</span>
+                  <span className="text-xs text-emerald-500/70 mt-1 font-medium">{alefeDeliveries.length} entregas realizadas por você</span>
+                </div>
+              </div>
+            )}
+
             <PaymentChart data={paymentData} />
             <DayOfWeekChart data={dayOfWeekData} />
           </>
@@ -238,7 +281,6 @@ export default function RelatoriosPage() {
         </div>
       )}
 
-      {/* MODAL PREMIUM DE SELEÇÃO DE PERÍODO */}
       {isPeriodModalOpen && (
         <div className="fixed inset-0 z-[70] flex flex-col justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-zinc-900 border-t border-zinc-800 rounded-t-[32px] p-6 pb-12 flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
@@ -246,10 +288,7 @@ export default function RelatoriosPage() {
             
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-zinc-50">Selecionar Período</h2>
-              <button 
-                onClick={() => setIsPeriodModalOpen(false)} 
-                className="p-2 bg-zinc-800 text-zinc-400 rounded-full hover:bg-zinc-700 active:scale-95 transition-all"
-              >
+              <button onClick={() => setIsPeriodModalOpen(false)} className="p-2 bg-zinc-800 text-zinc-400 rounded-full hover:bg-zinc-700 active:scale-95 transition-all">
                 <X size={20} />
               </button>
             </div>
@@ -264,14 +303,9 @@ export default function RelatoriosPage() {
               ].map(opt => (
                 <button
                   key={opt.value}
-                  onClick={() => {
-                    setSelectedPeriod(opt.value);
-                    setIsPeriodModalOpen(false);
-                  }}
+                  onClick={() => { setSelectedPeriod(opt.value); setIsPeriodModalOpen(false); }}
                   className={`flex items-center justify-between p-4 rounded-[20px] border transition-all active:scale-[0.98] ${
-                    selectedPeriod === opt.value
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-sm'
-                      : 'bg-zinc-950/50 border-zinc-800 text-zinc-300 hover:bg-zinc-800'
+                    selectedPeriod === opt.value ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-sm' : 'bg-zinc-950/50 border-zinc-800 text-zinc-300 hover:bg-zinc-800'
                   }`}
                 >
                   <span className="font-bold text-sm">{opt.label}</span>
