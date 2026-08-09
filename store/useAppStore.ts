@@ -6,14 +6,14 @@ import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import type { Route, Delivery, Customer, OrderOrigin, Motoboy } from '@/types';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy, DaySchedule, StorePause, HolidayOverride } from '@/types';
 
 interface AppState {
   user: FirebaseUser | null;
   authLoaded: boolean;
   hasHydrated: boolean;
   routes: Route[];
-  deliveries: (Delivery & { is_expanded?: boolean })[]; // Expandimos o tipo localmente
+  deliveries: (Delivery & { is_expanded?: boolean })[];
   customers: Customer[];
   motoboys: Motoboy[];
   selectedDate: Date;
@@ -24,11 +24,15 @@ interface AppState {
   theme: 'dark' | 'light' | 'system';
   storeSettings: {
     isOpen: boolean;
-    openingTime: string;
-    closingTime: string;
-    activeDays: number[];
+    openingTime: string; // Legado
+    closingTime: string; // Legado
+    activeDays: number[]; // Legado
     alertsEnabled: boolean;
     storeAddress?: string;
+    // 🔥 NOVOS CAMPOS DE EXPEDIENTE AVANÇADO
+    schedule?: Record<number, DaySchedule>;
+    pauses?: StorePause[];
+    holidaysOverrides?: Record<string, HolidayOverride>;
   };
   setHasHydrated: (value: boolean) => void;
   togglePrivacyMode: () => void; 
@@ -44,37 +48,35 @@ interface AppState {
   getCustomerById: (customerId?: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
   startRoute: (routeId: string) => Promise<void>; 
-  deleteRoute: (routeId: string) => Promise<void>; // NOVO: Deletar rota vazia
+  deleteRoute: (routeId: string) => Promise<void>;
   addDelivery: (delivery: Delivery) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
   closeRoute: (routeId: string) => Promise<void>;
   reopenRoute: (routeId: string) => Promise<void>;
   reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
-  toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void; // Nova função local
+  toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void;
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
   addMotoboy: (motoboy: Motoboy) => Promise<void>;
   updateMotoboy: (id: string, updatedData: Partial<Motoboy>) => Promise<void>;
   deleteMotoboy: (id: string) => Promise<void>;
-  findOrCreateCustomer: (
-    name: string,
-    details?: {
-      address?: string;
-      mapsLink?: string;
-      confirmationCode?: string;
-      observation?: string;
-      origin?: OrderOrigin;
-    }
-  ) => Promise<string>;
+  findOrCreateCustomer: (name: string, details?: { address?: string; mapsLink?: string; confirmationCode?: string; observation?: string; origin?: OrderOrigin; }) => Promise<string>;
 }
 
 const sanitizeForFirebase = (obj: any) => {
   const sanitized = Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
-  // Removemos o is_expanded antes de mandar pro Firebase, ele é só local!
   delete sanitized.is_expanded;
   return sanitized;
 };
+
+// Gerador do schedule padrão caso o usuário seja novo
+const defaultSchedule = Object.fromEntries(
+  [0, 1, 2, 3, 4, 5, 6].map(day => [
+    day, 
+    { active: day !== 1, shifts: [{ start: '18:00', end: '23:59' }] }
+  ])
+);
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -99,6 +101,9 @@ export const useAppStore = create<AppState>()(
         activeDays: [1, 2, 3, 4, 5, 6, 0],
         alertsEnabled: false,
         storeAddress: 'Patos de Minas, MG',
+        schedule: defaultSchedule,
+        pauses: [],
+        holidaysOverrides: {}
       },
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
@@ -116,7 +121,7 @@ export const useAppStore = create<AppState>()(
           const safeData = sanitizeForFirebase(newSettings);
           await setDoc(doc(db, 'store', 'store_settings'), safeData, { merge: true });
         } catch (error) {
-          console.error('Erro ao salvar configurações da loja na nuvem:', error);
+          console.error('Erro ao salvar configurações:', error);
         }
       },
 
@@ -135,7 +140,6 @@ export const useAppStore = create<AppState>()(
             await signInWithPopup(auth, googleProvider);
           }
         } catch (error: any) {
-          console.error('Erro no login:', error);
           alert(`Erro no login: ${error?.message || 'Erro desconhecido'}`);
         }
       },
@@ -144,9 +148,7 @@ export const useAppStore = create<AppState>()(
         try {
           await signOut(auth);
           set({ routes: [], deliveries: [], customers: [], motoboys: [], user: null });
-        } catch (error) {
-          console.error('Erro no logout:', error);
-        }
+        } catch (error) { console.error('Erro no logout:', error); }
       },
 
       initData: async () => {
@@ -173,7 +175,6 @@ export const useAppStore = create<AppState>()(
             if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
           });
 
-          // 🔥 CORREÇÃO DE TIPAGEM: Declaramos explicitamente o tipo do array resultante
           let mergedDeliveries: (Delivery & { is_expanded?: boolean })[] = [...fbDeliveries].map(fbDel => {
             const localDel = get().deliveries.find(l => l.id === fbDel.id);
             return {
@@ -188,7 +189,6 @@ export const useAppStore = create<AppState>()(
           
           mergedDeliveries = mergedDeliveries.map(d => {
              if (!(d as any).createdAt) {
-                // Tipagem explícita também aqui para não dar erro
                 const fixedDelivery = { ...d, createdAt: d.updated_at || new Date().toISOString() } as (Delivery & { is_expanded?: boolean });
                 const safeData = sanitizeForFirebase(fixedDelivery);
                 setDoc(doc(db, 'deliveries', fixedDelivery.id), safeData).catch(() => {});
@@ -197,7 +197,6 @@ export const useAppStore = create<AppState>()(
              return d;
           });
 
-          // 🔥 ORDENAÇÃO FORÇADA: Garante que os recarregamentos obedeçam sua reordenação manual
           mergedDeliveries.sort((a, b) => {
              const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
              const orderB = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
@@ -215,14 +214,15 @@ export const useAppStore = create<AppState>()(
           });
 
           const defaultSettings = get().storeSettings;
+          
+          // Tratamento para puxar dados novos e velhos sem quebrar
           const finalStoreSettings = cloudStoreSettings 
             ? { 
                 ...defaultSettings, 
                 ...cloudStoreSettings,
-                activeDays: (cloudStoreSettings as any).activeDays || defaultSettings.activeDays,
-                openingTime: (cloudStoreSettings as any).openingTime || defaultSettings.openingTime,
-                closingTime: (cloudStoreSettings as any).closingTime || defaultSettings.closingTime,
-                storeAddress: (cloudStoreSettings as any).storeAddress || defaultSettings.storeAddress
+                schedule: (cloudStoreSettings as any).schedule || defaultSettings.schedule,
+                pauses: (cloudStoreSettings as any).pauses || defaultSettings.pauses,
+                holidaysOverrides: (cloudStoreSettings as any).holidaysOverrides || defaultSettings.holidaysOverrides,
               }
             : defaultSettings;
 
@@ -238,23 +238,6 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false, syncError: true }); 
-
-          if (Capacitor.isNativePlatform()) {
-            try {
-              await LocalNotifications.schedule({
-                notifications: [
-                  {
-                    title: '⚠️ Falha de Sincronização',
-                    body: 'Não foi possível atualizar os dados com a nuvem. Verifique sua conexão.',
-                    id: 999,
-                    schedule: { at: new Date(Date.now() + 1000) },
-                  }
-                ]
-              });
-            } catch (e) {
-              console.error('Erro ao disparar notificação de falha de sync:', e);
-            }
-          }
         }
       },
 
@@ -303,7 +286,6 @@ export const useAppStore = create<AppState>()(
         } catch (error) { console.error(error); }
       },
 
-      // 🔥 NOVA FUNÇÃO: DELETAR ROTA
       deleteRoute: async (routeId) => {
         set((state) => ({ routes: state.routes.filter((r) => r.id !== routeId) }));
         try {
@@ -358,7 +340,6 @@ export const useAppStore = create<AppState>()(
 
       updateDelivery: async (id, updatedData) => {
         const dataWithTimestamp: Partial<Delivery> = { ...updatedData, updated_at: new Date().toISOString() };
-        
         const state = get();
         const deliveryToUpdate = state.deliveries.find((d) => d.id === id);
         
@@ -372,7 +353,6 @@ export const useAppStore = create<AppState>()(
 
           if (updatedData.completed !== undefined && deliveryToUpdate?.customer_id) {
              const customer = state.customers.find(c => c.id === deliveryToUpdate.customer_id);
-             
              if (customer) {
                let newCount = customer.orderCount || 0;
                let newSpent = customer.totalSpent || 0;
@@ -481,12 +461,9 @@ export const useAppStore = create<AppState>()(
         try {
           await updateDoc(doc(db, 'deliveries', targetDelivery.id), { order_index: targetDelivery.order_index, updated_at: now });
           await updateDoc(doc(db, 'deliveries', swapDelivery.id), { order_index: swapDelivery.order_index, updated_at: now });
-        } catch (error) {
-          console.error('Erro ao salvar reordenação:', error);
-        }
+        } catch (error) { console.error('Erro ao salvar reordenação:', error); }
       },
 
-      // 🔥 NOVA FUNÇÃO LÍQUIDA (SÓ LOCAL) PARA PERSISTIR A EXPANSÃO DOS CARDS
       toggleDeliveryExpansion: (id, isExpanded) => {
         set((state) => ({
           deliveries: state.deliveries.map(d => d.id === id ? { ...d, is_expanded: isExpanded } : d)
