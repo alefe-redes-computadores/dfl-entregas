@@ -49,9 +49,8 @@ export function MotoboyChart({ data }: MotoboyChartProps) {
         </button>
       </div>
       
-      {/* Margem bottom aumentada para 60 para não cortar os nomes */}
       <ResponsiveContainer width="100%" height={isExpanded ? '80%' : 300}>
-        <BarChart data={sortedData} margin={{ top: 10, right: 10, left: -20, bottom: 60 }}>
+        <BarChart data={sortedData} margin={{ top: 10, right: 10, left: -20, bottom: 50 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
           
           <XAxis 
@@ -61,7 +60,7 @@ export function MotoboyChart({ data }: MotoboyChartProps) {
             angle={-35}
             textAnchor="end"
             interval={0}
-            tickMargin={25}
+            tickMargin={15}
             axisLine={false}
             tickLine={false}
           />
@@ -70,7 +69,8 @@ export function MotoboyChart({ data }: MotoboyChartProps) {
           <YAxis yAxisId="right" orientation="right" stroke="#71717a" tick={{ fill: '#71717a', fontSize: 12 }} axisLine={false} tickLine={false} />
           
           <Tooltip content={<CustomTooltip />} cursor={{ fill: '#27272a', opacity: 0.4 }} />
-          <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '12px', color: '#a1a1aa' }} />
+          {/* paddingTop aumentado para a legenda descer um pouco mais */}
+          <Legend wrapperStyle={{ paddingTop: '35px', fontSize: '12px', color: '#a1a1aa' }} />
           
           <Bar yAxisId="left" dataKey="deliveries" name="Entregas" fill="#3b82f6" radius={[4, 4, 0, 0]} animationDuration={1500} />
           <Bar yAxisId="right" dataKey="revenue" name="Faturamento" fill="#10b981" radius={[4, 4, 0, 0]} animationDuration={1500} />
