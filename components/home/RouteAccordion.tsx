@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Bike, Wallet, CheckCircle2, RotateCcw, Timer, MapPin, Copy, User, UserRound, AlertTriangle, Edit3, X } from 'lucide-react';
+import { ChevronDown, Bike, Wallet, CheckCircle2, RotateCcw, Timer, MapPin, Copy, User, UserRound, AlertTriangle, X, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import type { Route, Delivery } from '@/types';
+import type { Route } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { DeliveryCard } from '@/components/home/DeliveryCard';
 import { useOptimizedDeliveries } from '@/hooks/useOptimizedDeliveries';
@@ -21,6 +21,7 @@ interface RouteAccordionProps {
 export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [fuzzyModalOpen, setFuzzyModalOpen] = useState(false);
+  const [isReopenModalOpen, setIsReopenModalOpen] = useState(false); // Modal de Reabertura
   const [currentFuzzyList, setCurrentFuzzyList] = useState<any[]>([]);
   const [pendingActionType, setPendingActionType] = useState<'copy' | 'maps' | null>(null);
 
@@ -29,6 +30,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const closeRoute = useAppStore((state) => state.closeRoute);
   const reopenRoute = useAppStore((state) => state.reopenRoute);
   const startRoute = useAppStore((state) => state.startRoute); 
+  const deleteRoute = useAppStore((state) => state.deleteRoute); // Função de deletar
+  
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const storeSettings = useAppStore((state) => state.storeSettings);
   const motoboys = useAppStore(state => state.motoboys);
@@ -37,6 +40,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const totalDeliveries = deliveries.length;
   const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
   const progressPercent = totalDeliveries > 0 ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
+  
+  // Calcula o total faturado na rota para exibir quando fechada
+  const routeTotalValue = deliveries.reduce((acc, curr) => acc + (curr.value || 0), 0);
 
   const isNotStarted = route.status === 'aberta' && !route.started_at;
   const isInProgress = route.status === 'aberta' && !!route.started_at;
@@ -71,6 +77,19 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     }
   };
 
+  const handleDeleteEmptyRoute = async () => {
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+    await deleteRoute(route.id);
+    toast.success('Rota excluída com sucesso!');
+  };
+
+  const confirmReopenRoute = async () => {
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+    await reopenRoute(route.id);
+    setIsReopenModalOpen(false);
+    toast.success('Rota reaberta para correções!');
+  };
+
   const triggerRouteAction = async (actionType: 'copy' | 'maps') => {
     const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
     const result = await copyFullRouteToClipboard(route, pendingDeliveries, storeAddr, getCustomerById);
@@ -93,7 +112,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (actionType === 'copy') {
       toast.success('Rota completa copiada com sucesso!');
     } else {
-      // MAPS URL INFALÍVEL
       const uniqueAddresses = Array.from(new Set(pendingDeliveries.map(d => {
         return d.address_string.toLowerCase().includes('patos de minas') 
           ? d.address_string 
@@ -120,7 +138,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       "overflow-hidden rounded-[28px] border transition-all duration-300 relative",
       isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : 
       isInProgress ? "bg-sky-900/10 border-sky-500/30" : 
-      "bg-emerald-900/10 border-emerald-500/30 opacity-75 grayscale"
+      "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]" // Cor Viva nas rotas concluídas
     )}>
       
       {totalDeliveries > 0 && !isCompleted && (
@@ -129,9 +147,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         </div>
       )}
 
-      <button onClick={() => setIsOpen((prev) => !prev)} className="flex w-full items-center justify-between gap-3 p-4 pt-5">
+      <button onClick={() => setIsOpen((prev) => !prev)} className="flex w-full items-center justify-between gap-3 p-4 pt-5 active:scale-[0.99] transition-transform">
         <div className="flex items-center gap-3">
-          <div className={clsx('flex h-12 w-12 items-center justify-center rounded-full transition-colors',
+          <div className={clsx('flex h-12 w-12 items-center justify-center rounded-full transition-colors shrink-0',
             isNotStarted ? 'bg-zinc-800 text-zinc-400' : 
             isInProgress ? 'bg-sky-500/20 text-sky-400' : 
             'bg-emerald-500/20 text-emerald-500'
@@ -139,9 +157,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             <Bike size={22} />
           </div>
 
-          <div className="text-left">
+          <div className="text-left flex flex-col">
             <div className="flex items-center gap-2">
-              <p className={clsx("font-heading text-lg font-bold", isCompleted ? "text-emerald-400" : "text-zinc-50")}>
+              <p className={clsx("font-heading text-lg font-bold truncate max-w-[130px]", isCompleted ? "text-emerald-400" : "text-zinc-50")}>
                 {route.name}
               </p>
               {isNotStarted && <span className="rounded-full bg-zinc-700 px-2 py-0.5 text-[9px] font-bold uppercase text-zinc-300">Montando</span>}
@@ -149,13 +167,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             </div>
             
             <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-zinc-400">
-              <MotoIcon size={12} className={isInProgress ? 'text-sky-400' : 'text-zinc-500'} />
-              {route.motoboy_name}
+              <MotoIcon size={12} className={isInProgress ? 'text-sky-400' : isCompleted ? 'text-emerald-500' : 'text-zinc-500'} />
+              <span className="truncate max-w-[120px]">{route.motoboy_name}</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           {!isCompleted ? (
             <span className={clsx("rounded-full px-2.5 py-1 text-xs font-bold", 
               pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white" :
@@ -164,7 +182,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               {pendingDeliveriesCount === 0 && totalDeliveries > 0 ? 'Concluída!' : `${pendingDeliveriesCount} pendente${pendingDeliveriesCount !== 1 ? 's' : ''}`}
             </span>
           ) : (
-             <CheckCircle2 size={20} className="text-emerald-500" />
+             <div className="flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 rounded-full">
+                <CheckCircle2 size={14} className="text-emerald-400" />
+                <span className="text-emerald-400 font-bold text-[11px]">R$ {routeTotalValue.toFixed(2).replace('.',',')}</span>
+             </div>
           )}
 
           <ChevronDown size={18} className={clsx('text-zinc-500 transition-transform duration-200', isOpen && 'rotate-180')} />
@@ -200,6 +221,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           )}
 
           <div className="mt-2 flex flex-col gap-2">
+            
+            {sortedDeliveries.length === 0 && isNotStarted && (
+               <button onClick={handleDeleteEmptyRoute} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-red-500/10 border border-red-500/20 py-3.5 text-sm font-bold text-red-500 hover:bg-red-500/20 active:scale-95 transition-all">
+                 <Trash2 size={18} /> Excluir Rota Vazia
+               </button>
+            )}
+
             {sortedDeliveries.length > 0 && route.status === 'aberta' && (
               <div className="fixed bottom-24 left-0 right-0 z-40 mx-auto flex w-full max-w-[92%] items-center justify-between gap-3 rounded-[24px] border border-zinc-700/80 bg-zinc-900/95 px-4 py-3 backdrop-blur-xl shadow-2xl shadow-black/50">
                 <button onClick={() => triggerRouteAction('copy')} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800/80 text-sm font-semibold text-zinc-300 active:scale-95">
@@ -211,7 +239,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </div>
             )}
 
-            {route.status === 'aberta' ? (
+            {route.status === 'aberta' && totalDeliveries > 0 ? (
               !route.started_at ? (
                 <button onClick={handleStartRoute} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-sky-500/10 border border-sky-500/20 py-3.5 text-sm font-bold text-sky-500 hover:bg-sky-500/20 active:scale-95">
                   <Timer size={18} /> Iniciar Rota (Cronômetro)
@@ -222,11 +250,43 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   {pendingDeliveriesCount === 0 ? 'Tudo Entregue! Fechar Rota' : 'Finalizar Rota'}
                 </button>
               )
-            ) : (
-              <button onClick={() => reopenRoute(route.id)} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-800/40 py-3.5 text-sm font-semibold text-zinc-400 hover:bg-zinc-800 active:scale-95">
-                <RotateCcw size={16} /> Reabrir Rota
+            ) : null}
+
+            {route.status === 'fechada' && (
+              <button onClick={() => setIsReopenModalOpen(true)} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-800/40 border border-zinc-700/50 py-3.5 text-sm font-semibold text-zinc-400 hover:bg-zinc-800 active:scale-95 mt-2">
+                <RotateCcw size={16} /> Reabrir Rota (Correções)
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {isReopenModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 text-amber-500">
+                <AlertTriangle size={24} />
+                <h3 className="text-lg font-bold text-zinc-50">Atenção ao Reabrir</h3>
+              </div>
+              <button onClick={() => setIsReopenModalOpen(false)} className="text-zinc-500 hover:text-zinc-300"><X size={20}/></button>
+            </div>
+
+            <p className="text-sm text-zinc-300 leading-relaxed bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl">
+              Se você precisa <strong className="text-amber-400">apenas consultar</strong> dados, não é necessário reabrir. As entregas já estão visíveis acima.
+            </p>
+            <p className="text-xs text-zinc-400 leading-relaxed px-1">
+              Reabrir a rota reiniciará o tempo de conclusão e pode afetar a média do motoboy nos relatórios.
+            </p>
+
+            <div className="flex flex-col gap-2.5 pt-3">
+              <button onClick={confirmReopenRoute} className="w-full h-12 bg-amber-500 hover:bg-amber-400 rounded-xl font-bold text-zinc-950 text-sm active:scale-95 transition-all shadow-lg shadow-amber-500/20">
+                Sim, Reabrir para Alterações
+              </button>
+              <button onClick={() => setIsReopenModalOpen(false)} className="w-full h-11 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-semibold text-zinc-300 text-xs active:scale-95 transition-all">
+                Cancelar e Manter Fechada
+              </button>
+            </div>
           </div>
         </div>
       )}
