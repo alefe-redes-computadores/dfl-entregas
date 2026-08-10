@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { RouteAccordion } from '@/components/home/RouteAccordion'; // Importando o seu card perfeito da Home!
+import { RouteAccordion } from '@/components/home/RouteAccordion'; 
 
 interface PerformanceModalsProps {
   isLogisticsOpen: boolean;
@@ -27,7 +27,6 @@ export function PerformanceModals({
   const router = useRouter();
   const [expandedDeliveryId, setExpandedDeliveryId] = useState<string | null>(null);
   
-  // Filtro de Motoboy no Histórico
   const [selectedMotoboy, setSelectedMotoboy] = useState<string>('all');
 
   const { 
@@ -43,7 +42,7 @@ export function PerformanceModals({
   const navigateDay = async (direction: 'prev' | 'next') => {
     await safeHaptic();
     direction === 'prev' ? goToPreviousDay() : goToNextDay();
-    setSelectedMotoboy('all'); // Reseta o filtro ao trocar de dia
+    setSelectedMotoboy('all'); 
   };
 
   const toggleDelivery = async (id: string) => {
@@ -85,23 +84,27 @@ export function PerformanceModals({
   }, [filteredRoutes, selectedDateDeliveries]);
 
   // =========================================================
-  // ORDEM CRONOLÓGICA REAL (EXTRATO)
+  // ORDEM CRONOLÓGICA BLINDADA (EXTRATO)
   // =========================================================
-  const chronologicDeliveries = [...(selectedDateDeliveries || [])].sort((a, b) => {
-    const timeA = new Date(a.updated_at || a.createdAt || 0).getTime();
-    const timeB = new Date(b.updated_at || b.createdAt || 0).getTime();
-    return timeA - timeB; // Crescente: do mais antigo pro mais novo (ex: 20h00 -> 21h00 -> 22h00)
-  });
+  const chronologicDeliveries = useMemo(() => {
+    return [...(selectedDateDeliveries || [])].sort((a, b) => {
+      // Usa o getTime() para converter a data num número absoluto e não falhar
+      const timeA = new Date(a.updated_at || a.createdAt || 0).getTime();
+      const timeB = new Date(b.updated_at || b.createdAt || 0).getTime();
+      
+      // DECRESCENTE: Os mais recentes primeiro (ex: 22h no topo, 18h lá embaixo)
+      return timeB - timeA; 
+    });
+  }, [selectedDateDeliveries]);
 
   return (
     <>
       {/* ========================================================= */}
-      {/* MODAL 1: RESUMO LOGÍSTICO (ESTILO HOME) */}
+      {/* MODAL 1: RESUMO LOGÍSTICO */}
       {/* ========================================================= */}
       {isLogisticsOpen && (
         <div className="fixed inset-0 z-[100] bg-zinc-950 overflow-y-auto block animate-in slide-in-from-bottom duration-300">
           
-          {/* HEADER FIXO NO TOPO */}
           <div className="sticky top-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/80 shadow-md">
             <div className="flex items-center justify-between p-5 pb-3">
               <div className="flex flex-col">
@@ -121,21 +124,13 @@ export function PerformanceModals({
               <button onClick={() => navigateDay('next')} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-950 border border-zinc-800 text-zinc-300 active:scale-95 shadow-sm"><ChevronRight size={20} /></button>
             </div>
 
-            {/* FILTROS DE MOTOBOY HORIZONTAL */}
             {uniqueMotoboys.length > 0 && (
               <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-5 py-4 bg-zinc-950/80">
-                <button 
-                  onClick={() => { safeHaptic(); setSelectedMotoboy('all'); }} 
-                  className={`flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold transition-all shadow-sm ${selectedMotoboy === 'all' ? "bg-zinc-100 text-zinc-950" : "bg-zinc-900 border border-zinc-800 text-zinc-400"}`}
-                >
+                <button onClick={() => { safeHaptic(); setSelectedMotoboy('all'); }} className={`flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold transition-all shadow-sm ${selectedMotoboy === 'all' ? "bg-zinc-100 text-zinc-950" : "bg-zinc-900 border border-zinc-800 text-zinc-400"}`}>
                   <Filter size={14} /> Equipe Toda
                 </button>
                 {uniqueMotoboys.map(m => (
-                  <button 
-                    key={m} 
-                    onClick={() => { safeHaptic(); setSelectedMotoboy(m); }} 
-                    className={`flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold transition-all shadow-sm ${selectedMotoboy === m ? "bg-zinc-100 text-zinc-950" : "bg-zinc-900 border border-zinc-800 text-zinc-400"}`}
-                  >
+                  <button key={m} onClick={() => { safeHaptic(); setSelectedMotoboy(m); }} className={`flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold transition-all shadow-sm ${selectedMotoboy === m ? "bg-zinc-100 text-zinc-950" : "bg-zinc-900 border border-zinc-800 text-zinc-400"}`}>
                     <User size={14} /> {m}
                   </button>
                 ))}
@@ -143,7 +138,6 @@ export function PerformanceModals({
             )}
           </div>
 
-          {/* ÁREA DE SCROLL NATIVA E LIVRE */}
           <div className="p-4 pb-40 flex flex-col gap-6">
             {uniqueMotoboys.length === 0 ? (
               <div className="py-24 flex flex-col items-center justify-center gap-3">
@@ -152,7 +146,6 @@ export function PerformanceModals({
               </div>
             ) : (
               <>
-                {/* CARDS DE RESUMO (MUDAM COM O FILTRO) */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-[24px] p-5 flex flex-col gap-1.5 shadow-sm">
                     <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Package size={12} className="text-sky-500"/> Entregas</span>
@@ -169,15 +162,12 @@ export function PerformanceModals({
 
                 <div className="w-full h-px bg-zinc-800/50 my-1" />
 
-                {/* AGRUPAMENTO DE ROTAS POR MOTOBOY (USANDO SEU CARD PERFEITO) */}
                 <div className="flex flex-col gap-8">
                   {Object.entries(groupedRoutes).map(([motoboyName, rotasDoMotoboy]) => (
                     <div key={motoboyName} className="flex flex-col gap-4 animate-in fade-in">
                       <div className="flex items-center justify-between px-2">
                         <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 bg-zinc-900 border border-zinc-800 rounded-full flex items-center justify-center text-zinc-400">
-                            <Users size={14}/>
-                          </div>
+                          <div className="h-8 w-8 bg-zinc-900 border border-zinc-800 rounded-full flex items-center justify-center text-zinc-400"><Users size={14}/></div>
                           <span className="font-bold text-zinc-200 text-sm">{motoboyName}</span>
                         </div>
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{rotasDoMotoboy.length} rotas</span>
@@ -185,7 +175,6 @@ export function PerformanceModals({
                       
                       <div className="flex flex-col gap-3">
                         {rotasDoMotoboy.map((rota) => (
-                           // ✨ SEU COMPONENTE ORIGINAL DA HOME
                            <RouteAccordion key={rota.id} route={rota} defaultOpen={false} />
                         ))}
                       </div>
@@ -204,7 +193,6 @@ export function PerformanceModals({
       {isRevenueOpen && (
         <div className="fixed inset-0 z-[100] bg-zinc-950 overflow-y-auto block animate-in slide-in-from-bottom duration-300">
           
-          {/* HEADER FIXO */}
           <div className="sticky top-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/80 shadow-md">
             <div className="flex items-center justify-between p-5 pb-3">
               <div className="flex flex-col">
@@ -223,7 +211,6 @@ export function PerformanceModals({
             </div>
           </div>
 
-          {/* ÁREA DE SCROLL NATIVA E LIVRE */}
           <div className="p-4 pb-40 flex flex-col gap-6">
             
             <div className="relative flex flex-col items-center justify-center bg-[#051a12] border border-[#0a2e1f] rounded-[32px] py-10 gap-1 shadow-lg">
@@ -258,7 +245,6 @@ export function PerformanceModals({
               </div>
             </div>
 
-            {/* LISTAGEM CRONOLÓGICA DAS ENTREGAS */}
             <div className="flex flex-col gap-4 mt-4">
               <span className="text-xs font-bold text-zinc-500 uppercase px-2 tracking-widest flex items-center gap-2">
                 <Receipt size={14}/> Lançamentos Registrados
@@ -272,7 +258,8 @@ export function PerformanceModals({
               ) : (
                 chronologicDeliveries.map((d: any) => {
                   const isExpanded = expandedDeliveryId === d.id;
-                  
+                  const timeFormatted = new Date(d.updated_at || d.createdAt || Date.now()).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
+
                   return (
                     <div key={d.id} className="flex flex-col bg-zinc-900 border border-zinc-800/80 rounded-3xl shadow-sm overflow-hidden shrink-0">
                       <button onClick={() => toggleDelivery(d.id)} className="flex items-center justify-between p-5 active:bg-zinc-800 transition-colors">
@@ -283,11 +270,14 @@ export function PerformanceModals({
                               {d.payment_method?.replace('_', ' ') || 'Dinheiro'}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col items-end gap-1.5">
                             <span className="text-base font-black text-emerald-400 shrink-0">
                               + R$ {isPrivacyMode ? '••' : (d.value || 0).toFixed(2).replace('.', ',')}
                             </span>
-                            <ChevronDown size={18} className={`text-zinc-600 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}/>
+                            {/* O HORÁRIO AGORA FICA VISÍVEL DIRETO NA LISTA! */}
+                            <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded-md border border-zinc-800/50">
+                              <Clock size={10} className="text-zinc-600"/> {timeFormatted}
+                            </span>
                         </div>
                       </button>
                       
@@ -303,17 +293,14 @@ export function PerformanceModals({
 
                             <div className="flex justify-between items-center text-zinc-400 px-2 mt-1">
                               <span className="text-xs font-semibold">ID: <strong className="text-zinc-300">#{d.order_id || 'Loja'}</strong></span>
-                              <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5 bg-zinc-800/50 px-2.5 py-1 rounded-md">
-                                <Clock size={12} className="text-emerald-500"/> 
-                                {new Date(d.updated_at || d.createdAt || Date.now()).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}
-                              </span>
                             </div>
 
-                            {/* SOLUÇÃO DEFINITIVA DO ERRO 404: Passa ID por Parâmetro */}
+                            {/* ESTE É O BOTÃO QUE DÁ ERRO 404 NO SEU APP */}
+                            {/* SE CONTINUAR DANDO ERRO, ME MANDE O CÓDIGO DA PÁGINA HOME DE ONDE VOCÊ EDITA A ENTREGA! */}
                             <button 
                               onClick={() => {
                                 closeRevenue();
-                                router.push(`/entrega?id=${d.id}`);
+                                router.push(`/entrega/${d.id}`);
                               }}
                               className="w-full mt-2 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl font-bold uppercase tracking-wider text-[11px] flex items-center justify-center gap-2 transition-all active:scale-95"
                             >
