@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Package, X, ChevronLeft, Calendar, ChevronRight, Bike, MapPin, ChevronDown, 
-  Wallet, QrCode, Banknote, CreditCard, Receipt, Eye, EyeOff, FileText
+  Wallet, QrCode, Banknote, CreditCard, Receipt, Eye, EyeOff, FileText, Clock
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -14,13 +15,14 @@ interface PerformanceModalsProps {
   isRevenueOpen: boolean;
   closeRevenue: () => void;
   isPrivacyMode: boolean;
-  togglePrivacyMode: () => void; // Passado pela página principal
+  togglePrivacyMode: () => void;
   dashboardData: any;
 }
 
 export function PerformanceModals({
   isLogisticsOpen, closeLogistics, isRevenueOpen, closeRevenue, isPrivacyMode, togglePrivacyMode, dashboardData
 }: PerformanceModalsProps) {
+  const router = useRouter();
   const [expandedDeliveryId, setExpandedDeliveryId] = useState<string | null>(null);
 
   const { 
@@ -46,7 +48,6 @@ export function PerformanceModals({
       {/* ========================================================= */}
       {isLogisticsOpen && (
         <div className="fixed inset-0 z-[100] flex flex-col bg-zinc-950 h-[100dvh] animate-in slide-in-from-bottom duration-300">
-          {/* HEADER FIXO */}
           <div className="sticky top-0 z-20 flex flex-col bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-800/80">
             <div className="flex items-center justify-between p-5 pb-3">
               <div className="flex flex-col">
@@ -62,8 +63,7 @@ export function PerformanceModals({
             </div>
           </div>
 
-          {/* LISTA SCROLLÁVEL */}
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10 hide-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-[120px] hide-scrollbar">
             {routesSummary.length === 0 ? (
               <div className="py-24 flex flex-col items-center justify-center gap-3"><Package size={48} className="text-zinc-800" /><p className="text-center text-zinc-500 text-sm font-semibold">Nenhuma rota encontrada nesta data.</p></div>
             ) : (
@@ -95,9 +95,11 @@ export function PerformanceModals({
                             <ChevronDown size={18} className={`text-zinc-500 shrink-0 ml-2 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                           </button>
                           
-                          {/* DETALHES INLINE EXPANSÍVEIS (SEM PÁGINA 404) */}
                           {isExpanded && (
                             <div className="p-4 pt-2 bg-zinc-900/40 border-t border-zinc-800/80 flex flex-col gap-3 text-sm animate-in slide-in-from-top-2">
+                               <button onClick={() => router.push(`/entrega?id=${d.id}`)} className="w-full py-3 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-xl font-bold uppercase tracking-wider text-[11px] mb-1 active:scale-95 transition-transform">
+                                 Abrir Detalhes do Pedido
+                               </button>
                                <div className="flex justify-between items-center bg-zinc-950 border border-zinc-800 p-3 rounded-xl">
                                  <span className="text-zinc-400 font-semibold flex items-center gap-2"><Wallet size={16} className="text-zinc-500"/> Valor</span>
                                  <span className="font-black text-emerald-400 text-base">R$ {(d.value || 0).toFixed(2).replace('.', ',')}</span>
@@ -133,7 +135,6 @@ export function PerformanceModals({
       {/* ========================================================= */}
       {isRevenueOpen && (
         <div className="fixed inset-0 z-[100] flex flex-col bg-zinc-950 h-[100dvh] animate-in slide-in-from-bottom duration-300">
-          {/* HEADER FIXO */}
           <div className="sticky top-0 z-20 flex flex-col bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-800/80">
             <div className="flex items-center justify-between p-5 pb-3">
               <div className="flex flex-col">
@@ -150,26 +151,24 @@ export function PerformanceModals({
             </div>
           </div>
 
-          {/* CONTEÚDO SCROLLÁVEL */}
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5 pb-10 hide-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5 pb-[120px] hide-scrollbar">
             
-            {/* PAINEL DE FATURAMENTO TOTAL COM OLHO DE PRIVACIDADE */}
-            <div className="relative flex flex-col items-center justify-center bg-emerald-500/10 border border-emerald-500/20 rounded-[32px] py-10 gap-3 shadow-[0_0_40px_rgba(16,185,129,0.05)]">
+            {/* PAINEL DE FATURAMENTO TOTAL PREMIUM (Fundo Verde Escuro) */}
+            <div className="relative flex flex-col items-center justify-center bg-[#051a12] border border-[#0a2e1f] rounded-[32px] py-10 gap-1 shadow-lg">
               <button 
                 onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); togglePrivacyMode(); }} 
-                className="absolute top-4 right-4 p-2.5 bg-emerald-500/20 text-emerald-400 rounded-full active:scale-90 transition-transform"
+                className="absolute top-5 right-5 p-2.5 bg-[#0a2e1f] text-emerald-500 rounded-full active:scale-90 transition-transform"
               >
                 {isPrivacyMode ? <EyeOff size={18}/> : <Eye size={18}/>}
               </button>
               
-              <span className="text-xs font-bold text-emerald-500 uppercase tracking-widest">Total Arrecadado</span>
+              <span className="text-[10px] font-black text-emerald-500/80 uppercase tracking-[0.2em] mb-1">Total Arrecadado</span>
               <span className="text-5xl font-black text-emerald-400 tracking-tight">
                 {isPrivacyMode ? '••••••' : `R$ ${faturamentoTotal.toFixed(2).replace('.', ',')}`}
               </span>
-              <span className="text-xs text-emerald-500/80 font-bold mt-2 bg-emerald-500/10 border border-emerald-500/20 px-4 py-1.5 rounded-full flex items-center gap-1.5">
-                 <TrendingUp size={12}/>
-                 Ticket Médio: R$ {isPrivacyMode ? '•••' : ticketMedio.toFixed(2).replace('.', ',')}
-              </span>
+              <div className="mt-3 bg-[#0a2e1f] border border-emerald-900/50 px-4 py-1.5 rounded-full flex items-center gap-1.5">
+                 <span className="text-[11px] text-emerald-500 font-bold">Ticket Médio: R$ {isPrivacyMode ? '•••' : ticketMedio.toFixed(2).replace('.', ',')}</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
@@ -196,7 +195,7 @@ export function PerformanceModals({
               </span>
               
               {selectedDateDeliveries.length === 0 ? (
-                 <div className="py-12 flex flex-col items-center justify-center gap-2 bg-zinc-900/30 rounded-3xl border border-zinc-800 border-dashed">
+                 <div className="py-12 flex flex-col items-center justify-center gap-3 bg-zinc-900/30 rounded-3xl border border-zinc-800 border-dashed">
                     <Receipt size={32} className="text-zinc-700"/>
                     <p className="text-center text-sm text-zinc-500 font-semibold">Nenhuma venda registrada nesta data.</p>
                  </div>
@@ -205,15 +204,15 @@ export function PerformanceModals({
                   const isExpanded = expandedDeliveryId === d.id;
                   return (
                     <div key={d.id} className="flex flex-col bg-zinc-900 border border-zinc-800/80 rounded-[20px] shadow-sm overflow-hidden">
-                      <button onClick={() => toggleDelivery(d.id)} className="flex items-center justify-between p-4 active:bg-zinc-800 transition-colors">
+                      <button onClick={() => toggleDelivery(d.id)} className="flex items-center justify-between p-5 active:bg-zinc-800 transition-colors">
                         <div className="flex flex-col truncate pr-3 text-left">
-                          <span className="text-sm font-bold text-zinc-200 truncate mb-1">{d.address_string.split('-')[0]}</span>
+                          <span className="text-sm font-bold text-zinc-200 truncate mb-1.5">{d.address_string.split('-')[0]}</span>
                           <span className="text-[11px] text-zinc-500 capitalize flex items-center gap-1.5 font-medium">
                              {d.payment_method === 'pix' ? <QrCode size={12}/> : d.payment_method === 'dinheiro' ? <Banknote size={12}/> : <CreditCard size={12}/>}
                              {d.payment_method?.replace('_', ' ') || 'Dinheiro'}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-4">
                            <span className="text-base font-black text-emerald-400 shrink-0">
                              + R$ {isPrivacyMode ? '••' : (d.value || 0).toFixed(2).replace('.', ',')}
                            </span>
@@ -221,9 +220,11 @@ export function PerformanceModals({
                         </div>
                       </button>
                       
-                      {/* DETALHES INLINE FINANCEIRO */}
                       {isExpanded && (
                          <div className="p-4 pt-2 bg-zinc-950/50 border-t border-zinc-800/50 flex flex-col gap-3 text-sm animate-in slide-in-from-top-2">
+                           <button onClick={() => router.push(`/entrega?id=${d.id}`)} className="w-full py-3 bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 rounded-xl font-bold uppercase tracking-wider text-[11px] mb-1 active:scale-95 transition-transform">
+                             Abrir Detalhes do Pedido
+                           </button>
                            {d.observation && (
                              <div className="flex flex-col gap-1.5 text-zinc-300 bg-amber-500/5 border border-amber-500/20 p-3 rounded-xl">
                                <span className="text-xs text-amber-500 font-black uppercase tracking-wider flex items-center gap-1.5"><FileText size={14}/> Observação</span>
@@ -231,7 +232,7 @@ export function PerformanceModals({
                              </div>
                            )}
                            <div className="flex justify-between items-center text-zinc-400 px-1 mt-1">
-                             <span className="text-xs">ID Pedido: <strong className="text-zinc-300">#{d.order_id || 'Loja'}</strong></span>
+                             <span className="text-xs">ID: <strong className="text-zinc-300">#{d.order_id || 'Loja'}</strong></span>
                              <span className="text-xs"><Clock size={12} className="inline mr-1 -mt-0.5"/> {new Date(d.updated_at || Date.now()).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</span>
                            </div>
                          </div>
