@@ -168,7 +168,7 @@ export default function LojaPage() {
       </div>
 
       <div className="flex flex-col gap-3">
-        {/* SELETOR DE DATAS ADICIONADO AQUI NA TELA PRINCIPAL */}
+        {/* NAVEGAÇÃO DE DATAS */}
         <div className="flex items-center justify-between px-2">
           <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
             <TrendingUp size={14} /> Desempenho
