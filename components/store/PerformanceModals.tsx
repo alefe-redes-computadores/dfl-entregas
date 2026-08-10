@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { RouteAccordion } from '@/components/home/RouteAccordion'; // 🔥 Importando o Componente Original!
+import { RouteAccordion } from '@/components/home/RouteAccordion'; // Importando o seu card perfeito da Home!
 
 interface PerformanceModalsProps {
   isLogisticsOpen: boolean;
@@ -27,13 +27,13 @@ export function PerformanceModals({
   const router = useRouter();
   const [expandedDeliveryId, setExpandedDeliveryId] = useState<string | null>(null);
   
-  // Filtro de Motoboy no Histórico Logístico
+  // Filtro de Motoboy no Histórico
   const [selectedMotoboy, setSelectedMotoboy] = useState<string>('all');
 
   const { 
     goToPreviousDay, goToNextDay, formattedDateLabel, 
-    totalEntregas, faturamentoTotal, ticketMedio, 
-    revenueByMethod, routesSummary, selectedDateDeliveries, selectedDateRoutes
+    faturamentoTotal, ticketMedio, 
+    revenueByMethod, selectedDateDeliveries, selectedDateRoutes
   } = dashboardData;
 
   const safeHaptic = async () => {
@@ -43,7 +43,7 @@ export function PerformanceModals({
   const navigateDay = async (direction: 'prev' | 'next') => {
     await safeHaptic();
     direction === 'prev' ? goToPreviousDay() : goToNextDay();
-    setSelectedMotoboy('all'); // Reseta o filtro ao mudar de dia
+    setSelectedMotoboy('all'); // Reseta o filtro ao trocar de dia
   };
 
   const toggleDelivery = async (id: string) => {
@@ -52,22 +52,20 @@ export function PerformanceModals({
   };
 
   // =========================================================
-  // LÓGICA DO NOVO HISTÓRICO LOGÍSTICO (FILTROS E SOMAS)
+  // LÓGICA DE FILTROS E SOMAS (LOGÍSTICA)
   // =========================================================
-  
-  // Extrai os motoboys que trabalharam no dia selecionado
   const uniqueMotoboys = useMemo(() => {
+    if (!selectedDateRoutes) return [];
     const names = new Set(selectedDateRoutes.map((r: any) => r.motoboy_name));
     return Array.from(names).sort() as string[];
   }, [selectedDateRoutes]);
 
-  // Filtra as rotas baseadas no motoboy selecionado
   const filteredRoutes = useMemo(() => {
+    if (!selectedDateRoutes) return [];
     if (selectedMotoboy === 'all') return selectedDateRoutes;
     return selectedDateRoutes.filter((r: any) => r.motoboy_name === selectedMotoboy);
   }, [selectedDateRoutes, selectedMotoboy]);
 
-  // Agrupa as rotas filtradas pelo nome do motoboy para renderizar a lista
   const groupedRoutes = useMemo(() => {
     return filteredRoutes.reduce((acc: any, route: any) => {
       if (!acc[route.motoboy_name]) acc[route.motoboy_name] = [];
@@ -76,10 +74,9 @@ export function PerformanceModals({
     }, {} as Record<string, any[]>);
   }, [filteredRoutes]);
 
-  // Calcula os totais dinâmicos (muda conforme o filtro do motoboy)
   const dynamicStats = useMemo(() => {
     const relevantRouteIds = filteredRoutes.map((r: any) => r.id);
-    const deliveries = selectedDateDeliveries.filter((d: any) => relevantRouteIds.includes(d.route_id));
+    const deliveries = (selectedDateDeliveries || []).filter((d: any) => relevantRouteIds.includes(d.route_id));
     
     return {
       entregas: deliveries.length,
@@ -87,23 +84,25 @@ export function PerformanceModals({
     };
   }, [filteredRoutes, selectedDateDeliveries]);
 
-  // Ordenação Cronológica para o Modal Financeiro
+  // =========================================================
+  // ORDEM CRONOLÓGICA REAL (EXTRATO)
+  // =========================================================
   const chronologicDeliveries = [...(selectedDateDeliveries || [])].sort((a, b) => {
     const timeA = new Date(a.updated_at || a.createdAt || 0).getTime();
     const timeB = new Date(b.updated_at || b.createdAt || 0).getTime();
-    return timeA - timeB;
+    return timeA - timeB; // Crescente: do mais antigo pro mais novo (ex: 20h00 -> 21h00 -> 22h00)
   });
 
   return (
     <>
       {/* ========================================================= */}
-      {/* MODAL 1: RESUMO LOGÍSTICO (ESTILO HOME) 🔥 */}
+      {/* MODAL 1: RESUMO LOGÍSTICO (ESTILO HOME) */}
       {/* ========================================================= */}
       {isLogisticsOpen && (
-        <div className="fixed top-0 left-0 w-full z-[100] bg-zinc-950 flex flex-col animate-in slide-in-from-bottom duration-300" style={{ height: '100dvh' }}>
+        <div className="fixed inset-0 z-[100] bg-zinc-950 overflow-y-auto block animate-in slide-in-from-bottom duration-300">
           
-          {/* HEADER E NAVEGAÇÃO DE DATAS */}
-          <div className="flex flex-col bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/80 shrink-0">
+          {/* HEADER FIXO NO TOPO */}
+          <div className="sticky top-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/80 shadow-md">
             <div className="flex items-center justify-between p-5 pb-3">
               <div className="flex flex-col">
                 <h2 className="text-xl font-bold text-zinc-50 flex items-center gap-2">
@@ -124,10 +123,10 @@ export function PerformanceModals({
 
             {/* FILTROS DE MOTOBOY HORIZONTAL */}
             {uniqueMotoboys.length > 0 && (
-              <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-5 py-4 bg-zinc-950">
+              <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-5 py-4 bg-zinc-950/80">
                 <button 
                   onClick={() => { safeHaptic(); setSelectedMotoboy('all'); }} 
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap text-[13px] font-bold transition-all shadow-sm ${selectedMotoboy === 'all' ? "bg-zinc-100 text-zinc-950" : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200"}`}
+                  className={`flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold transition-all shadow-sm ${selectedMotoboy === 'all' ? "bg-zinc-100 text-zinc-950" : "bg-zinc-900 border border-zinc-800 text-zinc-400"}`}
                 >
                   <Filter size={14} /> Equipe Toda
                 </button>
@@ -135,7 +134,7 @@ export function PerformanceModals({
                   <button 
                     key={m} 
                     onClick={() => { safeHaptic(); setSelectedMotoboy(m); }} 
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap text-[13px] font-bold transition-all shadow-sm ${selectedMotoboy === m ? "bg-zinc-100 text-zinc-950" : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200"}`}
+                    className={`flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold transition-all shadow-sm ${selectedMotoboy === m ? "bg-zinc-100 text-zinc-950" : "bg-zinc-900 border border-zinc-800 text-zinc-400"}`}
                   >
                     <User size={14} /> {m}
                   </button>
@@ -144,17 +143,15 @@ export function PerformanceModals({
             )}
           </div>
 
-          {/* ÁREA DE SCROLL (SOMAS E ROTAS) */}
-          <div className="flex-1 overflow-y-auto flex flex-col pb-40">
-            
+          {/* ÁREA DE SCROLL NATIVA E LIVRE */}
+          <div className="p-4 pb-40 flex flex-col gap-6">
             {uniqueMotoboys.length === 0 ? (
               <div className="py-24 flex flex-col items-center justify-center gap-3">
                 <Package size={48} className="text-zinc-800" />
                 <p className="text-center text-zinc-500 text-sm font-semibold">Nenhuma rota encontrada nesta data.</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-6 p-4">
-                
+              <>
                 {/* CARDS DE RESUMO (MUDAM COM O FILTRO) */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-[24px] p-5 flex flex-col gap-1.5 shadow-sm">
@@ -172,7 +169,7 @@ export function PerformanceModals({
 
                 <div className="w-full h-px bg-zinc-800/50 my-1" />
 
-                {/* AGRUPAMENTO DE ROTAS POR MOTOBOY (USA O ROUTE ACCORDION OFICIAL) */}
+                {/* AGRUPAMENTO DE ROTAS POR MOTOBOY (USANDO SEU CARD PERFEITO) */}
                 <div className="flex flex-col gap-8">
                   {Object.entries(groupedRoutes).map(([motoboyName, rotasDoMotoboy]) => (
                     <div key={motoboyName} className="flex flex-col gap-4 animate-in fade-in">
@@ -188,15 +185,14 @@ export function PerformanceModals({
                       
                       <div className="flex flex-col gap-3">
                         {rotasDoMotoboy.map((rota) => (
-                           // ✨ MÁGICA ACONTECENDO AQUI: REUSANDO SEU COMPONENTE DA HOME!
+                           // ✨ SEU COMPONENTE ORIGINAL DA HOME
                            <RouteAccordion key={rota.id} route={rota} defaultOpen={false} />
                         ))}
                       </div>
                     </div>
                   ))}
                 </div>
-
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -206,9 +202,10 @@ export function PerformanceModals({
       {/* MODAL 2: EXTRATO FINANCEIRO PREMIUM (CRONOLÓGICO) */}
       {/* ========================================================= */}
       {isRevenueOpen && (
-        <div className="fixed top-0 left-0 w-full z-[100] bg-zinc-950 flex flex-col animate-in slide-in-from-bottom duration-300" style={{ height: '100dvh' }}>
+        <div className="fixed inset-0 z-[100] bg-zinc-950 overflow-y-auto block animate-in slide-in-from-bottom duration-300">
           
-          <div className="flex flex-col bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/80 shadow-md shrink-0">
+          {/* HEADER FIXO */}
+          <div className="sticky top-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/80 shadow-md">
             <div className="flex items-center justify-between p-5 pb-3">
               <div className="flex flex-col">
                 <h2 className="text-xl font-bold text-zinc-50 flex items-center gap-2"><Wallet size={20} className="text-emerald-500" /> Extrato do Dia</h2>
@@ -226,7 +223,8 @@ export function PerformanceModals({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6 pb-40">
+          {/* ÁREA DE SCROLL NATIVA E LIVRE */}
+          <div className="p-4 pb-40 flex flex-col gap-6">
             
             <div className="relative flex flex-col items-center justify-center bg-[#051a12] border border-[#0a2e1f] rounded-[32px] py-10 gap-1 shadow-lg">
               <button onClick={async () => { await safeHaptic(); togglePrivacyMode(); }} className="absolute top-5 right-5 p-2.5 bg-[#0a2e1f] text-emerald-500 rounded-full active:scale-90 transition-transform">
@@ -260,6 +258,7 @@ export function PerformanceModals({
               </div>
             </div>
 
+            {/* LISTAGEM CRONOLÓGICA DAS ENTREGAS */}
             <div className="flex flex-col gap-4 mt-4">
               <span className="text-xs font-bold text-zinc-500 uppercase px-2 tracking-widest flex items-center gap-2">
                 <Receipt size={14}/> Lançamentos Registrados
@@ -275,7 +274,7 @@ export function PerformanceModals({
                   const isExpanded = expandedDeliveryId === d.id;
                   
                   return (
-                    <div key={d.id} className="flex flex-col bg-zinc-900 border border-zinc-800/80 rounded-3xl shadow-sm overflow-hidden">
+                    <div key={d.id} className="flex flex-col bg-zinc-900 border border-zinc-800/80 rounded-3xl shadow-sm overflow-hidden shrink-0">
                       <button onClick={() => toggleDelivery(d.id)} className="flex items-center justify-between p-5 active:bg-zinc-800 transition-colors">
                         <div className="flex flex-col truncate pr-3 text-left">
                           <span className="text-sm font-bold text-zinc-200 truncate mb-1">{d.address_string.split('-')[0]}</span>
@@ -310,6 +309,7 @@ export function PerformanceModals({
                               </span>
                             </div>
 
+                            {/* SOLUÇÃO DEFINITIVA DO ERRO 404: Passa ID por Parâmetro */}
                             <button 
                               onClick={() => {
                                 closeRevenue();
