@@ -25,7 +25,7 @@ export default function LojaPage() {
   const motoboys = useAppStore((state) => state.motoboys);
   const updateMotoboy = useAppStore((state) => state.updateMotoboy);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
-  const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode); // ADDED
+  const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode); 
 
   const hasHydrated = useAppStore((state) => state.hasHydrated);
   const storeSettings = useAppStore((state) => state.storeSettings) || {};
@@ -168,10 +168,30 @@ export default function LojaPage() {
       </div>
 
       <div className="flex flex-col gap-3">
+        {/* SELETOR DE DATAS ADICIONADO AQUI NA TELA PRINCIPAL */}
         <div className="flex items-center justify-between px-2">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2"><TrendingUp size={14} /> Desempenho</h2>
-          <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">{dashboardData.formattedDateLabel}</span>
+          <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
+            <TrendingUp size={14} /> Desempenho
+          </h2>
+          <div className="flex items-center gap-1.5">
+            <button 
+              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToPreviousDay(); }} 
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 active:scale-95 transition-all"
+            >
+              <ChevronLeft size={14}/>
+            </button>
+            <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-center min-w-[70px]">
+              {dashboardData.formattedDateLabel}
+            </span>
+            <button 
+              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToNextDay(); }} 
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 active:scale-95 transition-all"
+            >
+              <ChevronRight size={14}/>
+            </button>
+          </div>
         </div>
+
         <div className="grid grid-cols-2 gap-3">
           <button onClick={() => setIsLogisticsModalOpen(true)} className="bg-zinc-900/60 border border-zinc-800 hover:border-sky-500/40 p-4 rounded-[24px] flex flex-col gap-1.5 text-left transition-all active:scale-95 cursor-pointer">
             <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase"><Package size={14} className="text-sky-500" /> Resumo de Rotas</span>
