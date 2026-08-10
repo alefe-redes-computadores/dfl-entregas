@@ -407,20 +407,26 @@ export const useAppStore = create<AppState>()(
       closeRoute: async (routeId) => {
         const endTime = new Date().toISOString();
         set((state) => ({
-          routes: state.routes.map((r) => r.id === routeId ? { ...r, status: 'fechada', end_time: endTime, updated_at: endTime } : r),
+          routes: state.routes.map((r) => 
+            // O segredo está aqui: r.end_time || endTime
+            r.id === routeId ? { ...r, status: 'fechada', end_time: r.end_time || endTime, updated_at: endTime } : r
+          ),
         }));
         try {
-          await updateDoc(doc(db, 'routes', routeId), { status: 'fechada', end_time: endTime, updated_at: endTime });
+          const route = get().routes.find(r => r.id === routeId);
+          const finalEndTime = route?.end_time || endTime;
+          await updateDoc(doc(db, 'routes', routeId), { status: 'fechada', end_time: finalEndTime, updated_at: endTime });
         } catch (error) { console.error(error); }
       },
 
       reopenRoute: async (routeId) => {
         const now = new Date().toISOString();
         set((state) => ({
-          routes: state.routes.map((r) => r.id === routeId ? { ...r, status: 'aberta', end_time: undefined, updated_at: now } : r),
+          // Removido o end_time: undefined, o tempo oficial da rota agora fica salvo!
+          routes: state.routes.map((r) => r.id === routeId ? { ...r, status: 'aberta', updated_at: now } : r),
         }));
         try {
-          await updateDoc(doc(db, 'routes', routeId), { status: 'aberta', end_time: null, updated_at: now });
+          await updateDoc(doc(db, 'routes', routeId), { status: 'aberta', updated_at: now });
         } catch (error) { console.error(error); }
       },
 
