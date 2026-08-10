@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Power, Users, BellRing, Bike, TrendingUp, Wallet, Package, 
   AlertTriangle, Check, ChevronRight, X, Banknote, CreditCard, QrCode,
-  Calendar, Clock, Trash2, Plus, Info, MapPin
+  Calendar, Clock, Trash2, Plus, Info, MapPin, ChevronDown, ChevronLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
@@ -56,11 +56,20 @@ export default function LojaPage() {
   const [holidaysOverrides, setHolidaysOverrides] = useState<Record<string, HolidayOverride>>({});
   const [apiHolidays, setApiHolidays] = useState<BrasilApiHoliday[]>([]);
 
-  // Modais de Edição de Horários
+  // Modais de Edição de Horários (Padrão iFood)
   const [editingDay, setEditingDay] = useState<number | null>(null);
   const [tempDaySchedule, setTempDaySchedule] = useState<DaySchedule>({ active: false, shifts: [] });
   const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
   const [tempPause, setTempPause] = useState<StorePause>({ id: '', start_date: '', end_date: '', reason: '' });
+
+  // Custom Time Picker Bottom Sheet
+  const [timePicker, setTimePicker] = useState<{
+    isOpen: boolean;
+    shiftIndex: number;
+    field: 'start' | 'end';
+    hour: string;
+    minute: string;
+  } | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -177,6 +186,23 @@ export default function LojaPage() {
     setTempDaySchedule(prev => ({ ...prev, active: true, shifts: newShifts }));
   };
 
+  const confirmTimePicker = () => {
+    if (!timePicker) return;
+    if (editingDay !== null) {
+      setTempDaySchedule(prev => {
+        const newShifts = [...prev.shifts];
+        const formattedTime = `${timePicker.hour}:${timePicker.minute}`;
+        if (timePicker.field === 'start') {
+          newShifts[timePicker.shiftIndex].start = formattedTime;
+        } else {
+          newShifts[timePicker.shiftIndex].end = formattedTime;
+        }
+        return { ...prev, shifts: newShifts };
+      });
+    }
+    setTimePicker(null);
+  };
+
   if (!isMounted || !hasHydrated) return null;
 
   return (
@@ -201,6 +227,42 @@ export default function LojaPage() {
         </div>
       </button>
 
+      {/* 🔥 RESTAURADO: GESTÃO & CADASTROS */}
+      <div className="flex flex-col gap-3">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2">
+          <Users size={14} /> Gestão & Cadastros
+        </h2>
+        
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => router.push('/motoboys')} className="bg-zinc-900/60 border border-zinc-800 hover:border-amber-500/50 p-4 rounded-[24px] flex flex-col gap-2 text-left transition-all cursor-pointer group active:scale-95">
+            <div className="flex items-center justify-between">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Bike size={18} />
+              </div>
+              <span className="text-[10px] font-bold text-zinc-500 uppercase">Equipe</span>
+            </div>
+            <div>
+              <p className="font-heading font-bold text-zinc-100 text-sm">Motoboys</p>
+              <p className="text-[11px] text-zinc-500">Gerenciar e cadastrar</p>
+            </div>
+          </button>
+
+          <button onClick={() => router.push('/clientes')} className="bg-zinc-900/60 border border-zinc-800 hover:border-sky-500/50 p-4 rounded-[24px] flex flex-col gap-2 text-left transition-all cursor-pointer group active:scale-95">
+            <div className="flex items-center justify-between">
+              <div className="h-10 w-10 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Users size={18} />
+              </div>
+              <span className="text-[10px] font-bold text-zinc-500 uppercase">Base</span>
+            </div>
+            <div>
+              <p className="font-heading font-bold text-zinc-100 text-sm">Clientes</p>
+              <p className="text-[11px] text-zinc-500">Endereços salvos</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* DESEMPENHO DE HOJE */}
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2"><TrendingUp size={14} /> Desempenho de Hoje</h2>
         <div className="grid grid-cols-2 gap-3">
@@ -285,7 +347,7 @@ export default function LojaPage() {
                     <span className="text-xs text-zinc-600 text-center px-6">Crie pausas para recesso, férias ou reformas.</span>
                   </div>
                 ) : (
-                  pauses.map((p, idx) => (
+                  pauses.map((p) => (
                     <div key={p.id} className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
                        <div className="flex flex-col gap-1">
                           <span className="font-bold text-sm text-zinc-200">{p.reason || 'Pausa Programada'}</span>
@@ -336,7 +398,12 @@ export default function LojaPage() {
           </div>
 
           <div className="flex flex-col bg-zinc-950 border-t border-zinc-800 p-4 gap-4">
-             <div className="flex items-center justify-between">
+             <div className="flex flex-col gap-2">
+               <AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" />
+               <p className="text-[10px] text-zinc-500 leading-tight">Será usado como ponto de partida para as rotas inteligentes no mapa.</p>
+             </div>
+             
+             <div className="flex items-center justify-between pt-2">
                 <div className="flex items-center gap-3">
                   <div className="h-9 w-9 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center shrink-0"><AlertTriangle size={16} /></div>
                   <div className="text-left">
@@ -369,17 +436,19 @@ export default function LojaPage() {
         </div>
       </div>
 
-      {/* MODAL DE EDIÇÃO DE HORÁRIOS DO DIA */}
+      {/* ======================================================================= */}
+      {/* MODAL IFOOD: EDIÇÃO DE HORÁRIOS DO DIA */}
+      {/* ======================================================================= */}
       {editingDay !== null && (
         <div className="fixed inset-0 z-[80] flex flex-col bg-zinc-950 animate-in slide-in-from-bottom duration-300">
-           <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-             <button onClick={() => setEditingDay(null)} className="p-2 text-zinc-400"><X size={24}/></button>
+           <div className="flex items-center justify-between p-4 border-b border-zinc-800/80 bg-zinc-950">
+             <button onClick={() => setEditingDay(null)} className="p-2 text-zinc-400 active:scale-90"><ChevronLeft size={24}/></button>
              <span className="font-bold text-zinc-50">Editar horários</span>
              <div className="w-10"></div>
            </div>
 
-           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
-             <div className="flex items-center justify-between">
+           <div className="flex-1 overflow-y-auto pb-32">
+             <div className="p-4 flex items-center justify-between">
                <span className="text-xl font-bold text-zinc-100">{DAYS_OF_WEEK[editingDay]}</span>
                <button type="button" onClick={() => setTempDaySchedule(prev => ({ ...prev, active: !prev.active }))} className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${tempDaySchedule.active ? 'bg-indigo-500' : 'bg-zinc-800'}`}>
                   <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${tempDaySchedule.active ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -387,54 +456,104 @@ export default function LojaPage() {
              </div>
 
              {tempDaySchedule.active && (
-               <div className="flex flex-col gap-3">
+               <div className="px-4 flex flex-col gap-3">
                  {tempDaySchedule.shifts.map((shift, sIdx) => (
                    <div key={sIdx} className="flex items-center gap-3">
-                     <input type="time" value={shift.start} onChange={(e) => {
-                         const n = [...tempDaySchedule.shifts];
-                         n[sIdx].start = e.target.value;
-                         setTempDaySchedule(p => ({...p, shifts: n}));
-                     }} className="flex-1 h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-zinc-200 font-bold focus:border-indigo-500 outline-none" />
+                     
+                     <button onClick={() => setTimePicker({ isOpen: true, shiftIndex: sIdx, field: 'start', hour: shift.start.split(':')[0], minute: shift.start.split(':')[1] })} className="flex-1 h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 flex items-center justify-between text-zinc-200 font-bold active:bg-zinc-800 transition-colors">
+                       {shift.start}
+                       <ChevronDown size={16} className="text-zinc-500" />
+                     </button>
+
                      <span className="text-zinc-600 font-bold">-</span>
-                     <input type="time" value={shift.end} onChange={(e) => {
-                         const n = [...tempDaySchedule.shifts];
-                         n[sIdx].end = e.target.value;
-                         setTempDaySchedule(p => ({...p, shifts: n}));
-                     }} className="flex-1 h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-zinc-200 font-bold focus:border-indigo-500 outline-none" />
+                     
+                     <button onClick={() => setTimePicker({ isOpen: true, shiftIndex: sIdx, field: 'end', hour: shift.end.split(':')[0], minute: shift.end.split(':')[1] })} className="flex-1 h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 flex items-center justify-between text-zinc-200 font-bold active:bg-zinc-800 transition-colors">
+                       {shift.end}
+                       <ChevronDown size={16} className="text-zinc-500" />
+                     </button>
+
                      {tempDaySchedule.shifts.length > 1 && (
-                       <button onClick={() => {
-                          setTempDaySchedule(p => ({...p, shifts: p.shifts.filter((_, idx) => idx !== sIdx)}));
-                       }} className="p-3 text-zinc-500 hover:text-red-500 bg-zinc-900 rounded-xl"><Trash2 size={18}/></button>
+                       <button onClick={() => setTempDaySchedule(p => ({...p, shifts: p.shifts.filter((_, idx) => idx !== sIdx)}))} className="p-3 text-zinc-500 hover:text-red-500 bg-zinc-900 border border-zinc-800 rounded-xl transition-colors"><Trash2 size={18}/></button>
                      )}
                    </div>
                  ))}
 
-                 <button onClick={() => setTempDaySchedule(p => ({...p, shifts: [...p.shifts, { start: '00:00', end: '00:00' }]}))} className="flex items-center justify-center gap-2 h-12 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-300 text-sm font-bold active:scale-95 mt-2">
-                   <Plus size={16}/> Adicionar horário
+                 <button onClick={() => setTempDaySchedule(p => ({...p, shifts: [...p.shifts, { start: '00:00', end: '00:00' }]}))} className="self-end p-2 bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 active:scale-90 transition-all mt-1">
+                   <Plus size={18}/>
                  </button>
 
                  <div className="bg-zinc-900 p-4 rounded-xl flex items-start gap-3 mt-2 border border-zinc-800">
                     <Info size={18} className="text-zinc-500 shrink-0 mt-0.5" />
                     <div className="flex flex-col gap-1">
-                      <span className="font-bold text-xs text-zinc-200">Evite atrasos</span>
-                      <span className="text-[11px] text-zinc-400">O horário final define até quando os pedidos caem. Mantenha a loja aberta após para concluir.</span>
+                      <span className="font-bold text-xs text-zinc-200">Evite atrasos e cancelamentos</span>
+                      <span className="text-[11px] text-zinc-400 leading-relaxed">O horário final define até quando os pedidos podem ser feitos. Mantenha a loja aberta tempo suficiente após esse horário para concluir todos.</span>
                     </div>
                  </div>
                </div>
              )}
 
-             <div className="flex flex-col gap-2 mt-4 border-t border-zinc-800 pt-6">
-                <span className="text-sm font-bold text-zinc-400 mb-2">Ajustes Rápidos</span>
-                <button onClick={() => applyQuickAdjustment('24h')} className="text-left py-3 border-b border-zinc-800 text-zinc-300 text-xs font-semibold">Aberto 24 horas | 00:00 às 23:59</button>
-                <button onClick={() => applyQuickAdjustment('almoco')} className="text-left py-3 border-b border-zinc-800 text-zinc-300 text-xs font-semibold">Almoço | 11:00 às 15:00</button>
-                <button onClick={() => applyQuickAdjustment('janta')} className="text-left py-3 border-b border-zinc-800 text-zinc-300 text-xs font-semibold">Janta | 18:00 às 23:00</button>
-                <button onClick={() => applyQuickAdjustment('ambos')} className="text-left py-3 border-b border-zinc-800 text-zinc-300 text-xs font-semibold">Almoço e Janta | Dois Turnos</button>
+             <div className="flex flex-col px-4 mt-8">
+                <span className="text-sm font-bold text-zinc-400 mb-2">Ajustes rápidos</span>
+                <button onClick={() => applyQuickAdjustment('24h')} className="text-left py-4 border-b border-zinc-800/80 text-zinc-300 text-xs font-semibold active:bg-zinc-900/50">Aberto 24 horas | 00:00 às 23:59h</button>
+                <button onClick={() => applyQuickAdjustment('almoco')} className="text-left py-4 border-b border-zinc-800/80 text-zinc-300 text-xs font-semibold active:bg-zinc-900/50">Almoço | 11:00 às 15:00h</button>
+                <button onClick={() => applyQuickAdjustment('janta')} className="text-left py-4 border-b border-zinc-800/80 text-zinc-300 text-xs font-semibold active:bg-zinc-900/50">Janta | 18:00 às 23:00h</button>
+                <button onClick={() => applyQuickAdjustment('ambos')} className="text-left py-4 border-b border-zinc-800/80 text-zinc-300 text-xs font-semibold active:bg-zinc-900/50">Almoço e janta | 11:00 às 15:00h e 18:00 às 23:00h</button>
              </div>
            </div>
 
-           <div className="p-4 bg-zinc-900 border-t border-zinc-800">
-             <button onClick={saveDayEditor} className="w-full h-14 bg-indigo-600 text-white font-bold rounded-xl active:scale-95">Salvar Configuração</button>
+           <div className="fixed bottom-0 w-full p-4 bg-zinc-950 border-t border-zinc-800 pb-8">
+             <button onClick={saveDayEditor} className="w-full h-14 bg-zinc-100 hover:bg-white text-zinc-950 font-black rounded-xl active:scale-95 transition-all">Salvar</button>
            </div>
+        </div>
+      )}
+
+      {/* ======================================================================= */}
+      {/* TIME PICKER CUSTOMIZADO (BOTTOM SHEET iFood) */}
+      {/* ======================================================================= */}
+      {timePicker && (
+        <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-black/80 animate-in fade-in">
+          <div className="bg-zinc-900 rounded-t-[32px] p-6 pb-10 flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+             <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-700" />
+             <div className="flex items-center justify-between mb-6">
+               <h3 className="font-bold text-lg text-zinc-50">Horário de {timePicker.field === 'start' ? 'início' : 'término'}</h3>
+               <button onClick={() => setTimePicker(null)} className="p-2 bg-zinc-800 rounded-full text-zinc-400 active:scale-90"><X size={18}/></button>
+             </div>
+
+             <div className="flex justify-center gap-6 h-48 relative mb-6">
+               <div className="absolute top-0 w-full h-12 bg-gradient-to-b from-zinc-900 to-transparent pointer-events-none z-10"/>
+               <div className="absolute bottom-0 w-full h-12 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none z-10"/>
+
+               {/* Hours */}
+               <div className="flex-1 flex flex-col overflow-y-auto items-center" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                  {Array.from({length: 24}).map((_, i) => {
+                    const h = String(i).padStart(2, '0');
+                    return (
+                      <button key={h} onClick={() => setTimePicker(p => ({...p!, hour: h}))} className={`shrink-0 h-12 w-16 flex items-center justify-center text-2xl transition-all ${timePicker.hour === h ? 'font-black text-zinc-50 bg-zinc-800 rounded-xl' : 'font-semibold text-zinc-600'}`}>
+                        {h}
+                      </button>
+                    )
+                  })}
+               </div>
+
+               <div className="flex items-center justify-center text-2xl font-black text-zinc-700">:</div>
+
+               {/* Minutes */}
+               <div className="flex-1 flex flex-col overflow-y-auto items-center" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                  {Array.from({length: 60}).map((_, i) => {
+                    const m = String(i).padStart(2, '0');
+                    return (
+                      <button key={m} onClick={() => setTimePicker(p => ({...p!, minute: m}))} className={`shrink-0 h-12 w-16 flex items-center justify-center text-2xl transition-all ${timePicker.minute === m ? 'font-black text-zinc-50 bg-zinc-800 rounded-xl' : 'font-semibold text-zinc-600'}`}>
+                        {m}
+                      </button>
+                    )
+                  })}
+               </div>
+             </div>
+
+             <button onClick={confirmTimePicker} className="w-full h-14 bg-zinc-100 hover:bg-white text-zinc-950 font-black rounded-xl text-lg active:scale-95 transition-all">
+               Confirmar
+             </button>
+          </div>
         </div>
       )}
 
@@ -447,15 +566,15 @@ export default function LojaPage() {
                <button onClick={() => setIsPauseModalOpen(false)} className="text-zinc-500"><X size={20}/></button>
              </div>
              <div className="flex flex-col gap-3">
-                <input type="text" placeholder="Motivo (Ex: Férias)" onChange={e => setTempPause({...tempPause, reason: e.target.value})} className="h-12 bg-zinc-950 border border-zinc-800 rounded-xl px-4 text-sm text-zinc-200 outline-none" />
+                <input type="text" placeholder="Motivo (Ex: Férias)" onChange={e => setTempPause({...tempPause, reason: e.target.value})} className="h-12 bg-zinc-950 border border-zinc-800 rounded-xl px-4 text-sm text-zinc-200 outline-none focus:border-amber-500" />
                 <div className="flex gap-2">
                   <div className="flex flex-col gap-1 flex-1">
                     <span className="text-[10px] text-zinc-500 uppercase font-bold">Início</span>
-                    <input type="date" onChange={e => setTempPause({...tempPause, start_date: e.target.value})} className="h-12 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-xs text-zinc-200" />
+                    <input type="date" onChange={e => setTempPause({...tempPause, start_date: e.target.value})} className="h-12 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-xs text-zinc-200 focus:border-amber-500 outline-none" />
                   </div>
                   <div className="flex flex-col gap-1 flex-1">
                     <span className="text-[10px] text-zinc-500 uppercase font-bold">Fim</span>
-                    <input type="date" onChange={e => setTempPause({...tempPause, end_date: e.target.value})} className="h-12 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-xs text-zinc-200" />
+                    <input type="date" onChange={e => setTempPause({...tempPause, end_date: e.target.value})} className="h-12 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-xs text-zinc-200 focus:border-amber-500 outline-none" />
                   </div>
                 </div>
              </div>
@@ -471,8 +590,8 @@ export default function LojaPage() {
 
       {/* MODAL 1: RESUMO DE LOGÍSTICA (Cego Financeiro) */}
       {isLogisticsModalOpen && (
-        <div className="fixed inset-0 z-[70] flex flex-col bg-zinc-950/95 backdrop-blur-md animate-in slide-in-from-bottom duration-300 pb-20">
-          <div className="flex items-center justify-between p-6 border-b border-zinc-800/80 bg-zinc-900/50">
+        <div className="fixed inset-0 z-[70] flex flex-col bg-zinc-950/95 backdrop-blur-md animate-in slide-in-from-bottom duration-300">
+          <div className="flex items-center justify-between p-6 border-b border-zinc-800/80 bg-zinc-900/50 shrink-0">
             <div>
               <h2 className="text-xl font-bold text-zinc-50 flex items-center gap-2">
                 <Package size={20} className="text-sky-500" /> Resumo Logístico
@@ -482,7 +601,7 @@ export default function LojaPage() {
             <button onClick={() => setIsLogisticsModalOpen(false)} className="p-2 bg-zinc-800 text-zinc-400 rounded-full active:scale-90"><X size={20}/></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-32">
             {routesSummary.length === 0 ? (
               <p className="text-center text-zinc-500 text-sm mt-10">Nenhuma rota montada hoje.</p>
             ) : (
@@ -523,8 +642,8 @@ export default function LojaPage() {
 
       {/* MODAL 2: EXTRATO FINANCEIRO (Detalhado) */}
       {isRevenueModalOpen && (
-        <div className="fixed inset-0 z-[70] flex flex-col bg-zinc-950/95 backdrop-blur-md animate-in slide-in-from-bottom duration-300 pb-20">
-          <div className="flex items-center justify-between p-6 border-b border-zinc-800/80 bg-zinc-900/50">
+        <div className="fixed inset-0 z-[70] flex flex-col bg-zinc-950/95 backdrop-blur-md animate-in slide-in-from-bottom duration-300">
+          <div className="flex items-center justify-between p-6 border-b border-zinc-800/80 bg-zinc-900/50 shrink-0">
             <div>
               <h2 className="text-xl font-bold text-zinc-50 flex items-center gap-2">
                 <Wallet size={20} className="text-emerald-500" /> Extrato do Dia
@@ -534,7 +653,7 @@ export default function LojaPage() {
             <button onClick={() => setIsRevenueModalOpen(false)} className="p-2 bg-zinc-800 text-zinc-400 rounded-full active:scale-90"><X size={20}/></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5 pb-32">
             <div className="flex flex-col items-center justify-center bg-emerald-500/10 border border-emerald-500/20 rounded-[24px] py-6 gap-1">
               <span className="text-xs font-bold text-emerald-500 uppercase tracking-widest">Total Arrecadado</span>
               <span className="text-4xl font-black text-emerald-400">
