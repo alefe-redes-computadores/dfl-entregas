@@ -33,6 +33,7 @@ export function useStoreDashboard() {
     }, {} as Record<string, number>);
   }, [selectedDateDeliveries]);
 
+  // Rotas formatadas (Legado - Mantido para o Financeiro)
   const routesSummary = useMemo(() => {
     const summary = new Map();
     selectedDateDeliveries.forEach(d => {
@@ -43,6 +44,12 @@ export function useStoreDashboard() {
       summary.get(route.id).deliveries.push(d);
     });
     return Array.from(summary.values());
+  }, [selectedDateDeliveries, routes]);
+
+  // 🔥 NOVO: Puxa os Objetos de Rota completos da data selecionada
+  const selectedDateRoutes = useMemo(() => {
+    const routeIds = new Set(selectedDateDeliveries.map(d => d.route_id).filter(Boolean));
+    return routes.filter(r => routeIds.has(r.id));
   }, [selectedDateDeliveries, routes]);
 
   const formattedDateLabel = useMemo(() => {
@@ -60,6 +67,7 @@ export function useStoreDashboard() {
     goToNextDay,
     formattedDateLabel,
     selectedDateDeliveries,
+    selectedDateRoutes, // <-- Enviando para o Modal
     totalEntregas,
     faturamentoTotal,
     ticketMedio,
