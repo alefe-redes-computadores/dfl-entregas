@@ -21,7 +21,7 @@ interface RouteAccordionProps {
 export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [fuzzyModalOpen, setFuzzyModalOpen] = useState(false);
-  const [isReopenModalOpen, setIsReopenModalOpen] = useState(false); // Modal de Reabertura
+  const [isReopenModalOpen, setIsReopenModalOpen] = useState(false); 
   const [currentFuzzyList, setCurrentFuzzyList] = useState<any[]>([]);
   const [pendingActionType, setPendingActionType] = useState<'copy' | 'maps' | null>(null);
 
@@ -30,7 +30,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const closeRoute = useAppStore((state) => state.closeRoute);
   const reopenRoute = useAppStore((state) => state.reopenRoute);
   const startRoute = useAppStore((state) => state.startRoute); 
-  const deleteRoute = useAppStore((state) => state.deleteRoute); // Função de deletar
+  const deleteRoute = useAppStore((state) => state.deleteRoute); 
   
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const storeSettings = useAppStore((state) => state.storeSettings);
@@ -41,7 +41,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
   const progressPercent = totalDeliveries > 0 ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
   
-  // Calcula o total faturado na rota para exibir quando fechada
   const routeTotalValue = deliveries.reduce((acc, curr) => acc + (curr.value || 0), 0);
 
   const isNotStarted = route.status === 'aberta' && !route.started_at;
@@ -52,6 +51,19 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
   const { sortedDeliveries, pendingDeliveries, neighborhoodCounts } = useOptimizedDeliveries(deliveries, getCustomerById);
+
+  // CÁLCULO DE TEMPO DE ROTA (DURAÇÃO)
+  let routeDuration = '';
+  if (isCompleted && route.started_at && route.end_time) {
+    const start = new Date(route.started_at).getTime();
+    const end = new Date(route.end_time).getTime();
+    const diffMins = Math.floor((end - start) / 60000);
+    if (diffMins >= 0) {
+      const hrs = Math.floor(diffMins / 60);
+      const mins = diffMins % 60;
+      routeDuration = hrs > 0 ? `${hrs}h${mins}m` : `${mins}min`;
+    }
+  }
 
   const handleStartRoute = async () => {
     startRoute(route.id);
@@ -138,7 +150,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       "overflow-hidden rounded-[28px] border transition-all duration-300 relative",
       isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : 
       isInProgress ? "bg-sky-900/10 border-sky-500/30" : 
-      "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]" // Cor Viva nas rotas concluídas
+      "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]"
     )}>
       
       {totalDeliveries > 0 && !isCompleted && (
@@ -173,7 +185,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {!isCompleted ? (
             <span className={clsx("rounded-full px-2.5 py-1 text-xs font-bold", 
               pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white" :
@@ -182,13 +194,21 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               {pendingDeliveriesCount === 0 && totalDeliveries > 0 ? 'Concluída!' : `${pendingDeliveriesCount} pendente${pendingDeliveriesCount !== 1 ? 's' : ''}`}
             </span>
           ) : (
-             <div className="flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 rounded-full">
-                <CheckCircle2 size={14} className="text-emerald-400" />
-                <span className="text-emerald-400 font-bold text-[11px]">R$ {routeTotalValue.toFixed(2).replace('.',',')}</span>
+             <div className="flex items-center gap-2">
+                {routeDuration && (
+                  <div className="flex items-center gap-1 bg-zinc-800/80 border border-zinc-700/50 px-2.5 py-1 rounded-full">
+                    <Timer size={12} className="text-zinc-400" />
+                    <span className="text-zinc-300 font-bold text-[10px]">{routeDuration}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 rounded-full">
+                  <CheckCircle2 size={14} className="text-emerald-400" />
+                  <span className="text-emerald-400 font-bold text-[11px]">R$ {routeTotalValue.toFixed(2).replace('.',',')}</span>
+                </div>
              </div>
           )}
 
-          <ChevronDown size={18} className={clsx('text-zinc-500 transition-transform duration-200', isOpen && 'rotate-180')} />
+          <ChevronDown size={18} className={clsx('text-zinc-500 transition-transform duration-200 ml-1', isOpen && 'rotate-180')} />
         </div>
       </button>
 
@@ -276,7 +296,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               Se você precisa <strong className="text-amber-400">apenas consultar</strong> dados, não é necessário reabrir. As entregas já estão visíveis acima.
             </p>
             <p className="text-xs text-zinc-400 leading-relaxed px-1">
-              Reabrir a rota reiniciará o tempo de conclusão e pode afetar a média do motoboy nos relatórios.
+              Reabrir a rota reiniciará o status para aberta e permitirá edições. O tempo original de entrega da rota está seguro.
             </p>
 
             <div className="flex flex-col gap-2.5 pt-3">
