@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import type { StorePause, Shift } from '@/types';
 
 export function useStoreAutomation() {
   const storeSettings = useAppStore(state => state.storeSettings);
@@ -14,9 +15,8 @@ export function useStoreAutomation() {
   const lastCheckMinute = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!hasHydrated || !storeSettings) return;
+    if (!hasHydrated || !storeSettings || !storeSettings.schedule) return;
 
-    // 1. AGENDAMENTO DE NOTIFICAÇÕES NATIVAS (Roda mesmo em 2º plano)
     const setupNativeAlarms = async () => {
       if (!Capacitor.isNativePlatform() || !storeSettings.alertsEnabled) return;
       
@@ -26,68 +26,70 @@ export function useStoreAutomation() {
         
         await LocalNotifications.cancel({ notifications: await LocalNotifications.getPending().then(res => res.notifications) });
 
-        const [openH, openM] = storeSettings.openingTime.split(':').map(Number);
-        const [closeH, closeM] = storeSettings.closingTime.split(':').map(Number);
-        
         const notifications = [];
         let idCounter = 1000;
 
-        // Capacitor Weekdays: 1=Domingo, 2=Segunda ... 7=Sábado
-        // JS Weekdays: 0=Domingo, 1=Segunda ... 6=Sábado
-        for (const jsDay of storeSettings.activeDays) {
-          const capDay = jsDay + 1;
+        // Itera sobre todos os dias da semana
+        for (let jsDay = 0; jsDay <= 6; jsDay++) {
+          const capDay = jsDay + 1; // Capacitor usa 1=Dom, 7=Sab
+          const dayConfig = storeSettings.schedule[jsDay];
 
-          // 17:50 - Prepara a chapa
-          let prepM = openM - 10;
-          let prepH = openH;
-          if (prepM < 0) { prepM += 60; prepH -= 1; }
-          notifications.push({
-            id: idCounter++,
-            title: '🟡 Prepara a chapa!',
-            body: 'Faltam 10 minutos para abrir. Organize os itens.',
-            schedule: { on: { weekday: capDay, hour: prepH, minute: prepM } }
-          });
+          if (!dayConfig || !dayConfig.active || !dayConfig.shifts) continue;
 
-          // 18:00 - Loja Aberta
-          notifications.push({
-            id: idCounter++,
-            title: '🟢 Loja Aberta!',
-            body: 'Abra o app para confirmar a abertura no sistema.',
-            schedule: { on: { weekday: capDay, hour: openH, minute: openM } }
-          });
+          for (const shift of dayConfig.shifts) {
+            const [openH, openM] = shift.start.split(':').map(Number);
+            const [closeH, closeM] = shift.end.split(':').map(Number);
 
-          // 22:50 - Prepara Fechamento
-          let preCloseM = closeM - 10;
-          let preCloseH = closeH;
-          if (preCloseM < 0) { preCloseM += 60; preCloseH -= 1; }
-          notifications.push({
-            id: idCounter++,
-            title: '🟠 Reta final!',
-            body: 'Faltam 10 minutos para fechar. Já comece a organizar a limpeza.',
-            schedule: { on: { weekday: capDay, hour: preCloseH, minute: preCloseM } }
-          });
+            // 10 min antes de Abrir
+            let prepM = openM - 10;
+            let prepH = openH;
+            if (prepM < 0) { prepM += 60; prepH -= 1; }
+            if (prepH < 0) prepH = 23;
 
-          // 23:01 - Loja Fechada
-          let closedM = closeM + 2;
-          let closedH = closeH;
-          if (closedM > 59) { closedM -= 60; closedH = closedH >= 23 ? 0 : closedH + 1; }
-          notifications.push({
-            id: idCounter++,
-            title: '🔴 Loja Fechada!',
-            body: 'Pode fechar o notebook e descansar, Capitão!',
-            schedule: { on: { weekday: capDay, hour: closedH, minute: closedM } }
-          });
+            notifications.push({
+              id: idCounter++,
+              title: '🟡 Prepara a chapa!',
+              body: 'Faltam 10 minutos para abrir. Organize os itens.',
+              schedule: { on: { weekday: capDay, hour: prepH, minute: prepM } }
+            });
+
+            // Hora de Abrir
+            notifications.push({
+              id: idCounter++,
+              title: '🟢 Loja Aberta!',
+              body: 'O sistema iniciou o recebimento de pedidos.',
+              schedule: { on: { weekday: capDay, hour: openH, minute: openM } }
+            });
+
+            // 10 min antes de Fechar
+            let preCloseM = closeM - 10;
+            let preCloseH = closeH;
+            if (preCloseM < 0) { preCloseM += 60; preCloseH -= 1; }
+            if (preCloseH < 0) preCloseH = 23;
+
+            notifications.push({
+              id: idCounter++,
+              title: '🟠 Reta final!',
+              body: 'Faltam 10 minutos para fechar. Já comece a organizar a limpeza.',
+              schedule: { on: { weekday: capDay, hour: preCloseH, minute: preCloseM } }
+            });
+
+            // Hora de Fechar
+            notifications.push({
+              id: idCounter++,
+              title: '🔴 Loja Fechada!',
+              body: 'Expediente encerrado. Bom descanso, Capitão!',
+              schedule: { on: { weekday: capDay, hour: closeH, minute: closeM } }
+            });
+          }
         }
-
         await LocalNotifications.schedule({ notifications });
-      } catch (error) {
-        console.error("Erro ao configurar alarmes nativos", error);
-      }
+      } catch (error) { console.error("Erro ao configurar alarmes nativos", error); }
     };
 
     setupNativeAlarms();
 
-    // 2. VIGIA DE PRIMEIRO PLANO (Aciona as chaves sozinho se o app estiver aberto)
+    // 2. VIGIA DE PRIMEIRO PLANO (Aciona as chaves sozinho)
     const interval = setInterval(() => {
       const now = new Date();
       const currentMin = now.getMinutes();
@@ -96,28 +98,47 @@ export function useStoreAutomation() {
       if (currentMin === lastCheckMinute.current) return;
       lastCheckMinute.current = currentMin;
 
-      const jsDay = now.getDay();
-      if (!storeSettings.activeDays.includes(jsDay)) return;
-
-      const currentH = now.getHours();
-      
-      const [openH, openM] = storeSettings.openingTime.split(':').map(Number);
-      let [closeH, closeM] = storeSettings.closingTime.split(':').map(Number);
-      let closedM = closeM + 2;
-      let closedH = closeH;
-      if (closedM > 59) { closedM -= 60; closedH = closedH >= 23 ? 0 : closedH + 1; }
-
-      // Hora de Abrir (ex: 18:00)
-      if (currentH === openH && currentMin === openM && !storeSettings.isOpen) {
-        updateStoreSettings({ isOpen: true });
-        if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Heavy });
+      // Verifica Pausas
+      const todayIso = now.toISOString().split('T')[0];
+      const isPaused = storeSettings.pauses?.some(p => todayIso >= p.start_date.split('T')[0] && todayIso <= p.end_date.split('T')[0]);
+      if (isPaused) {
+        if (storeSettings.isOpen) updateStoreSettings({ isOpen: false });
+        return;
       }
 
-      // Hora de Fechar (ex: 23:01)
-      if (currentH === closedH && currentMin === closedM && storeSettings.isOpen) {
+      const jsDay = now.getDay();
+      const dayConfig = storeSettings.schedule[jsDay];
+      
+      if (!dayConfig || !dayConfig.active || !dayConfig.shifts || dayConfig.shifts.length === 0) {
+        if (storeSettings.isOpen) updateStoreSettings({ isOpen: false });
+        return;
+      }
+
+      const currentH = now.getHours();
+      const nowTotalMins = currentH * 60 + currentMin;
+
+      let isWithinAnyShift = false;
+
+      for (const shift of dayConfig.shifts) {
+        const [openH, openM] = shift.start.split(':').map(Number);
+        const [closeH, closeM] = shift.end.split(':').map(Number);
+        const startTotal = openH * 60 + openM;
+        const endTotal = closeH * 60 + closeM;
+
+        if (nowTotalMins >= startTotal && nowTotalMins < endTotal) {
+          isWithinAnyShift = true;
+          break;
+        }
+      }
+
+      if (isWithinAnyShift && !storeSettings.isOpen) {
+        updateStoreSettings({ isOpen: true });
+        if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Heavy });
+      } else if (!isWithinAnyShift && storeSettings.isOpen) {
         updateStoreSettings({ isOpen: false });
         if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Heavy });
       }
+
     }, 10000); 
 
     return () => clearInterval(interval);
