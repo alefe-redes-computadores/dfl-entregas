@@ -66,11 +66,11 @@ export function PerformanceModals({
   }, [selectedDateRoutes, selectedMotoboy]);
 
   const groupedRoutes = useMemo(() => {
-    return filteredRoutes.reduce((acc: any, route: any) => {
+    return filteredRoutes.reduce((acc: Record<string, any[]>, route: any) => {
       if (!acc[route.motoboy_name]) acc[route.motoboy_name] = [];
       acc[route.motoboy_name].push(route);
       return acc;
-    }, {} as Record<string, any[]>);
+    }, {});
   }, [filteredRoutes]);
 
   const dynamicStats = useMemo(() => {
@@ -88,11 +88,9 @@ export function PerformanceModals({
   // =========================================================
   const chronologicDeliveries = useMemo(() => {
     return [...(selectedDateDeliveries || [])].sort((a, b) => {
-      // Usa o getTime() para converter a data num número absoluto e não falhar
       const timeA = new Date(a.updated_at || a.createdAt || 0).getTime();
       const timeB = new Date(b.updated_at || b.createdAt || 0).getTime();
-      
-      // DECRESCENTE: Os mais recentes primeiro (ex: 22h no topo, 18h lá embaixo)
+      // DECRESCENTE: Os mais recentes no topo
       return timeB - timeA; 
     });
   }, [selectedDateDeliveries]);
@@ -163,23 +161,27 @@ export function PerformanceModals({
                 <div className="w-full h-px bg-zinc-800/50 my-1" />
 
                 <div className="flex flex-col gap-8">
-                  {Object.entries(groupedRoutes).map(([motoboyName, rotasDoMotoboy]) => (
-                    <div key={motoboyName} className="flex flex-col gap-4 animate-in fade-in">
-                      <div className="flex items-center justify-between px-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 bg-zinc-900 border border-zinc-800 rounded-full flex items-center justify-center text-zinc-400"><Users size={14}/></div>
-                          <span className="font-bold text-zinc-200 text-sm">{motoboyName}</span>
+                  {/* FIX DO VERCEL: Tipagem correta para evitar type 'unknown' */}
+                  {Object.entries(groupedRoutes).map(([motoboyName, rotasObj]) => {
+                    const rotasDoMotoboy = rotasObj as any[];
+                    return (
+                      <div key={motoboyName} className="flex flex-col gap-4 animate-in fade-in">
+                        <div className="flex items-center justify-between px-2">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-8 w-8 bg-zinc-900 border border-zinc-800 rounded-full flex items-center justify-center text-zinc-400"><Users size={14}/></div>
+                            <span className="font-bold text-zinc-200 text-sm">{motoboyName}</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{rotasDoMotoboy.length} rotas</span>
                         </div>
-                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{rotasDoMotoboy.length} rotas</span>
+                        
+                        <div className="flex flex-col gap-3">
+                          {rotasDoMotoboy.map((rota: any) => (
+                             <RouteAccordion key={rota.id} route={rota} defaultOpen={false} />
+                          ))}
+                        </div>
                       </div>
-                      
-                      <div className="flex flex-col gap-3">
-                        {rotasDoMotoboy.map((rota) => (
-                           <RouteAccordion key={rota.id} route={rota} defaultOpen={false} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </>
             )}
@@ -188,7 +190,7 @@ export function PerformanceModals({
       )}
 
       {/* ========================================================= */}
-      {/* MODAL 2: EXTRATO FINANCEIRO PREMIUM (CRONOLÓGICO) */}
+      {/* MODAL 2: EXTRATO FINANCEIRO PREMIUM */}
       {/* ========================================================= */}
       {isRevenueOpen && (
         <div className="fixed inset-0 z-[100] bg-zinc-950 overflow-y-auto block animate-in slide-in-from-bottom duration-300">
@@ -258,8 +260,7 @@ export function PerformanceModals({
               ) : (
                 chronologicDeliveries.map((d: any) => {
                   const isExpanded = expandedDeliveryId === d.id;
-                  const timeFormatted = new Date(d.updated_at || d.createdAt || Date.now()).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
-
+                  
                   return (
                     <div key={d.id} className="flex flex-col bg-zinc-900 border border-zinc-800/80 rounded-3xl shadow-sm overflow-hidden shrink-0">
                       <button onClick={() => toggleDelivery(d.id)} className="flex items-center justify-between p-5 active:bg-zinc-800 transition-colors">
@@ -274,16 +275,15 @@ export function PerformanceModals({
                             <span className="text-base font-black text-emerald-400 shrink-0">
                               + R$ {isPrivacyMode ? '••' : (d.value || 0).toFixed(2).replace('.', ',')}
                             </span>
-                            {/* O HORÁRIO AGORA FICA VISÍVEL DIRETO NA LISTA! */}
                             <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded-md border border-zinc-800/50">
-                              <Clock size={10} className="text-zinc-600"/> {timeFormatted}
+                              <Clock size={10} className="text-zinc-600"/> 
+                              {new Date(d.updated_at || d.createdAt || Date.now()).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}
                             </span>
                         </div>
                       </button>
                       
                       {isExpanded && (
                           <div className="p-5 pt-2 bg-zinc-950/40 border-t border-zinc-800/50 flex flex-col gap-4 text-sm animate-in fade-in">
-                            
                             {d.observation && (
                               <div className="flex flex-col gap-1.5 text-zinc-300 bg-amber-500/5 border border-amber-500/20 p-3.5 rounded-xl">
                                 <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider flex items-center gap-1.5"><FileText size={12}/> Observação</span>
@@ -295,12 +295,11 @@ export function PerformanceModals({
                               <span className="text-xs font-semibold">ID: <strong className="text-zinc-300">#{d.order_id || 'Loja'}</strong></span>
                             </div>
 
-                            {/* ESTE É O BOTÃO QUE DÁ ERRO 404 NO SEU APP */}
-                            {/* SE CONTINUAR DANDO ERRO, ME MANDE O CÓDIGO DA PÁGINA HOME DE ONDE VOCÊ EDITA A ENTREGA! */}
                             <button 
                               onClick={() => {
                                 closeRevenue();
-                                router.push(`/entrega/${d.id}`);
+                                // USANDO QUERY PARAMS PARA EVITAR 404 NO NEXT EXPORT
+                                router.push(`/entrega?id=${d.id}`);
                               }}
                               className="w-full mt-2 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl font-bold uppercase tracking-wider text-[11px] flex items-center justify-center gap-2 transition-all active:scale-95"
                             >
