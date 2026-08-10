@@ -25,6 +25,7 @@ export default function LojaPage() {
   const motoboys = useAppStore((state) => state.motoboys);
   const updateMotoboy = useAppStore((state) => state.updateMotoboy);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
+  const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode); // ADDED
 
   const hasHydrated = useAppStore((state) => state.hasHydrated);
   const storeSettings = useAppStore((state) => state.storeSettings) || {};
@@ -350,7 +351,9 @@ export default function LojaPage() {
       <PerformanceModals 
         isLogisticsOpen={isLogisticsModalOpen} closeLogistics={() => setIsLogisticsModalOpen(false)}
         isRevenueOpen={isRevenueModalOpen} closeRevenue={() => setIsRevenueModalOpen(false)}
-        isPrivacyMode={isPrivacyMode} dashboardData={dashboardData}
+        isPrivacyMode={isPrivacyMode} 
+        togglePrivacyMode={togglePrivacyMode}
+        dashboardData={dashboardData}
       />
     </div>
   );
