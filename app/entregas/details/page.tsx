@@ -187,7 +187,7 @@ function DeliveryDetailsForm() {
             confirmationCode: origin === 'ifood' ? confirmationCode : undefined, 
             observation, 
             origin
-          })
+          } as any)
         : undefined;
 
       await updateDelivery(deliveryId, {
@@ -405,11 +405,9 @@ function DeliveryDetailsForm() {
           )}
 
           <div className="flex flex-col gap-1.5 mt-1">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-zinc-400 flex items-center gap-1">
-                <Link2 size={13} className="text-sky-400" /> Link Manual / Coordenadas (Opcional)
-              </label>
-            </div>
+            <label className="text-xs font-semibold text-zinc-400 flex items-center gap-1">
+              <Link2 size={13} className="text-sky-400" /> Link Manual / Coordenadas (Opcional)
+            </label>
             <input 
               type="text" 
               placeholder="Cole o link do Maps ou coordenadas @lat,lng" 

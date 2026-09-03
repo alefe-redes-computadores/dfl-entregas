@@ -139,7 +139,7 @@ export default function NovaEntregaPage() {
             confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
             observation,
             origin,
-          })
+          } as any)
         : undefined;
 
       const novaEntrega: any = {
