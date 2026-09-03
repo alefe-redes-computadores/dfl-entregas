@@ -90,7 +90,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (!allRoutes || allRoutes.length === 0) return null;
     const motoboyRoutes = allRoutes
       .filter((r) => r.motoboy_name === route.motoboy_name)
-      .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+      .sort((a, b) => {
+        const timeA = new Date((a as any).created_at || a.started_at || 0).getTime();
+        const timeB = new Date((b as any).created_at || b.started_at || 0).getTime();
+        return timeA - timeB;
+      });
     
     const currentIndex = motoboyRoutes.findIndex((r) => r.id === route.id);
     return currentIndex > 0 ? motoboyRoutes[currentIndex - 1] : null;
