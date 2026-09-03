@@ -1,7 +1,3 @@
-// ============================================================================
-// DFL Entregas — Tipagens Globais
-// ============================================================================
-
 export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debito' | 'cartao';
 export type RouteStatus = 'aberta' | 'fechada';
 export type OrderOrigin = 'ifood' | 'loja';
@@ -47,13 +43,16 @@ export interface Delivery {
   drinks?: string;
   completed?: boolean;
   order_index?: number; 
-  is_urgent?: boolean; 
+  is_urgent?: boolean;
+  phone?: string;
+  notify_whatsapp?: boolean;
   updated_at?: string;
 }
 
 export interface Customer {
   id: string;
   name: string;
+  phone?: string;
   origin?: OrderOrigin;
   neighborhood?: string;
   address?: string;
@@ -78,7 +77,6 @@ export interface Motoboy {
   updated_at?: string;
 }
 
-// 🔥 NOVAS TIPAGENS DE EXPEDIENTE (PADRÃO IFOOD)
 export interface Shift {
   start: string;
   end: string;
@@ -97,7 +95,7 @@ export interface StorePause {
 }
 
 export interface HolidayOverride {
-  date: string; // YYYY-MM-DD
+  date: string;
   active: boolean;
   shifts: Shift[];
 }

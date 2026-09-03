@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, MapPin, User, Hash, Smartphone, Store, Pencil, X, Filter, Trophy, DollarSign, PackageOpen, UserRound, Star, Crown, Camera } from 'lucide-react';
+import { 
+  Search, MapPin, User, Hash, Smartphone, Store, Pencil, X, Filter, 
+  Trophy, DollarSign, PackageOpen, UserRound, Star, Crown, Camera, Phone, MessageSquare
+} from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -22,7 +25,7 @@ const CUSTOMER_AVATARS = [
   { id: 'store-indigo', type: 'store', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
 ];
 
-const RenderCustomerAvatar = ({ id, size = 20, className = '' }: { id?: string, size?: number, className?: string }) => {
+const RenderCustomerAvatar = ({ id, size = 20, className = '' }: { id?: string; size?: number; className?: string }) => {
   const config = CUSTOMER_AVATARS.find(a => a.id === id) || { type: 'user', color: 'text-zinc-400', bg: 'bg-zinc-800' };
   let Icon = User;
   if (config.type === 'user-round') Icon = UserRound;
@@ -31,6 +34,13 @@ const RenderCustomerAvatar = ({ id, size = 20, className = '' }: { id?: string, 
   if (config.type === 'store') Icon = Store;
 
   return <Icon size={size} className={`${config.color} ${className}`} />;
+};
+
+const formatPhoneInput = (val: string) => {
+  const digits = val.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
 
 export default function ClientesPage() {
@@ -43,6 +53,7 @@ export default function ClientesPage() {
 
   // Estados do Modal de Edição
   const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editNeighborhood, setEditNeighborhood] = useState('');
   const [editCode, setEditCode] = useState('');
@@ -54,15 +65,17 @@ export default function ClientesPage() {
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
 
   const searchLower = search.toLowerCase().trim();
+  const searchDigits = search.replace(/\D/g, '');
 
   const filtered = customers.filter(c => {
     const nameMatch = c.name.toLowerCase().includes(searchLower);
     const neighborhoodMatch = (c.neighborhood || '').toLowerCase().includes(searchLower);
     const addressMatch = (c.address || '').toLowerCase().includes(searchLower);
+    const phoneMatch = searchDigits && (c as any).phone ? (c as any).phone.includes(searchDigits) : false;
     const isIfood = c.origin === 'ifood' || !c.origin;
-    const originTextMatch = searchLower === 'ifood' && isIfood || searchLower === 'loja' && !isIfood;
+    const originTextMatch = (searchLower === 'ifood' && isIfood) || (searchLower === 'loja' && !isIfood);
 
-    const matchesSearch = !searchLower || nameMatch || neighborhoodMatch || addressMatch || originTextMatch;
+    const matchesSearch = !searchLower || nameMatch || neighborhoodMatch || addressMatch || phoneMatch || originTextMatch;
 
     if (originFilter === 'ifood') return matchesSearch && isIfood;
     if (originFilter === 'loja') return matchesSearch && !isIfood;
@@ -81,6 +94,7 @@ export default function ClientesPage() {
   const openEditModal = (client: Customer) => {
     setEditingCustomer(client);
     setEditName(client.name);
+    setEditPhone((client as any).phone ? formatPhoneInput((client as any).phone) : '');
     setEditAddress(client.address || '');
     setEditNeighborhood(client.neighborhood || '');
     setEditCode(client.last_confirmation_code || '');
@@ -99,12 +113,13 @@ export default function ClientesPage() {
     try {
       await updateCustomer(editingCustomer.id, {
         name: editName,
+        phone: editPhone.replace(/\D/g, ''),
         address: editAddress,
         neighborhood: editNeighborhood,
         last_confirmation_code: editCode,
         origin: editOrigin,
         avatar: editAvatar
-      });
+      } as any);
       toast.success('Cliente atualizado!');
       closeEditModal();
     } catch (error) {
@@ -116,25 +131,47 @@ export default function ClientesPage() {
 
   return (
     <div className="flex flex-col gap-5 relative pb-24">
-      <PageHeader title="Clientes" subtitle="Gerencie a base de clientes, ruas, bairros e códigos" />
+      <PageHeader title="Clientes" subtitle="Gerencie a base de clientes, contatos, ruas e códigos" />
 
       <div className="relative">
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-500"><Search size={18} /></div>
-        <input type="text" placeholder="Buscar por nome, bairro ou rua..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-12 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-500">
+          <Search size={18} />
+        </div>
+        <input 
+          type="text" 
+          placeholder="Buscar por nome, telefone, bairro ou rua..." 
+          value={search} 
+          onChange={(e) => setSearch(e.target.value)} 
+          className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-12 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none" 
+        />
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-        <button onClick={() => setOriginFilter('all')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${originFilter === 'all' ? 'bg-zinc-200 text-zinc-950' : 'bg-zinc-900/60 border border-zinc-800 text-zinc-400'}`}><Filter size={14} /> Todos ({customers.length})</button>
-        <button onClick={() => setOriginFilter('ranking')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${originFilter === 'ranking' ? 'bg-amber-500 text-zinc-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'bg-zinc-900/60 border border-zinc-800 text-zinc-400'}`}><Trophy size={14} /> Ranking 🏆</button>
-        <button onClick={() => setOriginFilter('ifood')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${originFilter === 'ifood' ? 'bg-red-500 text-white' : 'bg-zinc-900/60 border border-zinc-800 text-zinc-400'}`}><Smartphone size={14} /> iFood</button>
-        <button onClick={() => setOriginFilter('loja')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${originFilter === 'loja' ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-900/60 border border-zinc-800 text-zinc-400'}`}><Store size={14} /> Loja</button>
+        <button onClick={() => setOriginFilter('all')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${originFilter === 'all' ? 'bg-zinc-200 text-zinc-950' : 'bg-zinc-900/60 border border-zinc-800 text-zinc-400'}`}>
+          <Filter size={14} /> Todos ({customers.length})
+        </button>
+        <button onClick={() => setOriginFilter('ranking')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${originFilter === 'ranking' ? 'bg-amber-500 text-zinc-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'bg-zinc-900/60 border border-zinc-800 text-zinc-400'}`}>
+          <Trophy size={14} /> Ranking 🏆
+        </button>
+        <button onClick={() => setOriginFilter('ifood')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${originFilter === 'ifood' ? 'bg-red-500 text-white' : 'bg-zinc-900/60 border border-zinc-800 text-zinc-400'}`}>
+          <Smartphone size={14} /> iFood
+        </button>
+        <button onClick={() => setOriginFilter('loja')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${originFilter === 'loja' ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-900/60 border border-zinc-800 text-zinc-400'}`}>
+          <Store size={14} /> Loja
+        </button>
       </div>
 
       <div className="flex flex-col gap-3 pb-10">
         {filtered.length === 0 ? (
           <div className="py-14 flex flex-col items-center justify-center gap-3 text-center px-6 border border-dashed border-zinc-800/80 rounded-[28px] bg-zinc-950/30">
             {originFilter === 'ranking' ? (
-              <><div className="h-16 w-16 bg-amber-500/10 text-amber-500 flex items-center justify-center rounded-full mb-2 border border-amber-500/20"><Trophy size={28} /></div><p className="text-zinc-300 font-bold text-lg">O Pódio está vazio!</p><p className="text-xs text-zinc-500 leading-relaxed">Nenhum cliente contabilizou pedidos ainda.</p></>
+              <>
+                <div className="h-16 w-16 bg-amber-500/10 text-amber-500 flex items-center justify-center rounded-full mb-2 border border-amber-500/20">
+                  <Trophy size={28} />
+                </div>
+                <p className="text-zinc-300 font-bold text-lg">O Pódio está vazio!</p>
+                <p className="text-xs text-zinc-500 leading-relaxed">Nenhum cliente contabilizou pedidos ainda.</p>
+              </>
             ) : (
               <p className="text-sm text-zinc-500">Nenhum cliente encontrado.</p>
             )}
@@ -146,15 +183,18 @@ export default function ClientesPage() {
             const spent = client.totalSpent || 0;
             const isPodium = originFilter === 'ranking' && index < 3 && orders > 0;
             const avatarConfig = CUSTOMER_AVATARS.find(a => a.id === client.avatar);
+            const rawPhone = (client as any).phone;
 
             return (
               <div key={client.id} className={`relative flex flex-col rounded-[24px] border bg-zinc-900/40 p-4 gap-3 transition-all ${isPodium ? index === 0 ? 'border-amber-400/50 bg-amber-500/[0.05]' : index === 1 ? 'border-zinc-300/50 bg-zinc-300/[0.05]' : 'border-amber-700/50 bg-amber-700/[0.05]' : 'border-zinc-800'}`}>
-                {isPodium && (<div className={`absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full text-xs font-black shadow-lg z-10 ${index === 0 ? 'bg-amber-400 text-amber-950' : index === 1 ? 'bg-zinc-300 text-zinc-900' : 'bg-amber-700 text-amber-100'}`}>{index + 1}º</div>)}
+                {isPodium && (
+                  <div className={`absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full text-xs font-black shadow-lg z-10 ${index === 0 ? 'bg-amber-400 text-amber-950' : index === 1 ? 'bg-zinc-300 text-zinc-900' : 'bg-amber-700 text-amber-100'}`}>
+                    {index + 1}º
+                  </div>
+                )}
 
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3 pr-8">
-                    
-                    {/* 🎨 RENDERIZAÇÃO DO AVATAR LUCIDE */}
+                  <div className="flex items-center gap-3 pr-4 flex-1 truncate">
                     <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 border ${
                       client.avatar && avatarConfig
                         ? `${avatarConfig.bg} border-${avatarConfig.color.split('-')[1]}-500/20`
@@ -163,21 +203,62 @@ export default function ClientesPage() {
                       {client.avatar ? <RenderCustomerAvatar id={client.avatar} size={20} /> : <User size={18} />}
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                      <p className="font-semibold text-zinc-100">{client.name}</p>
-                      {client.address && (<div className="flex items-center gap-1.5 text-xs text-zinc-400"><MapPin size={12} className="text-zinc-500 shrink-0" /><p className="line-clamp-1">{client.address}{client.neighborhood ? ` - ${client.neighborhood}` : ''}</p></div>)}
-                      {!client.address && client.neighborhood && (<div className="flex items-center gap-1.5 text-xs text-zinc-500"><MapPin size={12} /><p>{client.neighborhood}</p></div>)}
+                    <div className="flex flex-col gap-0.5 truncate">
+                      <p className="font-semibold text-zinc-100 truncate">{client.name}</p>
+                      
+                      {rawPhone && (
+                        <a 
+                          href={`https://wa.me/55${rawPhone}`} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors w-fit"
+                        >
+                          <MessageSquare size={11} /> {formatPhoneInput(rawPhone)}
+                        </a>
+                      )}
+
+                      {client.address && (
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-400 truncate">
+                          <MapPin size={12} className="text-zinc-500 shrink-0" />
+                          <p className="truncate">{client.address}{client.neighborhood ? ` - ${client.neighborhood}` : ''}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex flex-col items-end gap-2 shrink-0">
-                    {isIfood ? (<span className="flex items-center gap-1 rounded bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-500 uppercase"><Smartphone size={10} /> iFood</span>) : (<span className="flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-500 uppercase"><Store size={10} /> Loja</span>)}
-                    <button onClick={() => openEditModal(client)} className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 hover:bg-zinc-700 active:scale-95"><Pencil size={14} /></button>
+                    {isIfood ? (
+                      <span className="flex items-center gap-1 rounded bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-500 uppercase"><Smartphone size={10} /> iFood</span>
+                    ) : (
+                      <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-500 uppercase"><Store size={10} /> Loja</span>
+                    )}
+                    <button onClick={() => openEditModal(client)} className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 hover:bg-zinc-700 active:scale-95">
+                      <Pencil size={14} />
+                    </button>
                   </div>
                 </div>
 
-                {originFilter === 'ranking' && orders > 0 && (<div className="mt-1 border-t border-zinc-800/80 pt-3 flex justify-between items-center bg-zinc-950/30 -mx-4 -mb-4 p-4 rounded-b-[24px]"><div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400"><PackageOpen size={14} className="text-indigo-400" /><span>{orders} {orders === 1 ? 'Pedido' : 'Pedidos'}</span></div><div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400"><DollarSign size={14} /><span>R$ {spent.toFixed(2).replace('.', ',')} Gasto</span></div></div>)}
-                {originFilter !== 'ranking' && isIfood && (<div className="mt-1 border-t border-zinc-800/80 pt-3 flex justify-between items-center bg-red-500/[0.03] -mx-4 -mb-4 p-4 rounded-b-[24px]"><span className="text-[10px] font-bold uppercase tracking-wider text-red-400/80">Cód. Confirmação</span><div className="flex items-center gap-1.5 rounded-xl bg-zinc-800/90 border border-red-500/30 px-3.5 py-1.5"><Hash size={14} className="text-amber-500" /><span className="font-heading text-xl font-bold text-zinc-50 tracking-wider">{client.last_confirmation_code || '----'}</span></div></div>)}
+                {originFilter === 'ranking' && orders > 0 && (
+                  <div className="mt-1 border-t border-zinc-800/80 pt-3 flex justify-between items-center bg-zinc-950/30 -mx-4 -mb-4 p-4 rounded-b-[24px]">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+                      <PackageOpen size={14} className="text-indigo-400" />
+                      <span>{orders} {orders === 1 ? 'Pedido' : 'Pedidos'}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                      <DollarSign size={14} />
+                      <span>R$ {spent.toFixed(2).replace('.', ',')} Gasto</span>
+                    </div>
+                  </div>
+                )}
+                {originFilter !== 'ranking' && isIfood && (
+                  <div className="mt-1 border-t border-zinc-800/80 pt-3 flex justify-between items-center bg-red-500/[0.03] -mx-4 -mb-4 p-4 rounded-b-[24px]">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-red-400/80">Cód. Confirmação</span>
+                    <div className="flex items-center gap-1.5 rounded-xl bg-zinc-800/90 border border-red-500/30 px-3.5 py-1.5">
+                      <Hash size={14} className="text-amber-500" />
+                      <span className="font-heading text-xl font-bold text-zinc-50 tracking-wider">{client.last_confirmation_code || '----'}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })
@@ -211,11 +292,41 @@ export default function ClientesPage() {
                 <button type="button" onClick={() => setEditOrigin('loja')} className={`flex-1 flex items-center justify-center h-10 rounded-xl font-bold text-sm ${editOrigin === 'loja' ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-500'}`}>Loja</button>
               </div>
 
-              <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold text-zinc-400">Nome do Cliente</label><input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-amber-500 focus:outline-none" required /></div>
-              <div className="flex flex-col gap-1.5"><AddressAutocomplete value={editAddress} onChange={setEditAddress} placeholder="Ex: Rua Major Gote, 100" label="Endereço Completo / Rua" /></div>
-              <div className="grid grid-cols-2 gap-3"><div className="flex flex-col gap-1.5"><label className="text-xs font-semibold text-zinc-400">Bairro</label><input type="text" value={editNeighborhood} onChange={(e) => setEditNeighborhood(e.target.value)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-amber-500 focus:outline-none" /></div><div className="flex flex-col gap-1.5"><label className="text-xs font-semibold text-zinc-400">Cód. Confirmação</label><input type="text" maxLength={4} inputMode="numeric" value={editCode} onChange={(e) => setEditCode(e.target.value.replace(/\D/g, ''))} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-amber-500 focus:outline-none" /></div></div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-zinc-400">Nome do Cliente</label>
+                <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-amber-500 focus:outline-none" required />
+              </div>
 
-              <button type="submit" disabled={isSaving} className="mt-2 h-12 w-full rounded-xl bg-amber-500 font-bold text-zinc-950 active:scale-95 disabled:opacity-60 cursor-pointer">{isSaving ? 'Salvando...' : 'Salvar Cliente'}</button>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-zinc-400">WhatsApp / Telefone</label>
+                <input 
+                  type="text" 
+                  inputMode="tel" 
+                  placeholder="(34) 99999-9999" 
+                  value={editPhone} 
+                  onChange={(e) => setEditPhone(formatPhoneInput(e.target.value))} 
+                  className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" 
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <AddressAutocomplete value={editAddress} onChange={setEditAddress} placeholder="Ex: Rua Major Gote, 100" label="Endereço Completo / Rua" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-zinc-400">Bairro</label>
+                  <input type="text" value={editNeighborhood} onChange={(e) => setEditNeighborhood(e.target.value)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-amber-500 focus:outline-none" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-zinc-400">Cód. Confirmação</label>
+                  <input type="text" maxLength={4} inputMode="numeric" value={editCode} onChange={(e) => setEditCode(e.target.value.replace(/\D/g, ''))} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-amber-500 focus:outline-none" />
+                </div>
+              </div>
+
+              <button type="submit" disabled={isSaving} className="mt-2 h-12 w-full rounded-xl bg-amber-500 font-bold text-zinc-950 active:scale-95 disabled:opacity-60 cursor-pointer">
+                {isSaving ? 'Salvando...' : 'Salvar Cliente'}
+              </button>
             </form>
           </div>
         </div>
@@ -248,7 +359,6 @@ export default function ClientesPage() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

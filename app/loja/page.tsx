@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -193,15 +194,28 @@ export default function LojaPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => setIsLogisticsModalOpen(true)} className="bg-zinc-900/60 border border-zinc-800 hover:border-sky-500/40 p-4 rounded-[24px] flex flex-col gap-1.5 text-left transition-all active:scale-95 cursor-pointer">
-            <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase"><Package size={14} className="text-sky-500" /> Resumo de Rotas</span>
+          <button 
+            onClick={() => setIsLogisticsModalOpen(true)} 
+            className="bg-zinc-900/60 border border-zinc-800 hover:border-sky-500/40 p-4 rounded-[24px] flex flex-col gap-1.5 text-left transition-all active:scale-95 cursor-pointer"
+          >
+            <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase">
+              <Package size={14} className="text-sky-500" /> Resumo Logístico
+            </span>
             <span className="font-heading text-2xl font-black text-zinc-100">{dashboardData.totalEntregas}</span>
-            <span className="text-[10px] text-zinc-500 flex items-center gap-1">Ver logística completa <ChevronRight size={10}/></span>
+            <span className="text-[10px] text-zinc-500 flex items-center gap-1">Ver rotas da equipe <ChevronRight size={10}/></span>
           </button>
-          <button onClick={() => setIsRevenueModalOpen(true)} className="bg-zinc-900/60 border border-zinc-800 hover:border-emerald-500/40 p-4 rounded-[24px] flex flex-col gap-1.5 text-left transition-all active:scale-95 cursor-pointer">
-            <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase"><TrendingUp size={14} className="text-emerald-500" /> Faturamento</span>
-            <span className="font-heading text-xl font-black text-emerald-400 truncate w-full">{isPrivacyMode ? 'R$ •••••' : `R$ ${dashboardData.faturamentoTotal.toFixed(2).replace('.', ',')}`}</span>
-            <span className="text-[10px] text-zinc-500 flex items-center gap-1">Ver extrato financeiro <ChevronRight size={10}/></span>
+          
+          <button 
+            onClick={() => setIsRevenueModalOpen(true)} 
+            className="bg-zinc-900/60 border border-zinc-800 hover:border-emerald-500/40 p-4 rounded-[24px] flex flex-col gap-1.5 text-left transition-all active:scale-95 cursor-pointer"
+          >
+            <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase">
+              <TrendingUp size={14} className="text-emerald-500" /> Extrato do Dia
+            </span>
+            <span className="font-heading text-xl font-black text-emerald-400 truncate w-full">
+              {isPrivacyMode ? 'R$ •••••' : `R$ ${dashboardData.faturamentoTotal.toFixed(2).replace('.', ',')}`}
+            </span>
+            <span className="text-[10px] text-zinc-500 flex items-center gap-1">Conferência de caixa <ChevronRight size={10}/></span>
           </button>
         </div>
         <div className="bg-zinc-900/40 border border-zinc-800 p-4 rounded-[24px] flex flex-col gap-3">

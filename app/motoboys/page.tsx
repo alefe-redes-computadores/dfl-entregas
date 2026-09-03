@@ -3,8 +3,8 @@
 import { useState, useMemo } from 'react';
 import { 
   Users, UserPlus, Calculator, PlusCircle, Trash2, ShieldCheck, 
-  CheckCircle2, Package, Wallet, TrendingUp, CalendarDays, Receipt, X, Send, Settings, Check, ChevronLeft, ChevronRight,
-  User, UserRound, Bike, Star, Crown, Store, Camera
+  CheckCircle2, Package, Banknote, CalendarDays, Receipt, X, Send, Settings, Check, ChevronLeft, ChevronRight,
+  User, UserRound, Bike, Star, Crown, Store, Camera, ArrowDownLeft, ArrowUpRight
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
@@ -20,7 +20,7 @@ interface ValeItem {
 }
 
 // ============================================================================
-// CONFIGURAÇÃO DOS AVATARES (LUCIDE ICONS + TAILWIND COLORS)
+// CONFIGURAÇÃO DOS AVATARES
 // ============================================================================
 const AVATAR_OPTIONS = [
   { id: 'man-blue', type: 'user', color: 'text-blue-500', bg: 'bg-blue-500/10', label: 'Rapaz (Azul)' },
@@ -33,7 +33,7 @@ const AVATAR_OPTIONS = [
   { id: 'bike-sky', type: 'bike', color: 'text-sky-500', bg: 'bg-sky-500/10', label: 'Moto (Azul)' },
 ];
 
-const RenderAvatarIcon = ({ id, size = 20, className = '' }: { id?: string, size?: number, className?: string }) => {
+const RenderAvatarIcon = ({ id, size = 20, className = '' }: { id?: string; size?: number; className?: string }) => {
   const config = AVATAR_OPTIONS.find(a => a.id === id) || AVATAR_OPTIONS[0];
   let Icon = User;
   if (config.type === 'user-round') Icon = UserRound;
@@ -74,7 +74,6 @@ export default function MotoboysPage() {
   const [selectedMotoboy, setSelectedMotoboy] = useState<Motoboy & { type?: 'fixo' | 'avulso' } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('acerto');
 
-  // Estado do Modal de Avatares
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [avatarTarget, setAvatarTarget] = useState<'new' | 'edit'>('new');
 
@@ -193,6 +192,9 @@ export default function MotoboysPage() {
     toast.success(newStatus ? 'Motoboy ativado!' : 'Motoboy desativado!');
   };
 
+  // ============================================================================
+  // CÁLCULO DE ACERTO DE CAIXA (SEM FATURAMENTO DA LOJA)
+  // ============================================================================
   const acertoData = useMemo(() => {
     if (!selectedMotoboy) return null;
     const motoboyNameLower = selectedMotoboy.name.toLowerCase().trim();
@@ -222,56 +224,101 @@ export default function MotoboysPage() {
     });
     
     const totalDeliveries = todaysDeliveries.length;
-    const deliveriesRevenue = todaysDeliveries.reduce((acc, curr) => acc + (curr.value || 0), 0);
+
+    // Total em dinheiro físico recebido pelo motoboy na rua
+    const cashCollected = todaysDeliveries
+      .filter(d => !d.is_paid && d.payment_method === 'dinheiro')
+      .reduce((acc, curr) => acc + (curr.value || 0), 0);
+
     const rule = selectedMotoboy.payment_rule || { type: 'fixed_plus_variable', fixed_amount: 100, threshold: 15, extra_fee: 7 };
-    let calculatedAmount = 0;
-    let calculationDesc = '';
+    let motoboyFee = 0;
+    let feeDescription = '';
 
     if (rule.type === 'fixed') {
-      calculatedAmount = rule.fixed_amount || 0;
-      calculationDesc = `Taxa Fixa Diária: R$ ${(rule.fixed_amount || 0).toFixed(2)}`;
+      motoboyFee = rule.fixed_amount || 0;
+      feeDescription = `Diária Fixa: R$ ${(rule.fixed_amount || 0).toFixed(2).replace('.', ',')}`;
     } else if (rule.type === 'per_delivery') {
-      calculatedAmount = totalDeliveries * (rule.delivery_fee || 0);
-      calculationDesc = `${totalDeliveries} entregas x R$ ${(rule.delivery_fee || 0).toFixed(2)}`;
+      motoboyFee = totalDeliveries * (rule.delivery_fee || 0);
+      feeDescription = `${totalDeliveries} entregas × R$ ${(rule.delivery_fee || 0).toFixed(2).replace('.', ',')}`;
     } else if (rule.type === 'fixed_plus_variable') {
       const fixed = rule.fixed_amount || 0;
       const threshold = rule.threshold || 0;
       const extraFee = rule.extra_fee || 0;
       if (totalDeliveries <= threshold) {
-        calculatedAmount = fixed;
-        calculationDesc = `Até ${threshold} entregas: R$ ${fixed.toFixed(2)}`;
+        motoboyFee = fixed;
+        feeDescription = `Base (${totalDeliveries}/${threshold} entregas): R$ ${fixed.toFixed(2).replace('.', ',')}`;
       } else {
         const extraDeliveries = totalDeliveries - threshold;
         const extraAmount = extraDeliveries * extraFee;
-        calculatedAmount = fixed + extraAmount;
-        calculationDesc = `Base R$ ${fixed.toFixed(2)} + ${extraDeliveries} extra(s) x R$ ${extraFee.toFixed(2)}`;
+        motoboyFee = fixed + extraAmount;
+        feeDescription = `Base R$ ${fixed.toFixed(2).replace('.', ',')} + ${extraDeliveries} extra(s) × R$ ${extraFee.toFixed(2).replace('.', ',')}`;
       }
     }
 
     const totalVales = vales.reduce((acc, curr) => acc + curr.amount, 0);
-    const finalAmountToPay = calculatedAmount - totalVales;
+    
+    // Total líquido que o motoboy tem a receber pelo trabalho
+    const liquidFeeToReceive = motoboyFee - totalVales;
 
-    return { totalDeliveries, deliveriesRevenue, calculatedAmount, calculationDesc, totalVales, finalAmountToPay };
+    // Diferença líquida entre o dinheiro recolhido e a remuneração devida
+    const netDifference = cashCollected - liquidFeeToReceive;
+    
+    // Se netDifference > 0: Motoboy recolheu mais dinheiro do que a taxa dele -> Devolve dinheiro ao caixa da loja
+    // Se netDifference < 0: A taxa do motoboy é maior que o dinheiro recolhido -> Loja paga a diferença ao motoboy
+    const mustReturnToStore = netDifference > 0;
+    const balanceAmount = Math.abs(netDifference);
+
+    return { 
+      totalDeliveries, 
+      cashCollected, 
+      motoboyFee, 
+      feeDescription, 
+      totalVales, 
+      liquidFeeToReceive, 
+      mustReturnToStore, 
+      balanceAmount 
+    };
   }, [selectedMotoboy, acertoDate, routes, deliveries, vales]);
 
   const handleCopyWhatsApp = async () => {
     if (!selectedMotoboy || !acertoData) return;
     const [year, month, day] = acertoDate.split('-');
     const formattedDate = `${day}/${month}/${year}`;
-    let text = `🏍️ *ACERTO DIÁRIO | DFL ENTREGAS* 🏍️\n`;
-    text += `👤 *Motoboy:* ${selectedMotoboy.name}\n`;
-    text += `📅 *Data:* ${formattedDate}\n\n`;
+    
+    let text = `🏍️ *FECHAMENTO DE CAIXA | DFL ENTREGAS*\n`;
+    text += `👤 *Entregador:* ${selectedMotoboy.name}\n`;
+    text += `📅 *Data:* ${formattedDate}\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     text += `📦 *Entregas Realizadas:* ${acertoData.totalDeliveries}\n\n`;
-    text += `📈 *Cálculo do Repasse:*\n`;
-    text += `   ↳ ${acertoData.calculationDesc} = *R$ ${acertoData.calculatedAmount.toFixed(2).replace('.', ',')}*\n\n`;
+    
+    text += `🛵 *Comissão / Diária:*\n`;
+    text += `   ↳ ${acertoData.feeDescription} = *R$ ${acertoData.motoboyFee.toFixed(2).replace('.', ',')}*\n`;
+    
     if (vales.length > 0) {
-      text += `➖ *Vales / Retenções / Caixas:*\n`;
-      vales.forEach(v => { text += `   - ${v.description}: R$ ${v.amount.toFixed(2).replace('.', ',')}\n`; });
-      text += `   *Total Abatido:* R$ ${acertoData.totalVales.toFixed(2).replace('.', ',')}\n\n`;
+      text += `\n➖ *Abatimentos / Vales:*\n`;
+      vales.forEach(v => { 
+        text += `   - ${v.description}: R$ ${v.amount.toFixed(2).replace('.', ',')}\n`; 
+      });
+      text += `   *Total Vales:* R$ ${acertoData.totalVales.toFixed(2).replace('.', ',')}\n`;
     }
-    text += `💵 *TOTAL A RECEBER:* *R$ ${acertoData.finalAmountToPay.toFixed(2).replace('.', ',')}* 💵`;
+
+    text += `   ↳ *Total Líquido da Diária:* R$ ${acertoData.liquidFeeToReceive.toFixed(2).replace('.', ',')}\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `💵 *Dinheiro Físico Recolhido:* R$ ${acertoData.cashCollected.toFixed(2).replace('.', ',')}\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+
+    if (acertoData.mustReturnToStore) {
+      text += `🔴 *ACERTO FINAL: ENTREGAR AO CAIXA*\n`;
+      text += `↳ *Valor a passar:* \`R$ ${acertoData.balanceAmount.toFixed(2).replace('.', ',')}\`\n`;
+      text += `_(Dinheiro recolhido na rua com a diária já descontada)_`;
+    } else {
+      text += `🟢 *ACERTO FINAL: RECEBER DA LOJA*\n`;
+      text += `↳ *Valor a receber:* \`R$ ${acertoData.balanceAmount.toFixed(2).replace('.', ',')}\`\n`;
+      text += `_(Saldo complementar da diária a ser pago pelo caixa)_`;
+    }
+
     await navigator.clipboard.writeText(text);
-    toast.success('Recibo copiado para o WhatsApp!');
+    toast.success('Acerto operacional copiado para o WhatsApp!');
   };
 
   const handleAddVale = () => {
@@ -295,7 +342,6 @@ export default function MotoboysPage() {
 
   return (
     <div className="flex flex-col gap-5 relative pb-24">
-      
       <PageHeader title="Equipe de Motoboys" subtitle="Gerencie frotas, regras e acertos" to="/loja" />
 
       {!isAdding ? (
@@ -379,7 +425,6 @@ export default function MotoboysPage() {
       {/* MODAL DO MOTOBOY */}
       {selectedMotoboy && (
         <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-md animate-in fade-in duration-200">
-          
           <div className="flex items-center justify-between px-4 pb-4 pt-12 border-b border-zinc-900 bg-zinc-950 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-sky-500/10 flex items-center justify-center">
@@ -387,7 +432,7 @@ export default function MotoboysPage() {
               </div>
               <div>
                 <h2 className="text-lg font-black text-zinc-50">{selectedMotoboy.name}</h2>
-                <p className="text-xs text-zinc-500">Central de Fechamento e Regras</p>
+                <p className="text-xs text-zinc-500">Conferência de Caixa e Regras</p>
               </div>
             </div>
             <button onClick={() => setSelectedMotoboy(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white">
@@ -396,50 +441,107 @@ export default function MotoboysPage() {
           </div>
 
           <div className="flex bg-zinc-900 p-1.5 border-b border-zinc-800">
-            <button onClick={() => setActiveTab('acerto')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-all ${activeTab === 'acerto' ? 'bg-zinc-800 text-emerald-400 shadow-md' : 'text-zinc-500'}`}><Receipt size={14} /> Acerto Diário</button>
+            <button onClick={() => setActiveTab('acerto')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-all ${activeTab === 'acerto' ? 'bg-zinc-800 text-emerald-400 shadow-md' : 'text-zinc-500'}`}><Receipt size={14} /> Acerto de Caixa</button>
             <button onClick={() => setActiveTab('config')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-all ${activeTab === 'config' ? 'bg-zinc-800 text-sky-400 shadow-md' : 'text-zinc-500'}`}><Settings size={14} /> Regras & Tipo</button>
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 pt-4 pb-12 flex flex-col gap-5">
             {activeTab === 'acerto' && acertoData && (
               <div className="flex flex-col gap-4 animate-in slide-in-from-right-4">
+                
+                {/* SELETOR DE DATA */}
                 <div className="flex flex-col gap-2 bg-zinc-900/60 border border-zinc-800 p-3.5 rounded-2xl">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5"><CalendarDays size={14} className="text-emerald-400" /> Data do Acerto</span>
+                    <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5"><CalendarDays size={14} className="text-emerald-400" /> Data do Turno</span>
                     <button type="button" onClick={handleSetToday} className="text-[10px] font-extrabold px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">Hoje</button>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => handleShiftDate(-1)} className="h-12 w-12 flex items-center justify-center bg-zinc-800 text-zinc-200 rounded-xl"><ChevronLeft size={22} /></button>
+                    <button type="button" onClick={() => handleShiftDate(-1)} className="h-12 w-12 flex items-center justify-center bg-zinc-800 text-zinc-200 rounded-xl active:scale-95 transition-all"><ChevronLeft size={22} /></button>
                     <div className="flex-1 h-12 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-center px-4 font-black text-zinc-100 text-sm tracking-widest">{(() => { const [y, m, d] = acertoDate.split('-'); return `${d}/${m}/${y}`; })()}</div>
-                    <button type="button" onClick={() => handleShiftDate(1)} className="h-12 w-12 flex items-center justify-center bg-zinc-800 text-zinc-200 rounded-xl"><ChevronRight size={22} /></button>
+                    <button type="button" onClick={() => handleShiftDate(1)} className="h-12 w-12 flex items-center justify-center bg-zinc-800 text-zinc-200 rounded-xl active:scale-95 transition-all"><ChevronRight size={22} /></button>
                   </div>
                 </div>
 
+                {/* MÉTRICAS DE OPERAÇÃO E DINHEIRO EM MÃOS */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-zinc-900/80 border border-zinc-800 p-3.5 rounded-2xl flex flex-col gap-1"><span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase"><Package size={12} className="text-emerald-500" /> Entregas</span><span className="text-2xl font-black text-emerald-400">{acertoData.totalDeliveries}</span></div>
-                  <div className="bg-zinc-900/80 border border-zinc-800 p-3.5 rounded-2xl flex flex-col gap-1"><span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase"><Wallet size={12} className="text-amber-500" /> Valor Bruto</span><span className="text-2xl font-black text-amber-500">R$ {acertoData.deliveriesRevenue.toFixed(2).replace('.', ',')}</span></div>
-                </div>
-
-                <div className="bg-sky-500/5 border border-sky-500/20 p-4 rounded-2xl flex flex-col gap-1.5"><span className="flex items-center gap-1.5 text-[10px] font-bold text-sky-400 uppercase tracking-wider"><TrendingUp size={12} /> Cálculo Automático</span><p className="text-xs font-medium text-zinc-300">{acertoData.calculationDesc}</p><span className="text-xl font-black text-sky-400 mt-1">R$ {acertoData.calculatedAmount.toFixed(2).replace('.', ',')}</span></div>
-
-                <div className="border-t border-zinc-800 pt-4 flex flex-col gap-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Abatimentos / Vales (Opcional)</h3>
-                  <div className="flex items-center gap-2 w-full">
-                    <input type="text" placeholder="Ex: Lanche" value={valeDesc} onChange={(e)=>setValeDesc(e.target.value)} className="flex-[2] min-w-0 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100" />
-                    <input type="text" placeholder="R$ 0,00" value={valeAmount} onChange={(e)=>setValeAmount(formatCurrencyInput(e.target.value))} className="flex-1 min-w-0 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 font-bold" />
-                    <button onClick={handleAddVale} className="h-11 w-11 shrink-0 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300"><PlusCircle size={18}/></button>
+                  <div className="bg-zinc-900/80 border border-zinc-800 p-3.5 rounded-2xl flex flex-col gap-1">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider"><Package size={12} className="text-sky-400" /> Entregas Feitas</span>
+                    <span className="text-2xl font-black text-zinc-100">{acertoData.totalDeliveries}</span>
                   </div>
-                  {vales.length > 0 && (<div className="flex flex-col gap-2">{vales.map(v => (<div key={v.id} className="flex justify-between items-center bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl"><span className="text-xs text-red-400 font-semibold">{v.description}</span><div className="flex items-center gap-3"><span className="text-xs text-red-400 font-bold">- R$ {v.amount.toFixed(2).replace('.', ',')}</span><button onClick={()=>setVales(vales.filter(x => x.id !== v.id))} className="text-red-500/50 hover:text-red-500"><Trash2 size={14}/></button></div></div>))}</div>)}
+                  <div className="bg-zinc-900/80 border border-zinc-800 p-3.5 rounded-2xl flex flex-col gap-1">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-amber-500 uppercase tracking-wider"><Banknote size={12} /> Dinheiro em Mãos</span>
+                    <span className="text-2xl font-black text-amber-400">R$ {acertoData.cashCollected.toFixed(2).replace('.', ',')}</span>
+                  </div>
                 </div>
 
-                <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center justify-between"><div className="flex flex-col"><span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Total Líquido a Pagar</span><span className="text-2xl font-black text-emerald-400 mt-0.5">R$ {acertoData.finalAmountToPay.toFixed(2).replace('.', ',')}</span></div><CheckCircle2 size={28} className="text-emerald-500/30" /></div>
-                <button onClick={handleCopyWhatsApp} className="w-full flex items-center justify-center gap-2 h-14 bg-emerald-500 hover:bg-emerald-400 rounded-xl font-bold text-zinc-950 text-base shadow-lg shadow-emerald-500/20 active:scale-95"><Send size={18} /> Enviar Recibo WhatsApp</button>
+                {/* CÁLCULO DA DIÁRIA/COMISSÃO */}
+                <div className="bg-sky-500/5 border border-sky-500/20 p-4 rounded-2xl flex flex-col gap-1.5">
+                  <span className="flex items-center gap-1.5 text-[10px] font-bold text-sky-400 uppercase tracking-wider"><Calculator size={12} /> Comissão / Diária Devida</span>
+                  <p className="text-xs font-medium text-zinc-300">{acertoData.feeDescription}</p>
+                  <span className="text-xl font-black text-sky-400 mt-0.5">R$ {acertoData.motoboyFee.toFixed(2).replace('.', ',')}</span>
+                </div>
+
+                {/* ABATIMENTOS E VALES */}
+                <div className="border-t border-zinc-800 pt-4 flex flex-col gap-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Abatimentos / Vales de Combustível</h3>
+                  <div className="flex items-center gap-2 w-full">
+                    <input type="text" placeholder="Ex: Combustível, Lanche" value={valeDesc} onChange={(e)=>setValeDesc(e.target.value)} className="flex-[2] min-w-0 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100" />
+                    <input type="text" placeholder="R$ 0,00" value={valeAmount} onChange={(e)=>setValeAmount(formatCurrencyInput(e.target.value))} className="flex-1 min-w-0 h-11 rounded-xl bg-zinc-900 border border-zinc-800 px-3 text-xs text-zinc-100 font-bold" />
+                    <button onClick={handleAddVale} className="h-11 w-11 shrink-0 flex items-center justify-center bg-zinc-800 rounded-xl text-zinc-300 active:scale-95 transition-all"><PlusCircle size={18}/></button>
+                  </div>
+                  {vales.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      {vales.map(v => (
+                        <div key={v.id} className="flex justify-between items-center bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl">
+                          <span className="text-xs text-red-400 font-semibold">{v.description}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-red-400 font-bold">- R$ {v.amount.toFixed(2).replace('.', ',')}</span>
+                            <button onClick={()=>setVales(vales.filter(x => x.id !== v.id))} className="text-red-500/50 hover:text-red-500"><Trash2 size={14}/></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* CARD FINAL DE ACERTO (CONFERÊNCIA DE CAIXA) */}
+                <div className={`border p-4 rounded-2xl flex items-center justify-between shadow-lg ${
+                  acertoData.mustReturnToStore 
+                    ? 'bg-amber-500/10 border-amber-500/30' 
+                    : 'bg-emerald-500/10 border-emerald-500/30'
+                }`}>
+                  <div className="flex flex-col">
+                    <span className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                      acertoData.mustReturnToStore ? 'text-amber-400' : 'text-emerald-400'
+                    }`}>
+                      {acertoData.mustReturnToStore ? (
+                        <>Motoboy Entrega ao Caixa <ArrowDownLeft size={14} /></>
+                      ) : (
+                        <>Caixa Paga ao Motoboy <ArrowUpRight size={14} /></>
+                      )}
+                    </span>
+                    <span className={`text-2xl font-black mt-1 ${
+                      acertoData.mustReturnToStore ? 'text-amber-400' : 'text-emerald-400'
+                    }`}>
+                      R$ {acertoData.balanceAmount.toFixed(2).replace('.', ',')}
+                    </span>
+                    <span className="text-[11px] text-zinc-400 mt-0.5">
+                      {acertoData.mustReturnToStore 
+                        ? `Recolheu R$ ${acertoData.cashCollected.toFixed(2).replace('.', ',')} em dinheiro físico` 
+                        : `Diária líquida devida: R$ ${acertoData.liquidFeeToReceive.toFixed(2).replace('.', ',')}`}
+                    </span>
+                  </div>
+                  <CheckCircle2 size={32} className={acertoData.mustReturnToStore ? 'text-amber-500/40' : 'text-emerald-500/40'} />
+                </div>
+
+                <button onClick={handleCopyWhatsApp} className="w-full flex items-center justify-center gap-2 h-14 bg-emerald-500 hover:bg-emerald-400 rounded-xl font-bold text-zinc-950 text-base shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                  <Send size={18} /> Enviar Acerto WhatsApp
+                </button>
               </div>
             )}
 
             {activeTab === 'config' && (
               <form onSubmit={handleSaveConfig} className="flex flex-col gap-4 animate-in slide-in-from-left-4">
-                
                 <div className="flex items-center gap-4 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
                   <button type="button" onClick={() => openAvatarPicker('edit')} className="relative h-14 w-14 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center hover:bg-zinc-800 group overflow-hidden shrink-0">
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 z-10"><Camera size={16} className="text-white" /></div>
@@ -459,16 +561,59 @@ export default function MotoboysPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold text-zinc-400">Regra de Pagamento</label><div className="flex flex-col gap-2">{[{ id: 'fixed_plus_variable', label: 'Fixo Mínimo + Taxa Extra' },{ id: 'per_delivery', label: 'Apenas por Entrega (Fixo)' },{ id: 'fixed', label: 'Apenas Diária Fixa' },].map((item) => (<button key={item.id} type="button" onClick={() => setRuleType(item.id as PaymentRuleType)} className={`flex items-center justify-between p-3.5 rounded-xl border text-left font-semibold text-xs ${ruleType === item.id ? 'bg-sky-500/10 border-sky-500 text-sky-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}>{item.label}{ruleType === item.id && <Check size={16} className="text-sky-400" />}</button>))}</div></div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-zinc-400">Regra de Remuneração</label>
+                  <div className="flex flex-col gap-2">
+                    {[
+                      { id: 'fixed_plus_variable', label: 'Fixo Mínimo + Taxa Extra' },
+                      { id: 'per_delivery', label: 'Apenas por Entrega (Fixo)' },
+                      { id: 'fixed', label: 'Apenas Diária Fixa' },
+                    ].map((item) => (
+                      <button key={item.id} type="button" onClick={() => setRuleType(item.id as PaymentRuleType)} className={`flex items-center justify-between p-3.5 rounded-xl border text-left font-semibold text-xs ${ruleType === item.id ? 'bg-sky-500/10 border-sky-500 text-sky-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}>
+                        {item.label}
+                        {ruleType === item.id && <Check size={16} className="text-sky-400" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                {ruleType === 'fixed_plus_variable' && (<div className="grid grid-cols-2 gap-3 bg-zinc-900 p-3.5 rounded-xl border border-zinc-800"><div className="flex flex-col gap-1"><label className="text-[10px] font-bold text-zinc-500 uppercase">Valor Fixo (R$)</label><input type="text" value={ruleFixedAmount} onChange={e => setRuleFixedAmount(formatCurrencyInput(e.target.value))} placeholder="0,00" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold" required /></div><div className="flex flex-col gap-1"><label className="text-[10px] font-bold text-zinc-500 uppercase">Até Quantas?</label><input type="number" value={ruleThreshold} onChange={e => setRuleThreshold(e.target.value)} placeholder="Ex: 15" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold" required /></div><div className="flex flex-col gap-1 col-span-2 border-t border-zinc-800 pt-2.5"><label className="text-[10px] font-bold text-sky-400 uppercase">Taxa por entrega extra (R$)</label><input type="text" value={ruleExtraFee} onChange={e => setRuleExtraFee(formatCurrencyInput(e.target.value))} placeholder="0,00" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold" required /></div></div>)}
-                {ruleType === 'per_delivery' && (<div className="bg-zinc-900 p-3.5 rounded-xl border border-zinc-800 flex flex-col gap-1"><label className="text-[10px] font-bold text-sky-400 uppercase">Valor por Entrega (R$)</label><input type="text" value={ruleDeliveryFee} onChange={e => setRuleDeliveryFee(formatCurrencyInput(e.target.value))} placeholder="0,00" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold" required /></div>)}
-                {ruleType === 'fixed' && (<div className="bg-zinc-900 p-3.5 rounded-xl border border-zinc-800 flex flex-col gap-1"><label className="text-[10px] font-bold text-sky-400 uppercase">Diária Fixa (R$)</label><input type="text" value={ruleFixedAmount} onChange={e => setRuleFixedAmount(formatCurrencyInput(e.target.value))} placeholder="0,00" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold" required /></div>)}
+                {ruleType === 'fixed_plus_variable' && (
+                  <div className="grid grid-cols-2 gap-3 bg-zinc-900 p-3.5 rounded-xl border border-zinc-800">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Valor Fixo (R$)</label>
+                      <input type="text" value={ruleFixedAmount} onChange={e => setRuleFixedAmount(formatCurrencyInput(e.target.value))} placeholder="0,00" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold" required />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Até Quantas?</label>
+                      <input type="number" value={ruleThreshold} onChange={e => setRuleThreshold(e.target.value)} placeholder="Ex: 15" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold" required />
+                    </div>
+                    <div className="flex flex-col gap-1 col-span-2 border-t border-zinc-800 pt-2.5">
+                      <label className="text-[10px] font-bold text-sky-400 uppercase">Taxa por entrega extra (R$)</label>
+                      <input type="text" value={ruleExtraFee} onChange={e => setRuleExtraFee(formatCurrencyInput(e.target.value))} placeholder="0,00" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold" required />
+                    </div>
+                  </div>
+                )}
+                
+                {ruleType === 'per_delivery' && (
+                  <div className="bg-zinc-900 p-3.5 rounded-xl border border-zinc-800 flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-sky-400 uppercase">Valor por Entrega (R$)</label>
+                    <input type="text" value={ruleDeliveryFee} onChange={e => setRuleDeliveryFee(formatCurrencyInput(e.target.value))} placeholder="0,00" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold" required />
+                  </div>
+                )}
 
-                <button type="submit" className="h-12 w-full rounded-xl bg-sky-500 font-bold text-zinc-950 active:scale-[0.98] mt-2 text-sm">Salvar Alterações</button>
+                {ruleType === 'fixed' && (
+                  <div className="bg-zinc-900 p-3.5 rounded-xl border border-zinc-800 flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-sky-400 uppercase">Diária Fixa (R$)</label>
+                    <input type="text" value={ruleFixedAmount} onChange={e => setRuleFixedAmount(formatCurrencyInput(e.target.value))} placeholder="0,00" className="h-11 rounded-lg bg-zinc-950 border border-zinc-800 px-3 text-zinc-100 text-sm font-bold" required />
+                  </div>
+                )}
+
+                <button type="submit" className="h-12 w-full rounded-xl bg-sky-500 font-bold text-zinc-950 active:scale-[0.98] mt-2 text-sm transition-all shadow-md shadow-sky-500/20">
+                  Salvar Alterações
+                </button>
 
                 <div className="border-t border-zinc-800 pt-4 mt-2 flex flex-col gap-2">
-                  <button type="button" onClick={toggleActive} className={`flex justify-center items-center gap-2 h-12 rounded-xl border font-bold text-xs ${selectedMotoboy.active ? 'border-amber-500/50 text-amber-500 bg-amber-500/10' : 'border-emerald-500/50 text-emerald-500 bg-emerald-500/10'}`}>
+                  <button type="button" onClick={toggleActive} className={`flex justify-center items-center gap-2 h-12 rounded-xl border font-bold text-xs active:scale-95 transition-all ${selectedMotoboy.active ? 'border-amber-500/50 text-amber-500 bg-amber-500/10' : 'border-emerald-500/50 text-emerald-500 bg-emerald-500/10'}`}>
                     <ShieldCheck size={14} />{selectedMotoboy.active ? 'Suspender Motoboy' : 'Reativar Motoboy'}
                   </button>
                 </div>
@@ -492,7 +637,7 @@ export default function MotoboysPage() {
                 <button
                   key={opt.id}
                   onClick={() => selectAvatar(opt.id)}
-                  className={`flex flex-col items-center justify-center gap-2 p-3 rounded-2xl border transition-all ${
+                  className={`flex flex-col items-center justify-center gap-2 p-3 rounded-2xl border transition-all active:scale-95 ${
                     (avatarTarget === 'new' ? newMotoboyAvatar : editAvatar) === opt.id
                       ? `bg-zinc-800 border-zinc-600 shadow-md`
                       : `bg-zinc-950 border-zinc-800/80 hover:bg-zinc-800`
@@ -507,7 +652,6 @@ export default function MotoboysPage() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

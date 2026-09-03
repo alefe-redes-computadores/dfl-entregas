@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { 
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, 
-  Smartphone, Store, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2
+  Smartphone, Store, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
@@ -52,9 +52,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
   const isIfood = delivery.origin === 'ifood' || !delivery.origin; 
-  const isUrgent = (delivery as any).is_urgent; 
+  const isUrgent = delivery.is_urgent; 
 
-  const shortAddress = delivery.address_string.split('-')[0].trim(); // Extrai apenas a rua e o número
+  const shortAddress = delivery.address_string.split('-')[0].trim();
+  const hasCoordinatesOrLink = !!(customer?.maps_link || delivery.maps_link);
+  const hasStreetNumber = /\d/.test(delivery.address_string);
+
+  const activePhone = delivery.phone || customer?.phone;
 
   const executeCompletion = async (codeToSave?: string) => {
     const updatePayload: Partial<Delivery> = { completed: true };
@@ -151,10 +155,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   return (
     <>
       <div className={clsx(
-          "relative overflow-hidden rounded-[20px] transition-all duration-300",
+          "relative overflow-hidden rounded-[24px] transition-all duration-300",
           delivery.completed ? "opacity-50 grayscale" : "shadow-sm",
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
-          isExpanded ? "bg-zinc-900/80 border border-zinc-700/80" : "bg-zinc-900/40 border border-zinc-800/80"
+          isExpanded ? "bg-zinc-900/90 border border-zinc-700/80" : "bg-zinc-900/45 border border-zinc-800/80"
         )}
       >
         <div className={clsx(
@@ -186,9 +190,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
 
               <div className="flex flex-col flex-1 truncate">
                 <div className="flex justify-between items-start">
-                  <p className="font-heading text-[15px] font-bold tracking-tight text-zinc-50 truncate max-w-[160px]">
-                    {customer?.name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
-                  </p>
+                  <div className="flex items-center gap-1.5 truncate max-w-[170px]">
+                    <p className="font-heading text-[15px] font-bold tracking-tight text-zinc-50 truncate">
+                      {customer?.name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
+                    </p>
+                  </div>
                   <p className="text-[14px] font-bold text-emerald-400 tracking-tight shrink-0">
                     {isPrivacyMode ? 'R$ •••••' : `R$ ${delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}`}
                   </p>
@@ -201,15 +207,80 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                 </div>
 
                 {!isExpanded && (
-                  <div className="flex items-center gap-2 mt-2.5 truncate w-full">
-                    {delivery.is_paid ? (
-                      <span className="flex items-center gap-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 px-1.5 py-0.5 text-[10px] font-bold shrink-0"><CheckCircle2 size={10} /> Pago</span>
-                    ) : (
-                      <span className={clsx("flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold shrink-0", payment.className)}>
-                        <PaymentIcon size={10} />{payment.label}
-                      </span>
-                    )}
-                    <span className="text-[11px] text-zinc-300 font-medium truncate w-full">{shortAddress}</span>
+                  <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-zinc-800/60 w-full">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 truncate">
+                        {delivery.is_paid ? (
+                          <span className="flex items-center gap-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 px-1.5 py-0.5 text-[10px] font-bold shrink-0">
+                            <CheckCircle2 size={10} /> Pago
+                          </span>
+                        ) : delivery.payment_method === 'pix' ? (
+                          <span className="flex items-center gap-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 text-[10px] font-bold shrink-0">
+                            <QrCode size={10} /> Pix Maquininha
+                          </span>
+                        ) : (
+                          <span className={clsx("flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold shrink-0", payment.className)}>
+                            <PaymentIcon size={10} />{payment.label}
+                          </span>
+                        )}
+
+                        {isNeighbor && (
+                          <span className="rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 px-1.5 py-0.5 text-[9px] font-extrabold uppercase shrink-0">
+                            Vizinho
+                          </span>
+                        )}
+
+                        {delivery.notify_whatsapp && (
+                          <span className="flex items-center gap-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 text-[9px] font-black shrink-0">
+                            <MessageCircle size={9} /> Avisar
+                          </span>
+                        )}
+
+                        {hasCoordinatesOrLink ? (
+                          <span className="flex items-center gap-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1 py-0.5 text-[9px] font-extrabold shrink-0">
+                            <Navigation size={8} /> Preciso
+                          </span>
+                        ) : !hasStreetNumber ? (
+                          <span className="flex items-center gap-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 px-1 py-0.5 text-[9px] font-extrabold shrink-0">
+                            ⚠️ S/ Nº
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {!delivery.completed && (
+                        <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden shrink-0 shadow-sm">
+                          <button 
+                            type="button"
+                            onClick={async (e) => { 
+                              e.stopPropagation(); 
+                              if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
+                              reorderDelivery(delivery.route_id, delivery.id, 'up'); 
+                            }} 
+                            className="flex h-7 w-7 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
+                            title="Mover para cima"
+                          >
+                            <ArrowUp size={12} />
+                          </button>
+                          <div className="w-[1px] h-4 bg-zinc-800" />
+                          <button 
+                            type="button"
+                            onClick={async (e) => { 
+                              e.stopPropagation(); 
+                              if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
+                              reorderDelivery(delivery.route_id, delivery.id, 'down'); 
+                            }} 
+                            className="flex h-7 w-7 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
+                            title="Mover para baixo"
+                          >
+                            <ArrowDown size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <span className="text-[11px] text-zinc-300 font-medium truncate w-full">
+                      🏠 {shortAddress}
+                    </span>
                   </div>
                 )}
               </div>
@@ -219,17 +290,34 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
           {isExpanded && (
             <div className="animate-in slide-in-from-top-2 fade-in duration-200">
               <div className="px-3.5 pb-3 flex flex-col gap-2.5">
-                <div className="flex items-center gap-2 pl-12">
+                <div className="flex items-center gap-2 pl-12 flex-wrap">
                   {isIfood && (delivery.confirmation_code || customer?.last_confirmation_code) && (
                     <span className="rounded bg-zinc-800 px-2 py-1 text-[11px] font-mono tracking-wider text-amber-500 font-bold border border-amber-500/20 shadow-inner">
                       Conf: {delivery.confirmation_code || customer?.last_confirmation_code}
                     </span>
                   )}
+
                   {isNeighbor && (
                     <span className="flex items-center gap-1 rounded bg-sky-500/10 px-2 py-1 text-[11px] font-bold text-sky-400 uppercase">
                       <MapPin size={12} /> Vizinho
                     </span>
                   )}
+
+                  {delivery.notify_whatsapp && (
+                    <span className="flex items-center gap-1 rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-1 text-[11px] font-black text-emerald-400">
+                      <MessageCircle size={12} /> Chamar no Portão
+                    </span>
+                  )}
+
+                  {hasCoordinatesOrLink ? (
+                    <span className="flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
+                      <Navigation size={10} /> Ponto Preciso Ativo
+                    </span>
+                  ) : !hasStreetNumber ? (
+                    <span className="flex items-center gap-1 rounded bg-amber-500/15 px-2 py-1 text-[10px] font-bold text-amber-400 border border-amber-500/30">
+                      ⚠️ Sem número residencial
+                    </span>
+                  ) : null}
                 </div>
 
                 <div className="ml-12 mt-1">
@@ -249,30 +337,62 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
               <div className="flex flex-col gap-3 border-t border-zinc-800/80 px-3.5 py-3 bg-zinc-950/40">
                 <div className="flex items-center gap-2 flex-wrap">
                   {delivery.is_paid ? (
-                    <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-500"><CheckCircle2 size={14} /> Pago no App</span>
+                    <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-500">
+                      <CheckCircle2 size={14} /> Pago no App
+                    </span>
                   ) : (
                     <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}>
-                      <PaymentIcon size={14} />{payment.label === 'Dinheiro' && delivery.change_for ? `Troco p/ R$ ${isPrivacyMode ? '•••••' : delivery.change_for.toFixed(2).replace('.', ',')}` : payment.label}
+                      <PaymentIcon size={14} />
+                      {payment.label === 'Dinheiro' && delivery.change_for ? `Troco p/ R$ ${isPrivacyMode ? '•••••' : delivery.change_for.toFixed(2).replace('.', ',')}` : payment.label}
                     </span>
                   )}
-                  {delivery.drinks && <span className="flex items-center gap-1 rounded-full bg-zinc-800 border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300"><CupSoda size={14} className="text-sky-400"/>{delivery.drinks}</span>}
+                  {delivery.drinks && (
+                    <span className="flex items-center gap-1 rounded-full bg-zinc-800 border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300">
+                      <CupSoda size={14} className="text-sky-400"/> {delivery.drinks}
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 mt-1">
-                  <button onClick={() => handleTriggerAction('complete')} className={clsx("flex-1 flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg", delivery.completed ? "bg-zinc-800 text-zinc-400 border border-zinc-700 shadow-none" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-emerald-500/5")}>
+                  <button 
+                    onClick={() => handleTriggerAction('complete')} 
+                    className={clsx(
+                      "flex-1 flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg", 
+                      delivery.completed ? "bg-zinc-800 text-zinc-400 border border-zinc-700 shadow-none" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-emerald-500/5"
+                    )}
+                  >
                     <CheckCircle2 size={16} />{delivery.completed ? 'Desfazer Baixa' : 'Dar Baixa'}
                   </button>
 
-                  {!delivery.completed && (
-                    <div className="flex bg-zinc-800/80 border border-zinc-700 rounded-xl overflow-hidden shrink-0 shadow-sm">
-                      <button onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({style: ImpactStyle.Light}); reorderDelivery(delivery.route_id, delivery.id, 'up'); }} className="flex h-11 w-10 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-600"><ArrowUp size={16} /></button>
-                      <div className="w-[1px] bg-zinc-700" />
-                      <button onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({style: ImpactStyle.Light}); reorderDelivery(delivery.route_id, delivery.id, 'down'); }} className="flex h-11 w-10 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-600"><ArrowDown size={16} /></button>
-                    </div>
+                  {activePhone && (
+                    <a
+                      href={`https://wa.me/55${activePhone.replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e cheguei com seu pedido no portão.')}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 active:scale-90 transition-all"
+                      title="Chamar cliente no WhatsApp"
+                    >
+                      <MessageCircle size={18} />
+                    </a>
                   )}
 
-                  <Link href={`/entregas/details?id=${delivery.id}`} onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({style: ImpactStyle.Light}); }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90"><Pencil size={16} /></Link>
-                  <button onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({style: ImpactStyle.Light}); copyDeliveryToClipboard(delivery, customer?.name); }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90"><Share2 size={16} strokeWidth={2.5} /></button>
+                  <Link 
+                    href={`/entregas/details?id=${delivery.id}`} 
+                    onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); }} 
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90 transition-all"
+                  >
+                    <Pencil size={16} />
+                  </Link>
+
+                  <button 
+                    onClick={async () => { 
+                      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
+                      copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code); 
+                    }} 
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90 transition-all"
+                  >
+                    <Share2 size={16} strokeWidth={2.5} />
+                  </button>
                 </div>
               </div>
             </div>
