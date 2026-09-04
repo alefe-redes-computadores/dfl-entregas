@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -347,7 +348,7 @@ export default function ClientesPage() {
             
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-heading font-bold text-zinc-50">Editar Cliente</h2>
-              <button onClick={closeEditModal} className="p-2 bg-zinc-900 rounded-full text-zinc-500 hover:text-zinc-300 transition-colors"><X size={20} /></button>
+              <button onClick={() => setEditingCustomer(null)} className="p-2 bg-zinc-900 rounded-full text-zinc-500 hover:text-zinc-300 transition-colors"><X size={20} /></button>
             </div>
 
             <form onSubmit={handleSaveCustomer} className="flex flex-col gap-4">
