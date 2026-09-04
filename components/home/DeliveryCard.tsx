@@ -2,9 +2,10 @@
 
 import { useState, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, 
-  Smartphone, Store, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle
+  Smartphone, Store, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, ExternalLink, Map as MapIcon, CheckSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
@@ -31,6 +32,7 @@ const PAYMENT_CONFIG = {
 } as const;
 
 export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: DeliveryCardProps) {
+  const router = useRouter();
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const reorderDelivery = useAppStore((state) => state.reorderDelivery);
   const toggleDeliveryExpansion = useAppStore((state) => state.toggleDeliveryExpansion);
@@ -45,20 +47,44 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   const [isSwiping, setIsSwiping] = useState(false);
   const touchStartX = useRef(0);
   const touchCurrentX = useRef(0);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
+  const [confirmRedirectModal, setConfirmRedirectModal] = useState<{isOpen: boolean, copiedText: string}>({ isOpen: false, copiedText: '' });
+  const [isDrinkCheckOpen, setIsDrinkCheckOpen] = useState(false);
 
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
   const isIfood = delivery.origin === 'ifood' || !delivery.origin; 
   const isUrgent = delivery.is_urgent; 
+  const isVIP = (customer?.orderCount || 0) >= 5;
 
   const shortAddress = delivery.address_string.split('-')[0].trim();
   const hasCoordinatesOrLink = !!(customer?.maps_link || delivery.maps_link);
   const hasStreetNumber = /\d/.test(delivery.address_string);
-
   const activePhone = delivery.phone || customer?.phone;
+
+  const triggerCopyAndRedirect = async (textToCopy: string) => {
+    if (!textToCopy) return;
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+    await navigator.clipboard.writeText(textToCopy);
+    toast.success('Copiado para a área de transferência!');
+    setConfirmRedirectModal({ isOpen: true, copiedText: textToCopy });
+  };
+
+  const handleTouchStartLongPress = (text: string) => {
+    longPressTimer.current = setTimeout(() => {
+      triggerCopyAndRedirect(text);
+    }, 450);
+  };
+
+  const handleTouchEndLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
   const executeCompletion = async (codeToSave?: string) => {
     const updatePayload: Partial<Delivery> = { completed: true };
@@ -69,11 +95,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
     await updateDelivery(delivery.id, updatePayload);
 
     if (codeToSave && delivery.customer_id) {
-      await findOrCreateCustomer(customer?.name || 'Cliente', { confirmationCode: codeToSave });
+      await findOrCreateCustomer(customer?.name || 'Cliente', { confirmationCode: codeToSave } as any);
     }
 
     toggleDeliveryExpansion(delivery.id, false);
     setIsIfoodModalOpen(false);
+    setIsDrinkCheckOpen(false);
     setInputCode('');
     
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
@@ -107,6 +134,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
         return;
       }
 
+      // Trava de segurança para bebidas não conferidas
+      if (delivery.drinks && !delivery.completed && !isDrinkCheckOpen) {
+        setIsDrinkCheckOpen(true);
+        return;
+      }
+
       if (isIfood && !delivery.confirmation_code && !customer?.last_confirmation_code) {
         setInputCode('');
         setIsIfoodModalOpen(true);
@@ -119,8 +152,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
       toggleDeliveryExpansion(delivery.id, !isExpanded);
     }
   }
-
-  const SWIPE_THRESHOLD = 60;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -142,9 +173,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
     setSwipeOffset(0);
     setIsSwiping(false);
 
-    if (diff < -SWIPE_THRESHOLD || finalOffset < -50) {
+    if (diff < -60 || finalOffset < -50) {
       handleTriggerAction('complete');
-    } else if (diff > SWIPE_THRESHOLD || finalOffset > 50) {
+    } else if (diff > 60 || finalOffset > 50) {
       handleTriggerAction('expand');
     }
   };
@@ -155,9 +186,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   return (
     <>
       <div className={clsx(
-          "relative overflow-hidden rounded-[24px] transition-all duration-300",
+          "relative overflow-hidden rounded-[26px] transition-all duration-300",
           delivery.completed ? "opacity-50 grayscale" : "shadow-sm",
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
+          isNeighbor && !delivery.completed && "border-sky-500/30",
           isExpanded ? "bg-zinc-900/90 border border-zinc-700/80" : "bg-zinc-900/45 border border-zinc-800/80"
         )}
       >
@@ -182,73 +214,147 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
           style={{ transform: `translateX(${swipeOffset}px)` }}
           className={clsx("relative z-10 flex flex-col bg-zinc-900 h-full w-full", !isSwiping && "transition-transform duration-200")}
         >
-          <div className="flex flex-col p-3.5">
+          <div className="flex flex-col p-4">
             <div className="flex items-start gap-3">
-              <span className={clsx("flex items-center justify-center h-10 w-10 rounded-full shrink-0 border mt-0.5", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
-                {isIfood ? <Smartphone size={18} /> : <Store size={18} />}
+              <span className={clsx("flex items-center justify-center h-11 w-11 rounded-full shrink-0 border mt-0.5", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
+                {isIfood ? <Smartphone size={19} /> : <Store size={19} />}
               </span>
 
               <div className="flex flex-col flex-1 truncate">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-1.5 truncate max-w-[170px]">
-                    <p className="font-heading text-[15px] font-bold tracking-tight text-zinc-50 truncate">
+                    <p className="font-heading text-base font-bold tracking-tight text-zinc-50 truncate flex items-center gap-1">
                       {customer?.name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
+                      {isVIP && <Crown size={12} className="text-amber-500 shrink-0" />}
                     </p>
                   </div>
-                  <p className="text-[14px] font-bold text-emerald-400 tracking-tight shrink-0">
-                    {isPrivacyMode ? 'R$ •••••' : `R$ ${delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}`}
-                  </p>
+                  <div className="flex flex-col items-end">
+                    <p className="text-[15px] font-black text-emerald-400 tracking-tight shrink-0">
+                      {isPrivacyMode ? 'R$ •••••' : `R$ ${delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}`}
+                    </p>
+                  </div>
                 </div>
                 
-                <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 truncate mt-0.5">
-                  {isIfood && delivery.order_id && <span className="font-mono text-zinc-500">#{delivery.order_id} •</span>}
-                  <span className="truncate">{customer?.neighborhood || 'Sem Bairro'}</span>
+                {/* Linha dos Identificadores com Press & Hold */}
+                <div className="flex items-center gap-1.5 mt-1 mb-1.5 flex-wrap">
+                  {isIfood && delivery.order_id && (
+                    <span className="bg-red-500/15 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0">
+                      #{delivery.order_id}
+                    </span>
+                  )}
+                  {isIfood && delivery.ifood_id && (
+                    <button 
+                      onClick={() => triggerCopyAndRedirect(delivery.ifood_id!)}
+                      onTouchStart={() => handleTouchStartLongPress(delivery.ifood_id!)}
+                      onTouchEnd={handleTouchEndLongPress}
+                      className="bg-zinc-950 border border-zinc-800 hover:border-zinc-700 active:scale-95 text-zinc-300 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0 flex items-center gap-1 transition-all"
+                    >
+                      ID: {delivery.ifood_id} <Copy size={9} className="text-sky-400"/>
+                    </button>
+                  )}
+                  {isIfood && (delivery.confirmation_code || customer?.last_confirmation_code) && (
+                    <button 
+                      onClick={() => triggerCopyAndRedirect(delivery.confirmation_code || customer?.last_confirmation_code || '')}
+                      onTouchStart={() => handleTouchStartLongPress(delivery.confirmation_code || customer?.last_confirmation_code || '')}
+                      onTouchEnd={handleTouchEndLongPress}
+                      className="bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 active:scale-95 text-amber-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0 flex items-center gap-1 transition-all"
+                    >
+                      Cód: {delivery.confirmation_code || customer?.last_confirmation_code} <Copy size={9} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 truncate w-full">
+                  <MapPin size={12} className="shrink-0 text-zinc-500" />
+                  <span className="truncate">{shortAddress} {customer?.neighborhood ? `- ${customer.neighborhood}` : ''}</span>
                   {isUrgent && <span className="ml-1 rounded bg-red-500/20 text-red-400 text-[9px] px-1 font-bold uppercase">Urgente</span>}
                 </div>
 
+                {/* VISUALIZAÇÃO COMPACTA */}
                 {!isExpanded && (
-                  <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-zinc-800/60 w-full">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 truncate">
-                        {delivery.is_paid ? (
-                          <span className="flex items-center gap-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 px-1.5 py-0.5 text-[10px] font-bold shrink-0">
-                            <CheckCircle2 size={10} /> Pago
-                          </span>
-                        ) : delivery.payment_method === 'pix' ? (
-                          <span className="flex items-center gap-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 text-[10px] font-bold shrink-0">
-                            <QrCode size={10} /> Pix Maquininha
-                          </span>
-                        ) : (
-                          <span className={clsx("flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold shrink-0", payment.className)}>
-                            <PaymentIcon size={10} />{payment.label}
-                          </span>
-                        )}
+                  <div className="flex flex-col gap-2.5 mt-2.5 pt-2.5 border-t border-zinc-800/60 w-full">
+                    
+                    <div className="flex items-center gap-2.5">
+                      <a
+                        href={delivery.maps_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(delivery.address_string)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="relative h-12 w-20 shrink-0 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 flex items-center justify-center active:scale-95 transition-all shadow-inner group"
+                        title="Ver no Google Maps"
+                      >
+                        <div className="absolute inset-0 bg-emerald-500/10 opacity-60 group-hover:opacity-100" />
+                        <MapIcon size={14} className="text-emerald-400 relative z-10" />
+                        <span className="absolute bottom-1 text-[8px] font-black tracking-tighter text-zinc-400 z-10 uppercase">MAPS ↗</span>
+                      </a>
 
-                        {isNeighbor && (
-                          <span className="rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 px-1.5 py-0.5 text-[9px] font-extrabold uppercase shrink-0">
-                            Vizinho
-                          </span>
-                        )}
+                      <div className="flex flex-col gap-1 truncate flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap truncate">
+                          {delivery.is_paid ? (
+                            <span className="flex items-center gap-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1.5 py-0.5 text-[10px] font-black shrink-0">
+                              <CheckCircle2 size={10} /> Pago App
+                            </span>
+                          ) : (
+                            <span className={clsx("flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-black shrink-0", payment.className)}>
+                              <PaymentIcon size={10} />
+                              {payment.label === 'Dinheiro' 
+                                ? `Dinheiro ${delivery.change_for ? `(Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})` : ''}` 
+                                : payment.label === 'Pix' ? 'QR Code Maquininha' : 'Cartão Maquininha'}
+                            </span>
+                          )}
 
-                        {delivery.notify_whatsapp && (
-                          <span className="flex items-center gap-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 text-[9px] font-black shrink-0">
-                            <MessageCircle size={9} /> Avisar
-                          </span>
-                        )}
+                          {delivery.drinks && (
+                            <span className="flex items-center gap-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 px-1.5 py-0.5 text-[10px] font-black shrink-0 truncate max-w-[100px]">
+                              <CupSoda size={10} /> {delivery.drinks}
+                            </span>
+                          )}
+                        </div>
 
-                        {hasCoordinatesOrLink ? (
-                          <span className="flex items-center gap-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1 py-0.5 text-[9px] font-extrabold shrink-0">
-                            <Navigation size={8} /> Preciso
-                          </span>
-                        ) : !hasStreetNumber ? (
-                          <span className="flex items-center gap-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 px-1 py-0.5 text-[9px] font-extrabold shrink-0">
-                            ⚠️ S/ Nº
-                          </span>
-                        ) : null}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {delivery.notify_whatsapp && (
+                            <span className="flex items-center gap-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 text-[9px] font-black shrink-0">
+                              <MessageCircle size={9} /> Avisar no Portão
+                            </span>
+                          )}
+
+                          {isNeighbor && (
+                            <span className="rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 px-1.5 py-0.5 text-[9px] font-extrabold uppercase shrink-0">
+                              Vizinho / Mesmo Local
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800/40">
+                      <div className="flex items-center gap-1.5">
+                        <button 
+                          type="button"
+                          onClick={async (e) => { 
+                            e.stopPropagation(); 
+                            if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
+                            copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code); 
+                            toast.success('Entrega copiada com sucesso!');
+                          }} 
+                          className="flex items-center gap-1.5 h-8 px-3 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/40 active:scale-95 text-xs font-bold transition-all shadow-sm"
+                        >
+                          <Copy size={13} className="text-emerald-500" /> Copiar Dados
+                        </button>
+
+                        {activePhone && (
+                          <a
+                            href={`https://wa.me/55${activePhone.replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e cheguei no portão com seu pedido.')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 active:scale-90 transition-transform"
+                            title="Chamar cliente no WhatsApp"
+                          >
+                            <MessageCircle size={14} />
+                          </a>
+                        )}
                       </div>
 
                       {!delivery.completed && (
-                        <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden shrink-0 shadow-sm">
+                        <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shrink-0 shadow-sm">
                           <button 
                             type="button"
                             onClick={async (e) => { 
@@ -256,10 +362,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                               if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
                               reorderDelivery(delivery.route_id, delivery.id, 'up'); 
                             }} 
-                            className="flex h-7 w-7 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
+                            className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
                             title="Mover para cima"
                           >
-                            <ArrowUp size={12} />
+                            <ArrowUp size={13} />
                           </button>
                           <div className="w-[1px] h-4 bg-zinc-800" />
                           <button 
@@ -269,46 +375,26 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                               if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
                               reorderDelivery(delivery.route_id, delivery.id, 'down'); 
                             }} 
-                            className="flex h-7 w-7 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
+                            className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
                             title="Mover para baixo"
                           >
-                            <ArrowDown size={12} />
+                            <ArrowDown size={13} />
                           </button>
                         </div>
                       )}
                     </div>
 
-                    <span className="text-[11px] text-zinc-300 font-medium truncate w-full">
-                      🏠 {shortAddress}
-                    </span>
                   </div>
                 )}
               </div>
             </div>
           </div>
 
+          {/* VISUALIZAÇÃO EXPANDIDA */}
           {isExpanded && (
             <div className="animate-in slide-in-from-top-2 fade-in duration-200">
-              <div className="px-3.5 pb-3 flex flex-col gap-2.5">
+              <div className="px-4 pb-3 flex flex-col gap-2.5">
                 <div className="flex items-center gap-2 pl-12 flex-wrap">
-                  {isIfood && (delivery.confirmation_code || customer?.last_confirmation_code) && (
-                    <span className="rounded bg-zinc-800 px-2 py-1 text-[11px] font-mono tracking-wider text-amber-500 font-bold border border-amber-500/20 shadow-inner">
-                      Conf: {delivery.confirmation_code || customer?.last_confirmation_code}
-                    </span>
-                  )}
-
-                  {isNeighbor && (
-                    <span className="flex items-center gap-1 rounded bg-sky-500/10 px-2 py-1 text-[11px] font-bold text-sky-400 uppercase">
-                      <MapPin size={12} /> Vizinho
-                    </span>
-                  )}
-
-                  {delivery.notify_whatsapp && (
-                    <span className="flex items-center gap-1 rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-1 text-[11px] font-black text-emerald-400">
-                      <MessageCircle size={12} /> Chamar no Portão
-                    </span>
-                  )}
-
                   {hasCoordinatesOrLink ? (
                     <span className="flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
                       <Navigation size={10} /> Ponto Preciso Ativo
@@ -326,7 +412,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
               </div>
 
               {delivery.observation && (
-                <div className="ml-14 mr-3.5 mb-2.5 rounded-xl bg-amber-500/5 border border-amber-500/10 px-3 py-2">
+                <div className="ml-14 mr-4 mb-3 rounded-2xl bg-amber-500/5 border border-amber-500/15 px-3.5 py-2.5">
                   <p className="text-xs text-zinc-300">
                     <span className="font-bold text-amber-500">OBS: </span>
                     {delivery.observation}
@@ -334,7 +420,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 border-t border-zinc-800/80 px-3.5 py-3 bg-zinc-950/40">
+              <div className="flex flex-col gap-3 border-t border-zinc-800/80 px-4 py-3 bg-zinc-950/40">
                 <div className="flex items-center gap-2 flex-wrap">
                   {delivery.is_paid ? (
                     <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-500">
@@ -347,7 +433,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                     </span>
                   )}
                   {delivery.drinks && (
-                    <span className="flex items-center gap-1 rounded-full bg-zinc-800 border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300">
+                    <span className="flex items-center gap-1 rounded-full bg-zinc-800 border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 font-bold">
                       <CupSoda size={14} className="text-sky-400"/> {delivery.drinks}
                     </span>
                   )}
@@ -357,7 +443,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                   <button 
                     onClick={() => handleTriggerAction('complete')} 
                     className={clsx(
-                      "flex-1 flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg", 
+                      "flex-1 flex h-12 items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all active:scale-95 shadow-lg", 
                       delivery.completed ? "bg-zinc-800 text-zinc-400 border border-zinc-700 shadow-none" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-emerald-500/5"
                     )}
                   >
@@ -388,6 +474,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                     onClick={async () => { 
                       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
                       copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code); 
+                      toast.success('Entrega copiada!');
                     }} 
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90 transition-all"
                   >
@@ -400,6 +487,86 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
         </div>
       </div>
 
+      {/* Modal Redirecionamento Direto para o Portal iFood */}
+      {confirmRedirectModal.isOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-[32px] border border-zinc-800 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex flex-col items-center justify-center text-center gap-3">
+              <div className="h-16 w-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center border border-red-500/20 mb-2">
+                <CheckSquare size={28} />
+              </div>
+              <h3 className="font-bold text-lg text-zinc-50">Confirmar no iFood?</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed px-2">
+                O identificador <strong className="text-zinc-200">"{confirmRedirectModal.copiedText}"</strong> foi copiado. Deseja abrir o portal de confirmações com esses dados?
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 mt-2">
+              <button 
+                onClick={async () => { 
+                  if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
+                  const targetCode = delivery.confirmation_code || customer?.last_confirmation_code || '';
+                  const targetId = delivery.ifood_id || '';
+                  setConfirmRedirectModal({ isOpen: false, copiedText: '' });
+                  router.push(`/confirmar?orderId=${encodeURIComponent(targetId)}&code=${encodeURIComponent(targetCode)}`); 
+                }} 
+                className="w-full h-12 bg-red-500 hover:bg-red-400 text-white font-bold rounded-xl active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                <ExternalLink size={16} /> Sim, abrir portal de confirmação
+              </button>
+              <button 
+                onClick={() => setConfirmRedirectModal({ isOpen: false, copiedText: '' })} 
+                className="w-full h-12 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold rounded-xl active:scale-95 transition-all"
+              >
+                Não, apenas copiar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Trava de Conferência de Bebidas antes de Dar Baixa */}
+      {isDrinkCheckOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-[32px] border border-sky-500/30 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex flex-col items-center justify-center text-center gap-2">
+              <div className="h-14 w-14 bg-sky-500/10 text-sky-400 rounded-full flex items-center justify-center border border-sky-500/20 mb-1">
+                <CupSoda size={26} />
+              </div>
+              <h3 className="font-bold text-lg text-zinc-50">Conferência de Bebida</h3>
+              <p className="text-xs text-zinc-400">Esta entrega inclui itens de geladeira:</p>
+              <div className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-xl font-bold text-sm text-sky-400">
+                🥤 {delivery.drinks}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 mt-2">
+              <button 
+                onClick={async () => {
+                  if (isIfood && !delivery.confirmation_code && !customer?.last_confirmation_code) {
+                    setIsDrinkCheckOpen(false);
+                    setIsIfoodModalOpen(true);
+                  } else {
+                    const code = delivery.confirmation_code || customer?.last_confirmation_code;
+                    await executeCompletion(code);
+                  }
+                }}
+                className="w-full h-12 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black rounded-xl active:scale-95 transition-all shadow-lg"
+              >
+                Bebida Entregue / Conferida
+              </button>
+              <button 
+                onClick={() => setIsDrinkCheckOpen(false)}
+                className="w-full h-11 bg-zinc-800 text-zinc-400 font-semibold rounded-xl active:scale-95 transition-all text-xs"
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Digitar Código Manual iFood na Baixa */}
       {isIfoodModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
           <div className="w-full max-w-sm rounded-[32px] border border-zinc-700 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-5">

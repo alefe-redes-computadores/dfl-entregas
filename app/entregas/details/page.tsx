@@ -1,17 +1,18 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   ChevronLeft, Store, Smartphone, Trash2, Banknote, QrCode, CreditCard, 
-  ChevronDown, AlertTriangle, Navigation, CheckCircle2, Link2, MessageCircle
+  ChevronDown, AlertTriangle, Navigation, CheckCircle2, Link2, MessageCircle, Info, Sparkles, ClipboardPaste
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; 
 import { extractCoordinatesFromUrl } from '@/lib/maps';
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer } from '@/types';
 
 function DeliveryDetailsForm() {
@@ -26,6 +27,9 @@ function DeliveryDetailsForm() {
   const deleteDelivery = useAppStore((state) => state.deleteDelivery);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
+
+  // Parser Mágico de Texto para Edição
+  const [magicText, setMagicText] = useState('');
 
   // Bloco 1: Origem e Rota
   const [origin, setOrigin] = useState<OrderOrigin>('ifood');
@@ -70,7 +74,155 @@ function DeliveryDetailsForm() {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   };
 
-  // Feedback Inteligente de Localização na Edição
+  // PARSER MÁGICO NA EDIÇÃO
+  const handleExecuteMagicParse = async () => {
+    if (!magicText.trim()) {
+      toast.error('Cole o texto do pedido na caixa antes de clicar.');
+      return;
+    }
+
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+
+    let foundOrderId = '';
+    let foundIfoodId = '';
+    let foundAddress = '';
+    let foundMapsLink = '';
+    let foundPaid = false;
+    let foundMethod: Delivery['payment_method'] | null = null;
+    let foundValue = '';
+    let foundChangeFor = '';
+    let foundDrinks: string[] = [];
+    let foundObs: string[] = [];
+
+    const lines = magicText.split('\n').map(l => l.trim()).filter(Boolean);
+
+    lines.forEach(line => {
+      const urlMatch = line.match(/https?:\/\/[^\s]+/i);
+      if (urlMatch && (urlMatch[0].includes('maps') || urlMatch[0].includes('goo.gl'))) {
+        foundMapsLink = urlMatch[0];
+        return;
+      }
+
+      const digitsOnly = line.replace(/\D+/g, ' ').trim().split(' ').filter(Boolean);
+      const isHeaderLine = digitsOnly.length > 0 && !line.toLowerCase().includes('r.') && !line.toLowerCase().includes('rua') && !line.toLowerCase().includes('av') && !line.toLowerCase().includes('pago');
+      if (isHeaderLine) {
+        digitsOnly.forEach(tok => {
+          if (tok.length === 8 && !foundIfoodId) foundIfoodId = tok;
+          else if ((tok.length === 4 || tok.length === 5) && !foundOrderId) foundOrderId = tok;
+        });
+        if (foundIfoodId || foundOrderId) return;
+      }
+
+      const lower = line.toLowerCase();
+      if (lower.includes('- pago') || lower === 'pago' || lower.includes('pago no app')) {
+        foundPaid = true;
+        foundMethod = 'pix';
+        return;
+      }
+
+      if (lower.includes('cartão') || lower.includes('cartao')) {
+        foundMethod = 'cartao';
+        foundPaid = false;
+        const valMatch = line.match(/(?:r\$\s*)?(\d+[.,]?\d*)/i);
+        if (valMatch) foundValue = valMatch[1].replace('.', ',');
+        return;
+      }
+
+      if (lower.includes('troco') || lower.includes('voltar') || lower.includes('dinheiro')) {
+        foundMethod = 'dinheiro';
+        foundPaid = false;
+        const valMatch = line.match(/(?:r\$\s*)?(\d+[.,]?\d*)/i);
+        if (valMatch) foundValue = valMatch[1].replace('.', ',');
+
+        const trocoParaMatch = line.match(/troco\s*(?:para|p\/)?\s*(\d+[.,]?\d*)/i);
+        const voltarMatch = line.match(/voltar\s*(\d+[.,]?\d*)/i);
+
+        if (trocoParaMatch) {
+          foundChangeFor = trocoParaMatch[1].replace('.', ',');
+        } else if (voltarMatch && valMatch) {
+          const vBase = parseFloat(valMatch[1].replace(',', '.'));
+          const vVolta = parseFloat(voltarMatch[1].replace(',', '.'));
+          if (!isNaN(vBase) && !isNaN(vVolta)) {
+            foundChangeFor = (vBase + vVolta).toFixed(2).replace('.', ',');
+          }
+        }
+        return;
+      }
+
+      if (lower.includes('coca') || lower.includes('guaraná') || lower.includes('guarana') || lower.includes('fanta') || lower.includes('suco') || lower.includes('refrigerante') || lower.includes('cerveja')) {
+        foundDrinks.push(line.replace(/^[-•*]\s*/, '').trim());
+        return;
+      }
+
+      if (lower.includes('r.') || lower.includes('rua') || lower.includes('av.') || lower.includes('avenida') || lower.includes('alameda') || lower.includes('travessa') || lower.includes('cep')) {
+        let clean = line
+          .replace(/,\s*Patos de Minas(?:\s*\/\s*MG|\s*-\s*MG)?/gi, '')
+          .replace(/-\s*CEP\s*[\d-]+/gi, '')
+          .replace(/CEP\s*[\d-]+/gi, '')
+          .trim();
+
+        const obsPaterns = /(casa\s+[a-zA-Z]+|apartamento\s*\d+|apto\s*\d+|bloco\s*[a-zA-Z0-9]+|esquina\s+com\s+[a-zA-Z]+|fundos|sobrado)/i;
+        const obsMatch = clean.match(obsPaterns);
+        if (obsMatch) {
+          foundObs.push(obsMatch[0].trim());
+          clean = clean.replace(obsMatch[0], '').replace(/\s{2,}/g, ' ').trim();
+        }
+
+        foundAddress = clean.replace(/\s*-\s*$/, '').replace(/,\s*,/g, ',').trim();
+        return;
+      }
+
+      if (lower.includes('obs:') || lower.includes('observação:') || lower.includes('observacao:')) {
+        foundObs.push(line.replace(/^(?:obs|observação|observacao):\s*/i, '').trim());
+        return;
+      }
+
+      if (!line.startsWith('http') && line.length > 2) {
+        foundObs.push(line.replace(/^[-•*]\s*/, ''));
+      }
+    });
+
+    const identified: string[] = [];
+    if (foundOrderId) { setOrderId(foundOrderId); identified.push(`Nº #${foundOrderId}`); }
+    if (foundIfoodId) { setIfoodId(foundIfoodId); identified.push(`ID ${foundIfoodId}`); }
+    if (foundAddress) { setStreetAddress(foundAddress); identified.push('Endereço'); }
+    if (foundMapsLink) { setMapsLink(foundMapsLink); identified.push('Link Maps'); }
+    if (foundPaid) { setIsPaid(true); identified.push('Pago'); }
+    if (foundMethod) { setPaymentMethod(foundMethod); }
+    if (foundValue) { setValue(formatCurrencyInput(foundValue.replace(/\D/g, ''))); identified.push(`Valor R$ ${foundValue}`); }
+    if (foundChangeFor) { setChangeFor(formatCurrencyInput(foundChangeFor.replace(/\D/g, ''))); identified.push(`Troco p/ ${foundChangeFor}`); }
+    if (foundDrinks.length > 0) { setDrinks(foundDrinks.join(', ')); identified.push('Bebidas'); }
+    if (foundObs.length > 0) {
+      setObservation(prev => prev ? `${prev}, ${foundObs.join(', ')}` : foundObs.join(', '));
+      identified.push('Obs');
+    }
+
+    if (identified.length > 0) {
+      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+      toast.success('Atualizado via Parser! 🪄', {
+        description: `Detectados: ${identified.join(' • ')}`,
+        duration: 4000
+      });
+      setMagicText('');
+    } else {
+      toast.error('Nenhum dado reconhecido no texto.');
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setMagicText(text);
+        toast.info('Texto colado! Clique em "Auto-Preencher" para atualizar os campos.');
+      } else {
+        toast.info('Área de transferência vazia.');
+      }
+    } catch {
+      toast.error('Cole o texto manualmente na caixa.');
+    }
+  };
+
   const addressAudit = useMemo(() => {
     const coords = extractCoordinatesFromUrl(mapsLink);
     if (coords || (mapsLink && mapsLink.includes('http'))) {
@@ -125,6 +277,20 @@ function DeliveryDetailsForm() {
     if (method === 'cartao') setIsPaid(false);
   };
 
+  const showInfoToast = (type: 'code' | 'id') => {
+    if (type === 'code') {
+      toast.info('Código de Confirmação', {
+        description: '4 dígitos informados pelo cliente na entrega. Se o cliente não alterou, costuma ser os últimos 4 números do celular cadastrado no iFood.',
+        duration: 5000,
+      });
+    } else {
+      toast.info('ID do Pedido', {
+        description: 'O identificador único de 8 dígitos do iFood.',
+        duration: 4000,
+      });
+    }
+  };
+
   useEffect(() => {
     if (!deliveryId) return;
 
@@ -167,9 +333,24 @@ function DeliveryDetailsForm() {
       toast.error('Preencha os campos obrigatórios (Rota, Valor e Rua)');
       return;
     }
-    if (origin === 'ifood' && !orderId) {
-      toast.error('Pedidos do iFood exigem o Número do Pedido (Curto).');
-      return;
+
+    if (origin === 'ifood') {
+      if (!orderId) {
+        toast.error('Pedidos do iFood exigem o Número do Pedido.');
+        return;
+      }
+
+      if (confirmationCode && confirmationCode.length !== 4) {
+        if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+        toast.error('Código Inválido', { description: 'O código de confirmação deve ter exatamente 4 dígitos numéricos.' });
+        return;
+      }
+
+      if (ifoodId && ifoodId.length !== 8) {
+        if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+        toast.error('ID Inválido', { description: 'O ID completo do iFood deve ter exatamente 8 dígitos numéricos.' });
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -244,6 +425,38 @@ function DeliveryDetailsForm() {
         <h1 className="font-heading text-xl font-bold text-zinc-50">Editar Entrega</h1>
       </div>
 
+      {/* ÁREA DO PARSER MÁGICO NA EDIÇÃO */}
+      <div className="flex flex-col gap-2.5 p-4 bg-gradient-to-b from-red-500/10 to-zinc-900/40 border border-red-500/20 rounded-[24px]">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">
+            <Sparkles size={14} className="text-amber-400" /> Parser de Texto iFood
+          </span>
+          <button 
+            type="button" 
+            onClick={handlePasteFromClipboard}
+            className="flex items-center gap-1 text-[11px] font-bold text-zinc-300 bg-zinc-800/90 hover:bg-zinc-700 px-3 py-1 rounded-full active:scale-95 transition-all shadow-sm"
+          >
+            <ClipboardPaste size={12} className="text-red-400" /> Colar do Celular
+          </button>
+        </div>
+        
+        <textarea
+          rows={3}
+          placeholder="Cole aqui o texto (IDs, endereço, valor, bebidas ou observação)..."
+          value={magicText}
+          onChange={(e) => setMagicText(e.target.value)}
+          className="w-full rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-red-500/50 outline-none resize-none font-mono"
+        />
+
+        <button
+          type="button"
+          onClick={handleExecuteMagicParse}
+          className="h-11 w-full rounded-xl bg-red-500 hover:bg-red-400 font-bold text-white text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-red-500/20"
+        >
+          <Sparkles size={15} /> Auto-Preencher Campos
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-5 pb-10">
         
         {/* BLOCO 1: ORIGEM E ROTA */}
@@ -302,11 +515,11 @@ function DeliveryDetailsForm() {
         {origin === 'ifood' && (
           <div className="grid grid-cols-3 gap-2 animate-in fade-in">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-emerald-400">Nº Curto*</label>
+              <label className="text-xs font-bold text-emerald-400">Nº Pedido*</label>
               <input 
                 type="text" 
                 inputMode="numeric" 
-                placeholder="Ex: 4821" 
+                placeholder="Ex: 5463" 
                 maxLength={5} 
                 value={orderId} 
                 onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ''))} 
@@ -314,18 +527,26 @@ function DeliveryDetailsForm() {
                 required 
               />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-zinc-400">ID Completo</label>
+            <div className="flex flex-col gap-1.5 relative">
+              <div className="flex items-center justify-between px-1">
+                <label className="text-[11px] font-semibold text-zinc-400">ID Pedido</label>
+                <button type="button" onClick={() => showInfoToast('id')} className="text-zinc-500 hover:text-sky-400"><Info size={12} /></button>
+              </div>
               <input 
                 type="text" 
-                placeholder="Ex: 12345678" 
+                inputMode="numeric" 
+                placeholder="Ex: 60873228" 
+                maxLength={8}
                 value={ifoodId} 
                 onChange={(e) => setIfoodId(e.target.value.replace(/\D/g, ''))} 
-                className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none" 
+                className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 focus:outline-none transition-colors ${ifoodId.length > 0 && ifoodId.length < 8 ? 'border-amber-500 focus:border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`} 
               />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-zinc-400">Código</label>
+            <div className="flex flex-col gap-1.5 relative">
+              <div className="flex items-center justify-between px-1">
+                <label className="text-[11px] font-semibold text-zinc-400">Cód. Confirmação</label>
+                <button type="button" onClick={() => showInfoToast('code')} className="text-zinc-500 hover:text-sky-400"><Info size={12} /></button>
+              </div>
               <input 
                 type="text" 
                 inputMode="numeric" 
@@ -333,7 +554,7 @@ function DeliveryDetailsForm() {
                 maxLength={4} 
                 value={confirmationCode} 
                 onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, ''))} 
-                className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none" 
+                className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 font-mono font-bold tracking-widest focus:outline-none transition-colors ${confirmationCode.length > 0 && confirmationCode.length < 4 ? 'border-amber-500 focus:border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`} 
               />
             </div>
           </div>
@@ -502,7 +723,7 @@ function DeliveryDetailsForm() {
         </div>
 
         <div className="flex flex-col gap-3 mt-4">
-          <button type="submit" disabled={isSaving || isDeleting} className="h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-amber-500/20">
+          <button type="submit" disabled={isSaving || isDeleting} className="h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-amber-500/20 transition-all">
             {isSaving ? 'Salvando...' : 'Atualizar Entrega'}
           </button>
           

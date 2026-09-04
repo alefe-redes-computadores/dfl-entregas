@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -18,6 +17,8 @@ import { PerformanceModals } from '@/components/store/PerformanceModals';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
 
 const DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+const formatMoney = (val: number) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function LojaPage() {
   const router = useRouter();
@@ -213,7 +214,7 @@ export default function LojaPage() {
               <TrendingUp size={14} className="text-emerald-500" /> Extrato do Dia
             </span>
             <span className="font-heading text-xl font-black text-emerald-400 truncate w-full">
-              {isPrivacyMode ? 'R$ •••••' : `R$ ${dashboardData.faturamentoTotal.toFixed(2).replace('.', ',')}`}
+              {isPrivacyMode ? 'R$ •••••' : `R$ ${formatMoney(dashboardData.faturamentoTotal)}`}
             </span>
             <span className="text-[10px] text-zinc-500 flex items-center gap-1">Conferência de caixa <ChevronRight size={10}/></span>
           </button>
@@ -381,7 +382,6 @@ export default function LojaPage() {
         </div>
       )}
 
-      {/* Renderiza os Modais de Desempenho Isolados */}
       <PerformanceModals 
         isLogisticsOpen={isLogisticsModalOpen} closeLogistics={() => setIsLogisticsModalOpen(false)}
         isRevenueOpen={isRevenueModalOpen} closeRevenue={() => setIsRevenueModalOpen(false)}

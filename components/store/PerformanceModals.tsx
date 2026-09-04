@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation';
 import { 
   Package, X, ChevronLeft, Calendar, ChevronRight, MapPin, ChevronDown, 
   Wallet, QrCode, Banknote, CreditCard, Receipt, Eye, EyeOff, FileText, Clock,
-  ArrowRight, Filter, User, TrendingUp, Users
+  ArrowRight, Filter, User, TrendingUp, Users, Copy, CheckCircle2
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { RouteAccordion } from '@/components/home/RouteAccordion'; 
+import { toast } from 'sonner';
 
 interface PerformanceModalsProps {
   isLogisticsOpen: boolean;
@@ -26,7 +27,6 @@ export function PerformanceModals({
 }: PerformanceModalsProps) {
   const router = useRouter();
   const [expandedDeliveryId, setExpandedDeliveryId] = useState<string | null>(null);
-  
   const [selectedMotoboy, setSelectedMotoboy] = useState<string>('all');
 
   const { 
@@ -34,6 +34,8 @@ export function PerformanceModals({
     faturamentoTotal, ticketMedio, 
     revenueByMethod, selectedDateDeliveries, selectedDateRoutes
   } = dashboardData;
+
+  const formatMoney = (val: number) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const safeHaptic = async () => {
     try { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); } catch (e) {}
@@ -50,9 +52,6 @@ export function PerformanceModals({
     setExpandedDeliveryId(prev => prev === id ? null : id);
   };
 
-  // =========================================================
-  // LÓGICA DE FILTROS E SOMAS (LOGÍSTICA)
-  // =========================================================
   const uniqueMotoboys = useMemo(() => {
     if (!selectedDateRoutes) return [];
     const names = new Set(selectedDateRoutes.map((r: any) => r.motoboy_name));
@@ -76,24 +75,55 @@ export function PerformanceModals({
   const dynamicStats = useMemo(() => {
     const relevantRouteIds = filteredRoutes.map((r: any) => r.id);
     const deliveries = (selectedDateDeliveries || []).filter((d: any) => relevantRouteIds.includes(d.route_id));
-    
     return {
       entregas: deliveries.length,
       faturamento: deliveries.reduce((acc: number, d: any) => acc + (d.value || 0), 0)
     };
   }, [filteredRoutes, selectedDateDeliveries]);
 
-  // =========================================================
-  // ORDEM CRONOLÓGICA BLINDADA (EXTRATO)
-  // =========================================================
   const chronologicDeliveries = useMemo(() => {
     return [...(selectedDateDeliveries || [])].sort((a, b) => {
       const timeA = new Date(a.updated_at || a.createdAt || 0).getTime();
       const timeB = new Date(b.updated_at || b.createdAt || 0).getTime();
-      // DECRESCENTE: Os mais recentes no topo
       return timeB - timeA; 
     });
   }, [selectedDateDeliveries]);
+
+  // Função para Copiar Relatório Logístico do Motoboy Selecionado
+  const handleCopyLogistics = async () => {
+    if (selectedMotoboy === 'all') {
+      toast.error('Selecione um motoboy específico para copiar o relatório.');
+      return;
+    }
+
+    const rotas = groupedRoutes[selectedMotoboy];
+    if (!rotas || rotas.length === 0) return;
+
+    let text = `📦 *RESUMO LOGÍSTICO - ${selectedMotoboy.toUpperCase()}*\n📅 Data: ${formattedDateLabel}\n\n`;
+    
+    rotas.forEach((r: any, idx) => {
+      // Conta entregas
+      const routeDeliveries = (selectedDateDeliveries || []).filter((d: any) => d.route_id === r.id);
+      let durationStr = 'Tempo N/A';
+      
+      if (r.started_at && (r.end_time || r.completed_at)) {
+        const diffMins = Math.floor((new Date(r.end_time || r.completed_at).getTime() - new Date(r.started_at).getTime()) / 60000);
+        const hrs = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        durationStr = hrs > 0 ? `${hrs}h${mins}m` : `${mins}min`;
+      }
+      text += `🏍️ *Rota ${idx + 1}*: ${routeDeliveries.length} entregas (⏱️ ${durationStr})\n`;
+    });
+
+    text += `\n📊 *TOTAL*: ${rotas.length} rotas | ${dynamicStats.entregas} entregas`;
+    
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Relatório copiado para enviar no WhatsApp!');
+    } catch {
+      toast.error('Erro ao copiar.');
+    }
+  };
 
   return (
     <>
@@ -102,7 +132,6 @@ export function PerformanceModals({
       {/* ========================================================= */}
       {isLogisticsOpen && (
         <div className="fixed inset-0 z-[100] bg-zinc-950 overflow-y-auto block animate-in slide-in-from-bottom duration-300">
-          
           <div className="sticky top-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/80 shadow-md">
             <div className="flex items-center justify-between p-5 pb-3">
               <div className="flex flex-col">
@@ -151,17 +180,25 @@ export function PerformanceModals({
                   </div>
                   <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-[24px] p-5 flex flex-col gap-1.5 relative shadow-sm">
                     <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><TrendingUp size={12} className="text-emerald-500"/> Faturamento</span>
-                    <span className="text-xl font-black text-emerald-400 mt-1 tracking-tight truncate">{isPrivacyMode ? '••••••' : `R$ ${dynamicStats.faturamento.toFixed(2).replace('.', ',')}`}</span>
+                    <span className="text-xl font-black text-emerald-400 mt-1 tracking-tight truncate">{isPrivacyMode ? '••••••' : `R$ ${formatMoney(dynamicStats.faturamento)}`}</span>
                     <button onClick={() => { safeHaptic(); togglePrivacyMode(); }} className="absolute top-5 right-5 text-zinc-500 active:scale-90 transition-transform">
                       {isPrivacyMode ? <EyeOff size={16}/> : <Eye size={16}/>}
                     </button>
                   </div>
                 </div>
 
+                {selectedMotoboy !== 'all' && (
+                  <button 
+                    onClick={handleCopyLogistics}
+                    className="w-full h-14 bg-sky-500 hover:bg-sky-400 text-zinc-950 font-black rounded-xl text-sm transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Copy size={16} /> Copiar Relatório Logístico
+                  </button>
+                )}
+
                 <div className="w-full h-px bg-zinc-800/50 my-1" />
 
                 <div className="flex flex-col gap-8">
-                  {/* FIX DO VERCEL: Tipagem correta para evitar type 'unknown' */}
                   {Object.entries(groupedRoutes).map(([motoboyName, rotasObj]) => {
                     const rotasDoMotoboy = rotasObj as any[];
                     return (
@@ -194,7 +231,6 @@ export function PerformanceModals({
       {/* ========================================================= */}
       {isRevenueOpen && (
         <div className="fixed inset-0 z-[100] bg-zinc-950 overflow-y-auto block animate-in slide-in-from-bottom duration-300">
-          
           <div className="sticky top-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/80 shadow-md">
             <div className="flex items-center justify-between p-5 pb-3">
               <div className="flex flex-col">
@@ -222,10 +258,10 @@ export function PerformanceModals({
               
               <span className="text-[10px] font-black text-emerald-500/80 uppercase tracking-[0.2em] mb-1">Total Arrecadado</span>
               <span className="text-5xl font-black text-emerald-400 tracking-tight">
-                {isPrivacyMode ? '••••••' : `R$ ${faturamentoTotal.toFixed(2).replace('.', ',')}`}
+                {isPrivacyMode ? '••••••' : `R$ ${formatMoney(faturamentoTotal)}`}
               </span>
               <div className="mt-3 bg-[#0a2e1f] border border-emerald-900/50 px-4 py-1.5 rounded-full flex items-center gap-1.5">
-                 <span className="text-[11px] text-emerald-500 font-bold">Ticket Médio: R$ {isPrivacyMode ? '•••' : ticketMedio.toFixed(2).replace('.', ',')}</span>
+                 <span className="text-[11px] text-emerald-500 font-bold">Ticket Médio: R$ {isPrivacyMode ? '•••' : formatMoney(ticketMedio)}</span>
               </div>
             </div>
 
@@ -233,17 +269,17 @@ export function PerformanceModals({
               <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-3xl p-5 flex flex-col gap-1.5 items-center">
                 <QrCode size={24} className="text-emerald-400 mb-2" />
                 <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Pix</span>
-                <span className="text-sm font-bold text-zinc-100 mt-1">R$ {isPrivacyMode ? '••' : (revenueByMethod['pix'] || 0).toFixed(2)}</span>
+                <span className="text-sm font-bold text-zinc-100 mt-1">R$ {isPrivacyMode ? '••' : formatMoney(revenueByMethod['pix'] || 0)}</span>
               </div>
               <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-3xl p-5 flex flex-col gap-1.5 items-center">
                 <Banknote size={24} className="text-amber-500 mb-2" />
                 <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Dinheiro</span>
-                <span className="text-sm font-bold text-zinc-100 mt-1">R$ {isPrivacyMode ? '••' : (revenueByMethod['dinheiro'] || 0).toFixed(2)}</span>
+                <span className="text-sm font-bold text-zinc-100 mt-1">R$ {isPrivacyMode ? '••' : formatMoney(revenueByMethod['dinheiro'] || 0)}</span>
               </div>
               <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-3xl p-5 flex flex-col gap-1.5 items-center">
                 <CreditCard size={24} className="text-sky-400 mb-2" />
                 <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Cartão</span>
-                <span className="text-sm font-bold text-zinc-100 mt-1">R$ {isPrivacyMode ? '••' : ((revenueByMethod['cartao'] || 0) + (revenueByMethod['cartao_credito'] || 0) + (revenueByMethod['cartao_debito'] || 0)).toFixed(2)}</span>
+                <span className="text-sm font-bold text-zinc-100 mt-1">R$ {isPrivacyMode ? '••' : formatMoney((revenueByMethod['cartao'] || 0) + (revenueByMethod['cartao_credito'] || 0) + (revenueByMethod['cartao_debito'] || 0))}</span>
               </div>
             </div>
 
@@ -260,12 +296,14 @@ export function PerformanceModals({
               ) : (
                 chronologicDeliveries.map((d: any) => {
                   const isExpanded = expandedDeliveryId === d.id;
+                  const customer = d.customer_id ? dashboardData.customers?.find((c: any) => c.id === d.customer_id) : null;
+                  const displayName = customer?.name || d.address_string.split('-')[0];
                   
                   return (
                     <div key={d.id} className="flex flex-col bg-zinc-900 border border-zinc-800/80 rounded-3xl shadow-sm overflow-hidden shrink-0">
                       <button onClick={() => toggleDelivery(d.id)} className="flex items-center justify-between p-5 active:bg-zinc-800 transition-colors">
                         <div className="flex flex-col truncate pr-3 text-left">
-                          <span className="text-sm font-bold text-zinc-200 truncate mb-1">{d.address_string.split('-')[0]}</span>
+                          <span className="text-sm font-bold text-zinc-200 truncate mb-1">{displayName}</span>
                           <span className="text-[11px] text-zinc-500 capitalize flex items-center gap-1.5 font-semibold">
                               {d.payment_method === 'pix' ? <QrCode size={12}/> : d.payment_method === 'dinheiro' ? <Banknote size={12}/> : <CreditCard size={12}/>}
                               {d.payment_method?.replace('_', ' ') || 'Dinheiro'}
@@ -273,7 +311,7 @@ export function PerformanceModals({
                         </div>
                         <div className="flex flex-col items-end gap-1.5">
                             <span className="text-base font-black text-emerald-400 shrink-0">
-                              + R$ {isPrivacyMode ? '••' : (d.value || 0).toFixed(2).replace('.', ',')}
+                              + R$ {isPrivacyMode ? '••' : formatMoney(d.value || 0)}
                             </span>
                             <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded-md border border-zinc-800/50">
                               <Clock size={10} className="text-zinc-600"/> 
@@ -284,6 +322,11 @@ export function PerformanceModals({
                       
                       {isExpanded && (
                           <div className="p-5 pt-2 bg-zinc-950/40 border-t border-zinc-800/50 flex flex-col gap-4 text-sm animate-in fade-in">
+                            <div className="flex items-start gap-2 bg-zinc-900 border border-zinc-800 p-3 rounded-xl">
+                              <MapPin size={14} className="text-zinc-500 shrink-0 mt-0.5" />
+                              <span className="text-xs text-zinc-400 leading-relaxed">{d.address_string}</span>
+                            </div>
+
                             {d.observation && (
                               <div className="flex flex-col gap-1.5 text-zinc-300 bg-amber-500/5 border border-amber-500/20 p-3.5 rounded-xl">
                                 <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider flex items-center gap-1.5"><FileText size={12}/> Observação</span>
@@ -293,12 +336,12 @@ export function PerformanceModals({
 
                             <div className="flex justify-between items-center text-zinc-400 px-2 mt-1">
                               <span className="text-xs font-semibold">ID: <strong className="text-zinc-300">#{d.order_id || 'Loja'}</strong></span>
+                              {d.is_paid && <span className="text-xs text-emerald-500 font-bold flex items-center gap-1"><CheckCircle2 size={12} /> Pago no App</span>}
                             </div>
 
                             <button 
                               onClick={() => {
                                 closeRevenue();
-                                // USANDO QUERY PARAMS PARA EVITAR 404 NO NEXT EXPORT
                                 router.push(`/entrega?id=${d.id}`);
                               }}
                               className="w-full mt-2 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl font-bold uppercase tracking-wider text-[11px] flex items-center justify-center gap-2 transition-all active:scale-95"

@@ -1,5 +1,8 @@
+
 import type { Delivery, Route, Customer } from '@/types';
 import { resolveStopLocation, buildGoogleMapsRouteUrl, cleanAddressForMaps } from '@/lib/maps';
+
+const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export async function copyDeliveryToClipboard(
   delivery: Delivery,
@@ -9,7 +12,7 @@ export async function copyDeliveryToClipboard(
   try {
     const parts: string[] = [];
     const isIfood = delivery.origin === 'ifood' || !delivery.origin;
-    const valueStr = delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00';
+    const valueStr = formatMoney(delivery.value || 0);
     const isUrgent = delivery.is_urgent;
     const currentCode = delivery.confirmation_code || savedCustomerCode;
     const clientPhone = delivery.phone?.replace(/\D/g, '');
@@ -50,7 +53,7 @@ export async function copyDeliveryToClipboard(
       if (delivery.payment_method === 'dinheiro') {
         if (delivery.change_for) {
           const troco = delivery.change_for - (delivery.value || 0);
-          parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Cliente paga com R$ ${delivery.change_for.toFixed(2).replace('.', ',')} | Troco: R$ ${troco.toFixed(2).replace('.', ',')})`);
+          parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Cliente paga com R$ ${formatMoney(delivery.change_for)} | Troco: R$ ${formatMoney(troco)})`);
         } else {
           parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Valor exato)`);
         }
@@ -124,7 +127,7 @@ export async function generateRouteMessages(
 
     const totalDeliveries = deliveries.length;
     const drinksSummary: Record<string, { qty: number; name: string }> = {};
-    const stopsNeedingCode: number[] = [];
+    const stopsNeedingCode: { num: number; neighborhood: string }[] = [];
     const stopsNeedingCall: { num: number; name: string }[] = [];
     const stopsNeedingPosMachine: number[] = [];
 
@@ -179,8 +182,8 @@ export async function generateRouteMessages(
         if (existingCode) {
           msg1.push(`🔑 *Cód. iFood Salvo:* \`${existingCode}\` ✅`);
         } else {
-          stopsNeedingCode.push(num);
-          msg1.push(`🚨 *PEGAR CÓDIGO DO IFOOD NA PORTA!*`);
+          // Salva para a lista do final
+          stopsNeedingCode.push({ num, neighborhood });
         }
       }
 
@@ -197,7 +200,7 @@ export async function generateRouteMessages(
         msg1.push(`📲 *Chamar no Portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
       }
 
-      const valueStr = (delivery.value || 0).toFixed(2).replace('.', ',');
+      const valueStr = formatMoney(delivery.value || 0);
 
       if (delivery.value === 1) {
         msg1.push(`- 💵 *Pagamento:* R$ 1,00 (Cartão)`);
@@ -219,7 +222,7 @@ export async function generateRouteMessages(
           stopsNeedingPosMachine.push(num);
         } else if (delivery.payment_method === 'dinheiro' && delivery.change_for) {
           const troco = delivery.change_for - (delivery.value || 0);
-          msg1.push(`- 💵 *Pagamento:* R$ ${valueStr} *(Paga c/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')} | Troco: R$ ${troco.toFixed(2).replace('.', ',')})*`);
+          msg1.push(`- 💵 *Pagamento:* R$ ${valueStr} *(Paga c/ R$ ${formatMoney(delivery.change_for)} | Troco: R$ ${formatMoney(troco)})*`);
         } else {
           msg1.push(`- 💵 *Pagamento:* *R$ ${valueStr} (${delivery.payment_method?.toUpperCase() || 'DINHEIRO'})*`);
         }
@@ -289,16 +292,14 @@ export async function generateRouteMessages(
       const neighborhood = customer?.neighborhood || delivery.address_string.split('-').pop()?.trim() || 'Bairro';
       const street = delivery.address_string.split(',')[0].trim();
       const isDuplicate = neighborhoodCounts[neighborhood] > 1;
-      const isIfood = delivery.origin === 'ifood' || !delivery.origin;
-      const existingCode = delivery.confirmation_code || customer?.last_confirmation_code;
       const clientPhone = delivery.phone || customer?.phone;
       
       const streetLabel = isDuplicate ? ` (${street})` : '';
       const drinkInfo = delivery.drinks && delivery.drinks.trim() !== '' ? ` — 🥤 *(${delivery.drinks.trim()})*` : '';
-      const codeWarning = (isIfood && !existingCode) ? ` 🚨 *[CÓDIGO]*` : '';
       const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` 📲 *[ZAP]*` : '';
       
-      msg2.push(`${num}. ${neighborhood}${streetLabel}${drinkInfo}${codeWarning}${zapWarning}`);
+      // Removemos o aviso sujo de [CÓDIGO] daqui para deixar a lista limpa
+      msg2.push(`${num}. ${neighborhood}${streetLabel}${drinkInfo}${zapWarning}`);
     });
 
     msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
@@ -320,10 +321,13 @@ export async function generateRouteMessages(
       msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
     }
 
+    // LISTA ORGANIZADA DE CÓDIGOS NO FINAL
     if (stopsNeedingCode.length > 0) {
       msg2.push(`🔐 *CÓDIGOS IFOOD (PEGAR NA PORTA):*`);
-      msg2.push(`⚠️ *Atenção nas paradas: ${stopsNeedingCode.join(', ')}*`);
-      msg2.push(`↳ *Pedir os 4 dígitos antes de entregar!*`);
+      msg2.push(`⚠️ *Pegar o código das seguintes entregas:*`);
+      stopsNeedingCode.forEach(s => {
+        msg2.push(`• Entrega ${s.num}: *${s.neighborhood}*`);
+      });
       msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
     }
 
@@ -350,14 +354,14 @@ export async function generateRouteMessages(
         
         if (d.change_for) {
           const troco = d.change_for - pedidoVal;
-          msg2.push(`- Parada ${num}: \`R$ ${dinheiroEmMaos.toFixed(2).replace('.', ',')}\` *(Pedido R$ ${pedidoVal.toFixed(2).replace('.', ',')} | Levou R$ ${troco.toFixed(2).replace('.', ',')} de troco)*`);
+          msg2.push(`- Parada ${num}: \`R$ ${formatMoney(dinheiroEmMaos)}\` *(Pedido R$ ${formatMoney(pedidoVal)} | Levou R$ ${formatMoney(troco)} de troco)*`);
         } else {
-          msg2.push(`- Parada ${num}: \`R$ ${dinheiroEmMaos.toFixed(2).replace('.', ',')}\` *(Valor exato do pedido)*`);
+          msg2.push(`- Parada ${num}: \`R$ ${formatMoney(dinheiroEmMaos)}\` *(Valor exato do pedido)*`);
         }
       });
 
       msg2.push('');
-      msg2.push(`● *TOTAL A PASSAR PRO CAIXA:* \`R$ ${totalDinheiroAReceber.toFixed(2).replace('.', ',')}\``);
+      msg2.push(`● *TOTAL A PASSAR PRO CAIXA:* \`R$ ${formatMoney(totalDinheiroAReceber)}\``);
       msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
     }
 
