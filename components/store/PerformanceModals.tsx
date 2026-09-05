@@ -101,7 +101,7 @@ export function PerformanceModals({
 
     let text = `📦 *RESUMO LOGÍSTICO - ${selectedMotoboy.toUpperCase()}*\n📅 Data: ${formattedDateLabel}\n\n`;
     
-    rotas.forEach((r: any, idx) => {
+    rotas.forEach((r: any, idx: number) => {
       // Conta entregas
       const routeDeliveries = (selectedDateDeliveries || []).filter((d: any) => d.route_id === r.id);
       let durationStr = 'Tempo N/A';
