@@ -27,7 +27,6 @@ function DeliveryDetailsForm() {
   const deleteDelivery = useAppStore((state) => state.deleteDelivery);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
-  const updateCustomer = useAppStore((state) => state.updateCustomer);
 
   // Parser Mágico de Texto para Edição
   const [magicText, setMagicText] = useState('');
@@ -414,11 +413,7 @@ function DeliveryDetailsForm() {
           confirmationCode: origin === 'ifood' ? confirmationCode : undefined, 
           observation, 
           origin
-        } as any);
-
-        if (customerId && rawPhone && updateCustomer) {
-          await updateCustomer(customerId, { phone: rawPhone });
-        }
+        });
       }
 
       await updateDelivery(deliveryId, {
@@ -444,6 +439,11 @@ function DeliveryDetailsForm() {
 
       toast.success('Entrega atualizada com sucesso!');
       router.push('/');
+    } catch (error) {
+      console.error('Erro ao atualizar entrega:', error);
+      toast.error('Não foi possível atualizar a entrega.', {
+        description: 'Nenhuma confirmação falsa foi mantida. Tente novamente.',
+      });
     } finally {
       setIsSaving(false);
     }

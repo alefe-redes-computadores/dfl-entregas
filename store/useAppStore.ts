@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField } from 'firebase/firestore';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
@@ -61,7 +61,7 @@ interface AppState {
   addMotoboy: (motoboy: Motoboy) => Promise<void>;
   updateMotoboy: (id: string, updatedData: Partial<Motoboy>) => Promise<void>;
   deleteMotoboy: (id: string) => Promise<void>;
-  findOrCreateCustomer: (name: string, details?: { address?: string; mapsLink?: string; confirmationCode?: string; observation?: string; origin?: OrderOrigin; }) => Promise<string>;
+  findOrCreateCustomer: (name: string, details?: { address?: string; phone?: string; mapsLink?: string; confirmationCode?: string; observation?: string; origin?: OrderOrigin; }) => Promise<string>;
 }
 
 const sanitizeForFirebase = (obj: any) => {
@@ -69,6 +69,9 @@ const sanitizeForFirebase = (obj: any) => {
   delete sanitized.is_expanded;
   return sanitized;
 };
+
+const getDeliveryCreatedAt = (delivery: Delivery): string | undefined =>
+  delivery.created_at || delivery.createdAt || delivery.updated_at;
 
 // Gerador do schedule padrão caso o usuário seja novo
 const defaultSchedule = Object.fromEntries(
@@ -187,16 +190,6 @@ export const useAppStore = create<AppState>()(
             if (!mergedDeliveries.some(m => m.id === local.id)) mergedDeliveries.push(local);
           });
           
-          mergedDeliveries = mergedDeliveries.map(d => {
-             if (!(d as any).createdAt) {
-                const fixedDelivery = { ...d, createdAt: d.updated_at || new Date().toISOString() } as (Delivery & { is_expanded?: boolean });
-                const safeData = sanitizeForFirebase(fixedDelivery);
-                setDoc(doc(db, 'deliveries', fixedDelivery.id), safeData).catch(() => {});
-                return fixedDelivery;
-             }
-             return d;
-          });
-
           mergedDeliveries.sort((a, b) => {
              const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
              const orderB = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
@@ -258,7 +251,7 @@ export const useAppStore = create<AppState>()(
         if (routeId === 'rota-resgate-recuperada') {
           const selectedDateStr = state.selectedDate.toDateString();
           return state.deliveries.filter(d => {
-            const deliveryDateStr = new Date(d.updated_at || Date.now()).toDateString();
+            const deliveryDateStr = new Date(getDeliveryCreatedAt(d) || 0).toDateString();
             return deliveryDateStr === selectedDateStr;
           });
         }
@@ -268,12 +261,17 @@ export const useAppStore = create<AppState>()(
       getCustomerById: (customerId) => customerId ? get().customers.find((c) => c.id === customerId) : undefined,
 
       addRoute: async (route) => {
-        const routeWithTimestamp: Route = { ...route, updated_at: new Date().toISOString() };
+        const now = new Date().toISOString();
+        const routeWithTimestamp: Route = { ...route, created_at: route.created_at || now, updated_at: now };
         set((state) => ({ routes: [routeWithTimestamp, ...state.routes] }));
         try {
           const safeData = sanitizeForFirebase(routeWithTimestamp);
           await setDoc(doc(db, 'routes', route.id), safeData);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          set((state) => ({ routes: state.routes.filter((r) => r.id !== route.id) }));
+          console.error(error);
+          throw error;
+        }
       },
 
       startRoute: async (routeId) => {
@@ -287,10 +285,18 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteRoute: async (routeId) => {
+        if (get().deliveries.some((delivery) => delivery.route_id === routeId)) {
+          throw new Error('Não é possível excluir uma rota que possui entregas.');
+        }
+        const previousRoutes = get().routes;
         set((state) => ({ routes: state.routes.filter((r) => r.id !== routeId) }));
         try {
           await deleteDoc(doc(db, 'routes', routeId));
-        } catch (error) { console.error('Erro ao excluir rota:', error); }
+        } catch (error) {
+          set({ routes: previousRoutes });
+          console.error('Erro ao excluir rota:', error);
+          throw error;
+        }
       },
 
       addMotoboy: async (motoboy) => {
@@ -324,7 +330,8 @@ export const useAppStore = create<AppState>()(
         const now = new Date().toISOString();
         const deliveryWithTimestamp = { 
           ...delivery, 
-          createdAt: (delivery as any).createdAt || now,
+          createdAt: delivery.createdAt || delivery.created_at || now,
+          created_at: delivery.created_at || delivery.createdAt || now,
           updated_at: now 
         } as Delivery;
         
@@ -334,54 +341,71 @@ export const useAppStore = create<AppState>()(
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
           await setDoc(doc(db, 'deliveries', delivery.id), safeData);
         } catch (error) { 
+          set((state) => ({ deliveries: state.deliveries.filter((item) => item.id !== delivery.id) }));
           console.error(error); 
+          throw error;
         }
       },
 
       updateDelivery: async (id, updatedData) => {
-        const dataWithTimestamp: Partial<Delivery> = { ...updatedData, updated_at: new Date().toISOString() };
         const state = get();
         const deliveryToUpdate = state.deliveries.find((d) => d.id === id);
+        if (!deliveryToUpdate) throw new Error('Entrega não encontrada.');
+
+        const now = new Date().toISOString();
+        const isCompleting = updatedData.completed === true && deliveryToUpdate.completed !== true;
+        const isReopening = updatedData.completed === false && deliveryToUpdate.completed === true;
+        const dataWithTimestamp: Partial<Delivery> = {
+          ...updatedData,
+          ...(isCompleting ? { completed_at: now } : {}),
+          updated_at: now,
+        };
+        const previousDeliveries = state.deliveries;
+        const previousCustomers = state.customers;
+        const customer = deliveryToUpdate.customer_id
+          ? state.customers.find((item) => item.id === deliveryToUpdate.customer_id)
+          : undefined;
+
+        const nextDelivery = { ...deliveryToUpdate, ...dataWithTimestamp } as Delivery;
+        if (isReopening) delete nextDelivery.completed_at;
+
+        let updatedCustomerData: Partial<Customer> | undefined;
+        if ((isCompleting || isReopening) && customer) {
+          const completedForCustomer = state.deliveries
+            .map((item) => item.id === id ? nextDelivery : item)
+            .filter((item) => item.customer_id === customer.id && item.completed === true);
+          updatedCustomerData = {
+            orderCount: completedForCustomer.length,
+            totalSpent: completedForCustomer.reduce((total, item) => total + (item.value || 0), 0),
+            updated_at: now,
+          };
+        }
+        if (customer && updatedData.confirmation_code) {
+          updatedCustomerData = {
+            ...updatedCustomerData,
+            last_confirmation_code: updatedData.confirmation_code,
+            updated_at: now,
+          };
+        }
         
-        set((state) => ({
-          deliveries: state.deliveries.map((d) => d.id === id ? { ...d, ...dataWithTimestamp } as Delivery : d)
+        set((current) => ({
+          deliveries: current.deliveries.map((d) => d.id === id ? nextDelivery : d),
+          customers: updatedCustomerData && customer
+            ? current.customers.map((item) => item.id === customer.id ? { ...item, ...updatedCustomerData } : item)
+            : current.customers,
         }));
         
+        let deliveryCommitCompleted = false;
         try {
-          const safeData = sanitizeForFirebase(dataWithTimestamp);
-          await updateDoc(doc(db, 'deliveries', id), safeData);
-
-          if (updatedData.completed !== undefined && deliveryToUpdate?.customer_id) {
-             const customer = state.customers.find(c => c.id === deliveryToUpdate.customer_id);
-             if (customer) {
-               let newCount = customer.orderCount || 0;
-               let newSpent = customer.totalSpent || 0;
-               const deliveryValue = deliveryToUpdate.value || 0;
-
-               if (updatedData.completed === true) {
-                 newCount += 1;
-                 newSpent += deliveryValue;
-               } else if (updatedData.completed === false) {
-                 newCount = Math.max(0, newCount - 1);
-                 newSpent = Math.max(0, newSpent - deliveryValue);
-               }
-
-               const updatedCustomerData = {
-                 orderCount: newCount,
-                 totalSpent: newSpent,
-                 updated_at: new Date().toISOString()
-               };
-
-               set((prev) => ({
-                 customers: prev.customers.map((c) => 
-                   c.id === customer.id ? { ...c, ...updatedCustomerData } : c
-                 )
-               }));
-
-               const safeCustomerData = sanitizeForFirebase(updatedCustomerData);
-               await updateDoc(doc(db, 'customers', customer.id), safeCustomerData);
-             }
+          const batch = writeBatch(db);
+          const safeData: Record<string, unknown> = sanitizeForFirebase(dataWithTimestamp);
+          if (isReopening) safeData.completed_at = deleteField();
+          batch.update(doc(db, 'deliveries', id), safeData);
+          if (updatedCustomerData && customer) {
+            batch.update(doc(db, 'customers', customer.id), sanitizeForFirebase(updatedCustomerData));
           }
+          await batch.commit();
+          deliveryCommitCompleted = true;
 
           if (updatedData.completed === true && deliveryToUpdate) {
             const currentState = get();
@@ -394,14 +418,28 @@ export const useAppStore = create<AppState>()(
               }
             }
           }
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          if (deliveryCommitCompleted) {
+            set({ syncError: true });
+            console.error('Entrega salva, mas não foi possível fechar a rota automaticamente:', error);
+            return;
+          }
+          set({ deliveries: previousDeliveries, customers: previousCustomers, syncError: true });
+          console.error(error);
+          throw error;
+        }
       },
 
       deleteDelivery: async (id) => {
+        const previousDeliveries = get().deliveries;
         set((state) => ({ deliveries: state.deliveries.filter((d) => d.id !== id) }));
         try {
           await deleteDoc(doc(db, 'deliveries', id));
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          set({ deliveries: previousDeliveries });
+          console.error(error);
+          throw error;
+        }
       },
 
       closeRoute: async (routeId) => {
@@ -434,6 +472,7 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const routeDeliveries = state.deliveries
           .filter(d => d.route_id === routeId)
+          .map((delivery) => ({ ...delivery }))
           .sort((a, b) => {
              const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
              const orderB = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
@@ -465,9 +504,15 @@ export const useAppStore = create<AppState>()(
         }));
 
         try {
-          await updateDoc(doc(db, 'deliveries', targetDelivery.id), { order_index: targetDelivery.order_index, updated_at: now });
-          await updateDoc(doc(db, 'deliveries', swapDelivery.id), { order_index: swapDelivery.order_index, updated_at: now });
-        } catch (error) { console.error('Erro ao salvar reordenação:', error); }
+          const batch = writeBatch(db);
+          batch.update(doc(db, 'deliveries', targetDelivery.id), { order_index: targetDelivery.order_index, updated_at: now });
+          batch.update(doc(db, 'deliveries', swapDelivery.id), { order_index: swapDelivery.order_index, updated_at: now });
+          await batch.commit();
+        } catch (error) {
+          set({ deliveries: state.deliveries });
+          console.error('Erro ao salvar reordenação:', error);
+          throw error;
+        }
       },
 
       toggleDeliveryExpansion: (id, isExpanded) => {
@@ -486,6 +531,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateCustomer: async (id, updatedData) => {
+        const previousCustomers = get().customers;
         const dataWithTimestamp: Partial<Customer> = { ...updatedData, updated_at: new Date().toISOString() };
         set((state) => ({
           customers: state.customers.map((c) => c.id === id ? { ...c, ...dataWithTimestamp } as Customer : c)
@@ -493,7 +539,11 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await updateDoc(doc(db, 'customers', id), safeData);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          set({ customers: previousCustomers });
+          console.error(error);
+          throw error;
+        }
       },
 
       findOrCreateCustomer: async (name, details) => {
@@ -524,6 +574,7 @@ export const useAppStore = create<AppState>()(
           if (details?.observation) updatedFields.observation = details.observation;
           if (derivedNeighborhood) updatedFields.neighborhood = derivedNeighborhood;
           if (details?.origin) updatedFields.origin = details.origin;
+          if (details?.phone) updatedFields.phone = details.phone;
 
           set((state) => ({
             customers: state.customers.map((c) => c.id === existing.id ? { ...c, ...updatedFields } : c),
@@ -532,7 +583,13 @@ export const useAppStore = create<AppState>()(
           try {
             const safeData = sanitizeForFirebase(updatedFields);
             await updateDoc(doc(db, 'customers', existing.id), safeData);
-          } catch (error) { console.error(error); }
+          } catch (error) {
+            set((state) => ({
+              customers: state.customers.map((item) => item.id === existing.id ? existing : item),
+            }));
+            console.error(error);
+            throw error;
+          }
 
           return existing.id;
         }
@@ -546,6 +603,7 @@ export const useAppStore = create<AppState>()(
           maps_link: details?.mapsLink || undefined,
           last_confirmation_code: details?.confirmationCode || undefined,
           observation: details?.observation || undefined,
+          phone: details?.phone || undefined,
           createdAt: now,
           updated_at: now,
         };
@@ -555,7 +613,11 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(newCustomer);
           await setDoc(doc(db, 'customers', newCustomer.id), safeData);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          set((state) => ({ customers: state.customers.filter((item) => item.id !== newCustomer.id) }));
+          console.error(error);
+          throw error;
+        }
 
         return newCustomer.id;
       },
@@ -574,13 +636,6 @@ export const useAppStore = create<AppState>()(
       }),
       onRehydrateStorage: () => (state) => { 
         state?.setHasHydrated(true); 
-        setTimeout(() => {
-          if (state && state.deliveries) {
-             const rescuedDeliveries = state.deliveries.map(d => (!(d as any).createdAt ? { ...d, createdAt: d.updated_at || new Date().toISOString() } as Delivery : d));
-             useAppStore.setState({ deliveries: rescuedDeliveries });
-          }
-          state?.initData();
-        }, 300);
       },
     }
   )

@@ -37,9 +37,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   const reorderDelivery = useAppStore((state) => state.reorderDelivery);
   const toggleDeliveryExpansion = useAppStore((state) => state.toggleDeliveryExpansion);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode); 
-  const closeRoute = useAppStore((state) => state.closeRoute);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
-  const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
   
   const isExpanded = delivery.is_expanded || false;
 
@@ -87,30 +85,35 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   };
 
   const executeCompletion = async (codeToSave?: string) => {
+    if (delivery.completed) return;
+
     const updatePayload: Partial<Delivery> = { completed: true };
     if (codeToSave) {
       updatePayload.confirmation_code = codeToSave;
     }
 
-    await updateDelivery(delivery.id, updatePayload);
+    try {
+      await updateDelivery(delivery.id, updatePayload);
 
-    if (codeToSave && delivery.customer_id) {
-      await findOrCreateCustomer(customer?.name || 'Cliente', { confirmationCode: codeToSave } as any);
-    }
+      toggleDeliveryExpansion(delivery.id, false);
+      setIsIfoodModalOpen(false);
+      setIsDrinkCheckOpen(false);
+      setInputCode('');
 
-    toggleDeliveryExpansion(delivery.id, false);
-    setIsIfoodModalOpen(false);
-    setIsDrinkCheckOpen(false);
-    setInputCode('');
-    
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-    toast.success('Baixa Realizada! ✅', { duration: 1500 });
+      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+      toast.success('Baixa realizada.', { duration: 1500 });
 
-    const routeDeliveries = getDeliveriesByRoute(route.id);
-    const remainingPending = routeDeliveries.filter(d => d.id !== delivery.id && !d.completed).length;
-    if (remainingPending === 0) {
-      closeRoute(route.id);
-      toast.success('🎉 Todas entregas concluídas! Rota fechada automaticamente.');
+      const routeDeliveries = getDeliveriesByRoute(route.id);
+      const remainingPending = routeDeliveries.filter(d => d.id !== delivery.id && !d.completed).length;
+      if (remainingPending === 0) {
+        toast.success('Todas as entregas foram concluídas. A rota foi fechada automaticamente.');
+      }
+    } catch (error) {
+      console.error('Erro ao concluir entrega:', error);
+      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+      toast.error('Não foi possível dar baixa na entrega.', {
+        description: 'O estado anterior foi restaurado. Tente novamente.',
+      });
     }
   };
 
@@ -129,8 +132,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
 
       const newStatus = !delivery.completed;
       if (!newStatus) {
-        await updateDelivery(delivery.id, { completed: false });
-        toast.success('Baixa desfeita!');
+        try {
+          await updateDelivery(delivery.id, { completed: false });
+          toast.success('Baixa desfeita.');
+        } catch (error) {
+          console.error('Erro ao desfazer baixa:', error);
+          toast.error('Não foi possível desfazer a baixa.');
+        }
         return;
       }
 

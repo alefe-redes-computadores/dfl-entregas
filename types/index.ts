@@ -22,6 +22,7 @@ export interface Route {
   end_time?: string;
   change_money: number;
   drinks_summary?: string;
+  created_at?: string;
   updated_at?: string;
 }
 
@@ -46,6 +47,10 @@ export interface Delivery {
   is_urgent?: boolean;
   phone?: string;
   notify_whatsapp?: boolean;
+  customer_name?: string;
+  createdAt?: string; // Campo legado ainda lido pelos relatórios atuais
+  created_at?: string;
+  completed_at?: string;
   updated_at?: string;
 }
 

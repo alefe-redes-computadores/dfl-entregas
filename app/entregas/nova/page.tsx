@@ -21,7 +21,6 @@ export default function NovaEntregaPage() {
   const customers = useAppStore((state) => state.customers);
   const addDelivery = useAppStore((state) => state.addDelivery);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
-  const updateCustomer = useAppStore((state) => state.updateCustomer);
 
   const openRoutes = routes.filter(r => r.status === 'aberta');
 
@@ -357,14 +356,11 @@ export default function NovaEntregaPage() {
           confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
           observation,
           origin,
-        } as any);
-
-        if (customerId && rawPhone && updateCustomer) {
-          await updateCustomer(customerId, { phone: rawPhone });
-        }
+        });
       }
 
-      const novaEntrega: any = {
+      const now = new Date().toISOString();
+      const novaEntrega: Delivery = {
         id: Date.now().toString(),
         route_id: routeId,
         origin,
@@ -384,12 +380,19 @@ export default function NovaEntregaPage() {
         notify_whatsapp: notifyWhatsapp,
         observation,
         drinks,
-        updated_at: new Date().toISOString()
+        createdAt: now,
+        created_at: now,
+        updated_at: now,
       };
 
-      await addDelivery(novaEntrega as Delivery);
+      await addDelivery(novaEntrega);
       toast.success('Entrega cadastrada com sucesso!');
       router.push('/');
+    } catch (error) {
+      console.error('Erro ao cadastrar entrega:', error);
+      toast.error('Não foi possível cadastrar a entrega.', {
+        description: 'Confira sua conexão e tente novamente.',
+      });
     } finally {
       setIsSaving(false);
     }
