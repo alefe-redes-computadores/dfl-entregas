@@ -85,6 +85,9 @@ export default function MotoboysPage() {
   const [vales, setVales] = useState<ValeItem[]>([]);
   const [valeDesc, setValeDesc] = useState('');
   const [valeAmount, setValeAmount] = useState('');
+  
+  // Controle de dinheiro em espécie entregue ao caixa
+  const [cashHandedOver, setCashHandedOver] = useState(true);
 
   const [ruleType, setRuleType] = useState<PaymentRuleType>('fixed_plus_variable');
   const [ruleFixedAmount, setRuleFixedAmount] = useState('');
@@ -135,6 +138,7 @@ export default function MotoboysPage() {
     setSelectedMotoboy(m);
     setActiveTab('acerto');
     setVales([]);
+    setCashHandedOver(true);
     setEditType(m.type || 'fixo');
     setEditAvatar(m.avatar || 'man-blue');
     
@@ -173,7 +177,7 @@ export default function MotoboysPage() {
     if (!selectedMotoboy) return;
     const newStatus = !selectedMotoboy.active;
     await updateMotoboy(selectedMotoboy.id, { active: newStatus });
-    setSelectedMotoboy(null); // Fecha ao suspender/reativar para atualizar a lista
+    setSelectedMotoboy(null);
     toast.success(newStatus ? 'Motoboy ativado!' : 'Motoboy suspenso!');
   };
 
@@ -205,7 +209,6 @@ export default function MotoboysPage() {
       return dDateStr === acertoDate;
     });
     
-    // Detalhamento de entregas por Rota para o WhatsApp
     const routeBreakdown = todaysRoutes.map((r, i) => {
       const qty = todaysDeliveries.filter(d => d.route_id === r.id).length;
       return { index: i + 1, qty };
@@ -213,7 +216,7 @@ export default function MotoboysPage() {
 
     const totalDeliveries = todaysDeliveries.length;
 
-    // Total em dinheiro físico recebido (Pedido + Troco real, conforme discutimos)
+    // Total recolhido em espécie
     const cashCollected = todaysDeliveries
       .filter(d => !d.is_paid && d.payment_method === 'dinheiro')
       .reduce((acc, curr) => acc + (curr.change_for ? curr.change_for : curr.value || 0), 0);
@@ -244,13 +247,22 @@ export default function MotoboysPage() {
     }
 
     const totalVales = vales.reduce((acc, curr) => acc + curr.amount, 0);
-    const liquidFeeToReceive = motoboyFee - totalVales;
-    const netDifference = cashCollected - liquidFeeToReceive;
-    
-    // Se netDifference > 0: Motoboy tem que devolver dinheiro para loja.
-    // Se netDifference < 0: Loja tem que pagar a diferença para ele (Pix/Dinheiro).
-    const mustReturnToStore = netDifference > 0;
-    const balanceAmount = Math.abs(netDifference);
+    const liquidFeeToReceive = Math.max(0, motoboyFee - totalVales);
+
+    // Se o dinheiro já foi entregue ao caixa, a loja simplesmente paga a diária líquida.
+    // Se ainda está com ele, abate da diária:
+    let netDifference = 0;
+    let mustReturnToStore = false;
+    let balanceAmount = 0;
+
+    if (cashHandedOver) {
+      mustReturnToStore = false;
+      balanceAmount = liquidFeeToReceive;
+    } else {
+      netDifference = cashCollected - liquidFeeToReceive;
+      mustReturnToStore = netDifference > 0;
+      balanceAmount = Math.abs(netDifference);
+    }
 
     return { 
       totalDeliveries, 
@@ -264,7 +276,7 @@ export default function MotoboysPage() {
       routeBreakdown,
       todaysRoutesLength: todaysRoutes.length
     };
-  }, [selectedMotoboy, acertoDate, routes, deliveries, vales]);
+  }, [selectedMotoboy, acertoDate, routes, deliveries, vales, cashHandedOver]);
 
   const handleCopyWhatsApp = async () => {
     if (!selectedMotoboy || !acertoData) return;
@@ -276,7 +288,6 @@ export default function MotoboysPage() {
     text += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     text += `📦 *Entregas Realizadas:* ${acertoData.totalDeliveries}\n`;
     
-    // Lista a quantidade de cada rota
     if (acertoData.routeBreakdown.length > 0) {
       text += `_(Detalhe: `;
       const breakdownText = acertoData.routeBreakdown.map(r => `Rota ${r.index}: ${r.qty}`).join(' | ');
@@ -296,21 +307,26 @@ export default function MotoboysPage() {
 
     text += `   ↳ *Total Líquido da Diária:* R$ ${acertoData.liquidFeeToReceive.toFixed(2).replace('.', ',')}\n`;
     text += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `💵 *Dinheiro Recolhido do Cliente:* R$ ${acertoData.cashCollected.toFixed(2).replace('.', ',')}\n`;
+    text += `💵 *Dinheiro Recolhido (Bag):* R$ ${acertoData.cashCollected.toFixed(2).replace('.', ',')} (${cashHandedOver ? 'Já entregue ao caixa' : 'Em mãos com o motoboy'})\n`;
     text += `━━━━━━━━━━━━━━━━━━━━━━\n`;
 
-    if (acertoData.mustReturnToStore) {
-      text += `🔴 *ACERTO FINAL: MOTOBOY DEVOLVE AO CAIXA*\n`;
-      text += `↳ *Valor a passar:* \`R$ ${acertoData.balanceAmount.toFixed(2).replace('.', ',')}\`\n`;
-      text += `_(Dinheiro da rua menos sua diária líquida)_`;
-    } else if (acertoData.balanceAmount === 0) {
-      text += `🟢 *ACERTO FINAL: ZERADO*\n`;
-      text += `↳ *Valor a receber/pagar:* \`R$ 0,00\`\n`;
-      text += `_(O dinheiro recolhido pagou exatamente a sua diária)_`;
-    } else {
+    if (cashHandedOver) {
       text += `🟢 *ACERTO FINAL: LOJA PAGA AO MOTOBOY*\n`;
-      text += `↳ *Valor a receber:* \`R$ ${acertoData.balanceAmount.toFixed(2).replace('.', ',')}\`\n`;
-      text += `_(Falta este valor para fechar sua diária)_`;
+      text += `↳ *Valor a repassar:* \`R$ ${acertoData.balanceAmount.toFixed(2).replace('.', ',')}\`\n`;
+      text += `_(Diária líquida integral, dinheiro recolhido já está no caixa)_`;
+    } else {
+      if (acertoData.mustReturnToStore) {
+        text += `🔴 *ACERTO FINAL: MOTOBOY DEVOLVE AO CAIXA*\n`;
+        text += `↳ *Valor a passar:* \`R$ ${acertoData.balanceAmount.toFixed(2).replace('.', ',')}\`\n`;
+        text += `_(Dinheiro da rua menos sua diária líquida)_`;
+      } else if (acertoData.balanceAmount === 0) {
+        text += `🟢 *ACERTO FINAL: ZERADO*\n`;
+        text += `↳ *Valor a receber/pagar:* \`R$ 0,00\`\n`;
+      } else {
+        text += `🟢 *ACERTO FINAL: LOJA PAGA AO MOTOBOY*\n`;
+        text += `↳ *Valor a receber:* \`R$ ${acertoData.balanceAmount.toFixed(2).replace('.', ',')}\`\n`;
+        text += `_(Diferença entre a diária líquida e o dinheiro recolhido)_`;
+      }
     }
 
     await navigator.clipboard.writeText(text);
@@ -482,10 +498,23 @@ export default function MotoboysPage() {
                     <span className="text-2xl font-black text-zinc-100">{acertoData.totalDeliveries} <span className="text-[11px] font-bold text-zinc-500 uppercase">entregas</span></span>
                     <span className="text-[10px] text-zinc-500">{acertoData.todaysRoutesLength} {acertoData.todaysRoutesLength === 1 ? 'rota concluída' : 'rotas concluídas'}</span>
                   </div>
-                  <div className="bg-zinc-900/80 border border-zinc-800 p-4 rounded-[24px] flex flex-col gap-1.5">
-                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-amber-500 uppercase tracking-widest"><Banknote size={12} /> Dinheiro na Bag</span>
-                    <span className="text-2xl font-black text-amber-400">R$ {acertoData.cashCollected.toFixed(2).replace('.', ',')}</span>
-                    <span className="text-[10px] text-zinc-500">Recolhido em espécie</span>
+
+                  {/* BLOCO DINHEIRO NA BAG COM CHECKBOX DE REPASSE */}
+                  <div className="bg-zinc-900/80 border border-zinc-800 p-4 rounded-[24px] flex flex-col justify-between gap-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="flex items-center gap-1.5 text-[10px] font-bold text-amber-500 uppercase tracking-widest"><Banknote size={12} /> Dinheiro na Bag</span>
+                      <span className="text-2xl font-black text-amber-400">R$ {acertoData.cashCollected.toFixed(2).replace('.', ',')}</span>
+                    </div>
+
+                    <label className="flex items-center gap-2 pt-2 border-t border-zinc-800/80 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={cashHandedOver} 
+                        onChange={(e) => setCashHandedOver(e.target.checked)}
+                        className="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-emerald-500"
+                      />
+                      <span className="text-[10px] font-bold text-zinc-300 leading-tight">Já entregue ao caixa</span>
+                    </label>
                   </div>
                 </div>
 

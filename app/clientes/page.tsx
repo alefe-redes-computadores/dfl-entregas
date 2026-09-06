@@ -1,11 +1,10 @@
-
 'use client';
 
 import { useState, useMemo } from 'react';
 import { 
   Search, MapPin, User, Hash, Smartphone, Store, Pencil, X, Filter, 
   Trophy, DollarSign, PackageOpen, UserRound, Star, Crown, Camera, 
-  Phone, MessageSquare, Medal, Award, TrendingUp
+  Phone, MessageSquare, Medal, Award, TrendingUp, Check
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
@@ -23,7 +22,7 @@ const CUSTOMER_AVATARS = [
   { id: 'woman-pink', type: 'user-round', color: 'text-pink-500', bg: 'bg-pink-500/10' },
   { id: 'woman-purple', type: 'user-round', color: 'text-purple-500', bg: 'bg-purple-500/10' },
   { id: 'star-amber', type: 'star', color: 'text-amber-500', bg: 'bg-amber-500/10' },
-  { id: 'crown-amber', type: 'crown', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+  { id: 'crown-amber', type: 'crown', color: 'text-crown-500', bg: 'bg-amber-500/10' },
   { id: 'store-indigo', type: 'store', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
 ];
 
@@ -48,12 +47,21 @@ const formatPhoneInput = (val: string) => {
 export default function ClientesPage() {
   const customers = useAppStore((state) => state.customers);
   const updateCustomer = useAppStore((state) => state.updateCustomer);
+  const deliveries = useAppStore((state) => state.deliveries || []);
+  const updateDelivery = useAppStore((state) => state.updateDelivery);
   
   const [search, setSearch] = useState('');
   const [originFilter, setOriginFilter] = useState<'all' | 'ifood' | 'loja' | 'ranking'>('all');
+  
+  // Estado para Edição do Cadastro
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
-  // Estados do Modal de Edição
+  // Estados para Detalhes dos Pedidos do Cliente
+  const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
+  const [editingDeliveryId, setEditingDeliveryId] = useState<string | null>(null);
+  const [tempPrice, setTempPrice] = useState('');
+
+  // Estados do Modal de Edição de Cadastro
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
@@ -80,22 +88,32 @@ export default function ClientesPage() {
 
       if (originFilter === 'ifood') return matchesSearch && isIfood;
       if (originFilter === 'loja') return matchesSearch && !isIfood;
-      if (originFilter === 'ranking') return matchesSearch && (c.orderCount || 0) > 0;
+      if (originFilter === 'ranking') {
+        // Ignora "Álefe" no Ranking VIP
+        const isSelf = c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('alefe');
+        return matchesSearch && (c.orderCount || 0) > 0 && !isSelf;
+      }
       
       return matchesSearch;
     });
 
-    // Ordenação
     if (originFilter === 'ranking') {
-      // Ordena por maior gasto total e pega apenas os TOP 5
       result = result.sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0)).slice(0, 5);
     } else {
-      // Ordem alfabética para o resto
       result = result.sort((a, b) => a.name.localeCompare(b.name));
     }
 
     return result;
   }, [customers, search, originFilter]);
+
+  // Pedidos vinculados ao cliente aberto no Modal de Detalhes
+  const customerDeliveries = useMemo(() => {
+    if (!viewingCustomer) return [];
+    return deliveries.filter(d => 
+      (d.customerId && d.customerId === viewingCustomer.id) ||
+      (d.customerName && d.customerName.toLowerCase().trim() === viewingCustomer.name.toLowerCase().trim())
+    );
+  }, [deliveries, viewingCustomer]);
 
   const openEditModal = (client: Customer) => {
     setEditingCustomer(client);
@@ -124,10 +142,27 @@ export default function ClientesPage() {
       });
       toast.success('Cliente atualizado!');
       setEditingCustomer(null);
-    } catch (error) {
+    } catch {
       toast.error('Erro ao salvar.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSaveDeliveryPrice = async (deliveryId: string) => {
+    const numeric = parseFloat(tempPrice.replace(',', '.'));
+    if (isNaN(numeric) || numeric < 0) {
+      toast.error('Informe um valor válido');
+      return;
+    }
+    try {
+      if (updateDelivery) {
+        await updateDelivery(deliveryId, { orderAmount: numeric });
+        toast.success('Valor do pedido atualizado!');
+      }
+      setEditingDeliveryId(null);
+    } catch {
+      toast.error('Erro ao atualizar o pedido');
     }
   };
 
@@ -135,7 +170,7 @@ export default function ClientesPage() {
     <div className="flex flex-col gap-6 relative pb-24 animate-in fade-in duration-300">
       <PageHeader title="CRM Clientes" subtitle="Gestão de base, histórico e VIPs" />
 
-      {/* BARRA DE PESQUISA PREMIUM */}
+      {/* BARRA DE PESQUISA */}
       <div className="relative px-2">
         <div className="pointer-events-none absolute inset-y-0 left-6 flex items-center text-zinc-500">
           <Search size={18} />
@@ -157,7 +192,7 @@ export default function ClientesPage() {
         )}
       </div>
 
-      {/* FILTROS ELEGANTES (TIPO SEGMENTED CONTROL) */}
+      {/* FILTROS SEGMENTADOS */}
       <div className="flex items-center gap-2 overflow-x-auto px-2 pb-2 hide-scrollbar">
         <button 
           onClick={() => setOriginFilter('all')} 
@@ -185,7 +220,7 @@ export default function ClientesPage() {
         </button>
       </div>
 
-      {/* CABEÇALHO DE CONTEXTO */}
+      {/* CABEÇALHO DA LISTAGEM */}
       <div className="px-3 flex items-center justify-between">
         <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
           {originFilter === 'ranking' ? 'Maiores Clientes da Loja' : 'Lista de Clientes'}
@@ -195,6 +230,7 @@ export default function ClientesPage() {
         </span>
       </div>
 
+      {/* LISTA DE CLIENTES */}
       <div className="flex flex-col gap-4 px-2 pb-10">
         {filtered.length === 0 ? (
           <div className="py-20 flex flex-col items-center justify-center gap-3 text-center px-6 border border-dashed border-zinc-800/80 rounded-[32px] bg-zinc-900/20">
@@ -235,7 +271,6 @@ export default function ClientesPage() {
                   'bg-zinc-900/40 border-zinc-800 hover:bg-zinc-900/60'
                 }`}
               >
-                {/* ETIQUETA DE PÓDIO */}
                 {isRanking && (
                   <div className={`absolute top-0 right-0 rounded-bl-[20px] px-3.5 py-1.5 flex items-center gap-1.5 shadow-md ${
                     isTop1 ? 'bg-yellow-500 text-yellow-950' : 
@@ -248,9 +283,12 @@ export default function ClientesPage() {
                   </div>
                 )}
 
-                <div className="p-5 pt-6 flex items-start justify-between">
+                {/* ÁREA CLICÁVEL: ABRE OS DETALHES E PEDIDOS DO CLIENTE */}
+                <div 
+                  onClick={() => setViewingCustomer(client)}
+                  className="p-5 pt-6 flex items-start justify-between cursor-pointer active:opacity-90 transition-opacity"
+                >
                   <div className="flex items-start gap-4 flex-1 truncate pr-2">
-                    
                     <div className={`h-12 w-12 rounded-full flex items-center justify-center shrink-0 border mt-0.5 ${
                       client.avatar && avatarConfig
                         ? `${avatarConfig.bg} border-${avatarConfig.color.split('-')[1]}-500/30`
@@ -273,14 +311,15 @@ export default function ClientesPage() {
                       
                       <div className="flex flex-col gap-1 mt-0.5">
                         {rawPhone && (
-                          <a 
-                            href={`https://wa.me/55${rawPhone}`} 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 w-fit transition-all"
+                          <span 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`https://wa.me/55${rawPhone}`, '_blank');
+                            }}
+                            className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 w-fit transition-all cursor-pointer"
                           >
                             <MessageSquare size={12} /> {formatPhoneInput(rawPhone)}
-                          </a>
+                          </span>
                         )}
 
                         {client.address && (
@@ -293,18 +332,24 @@ export default function ClientesPage() {
                     </div>
                   </div>
 
+                  {/* BOTÃO DO LÁPIS: APENAS EDITA DADOS BÁSICOS */}
                   <button 
-                    onClick={() => openEditModal(client)} 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditModal(client);
+                    }} 
                     className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800/80 border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 active:scale-90 transition-all shrink-0 mt-0.5"
+                    title="Editar Cadastro"
                   >
                     <Pencil size={14} />
                   </button>
                 </div>
 
-                {/* MÉTRICAS E INFORMAÇÕES DE CRM NO RODAPÉ DO CARD */}
-                <div className="border-t border-zinc-800/60 bg-zinc-950/40 p-4 flex flex-col gap-3">
-                  
-                  {/* Se tiver código do iFood, mostra elegante */}
+                {/* RODAPÉ DO CARD */}
+                <div 
+                  onClick={() => setViewingCustomer(client)}
+                  className="border-t border-zinc-800/60 bg-zinc-950/40 p-4 flex flex-col gap-3 cursor-pointer"
+                >
                   {isIfood && client.last_confirmation_code && (
                     <div className="flex items-center justify-between pb-3 border-b border-zinc-800/50">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Cód. iFood Salvo</span>
@@ -315,7 +360,6 @@ export default function ClientesPage() {
                     </div>
                   )}
 
-                  {/* Linha de Métricas de Valor */}
                   <div className="grid grid-cols-3 gap-2 divide-x divide-zinc-800/80">
                     <div className="flex flex-col items-center justify-center px-1">
                       <span className="text-[9px] font-black uppercase text-zinc-500 mb-1 flex items-center gap-1"><PackageOpen size={10} className="text-indigo-400"/> Pedidos</span>
@@ -338,12 +382,112 @@ export default function ClientesPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL DE EDIÇÃO */}
+      {/* MODAL DE HISTÓRICO DE PEDIDOS E EDIÇÃO DE VALOR */}
+      {/* ========================================================================= */}
+      {viewingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in">
+          <div className="w-full max-w-lg bg-[#121214] border-t sm:border border-zinc-800 rounded-t-[32px] sm:rounded-[32px] p-6 shadow-2xl max-h-[85vh] flex flex-col animate-in slide-in-from-bottom-8">
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-zinc-800 sm:hidden shrink-0" />
+            
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800 shrink-0">
+              <div className="flex flex-col">
+                <h3 className="text-lg font-bold text-zinc-100">{viewingCustomer.name}</h3>
+                <span className="text-xs text-zinc-400 flex items-center gap-1 mt-0.5">
+                  <PackageOpen size={13} className="text-indigo-400" /> {customerDeliveries.length} pedido(s) encontrado(s)
+                </span>
+              </div>
+              <button 
+                onClick={() => { setViewingCustomer(null); setEditingDeliveryId(null); }}
+                className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-zinc-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-3">
+              {customerDeliveries.length === 0 ? (
+                <div className="text-center py-12 text-zinc-500 text-sm">
+                  Nenhum pedido registrado para este cliente.
+                </div>
+              ) : (
+                customerDeliveries.map((del) => {
+                  const valorAtual = Number(del.orderAmount || del.total || 0);
+                  const isEditingThis = editingDeliveryId === del.id;
+
+                  return (
+                    <div key={del.id} className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-zinc-300">
+                          {del.code ? `#${del.code}` : (del.orderNumber ? `Pedido ${del.orderNumber}` : 'Entrega')}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 uppercase tracking-wider">
+                          {del.paymentMethod || 'Pendente'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-800/50">
+                        <span className="text-xs text-zinc-500 flex items-center gap-1 truncate pr-2">
+                          <MapPin size={12} className="shrink-0 text-zinc-600" /> 
+                          <span className="truncate">{del.neighborhood || 'Bairro ñ informado'}</span>
+                        </span>
+
+                        {isEditingThis ? (
+                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <input 
+                              type="text" 
+                              inputMode="decimal"
+                              value={tempPrice}
+                              onChange={(e) => setTempPrice(e.target.value)}
+                              className="w-24 h-8 rounded-lg bg-zinc-950 border border-emerald-500 px-2 text-xs font-bold text-emerald-400 outline-none"
+                              placeholder="0.00"
+                              autoFocus
+                            />
+                            <button 
+                              onClick={() => handleSaveDeliveryPrice(del.id)}
+                              className="h-8 w-8 rounded-lg bg-emerald-500 text-zinc-950 flex items-center justify-center font-bold active:scale-95 transition-transform"
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button 
+                              onClick={() => setEditingDeliveryId(null)}
+                              className="h-8 w-8 rounded-lg bg-zinc-800 text-zinc-400 flex items-center justify-center active:scale-95 transition-transform"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-emerald-400">
+                              R$ {valorAtual.toFixed(2).replace('.', ',')}
+                            </span>
+                            <button 
+                              onClick={() => {
+                                setEditingDeliveryId(del.id);
+                                setTempPrice(String(valorAtual));
+                              }}
+                              className="p-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                              title="Corrigir Valor"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL DE EDIÇÃO DE CADASTRO DO CLIENTE */}
       {/* ========================================================================= */}
       {editingCustomer && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-md bg-[#121214] border-t sm:border border-zinc-800 rounded-t-[32px] sm:rounded-[32px] p-6 shadow-2xl overflow-y-auto max-h-[90vh] animate-in slide-in-from-bottom-8">
-            
             <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-zinc-800 sm:hidden" />
             
             <div className="flex items-center justify-between mb-6">
@@ -352,7 +496,6 @@ export default function ClientesPage() {
             </div>
 
             <form onSubmit={handleSaveCustomer} className="flex flex-col gap-4">
-              
               <div className="flex items-center gap-4 bg-zinc-900/40 p-4 rounded-[20px] border border-zinc-800/80">
                 <button type="button" onClick={() => setIsAvatarModalOpen(true)} className="relative h-14 w-14 rounded-full bg-zinc-950 border border-zinc-700 flex items-center justify-center group overflow-hidden shrink-0 transition-transform active:scale-95">
                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 z-10 transition-opacity"><Camera size={16} className="text-white" /></div>
