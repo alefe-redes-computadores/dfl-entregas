@@ -1,8 +1,9 @@
+// app/mais/page.tsx
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Trash2, CheckSquare, Moon, LogOut, AlertTriangle, Bike, ChevronRight } from 'lucide-react';
+import { RefreshCw, Trash2, CheckSquare, Moon, LogOut, AlertTriangle, Bike, ChevronRight, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -107,6 +108,10 @@ export default function MaisPage() {
           Operação Diária
         </h3>
         <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
+          <button onClick={() => router.push('/entregas')} className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 transition-colors active:bg-zinc-800/50">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-400"><Package size={20} /></div>
+            <div className="flex-1 text-left"><p className="font-semibold text-zinc-100">Entregas e histórico</p><p className="text-xs text-zinc-500">Buscar pedidos, clientes e endereços</p></div><ChevronRight size={18} className="text-zinc-600" />
+          </button>
           <button
             onClick={() => router.push('/rotas')}
             className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 transition-colors active:bg-zinc-800/50"
