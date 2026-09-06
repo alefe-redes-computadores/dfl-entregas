@@ -43,6 +43,15 @@ function normalizeSpaces(value: string): string {
   return value.replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim();
 }
 
+function parseMoneyToken(value: string): number {
+  const normalized = value.replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.');
+  return Number(normalized);
+}
+
+function formatMoneyToken(value: number): string {
+  return value.toFixed(2).replace('.', ',');
+}
+
 function cleanAddressLine(line: string, observations: string[]): string {
   let address = line
     .replace(/\bCEP\s*:?\s*\d{5}-?\d{3}\b/gi, '')
@@ -67,8 +76,12 @@ function cleanAddressLine(line: string, observations: string[]): string {
 
   if (parts.length <= 1) return normalizeSpaces(address).replace(/[,-]\s*$/, '');
 
-  const addressParts: string[] = [parts[0]];
+  const street = parts[0];
+  const numberIndex = parts.findIndex((part, index) => index > 0 && /^(?:\d+[A-Za-z]?|s\/?n)$/i.test(part));
+  const number = numberIndex >= 0 ? parts[numberIndex] : '';
+  const addressParts: string[] = [];
   for (let index = 1; index < parts.length; index += 1) {
+    if (index === numberIndex) continue;
     const part = parts[index];
     const lower = part.toLowerCase();
     const isHumanInstruction = /\b(?:port[aã]o|ligar|chamar|interfone|entrada|esquina|em frente|ao lado|casa de|fundos)\b/i.test(part);
@@ -77,11 +90,12 @@ function cleanAddressLine(line: string, observations: string[]): string {
     if (isHumanInstruction && !looksLikeNeighborhood) {
       observations.push(part);
     } else if (!/^(?:casa|resid[eê]ncia)$/i.test(lower)) {
-      addressParts.push(part);
+      addressParts.push(part.replace(/^[-–—]+|[-–—]+$/g, '').trim());
     }
   }
 
-  return addressParts.join(' - ').replace(/[,-]\s*$/, '').trim();
+  const streetAndNumber = number ? `${street}, ${number}` : street;
+  return [streetAndNumber, ...addressParts].filter(Boolean).join(' - ').replace(/(?:\s*-\s*){2,}/g, ' - ').replace(/[,-]\s*$/, '').trim();
 }
 
 function unique(values: string[]): string[] {
@@ -148,7 +162,7 @@ export function parseIfoodOrderText(text: string): ParsedIfoodOrder {
       return;
     }
 
-    if (/\b(?:pago no app|pago online|pedido pago)\b/i.test(line)) {
+    if (/\b(?:pago(?:\s+no\s+app|\s+online)?|pedido\s+pago)\b/i.test(line) && !/n[aã]o\s+pago/i.test(line)) {
       result.isPaid = true;
       result.paymentMethod = 'pix';
     } else if (/\b(?:cart[aã]o|cr[eé]dito|d[eé]bito)\b/i.test(line)) {
@@ -161,16 +175,18 @@ export function parseIfoodOrderText(text: string): ParsedIfoodOrder {
       result.paymentMethod = 'pix';
     }
 
-    const amount = line.match(/(?:r\$\s*)?(\d+[.,]\d{2})/i);
-    if (amount && !result.value && !/\b(?:troco|voltar)\b/i.test(line)) result.value = amount[1].replace('.', ',');
+    const amount = line.match(/(?:valor|total)?\s*:?[\s(]*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i);
+    const hasFinancialContext = /\b(?:valor|total|pago|pagamento|pix|cart[aã]o|dinheiro|troco|voltar)\b/i.test(line);
+    if (amount && hasFinancialContext && !result.value) result.value = formatMoneyToken(parseMoneyToken(amount[1]));
 
-    const change = line.match(/troco\s*(?:para|p\/)?\s*(?:r\$\s*)?(\d+[.,]?\d*)/i);
-    const returnAmount = line.match(/voltar\s*(?:r\$\s*)?(\d+[.,]?\d*)/i);
+    const change = line.match(/troco\s*(?:para|p\/)?\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i);
+    const returnAmount = line.match(/(?:voltar|(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s+de\s+troco)/i);
     if (change) {
-      result.changeFor = change[1].replace('.', ',');
+      result.changeFor = formatMoneyToken(parseMoneyToken(change[1]));
     } else if (returnAmount && amount) {
-      const base = Number(amount[1].replace(',', '.'));
-      const returned = Number(returnAmount[1].replace(',', '.'));
+      const base = parseMoneyToken(amount[1]);
+      const returnedToken = returnAmount[1] || line.match(/voltar\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i)?.[1];
+      const returned = returnedToken ? parseMoneyToken(returnedToken) : Number.NaN;
       if (Number.isFinite(base) && Number.isFinite(returned)) result.changeFor = (base + returned).toFixed(2).replace('.', ',');
     }
 

@@ -208,7 +208,7 @@ export default function NovaEntregaPage() {
         customer_id: customerId || '',
         customer_name: customerName.trim() || undefined,
         value: cleanValue,
-        is_paid: isPaid,
+        is_paid: paymentMethod === 'pix' ? isPaid : false,
         is_urgent: isUrgent,
         payment_method: paymentMethod,
         change_for: cleanChangeFor,
@@ -529,7 +529,7 @@ export default function NovaEntregaPage() {
           <div className={`flex flex-col gap-2 transition-all duration-300 ${isPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
             <label className="text-xs font-semibold text-zinc-400">Forma de Pagamento</label>
             <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={() => setPaymentMethod('dinheiro')} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${paymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
+              <button type="button" onClick={() => { setPaymentMethod('dinheiro'); setIsPaid(false); }} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${paymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
                 <Banknote size={20} />
                 <span className="text-xs font-bold">Dinheiro</span>
               </button>
@@ -544,11 +544,11 @@ export default function NovaEntregaPage() {
             </div>
           </div>
 
-          {(paymentMethod as string) !== 'cartao' && (
+          {paymentMethod === 'pix' && (
             <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800">
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-zinc-200">Pago antecipado?</span>
-                <span className="text-[10px] text-zinc-500">Marque se já está pago no app/chave</span>
+                <span className="text-[10px] text-zinc-500">Marque quando o Pix já foi recebido</span>
               </div>
               <button type="button" onClick={() => setIsPaid(!isPaid)} className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${isPaid ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
                 <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${isPaid ? 'translate-x-6' : 'translate-x-1'}`} />

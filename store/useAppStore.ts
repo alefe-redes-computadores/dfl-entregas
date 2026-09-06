@@ -568,7 +568,11 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(customerWithTimestamp);
           await setDoc(doc(db, 'customers', customer.id), safeData);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          set((state) => ({ customers: state.customers.filter((item) => item.id !== customer.id) }));
+          console.error(error);
+          throw error;
+        }
       },
 
       updateCustomer: async (id, updatedData) => {

@@ -1,7 +1,7 @@
 // app/entregas/details/page.tsx
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, Banknote, Bike, CheckCircle2, ChevronLeft, Clock3, CreditCard, Edit3, MapPin, MessageCircle, Navigation, Phone, QrCode, Smartphone, Store, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,6 +16,8 @@ function DeliveryDetailsContent() {
   const delivery = useAppStore(state => state.deliveries.find(item => item.id === id));
   const route = useAppStore(state => state.routes.find(item => item.id === delivery?.route_id));
   const customer = useAppStore(state => state.customers.find(item => item.id === delivery?.customer_id));
+  const updateDelivery = useAppStore(state => state.updateDelivery);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   if (!delivery) return <div className="flex min-h-[55vh] flex-col items-center justify-center gap-4 text-center"><AlertTriangle className="text-amber-400" size={36}/><div><h1 className="font-heading text-xl font-bold text-zinc-100">Entrega não encontrada</h1><p className="mt-1 text-sm text-zinc-500">Ela pode ter sido removida ou ainda não sincronizou.</p></div><button onClick={()=>router.push('/entregas')} className="rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold text-zinc-200">Voltar às entregas</button></div>;
 
@@ -28,6 +30,18 @@ function DeliveryDetailsContent() {
     if (!phone) return toast.error('Este cliente não possui telefone cadastrado.');
     window.open(`https://wa.me/55${phone.replace(/\D/g,'')}`, '_blank');
   };
+  const completeDelivery = async () => {
+    if (delivery.completed || isCompleting) return;
+    setIsCompleting(true);
+    try {
+      await updateDelivery(delivery.id, { completed: true });
+      toast.success('Entrega concluída com sucesso.');
+    } catch {
+      toast.error('Não foi possível concluir a entrega.', { description: 'Confira a conexão e tente novamente.' });
+    } finally {
+      setIsCompleting(false);
+    }
+  };
 
   return <div className="flex flex-col gap-5 pb-28 animate-in fade-in duration-300">
     <header className="flex items-center gap-3"><button onClick={()=>router.push('/entregas')} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400"><ChevronLeft size={21}/></button><div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-500">Ficha da entrega</p><h1 className="truncate font-heading text-xl font-bold text-zinc-50">{name}</h1></div><button onClick={()=>router.push(`/entregas/editar?id=${delivery.id}`)} className="flex h-10 items-center gap-2 rounded-xl bg-amber-500 px-3 text-xs font-black text-zinc-950"><Edit3 size={15}/>Editar</button></header>
@@ -35,6 +49,8 @@ function DeliveryDetailsContent() {
     <section className={`rounded-[26px] border p-5 ${delivery.completed?'border-emerald-500/25 bg-emerald-500/[0.06]':'border-amber-500/25 bg-amber-500/[0.05]'}`}><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${delivery.origin==='ifood'?'bg-red-500/15 text-red-400':'bg-emerald-500/15 text-emerald-400'}`}>{delivery.origin==='ifood'?<Smartphone/>:<Store/>}</div><div><p className="text-xs font-bold uppercase text-zinc-500">{delivery.origin==='ifood'?'Pedido iFood':'Pedido da loja'}</p><p className="mt-0.5 text-lg font-black text-zinc-100">{delivery.order_id?`#${delivery.order_id}`:'Sem número'}</p></div></div><span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase ${delivery.completed?'bg-emerald-500/15 text-emerald-400':'bg-amber-500/15 text-amber-400'}`}>{delivery.completed?'Concluída':'Pendente'}</span></div><div className="mt-5 grid grid-cols-2 gap-3"><div><p className="text-[10px] uppercase text-zinc-500">Valor</p><p className="text-xl font-black text-emerald-400">{money(delivery.value)}</p></div><div><p className="text-[10px] uppercase text-zinc-500">Pagamento</p><p className="mt-1 flex items-center gap-1.5 text-sm font-bold capitalize text-zinc-200"><PaymentIcon size={15}/>{delivery.is_paid?'Pago no app':delivery.payment_method}</p></div></div></section>
 
     <section className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40"><InfoRow icon={UserRound} label="Cliente" value={name}/><InfoRow icon={Phone} label="Contato" value={phone || 'Não informado'}/><InfoRow icon={MapPin} label="Endereço" value={delivery.address_string || 'Não informado'}/>{delivery.observation&&<InfoRow icon={AlertTriangle} label="Observações" value={delivery.observation}/>}</section>
+
+    {!delivery.completed && <button onClick={completeDelivery} disabled={isCompleting} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950 shadow-lg shadow-emerald-500/15 active:scale-[0.98] disabled:opacity-60"><CheckCircle2 size={19}/>{isCompleting?'Concluindo...':'Concluir entrega'}</button>}
 
     <div className="grid grid-cols-2 gap-3"><button onClick={()=>window.open(mapsUrl,'_blank')} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-sky-500 font-black text-white"><Navigation size={18}/>Abrir Maps</button><button onClick={openWhatsApp} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950"><MessageCircle size={18}/>WhatsApp</button></div>
 
