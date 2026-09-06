@@ -29,7 +29,7 @@ export default function HomePage() {
   const selectedDateStr = selectedDate.toDateString();
   
   let routesDoDia = routes.filter((r) => {
-    const routeDate = new Date(r.departure_time || r.updated_at || Date.now()).toDateString();
+    const routeDate = new Date(r.created_at || r.started_at || r.departure_time || r.updated_at || 0).toDateString();
     return routeDate === selectedDateStr;
   });
 
@@ -38,7 +38,7 @@ export default function HomePage() {
   }
 
   // Ordenação Cronológica de Ferro
-  routesDoDia.sort((a, b) => new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime());
+  routesDoDia.sort((a, b) => new Date(a.created_at || a.started_at || a.departure_time || 0).getTime() - new Date(b.created_at || b.started_at || b.departure_time || 0).getTime());
 
   const routeIdsDoDia = routesDoDia.map(r => r.id);
   
@@ -80,7 +80,7 @@ export default function HomePage() {
   }, {} as Record<string, Route[]>);
 
   const activeMotoboysToday = motoboys.filter(m => 
-    routes.some(r => r.motoboy_name === m.name && new Date(r.departure_time).toDateString() === selectedDateStr)
+    routes.some(r => (r.motoboy_id === m.id || r.motoboy_name === m.name) && new Date(r.created_at || r.started_at || r.departure_time || 0).toDateString() === selectedDateStr)
   );
 
   // Função para pegar ícone do motoboy para o cabeçalho do grupo

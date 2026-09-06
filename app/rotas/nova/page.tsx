@@ -16,6 +16,7 @@ export default function NovaRotaPage() {
   const [name, setName] = useState('');
   const [motoboySelection, setMotoboySelection] = useState<string>('');
   const [changeMoney, setChangeMoney] = useState('');
+  const [isSavingRoute, setIsSavingRoute] = useState(false);
 
   // Estados do Modal de Novo Motoboy
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -47,7 +48,7 @@ export default function NovaRotaPage() {
       };
       
       await addMotoboy(novoMotoboy);
-      setMotoboySelection(trimmed); // Já deixa selecionado
+      setMotoboySelection(novoMotoboy.id);
       toast.success(`${trimmed} cadastrado com sucesso!`);
       setIsModalOpen(false);
       setNewMotoboyName('');
@@ -61,24 +62,35 @@ export default function NovaRotaPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name || !motoboySelection) {
+    const selectedMotoboy = motoboys.find((motoboy) => motoboy.id === motoboySelection);
+    if (!name.trim() || !selectedMotoboy) {
       toast.error('Preencha o nome da rota e escolha o motoboy.');
       return;
     }
 
-    const novaRota: Route = {
-      id: Date.now().toString(),
-      name,
-      status: 'aberta',
-      motoboy_name: motoboySelection, // Salva só o nome, mantendo a compatibilidade dos relatórios
-      departure_time: new Date().toISOString(),
-      change_money: changeMoney ? parseFloat(changeMoney) : 0,
-      drinks_summary: ''
-    };
-
-    await addRoute(novaRota);
-    toast.success('Rota aberta com sucesso!');
-    router.push('/');
+    setIsSavingRoute(true);
+    try {
+      const now = new Date().toISOString();
+      const novaRota: Route = {
+        id: Date.now().toString(),
+        name: name.trim(),
+        status: 'aberta',
+        motoboy_id: selectedMotoboy.id,
+        motoboy_name: selectedMotoboy.name,
+        change_money: changeMoney ? Number(changeMoney) : 0,
+        drinks_summary: '',
+        created_at: now,
+        updated_at: now,
+      };
+      await addRoute(novaRota);
+      toast.success('Rota criada e pronta para receber entregas.');
+      router.push(`/rotas/details?id=${novaRota.id}`);
+    } catch (error) {
+      console.error('Erro ao criar rota:', error);
+      toast.error('Não foi possível criar a rota.');
+    } finally {
+      setIsSavingRoute(false);
+    }
   };
 
   return (
@@ -117,9 +129,9 @@ export default function NovaRotaPage() {
               <button
                 key={mb.id}
                 type="button"
-                onClick={() => setMotoboySelection(mb.name)}
+                onClick={() => setMotoboySelection(mb.id)}
                 className={`flex h-12 items-center justify-center gap-2 rounded-xl border font-semibold transition-all ${
-                  motoboySelection === mb.name
+                  motoboySelection === mb.id
                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500'
                     : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'
                 }`}
@@ -154,9 +166,10 @@ export default function NovaRotaPage() {
 
         <button
           type="submit"
+          disabled={isSavingRoute}
           className="mt-4 h-14 w-full rounded-2xl bg-emerald-500 font-bold text-zinc-950 active:scale-[0.98]"
         >
-          Abrir Rota
+          {isSavingRoute ? 'Criando rota...' : 'Criar Rota'}
         </button>
       </form>
 

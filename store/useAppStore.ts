@@ -47,6 +47,7 @@ interface AppState {
   getDeliveriesByRoute: (routeId: string) => Delivery[];
   getCustomerById: (customerId?: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
+  updateRoute: (routeId: string, data: Partial<Route>) => Promise<void>;
   startRoute: (routeId: string) => Promise<void>; 
   deleteRoute: (routeId: string) => Promise<void>;
   addDelivery: (delivery: Delivery) => Promise<void>;
@@ -274,14 +275,37 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      updateRoute: async (routeId, data) => {
+        const previousRoutes = get().routes;
+        const now = new Date().toISOString();
+        const nextData: Partial<Route> = { ...data, updated_at: now };
+        set((state) => ({ routes: state.routes.map((route) => route.id === routeId ? { ...route, ...nextData } : route) }));
+        try {
+          await updateDoc(doc(db, 'routes', routeId), sanitizeForFirebase(nextData));
+        } catch (error) {
+          set({ routes: previousRoutes });
+          console.error('Erro ao atualizar rota:', error);
+          throw error;
+        }
+      },
+
       startRoute: async (routeId) => {
+        const previousRoutes = get().routes;
+        const current = previousRoutes.find((route) => route.id === routeId);
+        if (!current) throw new Error('Rota não encontrada.');
+        if (current.status === 'fechada') throw new Error('Reabra a rota antes de iniciá-la.');
+        if (current.started_at) return;
         const now = new Date().toISOString();
         set((state) => ({
           routes: state.routes.map((r) => r.id === routeId ? { ...r, started_at: now, updated_at: now } : r),
         }));
         try {
-          await updateDoc(doc(db, 'routes', routeId), { started_at: now, updated_at: now });
-        } catch (error) { console.error(error); }
+          await updateDoc(doc(db, 'routes', routeId), { started_at: now, departure_time: now, updated_at: now });
+        } catch (error) {
+          set({ routes: previousRoutes });
+          console.error(error);
+          throw error;
+        }
       },
 
       deleteRoute: async (routeId) => {
@@ -443,6 +467,14 @@ export const useAppStore = create<AppState>()(
       },
 
       closeRoute: async (routeId) => {
+        const previousRoutes = get().routes;
+        const routeBeforeClose = previousRoutes.find((route) => route.id === routeId);
+        if (!routeBeforeClose) throw new Error('Rota não encontrada.');
+        if (routeBeforeClose.status === 'fechada') return;
+        if (!routeBeforeClose.started_at) throw new Error('Inicie a rota antes de finalizá-la.');
+        if (get().deliveries.some((delivery) => delivery.route_id === routeId && !delivery.completed)) {
+          throw new Error('Conclua todas as entregas antes de finalizar a rota.');
+        }
         const endTime = new Date().toISOString();
         set((state) => ({
           routes: state.routes.map((r) => 
@@ -454,18 +486,27 @@ export const useAppStore = create<AppState>()(
           const route = get().routes.find(r => r.id === routeId);
           const finalEndTime = route?.end_time || endTime;
           await updateDoc(doc(db, 'routes', routeId), { status: 'fechada', end_time: finalEndTime, updated_at: endTime });
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          set({ routes: previousRoutes });
+          console.error(error);
+          throw error;
+        }
       },
 
       reopenRoute: async (routeId) => {
+        const previousRoutes = get().routes;
         const now = new Date().toISOString();
         set((state) => ({
           // Removido o end_time: undefined, o tempo oficial da rota agora fica salvo!
-          routes: state.routes.map((r) => r.id === routeId ? { ...r, status: 'aberta', updated_at: now } : r),
+          routes: state.routes.map((r) => r.id === routeId ? { ...r, status: 'aberta', end_time: undefined, reopened_at: now, updated_at: now } : r),
         }));
         try {
-          await updateDoc(doc(db, 'routes', routeId), { status: 'aberta', updated_at: now });
-        } catch (error) { console.error(error); }
+          await updateDoc(doc(db, 'routes', routeId), { status: 'aberta', end_time: deleteField(), reopened_at: now, updated_at: now });
+        } catch (error) {
+          set({ routes: previousRoutes });
+          console.error(error);
+          throw error;
+        }
       },
 
       reorderDelivery: async (routeId, deliveryId, direction) => {

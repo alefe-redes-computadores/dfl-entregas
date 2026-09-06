@@ -17,9 +17,11 @@ export interface Route {
   name: string;
   status: RouteStatus;
   motoboy_name: string;
-  departure_time: string;
+  motoboy_id?: string;
+  departure_time?: string; // Legado: novas rotas usam started_at como saída real
   started_at?: string;
   end_time?: string;
+  reopened_at?: string;
   change_money: number;
   drinks_summary?: string;
   created_at?: string;

@@ -11,6 +11,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; 
 import { extractCoordinatesFromUrl } from '@/lib/maps';
+import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer } from '@/types';
@@ -25,6 +26,7 @@ export default function NovaEntregaPage() {
   const openRoutes = routes.filter(r => r.status === 'aberta');
 
   const [magicText, setMagicText] = useState('');
+  const [isParserOpen, setIsParserOpen] = useState(true);
 
   const [origin, setOrigin] = useState<OrderOrigin>('ifood');
   const [routeId, setRouteId] = useState('');
@@ -63,7 +65,6 @@ export default function NovaEntregaPage() {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   };
 
-  // PARSER MÁGICO DE ALTA PRECISÃO
   const handleExecuteMagicParse = async () => {
     if (!magicText.trim()) {
       toast.error('Cole o texto do pedido antes de processar.');
@@ -72,201 +73,38 @@ export default function NovaEntregaPage() {
 
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
 
-    let foundOrderId = '';
-    let foundIfoodId = '';
-    let foundConfirmationCode = '';
-    let foundCustomerName = '';
-    let foundPhone = '';
-    let foundAddress = '';
-    let foundMapsLink = '';
-    let foundPaid = false;
-    let foundMethod: Delivery['payment_method'] | null = null;
-    let foundValue = '';
-    let foundChangeFor = '';
-    let foundDrinks: string[] = [];
-    let foundObs: string[] = [];
-
-    const rawLines = magicText.split('\n').map(l => l.trim()).filter(Boolean);
-    let idLineIndex = -1;
-
-    // 1ª PASSADA: IDENTIFICADORES, MAPS E LINKS
-    rawLines.forEach((line, idx) => {
-      const lower = line.toLowerCase();
-
-      // Maps
-      const urlMatch = line.match(/https?:\/\/[^\s]+/i);
-      if (urlMatch && (urlMatch[0].includes('maps') || urlMatch[0].includes('goo.gl'))) {
-        foundMapsLink = urlMatch[0];
-        return;
-      }
-
-      // Linha de Números/IDs
-      const tokens = line.replace(/\D+/g, ' ').trim().split(' ').filter(Boolean);
-      const isHeaderLine = tokens.length > 0 && !lower.includes('r.') && !lower.includes('rua') && !lower.includes('av') && !lower.includes('pago') && !lower.includes('total');
-      
-      if (isHeaderLine && tokens.some(t => t.length === 8)) {
-        idLineIndex = idx;
-        tokens.forEach(tok => {
-          if ((tok.length === 4 || tok.length === 5) && !foundOrderId) {
-            foundOrderId = tok;
-          } else if (tok.length === 8 && !foundIfoodId) {
-            foundIfoodId = tok;
-          } else if (tok.length === 4 && foundIfoodId && !foundConfirmationCode) {
-            foundConfirmationCode = tok;
-          }
-        });
-      }
-    });
-
-    // 2ª PASSADA: ANÁLISE LINHA A LINHA
-    rawLines.forEach((line, idx) => {
-      const lower = line.toLowerCase();
-
-      // Pula a linha que já foi processada como IDs ou Link
-      if (idx === idLineIndex || line.startsWith('http')) return;
-
-      // Nome do Cliente por padrão de linha
-      if (lower.startsWith('cliente:') || lower.startsWith('nome:')) {
-        foundCustomerName = line.replace(/^(cliente|nome):\s*/i, '').trim();
-        return;
-      }
-
-      // Nome posicional (linha de texto após o ID)
-      if (!foundCustomerName && idLineIndex !== -1 && idx > idLineIndex && idx <= idLineIndex + 2) {
-        const isNotAddress = !lower.includes('r.') && !lower.includes('rua') && !lower.includes('av') && !lower.includes('cep');
-        const isNotMoney = !lower.includes('pago') && !lower.includes('cart') && !lower.includes('dinheiro') && !/\d+[.,]\d{2}/.test(line);
-        if (isNotAddress && isNotMoney && line.length > 2) {
-          foundCustomerName = line.replace(/[-•*]/g, '').trim();
-          return;
-        }
-      }
-
-      // Telefone
-      const phoneMatch = line.match(/(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4,5}[-\s]?\d{4}/);
-      if (phoneMatch && !foundPhone && !lower.includes('cep')) {
-        const digits = phoneMatch[0].replace(/\D/g, '');
-        if (digits.length >= 10 && digits.length <= 11) foundPhone = digits;
-      }
-
-      // Bebidas com volumes
-      const isDrink = /(coca|guaraná|guarana|fanta|sprite|suco|refrigerante|cerveja|heineken|água|agua|schweppes|del valle)/i.test(lower);
-      const hasVolume = /(\d+\s*(?:l|ml|litro|litros)|lata|garrafa|600ml|2l|1\.5l|350ml)/i.test(lower);
-      if (isDrink || (hasVolume && !lower.includes('r.') && !lower.includes('ap'))) {
-        foundDrinks.push(line.replace(/^[-•*x\d\s]+\s*/i, '').trim());
-        return;
-      }
-
-      // Financeiro e Formas de Pagamento
-      if (lower.includes('pago') || lower.includes('pago no app') || lower.includes('pago online')) {
-        foundPaid = true;
-        foundMethod = 'pix';
-      }
-
-      if (lower.includes('cartão') || lower.includes('cartao') || lower.includes('crédito') || lower.includes('debito')) {
-        foundMethod = 'cartao';
-        foundPaid = false;
-      }
-
-      if (lower.includes('dinheiro') || lower.includes('troco') || lower.includes('voltar')) {
-        foundMethod = 'dinheiro';
-        foundPaid = false;
-      }
-
-      // Valores
-      const valMatch = line.match(/(?:r\$\s*)?(\d+[.,]\d{2})/i);
-      if (valMatch && !foundValue && !lower.includes('troco') && !lower.includes('voltar')) {
-        foundValue = valMatch[1].replace('.', ',');
-      }
-
-      const trocoMatch = line.match(/troco\s*(?:para|p\/)?\s*(?:r\$\s*)?(\d+[.,]?\d*)/i);
-      const voltarMatch = line.match(/voltar\s*(?:r\$\s*)?(\d+[.,]?\d*)/i);
-      if (trocoMatch) {
-        foundChangeFor = trocoMatch[1].replace('.', ',');
-      } else if (voltarMatch && valMatch) {
-        const vBase = parseFloat(valMatch[1].replace(',', '.'));
-        const vVolta = parseFloat(voltarMatch[1].replace(',', '.'));
-        if (!isNaN(vBase) && !isNaN(vVolta)) {
-          foundChangeFor = (vBase + vVolta).toFixed(2).replace('.', ',');
-        }
-      }
-
-      // Endereço e Observações
-      if (lower.includes('r.') || lower.includes('rua') || lower.includes('av.') || lower.includes('avenida') || lower.includes('alameda') || lower.includes('travessa') || lower.includes('cep')) {
-        let clean = line
-          .replace(/,\s*Patos de Minas(?:\s*\/\s*MG|\s*-\s*MG)?/gi, '')
-          .replace(/-\s*CEP\s*[\d-]+/gi, '')
-          .replace(/CEP\s*[\d-]+/gi, '')
-          .trim();
-
-        // Une número e bloco/letra (ex: 41 - C vira 41C)
-        clean = clean.replace(/(\b\d+)\s*-\s*([a-zA-Z]\b)/g, '$1$2');
-
-        // Extrai dados de apartamento ou bloco para a observação
-        const aptoMatch = clean.match(/(?:ap|apto|apartamento|bloco)\s*[\w\d]+/i);
-        if (aptoMatch) {
-          foundObs.push(aptoMatch[0].trim());
-          clean = clean.replace(aptoMatch[0], '').trim();
-        }
-
-        // Extrai observações adicionais no final da linha (ex: - Casa Azul, - Rua Do Posto)
-        const parts = clean.split(/\s*-\s*/);
-        if (parts.length > 2) {
-          const possibleObs = parts[parts.length - 1].trim();
-          const lowerObs = possibleObs.toLowerCase();
-          
-          if (!lowerObs.includes('bairro') && !lowerObs.includes('vila') && !lowerObs.includes('jardim')) {
-            if (lowerObs === 'casa') {
-              // Apenas remove a palavra genérica 'casa'
-              parts.pop();
-            } else {
-              foundObs.push(possibleObs);
-              parts.pop();
-            }
-            clean = parts.join(' - ');
-          }
-        }
-
-        // Limpeza de 'Casa' no meio da linha
-        clean = clean.replace(/\s*-\s*casa\s*-\s*/gi, ' - ').replace(/,\s*casa\s*,/gi, ', ');
-
-        foundAddress = clean.replace(/\s*-\s*$/, '').replace(/,\s*,/g, ',').trim();
-        return;
-      }
-
-      // Observações explícitas
-      if (lower.includes('obs:') || lower.includes('observação:') || lower.includes('observacao:')) {
-        foundObs.push(line.replace(/^(?:obs|observação|observacao):\s*/i, '').trim());
-      }
-    });
-
+    const parsed = parseIfoodOrderText(magicText);
     const identified: string[] = [];
-    if (foundOrderId) { setOrderId(foundOrderId); identified.push(`Nº #${foundOrderId}`); }
-    if (foundIfoodId) { setIfoodId(foundIfoodId); identified.push(`ID ${foundIfoodId}`); }
-    if (foundConfirmationCode) { setConfirmationCode(foundConfirmationCode); identified.push(`Cód. ${foundConfirmationCode}`); }
-    if (foundCustomerName) { setCustomerName(foundCustomerName); identified.push('Cliente'); }
-    if (foundPhone) { setPhone(formatPhoneInput(foundPhone)); identified.push('Zap'); }
-    if (foundAddress) { setStreetAddress(foundAddress); identified.push('Endereço'); }
-    if (foundMapsLink) { setMapsLink(foundMapsLink); identified.push('Link Maps'); }
-    if (foundPaid) { setIsPaid(true); identified.push('Pago (Pix)'); }
-    if (foundMethod) { setPaymentMethod(foundMethod); }
-    if (foundValue) { setValue(formatCurrencyInput(foundValue.replace(/\D/g, ''))); identified.push(`Valor R$ ${foundValue}`); }
-    if (foundChangeFor) { setChangeFor(formatCurrencyInput(foundChangeFor.replace(/\D/g, ''))); identified.push(`Troco p/ ${foundChangeFor}`); }
-    if (foundDrinks.length > 0) { setDrinks(foundDrinks.join(', ')); identified.push('Bebidas'); }
-    if (foundObs.length > 0) {
-      setObservation(prev => prev ? `${prev}, ${foundObs.join(' - ')}` : foundObs.join(' - '));
+
+    if (parsed.orderId) { setOrderId(parsed.orderId); identified.push(`Nº #${parsed.orderId}`); }
+    if (parsed.ifoodId) { setIfoodId(parsed.ifoodId); identified.push(`ID ${parsed.ifoodId}`); }
+    if (parsed.confirmationCode) { setConfirmationCode(parsed.confirmationCode); identified.push(`Cód. ${parsed.confirmationCode}`); }
+    if (parsed.customerName) { setCustomerName(parsed.customerName); identified.push('Cliente'); }
+    if (parsed.phone) { setPhone(formatPhoneInput(parsed.phone)); identified.push('Zap'); }
+    if (parsed.address) { setStreetAddress(parsed.address); identified.push('Endereço'); }
+    if (parsed.mapsLink) { setMapsLink(parsed.mapsLink); identified.push('Link Maps'); }
+    if (parsed.isPaid) { setIsPaid(true); identified.push('Pago'); }
+    if (parsed.paymentMethod) setPaymentMethod(parsed.paymentMethod);
+    if (parsed.value) { setValue(formatCurrencyInput(parsed.value.replace(/\D/g, ''))); identified.push(`Valor R$ ${parsed.value}`); }
+    if (parsed.changeFor) { setChangeFor(formatCurrencyInput(parsed.changeFor.replace(/\D/g, ''))); identified.push(`Troco p/ ${parsed.changeFor}`); }
+    if (parsed.drinks.length > 0) { setDrinks(parsed.drinks.join(', ')); identified.push('Bebidas'); }
+    if (parsed.observations.length > 0) {
+      setObservation((current) => current ? `${current}, ${parsed.observations.join(' - ')}` : parsed.observations.join(' - '));
       identified.push('Obs');
     }
 
-    if (identified.length > 0) {
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
-      toast.success('Auto-Preenchido com Sucesso! 🪄', {
-        description: `Detectados: ${identified.join(' • ')}`,
-        duration: 4000
-      });
-      setMagicText('');
-    } else {
+    if (identified.length === 0) {
       toast.error('Nenhum dado reconhecido no texto.');
+      return;
     }
+
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+    toast.success('Campos preenchidos pelo parser.', {
+      description: `Detectados: ${identified.join(' • ')}`,
+      duration: 4000,
+    });
+    setMagicText('');
+    setIsParserOpen(false);
   };
 
   const handlePasteFromClipboard = async () => {
@@ -443,7 +281,17 @@ export default function NovaEntregaPage() {
       </div>
 
       {/* CAIXA DE TEXTO DO PARSER (APENAS QUANDO FOR IFOOD) */}
-      {origin === 'ifood' && (
+      {origin === 'ifood' && !isParserOpen && (
+        <button
+          type="button"
+          onClick={() => setIsParserOpen(true)}
+          className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/5 text-xs font-bold text-red-400 active:scale-[0.98]"
+        >
+          <Sparkles size={15} /> Colar outro pedido do iFood
+        </button>
+      )}
+
+      {origin === 'ifood' && isParserOpen && (
         <div className="flex flex-col gap-2.5 p-4 bg-gradient-to-b from-red-500/10 to-zinc-900/40 border border-red-500/20 rounded-[24px] animate-in fade-in">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">

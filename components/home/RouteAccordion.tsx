@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   ChevronDown, Bike, Wallet, CheckCircle2, RotateCcw, Timer, MapPin, 
   Copy, User, UserRound, AlertTriangle, X, Trash2, Receipt, MessageCircle, Send
@@ -23,6 +24,7 @@ interface RouteAccordionProps {
 }
 
 export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionProps) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [fuzzyModalOpen, setFuzzyModalOpen] = useState(false);
   const [isReopenModalOpen, setIsReopenModalOpen] = useState(false); 
@@ -30,6 +32,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [currentFuzzyList, setCurrentFuzzyList] = useState<any[]>([]);
   const [pendingActionType, setPendingActionType] = useState<'copy1' | 'copy2' | 'maps' | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
@@ -101,18 +104,27 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   const handleStartRoute = async () => {
-    startRoute(route.id);
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-    toast.success('Rota Iniciada! 🚀', { description: 'O cronômetro de performance está valendo.' });
+    if (actionBusy) return;
+    setActionBusy(true);
+    try {
+      await startRoute(route.id);
+      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+      toast.success('Rota iniciada.', { description: 'O horário real de saída foi registrado.' });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar a rota.');
+    } finally { setActionBusy(false); }
   };
 
   const handleCloseRoute = async () => {
-    if (Capacitor.isNativePlatform()) await Haptics.notification({ type: NotificationType.Success });
-    closeRoute(route.id);
-    toast.success('Rota finalizada!', { description: 'Enviada para as rotas concluídas.' });
-    setIsOpen(false);
+    if (actionBusy) return;
+    setActionBusy(true);
+    try {
+      await closeRoute(route.id);
+      if (Capacitor.isNativePlatform()) await Haptics.notification({ type: NotificationType.Success });
+      toast.success('Rota finalizada!', { description: 'Enviada para as rotas concluídas.' });
+      setIsOpen(false);
 
-    if (routeAlertsEnabled && Capacitor.isNativePlatform()) {
+      if (routeAlertsEnabled && Capacitor.isNativePlatform()) {
       LocalNotifications.schedule({
         notifications: [{
           title: '🎉 Rota Finalizada!',
@@ -121,7 +133,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           schedule: { at: new Date(Date.now() + 1000) }, 
         }]
       });
-    }
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível finalizar a rota.');
+    } finally { setActionBusy(false); }
   };
 
   const handleDeleteEmptyRoute = async () => {
@@ -275,7 +290,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </button>
             )}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && (
-              <div className="fixed bottom-24 left-0 right-0 z-40 mx-auto flex w-full max-w-[92%] items-center justify-between gap-3 rounded-[24px] border border-zinc-700/80 bg-zinc-900/95 px-4 py-3 backdrop-blur-xl shadow-2xl shadow-black/50">
+              <div className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-zinc-700/80 bg-zinc-950/70 p-2.5">
                 <button onClick={() => setIsCopyMenuOpen(true)} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800/80 text-sm font-semibold text-zinc-300 active:scale-95">
                   <Copy size={18} className="text-emerald-500" />
                   <span className="truncate">Copiar (WhatsApp)</span>
@@ -303,6 +318,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 <RotateCcw size={16} /> Reabrir Rota (Correções)
               </button>
             )}
+            <button onClick={() => router.push(`/rotas/details?id=${route.id}`)} className="flex w-full items-center justify-center rounded-[18px] border border-zinc-800 py-3 text-xs font-bold text-zinc-400 active:scale-95">Ver detalhes da rota</button>
           </div>
         </div>
       )}

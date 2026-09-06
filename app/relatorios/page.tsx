@@ -71,7 +71,9 @@ export default function RelatoriosPage() {
       if ((countByMotoboyDay.get(key) || 0) > 32) return false;
 
       if (route && route.status === 'fechada' && route.end_time) {
-        const start = new Date(route.started_at || route.departure_time).getTime();
+        const startSource = route.started_at || route.departure_time;
+        if (!startSource) return true;
+        const start = new Date(startSource).getTime();
         const end = new Date(route.end_time).getTime();
         if ((end - start) < 5 * 60 * 1000) return false;
       }
@@ -148,7 +150,9 @@ export default function RelatoriosPage() {
       if (name.includes('álefe') || name.includes('alefe')) return;
       if (route.status !== 'fechada' || !route.end_time) return;
 
-      const startTime = new Date(route.started_at || route.departure_time).getTime();
+      const startSource = route.started_at || route.departure_time;
+      if (!startSource) return;
+      const startTime = new Date(startSource).getTime();
       const endTime = new Date(route.end_time).getTime();
       const minutes = (endTime - startTime) / (1000 * 60);
 
