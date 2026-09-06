@@ -89,7 +89,6 @@ export default function ClientesPage() {
       if (originFilter === 'ifood') return matchesSearch && isIfood;
       if (originFilter === 'loja') return matchesSearch && !isIfood;
       if (originFilter === 'ranking') {
-        // Ignora "Álefe" no Ranking VIP
         const isSelf = c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('alefe');
         return matchesSearch && (c.orderCount || 0) > 0 && !isSelf;
       }
@@ -109,8 +108,10 @@ export default function ClientesPage() {
   // Pedidos vinculados ao cliente aberto no Modal de Detalhes
   const customerDeliveries = useMemo(() => {
     if (!viewingCustomer) return [];
-    return deliveries.filter(d => 
+    return deliveries.filter((d: any) => 
+      (d.customer_id && d.customer_id === viewingCustomer.id) ||
       (d.customerId && d.customerId === viewingCustomer.id) ||
+      (d.customer_name && d.customer_name.toLowerCase().trim() === viewingCustomer.name.toLowerCase().trim()) ||
       (d.customerName && d.customerName.toLowerCase().trim() === viewingCustomer.name.toLowerCase().trim())
     );
   }, [deliveries, viewingCustomer]);
@@ -157,7 +158,7 @@ export default function ClientesPage() {
     }
     try {
       if (updateDelivery) {
-        await updateDelivery(deliveryId, { orderAmount: numeric });
+        await updateDelivery(deliveryId, { value: numeric } as any);
         toast.success('Valor do pedido atualizado!');
       }
       setEditingDeliveryId(null);
@@ -410,25 +411,25 @@ export default function ClientesPage() {
                   Nenhum pedido registrado para este cliente.
                 </div>
               ) : (
-                customerDeliveries.map((del) => {
-                  const valorAtual = Number(del.orderAmount || del.total || 0);
+                customerDeliveries.map((del: any) => {
+                  const valorAtual = Number(del.value || del.orderAmount || del.total || 0);
                   const isEditingThis = editingDeliveryId === del.id;
 
                   return (
                     <div key={del.id} className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 flex flex-col gap-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-zinc-300">
-                          {del.code ? `#${del.code}` : (del.orderNumber ? `Pedido ${del.orderNumber}` : 'Entrega')}
+                          {del.order_id ? `#${del.order_id}` : (del.code ? `#${del.code}` : 'Entrega')}
                         </span>
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 uppercase tracking-wider">
-                          {del.paymentMethod || 'Pendente'}
+                          {del.payment_method || del.paymentMethod || 'Pendente'}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between pt-1 border-t border-zinc-800/50">
                         <span className="text-xs text-zinc-500 flex items-center gap-1 truncate pr-2">
                           <MapPin size={12} className="shrink-0 text-zinc-600" /> 
-                          <span className="truncate">{del.neighborhood || 'Bairro ñ informado'}</span>
+                          <span className="truncate">{del.address_string || del.neighborhood || 'Endereço'}</span>
                         </span>
 
                         {isEditingThis ? (
