@@ -57,6 +57,7 @@ export default function RelatoriosPage() {
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
+  const fuelings = useAppStore((state) => state.fuelings);
 
   const [periodKey, setPeriodKey] = useState<ReportPeriodKey>('7d');
   const [periodOpen, setPeriodOpen] = useState(false);
@@ -69,9 +70,10 @@ export default function RelatoriosPage() {
         deliveries,
         routes,
         customers,
+        fuelings,
         periodKey,
       }),
-    [customers, deliveries, periodKey, routes],
+    [customers, deliveries, fuelings, periodKey, routes],
   );
 
   const currentPeriodLabel =
@@ -303,6 +305,134 @@ export default function RelatoriosPage() {
                 })
               }
             />
+
+            <section className="mt-2 border-t border-zinc-800/70 pt-5">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[.18em] text-amber-500">
+                    Custos operacionais
+                  </p>
+                  <h2 className="mt-1 font-heading text-base font-black text-zinc-100">
+                    Combustível
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push('/abastecimentos')}
+                  className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] font-black text-amber-400"
+                >
+                  Abrir histórico
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <SummaryCard
+                  title="Gasto combustível"
+                  value={money(model.fuel.metrics.totalAmount)}
+                  subtitle={variationSubtitle(
+                    model.fuel.metrics.spendVariation,
+                    'vs período anterior equivalente',
+                  )}
+                  icon={<Banknote size={20} />}
+                  accentColor="amber"
+                />
+                <SummaryCard
+                  title="Média por abastecimento"
+                  value={money(model.fuel.metrics.averageFueling)}
+                  subtitle={`${model.fuel.metrics.count} registro${model.fuel.metrics.count === 1 ? '' : 's'}`}
+                  icon={<Store size={20} />}
+                  accentColor="blue"
+                />
+                <SummaryCard
+                  title="Litros registrados"
+                  value={`${model.fuel.metrics.liters.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} L`}
+                  subtitle={`${model.fuel.metrics.litersCoverageCount}/${model.fuel.metrics.count} com litros`}
+                  icon={<Activity size={20} />}
+                  accentColor="purple"
+                />
+                <SummaryCard
+                  title="Preço médio / L"
+                  value={
+                    model.fuel.metrics.averagePricePerLiter
+                      ? money(model.fuel.metrics.averagePricePerLiter)
+                      : 'Sem amostra'
+                  }
+                  subtitle="Média ponderada pelos litros"
+                  icon={<Wallet size={20} />}
+                  accentColor="emerald"
+                />
+              </div>
+            </section>
+
+            <ReportChartCard
+              title="Gasto diário com combustível"
+              description="Valores efetivamente registrados no período. Não é estimativa e não representa sozinho o lucro da operação."
+              icon={<Banknote size={18} />}
+              data={model.fuel.dailySpend}
+              chartType="line"
+              dataKey="revenue"
+              valueLabel="Combustível"
+              valueFormatter={money}
+              onExplore={() => router.push('/abastecimentos')}
+              footer="Abrir histórico de abastecimentos"
+            />
+
+            <ReportChartCard
+              title="Custo por tipo de combustível"
+              description="Distribui o gasto real pelos combustíveis informados, sem completar dados ausentes."
+              icon={<BarChart3 size={18} />}
+              data={model.fuel.byFuelType}
+              dataKey="revenue"
+              valueLabel="Gasto"
+              valueFormatter={money}
+              onExplore={() => router.push('/abastecimentos')}
+              footer="Conferir os registros que formam estes valores"
+            />
+
+            <ReportChartCard
+              title="Custo por veículo informado"
+              description="Separa o gasto por moto ou veículo. Registros sem identificação continuam visíveis como não informados."
+              icon={<RouteIcon size={18} />}
+              data={model.fuel.byVehicle.slice(0, 12)}
+              dataKey="revenue"
+              valueLabel="Gasto"
+              valueFormatter={money}
+              onExplore={() => router.push('/abastecimentos')}
+              footer="Abrir histórico e revisar vínculos de veículo"
+            />
+
+            <section className="rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-violet-400">
+                    Cobertura do combustível
+                  </p>
+                  <h2 className="mt-1 font-black text-zinc-100">
+                    Dados prontos para inteligência
+                  </h2>
+                </div>
+                <Activity size={20} className="text-violet-400" />
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {[
+                  ['Litros', model.fuel.metrics.litersCoverageCount],
+                  ['Odômetro', model.fuel.metrics.odometerCoverageCount],
+                  ['Veículo', model.fuel.metrics.vehicleCoverageCount],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="rounded-2xl bg-zinc-950/55 p-3">
+                    <p className="text-[9px] font-bold text-zinc-600">{label}</p>
+                    <p className="mt-1 text-base font-black text-zinc-100">
+                      {Number(value)}/{model.fuel.metrics.count}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <p className="mt-3 text-[10px] leading-relaxed text-zinc-600">
+                O app ainda não calcula km/L. Quilometragem isolada não basta para consumo confiável; precisamos saber quando o tanque foi realmente completado para comparar dois abastecimentos equivalentes.
+              </p>
+            </section>
           </>
         )}
 

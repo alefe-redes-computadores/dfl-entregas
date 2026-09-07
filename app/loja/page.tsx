@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Power, Users, BellRing, Bike, TrendingUp, Package, Wallet,
+  Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, Fuel,
   AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -231,6 +231,15 @@ export default function LojaPage() {
             </div>
             <p className="mt-4 font-heading text-sm font-black text-zinc-100">Clientes</p>
             <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Base, endereços e histórico</p>
+          </button>
+
+          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[26px] border border-amber-500/20 bg-amber-500/[.045] p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><Fuel size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Abastecimentos</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Combustível, litros, km e custos</p>
           </button>
         </div>
       </section>

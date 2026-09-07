@@ -3,7 +3,25 @@ export type RouteStatus = 'aberta' | 'fechada';
 export type OrderOrigin = 'ifood' | 'loja';
 export type FulfillmentMode = 'delivery' | 'pickup' | 'counter';
 export type PaymentRuleType = 'fixed' | 'per_delivery' | 'fixed_plus_variable';
-export type MotoboyType = 'fixo' | 'avulso'; 
+export type MotoboyType = 'fixo' | 'avulso';
+export type FuelType = 'gasolina_comum' | 'gasolina_aditivada' | 'etanol' | 'diesel' | 'outro';
+
+export interface Fueling {
+  id: string;
+  occurred_at: string;
+  fuel_type: FuelType;
+  total_amount: number;
+  liters?: number;
+  price_per_liter?: number;
+  odometer_km?: number;
+  station?: string;
+  vehicle_label?: string;
+  motoboy_id?: string;
+  motoboy_name?: string;
+  observation?: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
 export interface MotoboyPaymentRule {
   type: PaymentRuleType;

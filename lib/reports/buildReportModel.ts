@@ -1,4 +1,5 @@
-import type { Customer, Delivery, Route } from '@/types';
+import type { Customer, Delivery, Fueling, Route } from '@/types';
+import { FUEL_LABELS } from '@/lib/fueling-analytics';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
   compareDateKeys,
@@ -296,6 +297,175 @@ function buildRouteTimings(
   return { trusted, suspicious };
 }
 
+function fuelingTimestamp(fueling: Fueling): Date | null {
+  return parseTimestamp(fueling.occurred_at ?? fueling.created_at);
+}
+
+function fuelingInPeriod(
+  fueling: Fueling,
+  start: Date | null,
+  end: Date,
+): boolean {
+  const timestamp = fuelingTimestamp(fueling);
+  if (!timestamp) return false;
+  if (!start) return true;
+
+  const key = saoPauloDateKey(timestamp);
+  return (
+    compareDateKeys(key, saoPauloDateKey(start)) >= 0 &&
+    compareDateKeys(key, saoPauloDateKey(end)) <= 0
+  );
+}
+
+function buildFuelDaily(
+  fuelings: Fueling[],
+  period: ReportPeriod,
+): DailyBucket[] {
+  const valid = fuelings
+    .map((fueling) => ({ fueling, timestamp: fuelingTimestamp(fueling) }))
+    .filter(
+      (item): item is { fueling: Fueling; timestamp: Date } =>
+        Boolean(item.timestamp),
+    );
+
+  let dateKeys: string[] = [];
+
+  if (period.start) {
+    dateKeys = enumerateDateKeys(
+      saoPauloDateKey(period.start),
+      saoPauloDateKey(period.end),
+    );
+  } else {
+    dateKeys = Array.from(
+      new Set(valid.map((item) => saoPauloDateKey(item.timestamp))),
+    ).sort(compareDateKeys);
+  }
+
+  const byDate = new Map<string, { count: number; revenue: number }>();
+
+  valid.forEach(({ fueling, timestamp }) => {
+    const key = saoPauloDateKey(timestamp);
+    const current = byDate.get(key) ?? { count: 0, revenue: 0 };
+    byDate.set(key, {
+      count: current.count + 1,
+      revenue: current.revenue + money(fueling.total_amount),
+    });
+  });
+
+  return dateKeys.map((dateKey) => {
+    const current = byDate.get(dateKey) ?? { count: 0, revenue: 0 };
+
+    return {
+      key: dateKey,
+      dateKey,
+      label: formatReportDate(dateFromKey(dateKey)),
+      count: current.count,
+      revenue: Number(current.revenue.toFixed(2)),
+    };
+  });
+}
+
+function buildFuelReport(
+  fuelings: Fueling[],
+  period: ReportPeriod,
+): ReportModel['fuel'] {
+  const current =
+    period.key === 'all'
+      ? fuelings
+      : fuelings.filter((item) =>
+          fuelingInPeriod(item, period.start, period.end),
+        );
+
+  const previous =
+    period.previousStart && period.previousEnd
+      ? fuelings.filter((item) =>
+          fuelingInPeriod(item, period.previousStart, period.previousEnd as Date),
+        )
+      : [];
+
+  const totalAmount = current.reduce(
+    (sum, item) => sum + money(item.total_amount),
+    0,
+  );
+  const previousAmount = previous.reduce(
+    (sum, item) => sum + money(item.total_amount),
+    0,
+  );
+  const liters = current.reduce((sum, item) => sum + money(item.liters), 0);
+
+  const pricedItems = current.filter(
+    (item) => (item.liters || 0) > 0 && (item.total_amount || 0) > 0,
+  );
+  const pricedLiters = pricedItems.reduce(
+    (sum, item) => sum + (item.liters || 0),
+    0,
+  );
+  const pricedAmount = pricedItems.reduce(
+    (sum, item) => sum + (item.total_amount || 0),
+    0,
+  );
+
+  const fuelMap = new Map<string, { count: number; revenue: number }>();
+  current.forEach((item) => {
+    const key = item.fuel_type || 'outro';
+    const bucket = fuelMap.get(key) ?? { count: 0, revenue: 0 };
+    fuelMap.set(key, {
+      count: bucket.count + 1,
+      revenue: bucket.revenue + money(item.total_amount),
+    });
+  });
+
+  const vehicleMap = new Map<string, { count: number; revenue: number }>();
+  current.forEach((item) => {
+    const key = item.vehicle_label?.trim() || 'Veículo não informado';
+    const bucket = vehicleMap.get(key) ?? { count: 0, revenue: 0 };
+    vehicleMap.set(key, {
+      count: bucket.count + 1,
+      revenue: bucket.revenue + money(item.total_amount),
+    });
+  });
+
+  return {
+    current,
+    previous,
+    metrics: {
+      totalAmount: Number(totalAmount.toFixed(2)),
+      liters: Number(liters.toFixed(2)),
+      averagePricePerLiter:
+        pricedLiters > 0
+          ? Number((pricedAmount / pricedLiters).toFixed(3))
+          : 0,
+      averageFueling:
+        current.length > 0
+          ? Number((totalAmount / current.length).toFixed(2))
+          : 0,
+      count: current.length,
+      spendVariation:
+        period.key === 'all' ? null : variation(totalAmount, previousAmount),
+      litersCoverageCount: current.filter((item) => (item.liters || 0) > 0).length,
+      odometerCoverageCount: current.filter((item) => (item.odometer_km || 0) > 0).length,
+      vehicleCoverageCount: current.filter((item) => Boolean(item.vehicle_label?.trim())).length,
+    },
+    dailySpend: buildFuelDaily(current, period),
+    byFuelType: Array.from(fuelMap.entries())
+      .map(([key, bucket]) => ({
+        key,
+        label: FUEL_LABELS[key as keyof typeof FUEL_LABELS] || key,
+        count: bucket.count,
+        revenue: Number(bucket.revenue.toFixed(2)),
+      }))
+      .sort((a, b) => b.revenue - a.revenue),
+    byVehicle: Array.from(vehicleMap.entries())
+      .map(([key, bucket]) => ({
+        key,
+        label: key,
+        count: bucket.count,
+        revenue: Number(bucket.revenue.toFixed(2)),
+      }))
+      .sort((a, b) => b.revenue - a.revenue),
+  };
+}
+
 function buildQuality(
   deliveries: ReportDelivery[],
   suspiciousRoutes: number,
@@ -361,6 +531,7 @@ export function buildReportModel(input: {
   deliveries: Delivery[];
   routes: Route[];
   customers: Customer[];
+  fuelings: Fueling[];
   periodKey: ReportPeriodKey;
 }): ReportModel {
   const routeMap = new Map(input.routes.map((route) => [route.id, route]));
@@ -445,6 +616,7 @@ export function buildReportModel(input: {
   ).sort((a, b) => b.count - a.count);
 
   const routeTiming = buildRouteTimings(input.routes, logisticsCurrent);
+  const fuel = buildFuelReport(input.fuelings, period);
 
   return {
     period,
@@ -477,6 +649,7 @@ export function buildReportModel(input: {
     neighborhoods,
     motoboys,
     routeTimings: routeTiming.trusted,
+    fuel,
     quality: buildQuality(logisticsCurrent, routeTiming.suspicious),
   };
 }

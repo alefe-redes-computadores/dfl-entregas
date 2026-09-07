@@ -6,7 +6,7 @@ import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import type { Route, Delivery, Customer, OrderOrigin, Motoboy, DaySchedule, StorePause, HolidayOverride } from '@/types';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, DaySchedule, StorePause, HolidayOverride } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 
 interface AppState {
@@ -17,6 +17,7 @@ interface AppState {
   deliveries: (Delivery & { is_expanded?: boolean })[];
   customers: Customer[];
   motoboys: Motoboy[];
+  fuelings: Fueling[];
   selectedDate: Date;
   isSyncing: boolean;
   syncError: boolean;
@@ -63,6 +64,9 @@ interface AppState {
   addMotoboy: (motoboy: Motoboy) => Promise<void>;
   updateMotoboy: (id: string, updatedData: Partial<Motoboy>) => Promise<void>;
   deleteMotoboy: (id: string) => Promise<void>;
+  addFueling: (fueling: Fueling) => Promise<void>;
+  updateFueling: (id: string, updatedData: Partial<Fueling>) => Promise<void>;
+  deleteFueling: (id: string) => Promise<void>;
   findOrCreateCustomer: (name: string, details?: { address?: string; phone?: string; mapsLink?: string; confirmationCode?: string; observation?: string; origin?: OrderOrigin; }) => Promise<string>;
 }
 
@@ -93,6 +97,7 @@ export const useAppStore = create<AppState>()(
       deliveries: [],
       customers: [],
       motoboys: [],
+      fuelings: [],
       selectedDate: new Date(),
       isSyncing: false,
       syncError: false,
@@ -152,7 +157,7 @@ export const useAppStore = create<AppState>()(
       logout: async () => {
         try {
           await signOut(auth);
-          set({ routes: [], deliveries: [], customers: [], motoboys: [], user: null });
+          set({ routes: [], deliveries: [], customers: [], motoboys: [], fuelings: [], user: null });
         } catch (error) { console.error('Erro no logout:', error); }
       },
 
@@ -160,11 +165,12 @@ export const useAppStore = create<AppState>()(
         if (!get().hasHydrated) return;
         set({ isSyncing: true, syncError: false }); 
         try {
-          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, storeSnap] = await Promise.all([
+          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, storeSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
             getDocs(collection(db, 'deliveries')),
             getDocs(collection(db, 'customers')),
             getDocs(collection(db, 'motoboys')),
+            getDocs(collection(db, 'fuelings')),
             getDoc(doc(db, 'store', 'store_settings'))
           ]);
 
@@ -172,6 +178,7 @@ export const useAppStore = create<AppState>()(
           const fbDeliveries = deliveriesSnap.docs.map(d => d.data() as Delivery);
           const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
           const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
+          const fbFuelings = fuelingsSnap.docs.map(d => d.data() as Fueling);
           
           const cloudStoreSettings = storeSnap.exists() ? storeSnap.data() : null;
 
@@ -208,6 +215,15 @@ export const useAppStore = create<AppState>()(
             if (!mergedMotoboys.some(m => m.id === local.id)) mergedMotoboys.push(local);
           });
 
+          const mergedFuelings = [...fbFuelings];
+          get().fuelings.forEach(local => {
+            if (!mergedFuelings.some(item => item.id === local.id)) mergedFuelings.push(local);
+          });
+          mergedFuelings.sort((a, b) =>
+            new Date(b.occurred_at || b.created_at || 0).getTime() -
+            new Date(a.occurred_at || a.created_at || 0).getTime()
+          );
+
           const defaultSettings = get().storeSettings;
           
           // Tratamento para puxar dados novos e velhos sem quebrar
@@ -226,6 +242,7 @@ export const useAppStore = create<AppState>()(
             deliveries: mergedDeliveries,
             customers: mergedCustomers,
             motoboys: mergedMotoboys,
+            fuelings: mergedFuelings,
             storeSettings: finalStoreSettings as any,
             isSyncing: false,
             syncError: false
@@ -364,6 +381,56 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           set({ motoboys: previousMotoboys });
           console.error(error);
+          throw error;
+        }
+      },
+
+      addFueling: async (fueling) => {
+        const now = new Date().toISOString();
+        const dataWithTimestamp: Fueling = {
+          ...fueling,
+          occurred_at: fueling.occurred_at || now,
+          created_at: fueling.created_at || now,
+          updated_at: now,
+        };
+        set((state) => ({ fuelings: [dataWithTimestamp, ...state.fuelings] }));
+        try {
+          await setDoc(doc(db, 'fuelings', fueling.id), sanitizeForFirebase(dataWithTimestamp));
+        } catch (error) {
+          set((state) => ({ fuelings: state.fuelings.filter((item) => item.id !== fueling.id) }));
+          console.error('Erro ao adicionar abastecimento:', error);
+          throw error;
+        }
+      },
+
+      updateFueling: async (id, updatedData) => {
+        const previousFuelings = get().fuelings;
+        const dataWithTimestamp: Partial<Fueling> = {
+          ...updatedData,
+          updated_at: new Date().toISOString(),
+        };
+        set((state) => ({
+          fuelings: state.fuelings.map((item) =>
+            item.id === id ? { ...item, ...dataWithTimestamp } as Fueling : item
+          ),
+        }));
+        try {
+          await updateDoc(doc(db, 'fuelings', id), sanitizeForFirebase(dataWithTimestamp));
+        } catch (error) {
+          set({ fuelings: previousFuelings });
+          console.error('Erro ao atualizar abastecimento:', error);
+          throw error;
+        }
+      },
+
+      deleteFueling: async (id) => {
+        const previousFuelings = get().fuelings;
+        set((state) => ({ fuelings: state.fuelings.filter((item) => item.id !== id) }));
+        try {
+          await deleteDoc(doc(db, 'fuelings', id));
+        } catch (error) {
+          set({ fuelings: previousFuelings });
+          console.error('Erro ao excluir abastecimento:', error);
           throw error;
         }
       },
@@ -692,6 +759,7 @@ export const useAppStore = create<AppState>()(
         deliveries: state.deliveries, 
         customers: state.customers,
         motoboys: state.motoboys,
+        fuelings: state.fuelings,
         isPrivacyMode: state.isPrivacyMode,
         routeAlertsEnabled: state.routeAlertsEnabled,
         theme: state.theme,

@@ -12,6 +12,7 @@ export function useReportsData(periodKey: ReportPeriodKey = '7d') {
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
+  const fuelings = useAppStore((state) => state.fuelings);
 
   return useMemo(
     () =>
@@ -19,8 +20,9 @@ export function useReportsData(periodKey: ReportPeriodKey = '7d') {
         deliveries,
         routes,
         customers,
+        fuelings,
         periodKey,
       }),
-    [customers, deliveries, periodKey, routes],
+    [customers, deliveries, fuelings, periodKey, routes],
   );
 }
