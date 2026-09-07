@@ -40,6 +40,8 @@ export function parseTimestamp(value: TimestampLike): Date | null {
       const date = new Date(value.seconds * 1000);
       return Number.isFinite(date.getTime()) ? date : null;
     }
+
+    return null;
   }
 
   const date = new Date(value);
