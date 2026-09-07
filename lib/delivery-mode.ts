@@ -24,3 +24,14 @@ export function fulfillmentLabel(
 ): string {
   return FULFILLMENT_LABELS[getFulfillmentMode(delivery)];
 }
+
+export function fulfillmentOperationalLabel(
+  delivery: Pick<Delivery, 'fulfillment_mode'>,
+): string {
+  const mode = getFulfillmentMode(delivery);
+
+  if (mode === 'pickup') return 'Retirada na loja';
+  if (mode === 'counter') return 'Atendimento presencial / balcão';
+
+  return 'Entrega em rota';
+}
