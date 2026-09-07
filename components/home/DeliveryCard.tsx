@@ -195,7 +195,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
     <>
       <div className={clsx(
           "relative overflow-hidden rounded-[26px] transition-all duration-300",
-          delivery.completed ? "opacity-50 grayscale" : "shadow-sm",
+          delivery.completed ? "opacity-65" : "shadow-sm",
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
           isNeighbor && !delivery.completed && "border-sky-500/30",
           isExpanded ? "bg-zinc-900/90 border border-zinc-700/80" : "bg-zinc-900/45 border border-zinc-800/80"
@@ -224,7 +224,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
         >
           <div className="flex flex-col p-4">
             <div className="flex items-start gap-3">
-              <span className={clsx("flex items-center justify-center h-11 w-11 rounded-full shrink-0 border mt-0.5", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
+              <span className={clsx("flex items-center justify-center h-11 w-11 rounded-2xl shrink-0 border mt-0.5", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
                 {isIfood ? <Smartphone size={19} /> : <Store size={19} />}
               </span>
 
@@ -287,12 +287,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                         href={delivery.maps_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(delivery.address_string)}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="relative h-12 w-20 shrink-0 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 flex items-center justify-center active:scale-95 transition-all shadow-inner group"
+                        className="relative h-10 w-10 shrink-0 rounded-xl overflow-hidden border border-emerald-500/20 bg-emerald-500/[0.07] flex items-center justify-center active:scale-95 transition-all group"
                         title="Ver no Google Maps"
                       >
                         <div className="absolute inset-0 bg-emerald-500/10 opacity-60 group-hover:opacity-100" />
-                        <MapIcon size={14} className="text-emerald-400 relative z-10" />
-                        <span className="absolute bottom-1 text-[8px] font-black tracking-tighter text-zinc-400 z-10 uppercase">MAPS ↗</span>
+                        <MapIcon size={17} className="text-emerald-400 relative z-10" />
                       </a>
 
                       <div className="flex flex-col gap-1 truncate flex-1">

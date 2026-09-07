@@ -39,7 +39,7 @@ export default function DeliveriesPage() {
   }).filter(({delivery,incomplete,haystack}) => {
     const matchesStatus=status==='todas'||(status==='pendentes'&&!delivery.completed)||(status==='concluidas'&&delivery.completed)||(status==='incompletas'&&incomplete);
     return matchesStatus&&(origin==='todas'||delivery.origin===origin)&&(!query.trim()||haystack.includes(normalize(query)));
-  }).sort((a,b)=>new Date(createdAt(b.delivery)).getTime()-new Date(createdAt(a.delivery)).getTime()), [customers,dayDeliveries,origin,query,routes,status]);
+  }).sort((a,b)=>new Date(createdAt(a.delivery)).getTime()-new Date(createdAt(b.delivery)).getTime()), [customers,dayDeliveries,origin,query,routes,status]);
 
   const totals=useMemo(()=>({all:dayDeliveries.length,pending:dayDeliveries.filter(item=>!item.completed).length,completed:dayDeliveries.filter(item=>item.completed).length}),[dayDeliveries]);
   const calendarDays=useMemo(()=>{const first=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth(),1);const start=new Date(first.getFullYear(),first.getMonth(),1-first.getDay());return Array.from({length:42},(_,index)=>{const day=new Date(start);day.setDate(start.getDate()+index);return day;});},[calendarMonth]);

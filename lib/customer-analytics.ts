@@ -17,6 +17,18 @@ export const normalizeCustomerName = (value?: string) => (value || '')
   .trim()
   .toLocaleLowerCase('pt-BR');
 
+const normalizeCustomerAddress = (value?: string) => normalizeCustomerName(value)
+  .replace(/\b(?:rua|r\.?|avenida|av\.?)\b/g, '')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+/** Cadastros reais que pertencem à operação, mas não devem disputar rankings de clientes. */
+export function isOperationalCustomer(customer: Customer): boolean {
+  const name = normalizeCustomerName(customer.name);
+  const address = normalizeCustomerAddress(customer.address);
+  return name === 'alefe' && address.includes('lazaro martins marciel 164') && address.includes('jardim quebec');
+}
+
 export const getDeliveryCreatedAt = (delivery: Delivery) => delivery.created_at || delivery.createdAt || delivery.updated_at;
 
 export function deliveryBelongsToCustomer(delivery: Delivery, customer: Customer): boolean {

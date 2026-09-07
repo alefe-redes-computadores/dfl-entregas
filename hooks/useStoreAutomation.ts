@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { isWithinSchedule } from '@/lib/operational-time';
 
 export function useStoreAutomation() {
   const hasHydrated = useAppStore(state => state.hasHydrated);
@@ -81,13 +82,21 @@ export function useStoreAutomation() {
       const state = useAppStore.getState();
       const settings = state.storeSettings;
       
-      if (!settings || !settings.schedule) return;
+      if (!settings || !settings.schedule || !settings.alertsEnabled) return;
 
       const now = new Date();
       const currentMin = now.getMinutes();
       
       if (currentMin === lastCheckMinute.current) return;
       lastCheckMinute.current = currentMin;
+
+      const schedule = settings.schedule;
+      const shouldBeOpen = isWithinSchedule(now, schedule, settings.pauses);
+      if (shouldBeOpen !== Boolean(settings.isOpen)) {
+        state.updateStoreSettings({ isOpen: shouldBeOpen });
+        if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Heavy });
+      }
+      return;
 
       // Pausas Programadas (Férias)
       const todayIso = now.toISOString().split('T')[0];
@@ -98,7 +107,7 @@ export function useStoreAutomation() {
       }
 
       const jsDay = now.getDay();
-      const dayConfig = settings.schedule[jsDay];
+      const dayConfig = schedule[jsDay];
       
       if (!dayConfig || !dayConfig.active || !dayConfig.shifts || dayConfig.shifts.length === 0) {
         if (settings.isOpen) state.updateStoreSettings({ isOpen: false });

@@ -14,6 +14,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import { useStoreDashboard } from '@/hooks/useStoreDashboard';
 import { PerformanceModals } from '@/components/store/PerformanceModals';
+import { OperationalCalendar } from '@/components/store/OperationalCalendar';
+import { validateSchedule } from '@/lib/operational-time';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
 
 const DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
@@ -43,6 +45,7 @@ export default function LojaPage() {
   const dashboardData = useStoreDashboard();
   const [isLogisticsModalOpen, setIsLogisticsModalOpen] = useState(false);
   const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   // Expediente Avançado
   const [activeTab, setActiveTab] = useState<'horarios' | 'pausas' | 'feriados'>('horarios');
@@ -115,7 +118,9 @@ export default function LojaPage() {
 
   const saveDayEditor = () => {
     if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium });
-    if (editingDay !== null) { setSchedule(prev => ({ ...prev, [editingDay]: tempDaySchedule })); setEditingDay(null); }
+    const error = validateSchedule(tempDaySchedule);
+    if (error) { toast.error('Confira os horários', { description: error }); return; }
+    if (editingDay !== null) { setSchedule(prev => ({ ...prev, [editingDay]: { ...tempDaySchedule, shifts: tempDaySchedule.shifts.map(shift => ({...shift})) } })); setEditingDay(null); }
   };
 
   const applyQuickAdjustment = (type: '24h' | 'almoco' | 'janta' | 'ambos') => {
@@ -133,7 +138,7 @@ export default function LojaPage() {
     if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium });
     if (editingDay !== null) {
       setTempDaySchedule(prev => {
-        const ns = [...prev.shifts];
+        const ns = prev.shifts.map(shift => ({ ...shift }));
         const t = `${timePicker.hour}:${timePicker.minute}`;
         if (timePicker.field === 'start') ns[timePicker.shiftIndex].start = t; else ns[timePicker.shiftIndex].end = t;
         return { ...prev, shifts: ns };
@@ -158,6 +163,8 @@ export default function LojaPage() {
       <div className="flex flex-col gap-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2"><Users size={14} /> Gestão & Cadastros</h2>
         <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => router.push('/entregas')} className="rounded-[24px] border border-amber-500/20 bg-amber-500/[.06] p-4 text-left active:scale-95"><span className="text-[10px] font-bold uppercase text-amber-400">Operação</span><p className="mt-2 font-heading font-bold text-zinc-100">Entregas</p><p className="text-[11px] text-zinc-500">Consultar o dia e histórico</p></button>
+          <button onClick={() => router.push('/rotas')} className="rounded-[24px] border border-sky-500/20 bg-sky-500/[.06] p-4 text-left active:scale-95"><span className="text-[10px] font-bold uppercase text-sky-400">Logística</span><p className="mt-2 font-heading font-bold text-zinc-100">Rotas</p><p className="text-[11px] text-zinc-500">Acompanhar e organizar</p></button>
           <button onClick={() => router.push('/motoboys')} className="bg-zinc-900/60 border border-zinc-800 hover:border-amber-500/50 p-4 rounded-[24px] flex flex-col gap-2 text-left transition-all cursor-pointer active:scale-95 group">
             <div className="flex items-center justify-between"><div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center group-hover:scale-105 transition-transform"><Bike size={18} /></div><span className="text-[10px] font-bold text-zinc-500 uppercase">Equipe</span></div>
             <div><p className="font-heading font-bold text-zinc-100 text-sm">Motoboys</p><p className="text-[11px] text-zinc-500">Gerenciar e cadastrar</p></div>
@@ -182,9 +189,9 @@ export default function LojaPage() {
             >
               <ChevronLeft size={14}/>
             </button>
-            <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-center min-w-[70px]">
+            <button onClick={() => setIsCalendarOpen(true)} className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full text-center min-w-[86px] active:scale-95">
               {dashboardData.formattedDateLabel}
-            </span>
+            </button>
             <button 
               onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToNextDay(); }} 
               className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 active:scale-95 transition-all"
@@ -389,6 +396,7 @@ export default function LojaPage() {
         togglePrivacyMode={togglePrivacyMode}
         dashboardData={dashboardData}
       />
+      {isCalendarOpen && <OperationalCalendar selected={dashboardData.selectedDateKey} markedDates={dashboardData.datesWithOperation} onClose={() => setIsCalendarOpen(false)} onSelect={(key) => { dashboardData.setSelectedDateKey(key); setIsCalendarOpen(false); }} />}
     </div>
   );
 }

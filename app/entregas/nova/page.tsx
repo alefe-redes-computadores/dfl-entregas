@@ -83,13 +83,17 @@ export default function NovaEntregaPage() {
     if (parsed.phone) { setPhone(formatPhoneInput(parsed.phone)); identified.push('Zap'); }
     if (parsed.address) { setStreetAddress(parsed.address); identified.push('Endereço'); }
     if (parsed.mapsLink) { setMapsLink(parsed.mapsLink); identified.push('Link Maps'); }
-    if (parsed.isPaid) { setIsPaid(true); identified.push('Pago'); }
-    if (parsed.paymentMethod) setPaymentMethod(parsed.paymentMethod);
+    if (parsed.paymentMethod) {
+      setPaymentMethod(parsed.paymentMethod);
+      setIsPaid(parsed.paymentMethod === 'pix' ? parsed.isPaid : false);
+      if (parsed.paymentMethod !== 'dinheiro') setChangeFor('');
+      identified.push(parsed.isPaid ? 'Pago no app' : 'Pagamento');
+    }
     if (parsed.value) { setValue(formatCurrencyInput(parsed.value.replace(/\D/g, ''))); identified.push(`Valor R$ ${parsed.value}`); }
     if (parsed.changeFor) { setChangeFor(formatCurrencyInput(parsed.changeFor.replace(/\D/g, ''))); identified.push(`Troco p/ ${parsed.changeFor}`); }
     if (parsed.drinks.length > 0) { setDrinks(parsed.drinks.join(', ')); identified.push('Bebidas'); }
     if (parsed.observations.length > 0) {
-      setObservation((current) => current ? `${current}, ${parsed.observations.join(' - ')}` : parsed.observations.join(' - '));
+      setObservation((current) => current ? `${current} - ${parsed.observations.join(' - ')}` : parsed.observations.join(' - '));
       identified.push('Obs');
     }
 

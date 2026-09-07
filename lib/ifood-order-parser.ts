@@ -1,207 +1,90 @@
-import type { Delivery } from '../types';
+// lib/ifood-order-parser.ts
+import type { Delivery } from '@/types';
 
 export interface ParsedIfoodOrder {
-  orderId: string;
-  ifoodId: string;
-  confirmationCode: string;
-  customerName: string;
-  phone: string;
-  address: string;
-  mapsLink: string;
-  isPaid: boolean;
-  paymentMethod: Delivery['payment_method'] | null;
-  value: string;
-  changeFor: string;
-  drinks: string[];
-  observations: string[];
+  orderId: string; ifoodId: string; confirmationCode: string; customerName: string;
+  phone: string; address: string; mapsLink: string; isPaid: boolean;
+  paymentMethod: Delivery['payment_method'] | null; value: string; changeFor: string;
+  drinks: string[]; observations: string[];
 }
 
-const STREET_PATTERN = /(?:\br\.(?=\s)|\b(?:rua|av\.?|avenida|alameda|travessa|praça|praca|rodovia|estrada|beco|viela)\b)/i;
-const NEIGHBORHOOD_HINT = /\b(?:bairro|vila|jardim|jd\.?|residencial|loteamento|condom[ií]nio|centro|distrito|ch[aá]cara|morada|nova|novo|santa|santo|s[ãa]o)\b/i;
-const COMPLEMENT_PATTERN = /\b(?:ap(?:to|artamento)?\.?|bloco|casa|fundos|andar|sala|lote|quadra)\s*[A-Za-zÀ-ÿ0-9.]+(?:\s+[A-Za-zÀ-ÿ0-9.]+)?/gi;
-const OBSERVATION_PREFIX = /^(?:obs(?:erva(?:ç|c)[aã]o)?|refer[eê]ncia|complemento|instru(?:ç|c)[aã]o|port[aã]o)\s*:\s*/i;
+const STREET = /(?:\br\.(?=\s)|\b(?:rua|av\.?|avenida|alameda|travessa|pra[cç]a|rodovia|estrada|beco|viela)\b)/i;
+const URL = /https?:\/\/[^\s<>()]+/gi;
+const MAP_HOST = /(?:google\.[^/]+\/(?:maps|url)|maps\.google\.[^/]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i;
+const OBS_PREFIX = /^(?:obs(?:erva(?:ç|c)[aã]o)?|refer[eê]ncia|complemento|instru(?:ç|c)[aã]o|port[aã]o)\s*:\s*/i;
+const INSTRUCTION = /\b(?:ap(?:to|artamento)?\.?|bloco|casa|fundos|andar|sala|lote|quadra|port[aã]o|interfone|ligar|chamar|entrada|esquina|em frente|ao lado|casa de|deixar|tocar|buzinar)\b/i;
+const NEIGHBORHOOD = /^(?:bairro\s+)?(?:vila|jardim|jd\.?|residencial|loteamento|condom[ií]nio|centro|distrito|ch[aá]cara|morada|nova|novo|santa|santo|s[ãa]o)\b/i;
 
-function emptyResult(): ParsedIfoodOrder {
-  return {
-    orderId: '',
-    ifoodId: '',
-    confirmationCode: '',
-    customerName: '',
-    phone: '',
-    address: '',
-    mapsLink: '',
-    isPaid: false,
-    paymentMethod: null,
-    value: '',
-    changeFor: '',
-    drinks: [],
-    observations: [],
-  };
+const emptyResult = (): ParsedIfoodOrder => ({ orderId:'',ifoodId:'',confirmationCode:'',customerName:'',phone:'',address:'',mapsLink:'',isPaid:false,paymentMethod:null,value:'',changeFor:'',drinks:[],observations:[] });
+const spaces = (value:string) => value.replace(/\s+/g,' ').replace(/\s+,/g,',').trim();
+const numberValue = (value:string) => { const clean=value.replace(/\s/g,''); return Number(clean.includes(',')?clean.replace(/\./g,'').replace(',','.'):clean); };
+const currency = (value:number) => value.toFixed(2).replace('.',',');
+
+function addUnique(target:string[], value:string) {
+  const clean=spaces(value).replace(/^[-–—,;]+|[-–—,;]+$/g,'').trim();
+  const key=clean.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  if(clean&&!target.some(item=>item.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()===key)) target.push(clean);
 }
 
-function normalizeSpaces(value: string): string {
-  return value.replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim();
+function mapUrl(line:string) {
+  return (line.match(URL)??[]).find(value=>MAP_HOST.test(value))?.replace(/[),.;]+$/,'')??'';
 }
 
-function parseMoneyToken(value: string): number {
-  const normalized = value.replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.');
-  return Number(normalized);
-}
-
-function formatMoneyToken(value: number): string {
-  return value.toFixed(2).replace('.', ',');
-}
-
-function cleanAddressLine(line: string, observations: string[]): string {
-  let address = line
-    .replace(/\bCEP\s*:?\s*\d{5}-?\d{3}\b/gi, '')
-    .replace(/,?\s*Patos de Minas\s*(?:[-/]\s*MG|,\s*MG)?\b/gi, '')
-    .replace(/,?\s*Minas Gerais\b/gi, '')
-    .replace(/,?\s*MG\b\s*$/gi, '')
-    .replace(/(\b\d+)\s*-\s*([A-Za-z]\b)/g, '$1$2');
-
-  const complements = address.match(COMPLEMENT_PATTERN) ?? [];
-  for (const complement of complements) {
-    const normalized = normalizeSpaces(complement);
-    if (normalized && !observations.some((item) => item.toLowerCase() === normalized.toLowerCase())) {
-      observations.push(normalized);
-    }
+function cleanAddress(source:string, observations:string[]) {
+  let line=source.replace(URL,' ')
+    .replace(/\bCEP\s*:?\s*\d{5}-?\d{3}\b/gi,' ')
+    .replace(/,?\s*Patos de Minas\s*(?:[-/,]\s*MG)?\b/gi,' ')
+    .replace(/,?\s*Minas Gerais\b/gi,' ')
+    .replace(/,?\s*MG\b/gi,' ')
+    .replace(/,?\s*Brasil\b/gi,' ')
+    .replace(/(\b\d+)\s*-\s*([A-Za-z]\b)/g,'$1$2')
+    .replace(/\s*[,;]\s*/g,' - ').replace(/\s*[-–—]\s*/g,' - ')
+    .replace(/(?:\s+-\s+){2,}/g,' - ');
+  const parts=line.split(/\s+-\s+/).map(spaces).filter(Boolean);
+  if(!parts.length)return '';
+  let street=parts.shift()!; let number='';
+  const inline=street.match(/^(.*?)[,\s]+(\d+[A-Za-z]?|s\/?n)$/i);
+  if(inline){street=inline[1];number=inline[2];}
+  else if(parts[0]&&/^(?:\d+[A-Za-z]?|s\/?n)$/i.test(parts[0]))number=parts.shift()!;
+  let neighborhood='';
+  for(const part of parts){
+    if(INSTRUCTION.test(part)&&!NEIGHBORHOOD.test(part))addUnique(observations,part);
+    else if(!neighborhood&&!/^(?:casa|resid[eê]ncia)$/i.test(part))neighborhood=part.replace(/^bairro\s+/i,'');
+    else if(part)addUnique(observations,part);
   }
-  address = address.replace(COMPLEMENT_PATTERN, '');
-
-  const parts = address
-    .split(/\s+-\s+|\s*[,;]\s*/)
-    .map(normalizeSpaces)
-    .filter((part) => Boolean(part) && !/^[-–—]+$/.test(part));
-
-  if (parts.length <= 1) return normalizeSpaces(address).replace(/[,-]\s*$/, '');
-
-  const street = parts[0];
-  const numberIndex = parts.findIndex((part, index) => index > 0 && /^(?:\d+[A-Za-z]?|s\/?n)$/i.test(part));
-  const number = numberIndex >= 0 ? parts[numberIndex] : '';
-  const addressParts: string[] = [];
-  for (let index = 1; index < parts.length; index += 1) {
-    if (index === numberIndex) continue;
-    const part = parts[index];
-    const lower = part.toLowerCase();
-    const isHumanInstruction = /\b(?:port[aã]o|ligar|chamar|interfone|entrada|esquina|em frente|ao lado|casa de|fundos)\b/i.test(part);
-    const looksLikeNeighborhood = NEIGHBORHOOD_HINT.test(part) || (index === parts.length - 1 && !isHumanInstruction);
-
-    if (isHumanInstruction && !looksLikeNeighborhood) {
-      observations.push(part);
-    } else if (!/^(?:casa|resid[eê]ncia)$/i.test(lower)) {
-      addressParts.push(part.replace(/^[-–—]+|[-–—]+$/g, '').trim());
-    }
-  }
-
-  const streetAndNumber = number ? `${street}, ${number}` : street;
-  return [streetAndNumber, ...addressParts].filter(Boolean).join(' - ').replace(/(?:\s*-\s*){2,}/g, ' - ').replace(/[,-]\s*$/, '').trim();
+  return spaces(`${street.replace(/[,]$/,'')}${number?`, ${number}`:''}${neighborhood?` - ${neighborhood}`:''}`).replace(/[,\-]\s*$/,'');
 }
 
-function unique(values: string[]): string[] {
-  const seen = new Set<string>();
-  return values.filter((value) => {
-    const normalized = normalizeSpaces(value).toLocaleLowerCase('pt-BR');
-    if (!normalized || seen.has(normalized)) return false;
-    seen.add(normalized);
-    return true;
-  });
+function parsePayment(line:string,result:ParsedIfoodOrder){
+  if(/\b(?:pago\s+(?:no\s+app|online)|pedido\s+pago|pagamento\s+online)\b/i.test(line)&&!/\bn[aã]o\s+pago\b/i.test(line)){result.paymentMethod='pix';result.isPaid=true;result.changeFor='';return;}
+  if(/\b(?:cart[aã]o|cr[eé]dito|d[eé]bito)\b/i.test(line)){result.paymentMethod='cartao';result.isPaid=false;result.changeFor='';}
+  else if(/\b(?:dinheiro|troco|voltar)\b/i.test(line)){result.paymentMethod='dinheiro';result.isPaid=false;}
+  else if(/\bpix\b/i.test(line))result.paymentMethod='pix';
 }
 
-export function parseIfoodOrderText(text: string): ParsedIfoodOrder {
-  const result = emptyResult();
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  let identifierLine = -1;
+function parseFinancial(line:string,result:ParsedIfoodOrder){
+  const tokens=[...line.matchAll(/(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/gi)].map(match=>({value:numberValue(match[1]),index:match.index??0}));
+  const changeIndex=line.search(/\b(?:troco|voltar)\b/i);
+  const baseToken=tokens.find(token=>changeIndex<0||token.index<changeIndex);
+  if(!result.value&&/\b(?:valor|total|pagamento|pago|pix|cart[aã]o|dinheiro|troco|voltar)\b/i.test(line)&&baseToken&&Number.isFinite(baseToken.value))result.value=currency(baseToken.value);
+  const base=result.value?numberValue(result.value):baseToken?.value;
+  const tendered=line.match(/\btroco\s+(?:para|p\/?|de)\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i);
+  const returned=line.match(/\b(?:troco|voltar)\s*(?!para\b|p\/?\b|de\b)(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i)||line.match(/(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s+de\s+troco\b/i);
+  if(tendered){const value=numberValue(tendered[1]);if(Number.isFinite(value))result.changeFor=currency(value);}
+  else if(returned&&Number.isFinite(base)){const value=numberValue(returned[1]);if(Number.isFinite(value))result.changeFor=currency((base as number)+value);}
+}
 
-  lines.forEach((line, index) => {
-    const url = line.match(/https?:\/\/[^\s]+/i)?.[0];
-    if (url && /(?:google\.[^/]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(url)) {
-      result.mapsLink = url.replace(/[),.;]+$/, '');
-    }
-
-    const lower = line.toLowerCase();
-    const tokens = line.replace(/\D+/g, ' ').trim().split(' ').filter(Boolean);
-    const canBeIdentifierLine = tokens.length > 0 && !STREET_PATTERN.test(line) && !lower.includes('cep') && !lower.includes('r$') && !lower.includes('total');
-    if (!canBeIdentifierLine || !tokens.some((token) => token.length === 8)) return;
-
-    identifierLine = index;
-    const eightDigit = tokens.find((token) => token.length === 8);
-    const shortTokens = tokens.filter((token) => token.length === 4 || token.length === 5);
-    result.ifoodId ||= eightDigit ?? '';
-    result.orderId ||= shortTokens[0] ?? '';
-    result.confirmationCode ||= shortTokens.find((token) => token.length === 4 && token !== result.orderId) ?? '';
-  });
-
-  lines.forEach((line, index) => {
-    const lower = line.toLowerCase();
-    if (index === identifierLine || /^https?:\/\//i.test(line)) return;
-
-    if (/^(?:cliente|nome)\s*:/i.test(line)) {
-      result.customerName = line.replace(/^(?:cliente|nome)\s*:\s*/i, '').trim();
-      return;
-    }
-
-    if (!result.customerName && identifierLine >= 0 && index > identifierLine && index <= identifierLine + 2) {
-      const isCandidate = !STREET_PATTERN.test(line) && !/\b(?:cep|pago|cart[aã]o|dinheiro|pix|total)\b/i.test(line) && !/\d+[.,]\d{2}/.test(line);
-      if (isCandidate && line.length > 2) {
-        result.customerName = line.replace(/^[-•*]\s*/, '').trim();
-        return;
-      }
-    }
-
-    const phone = line.match(/(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4,5}[-\s]?\d{4}/)?.[0];
-    if (phone && !result.phone && !lower.includes('cep')) {
-      const digits = phone.replace(/\D/g, '');
-      if (digits.length >= 10 && digits.length <= 11) result.phone = digits;
-    }
-
-    const isDrink = /(coca|guaran[aá]|fanta|sprite|suco|refrigerante|cerveja|heineken|[aá]gua|schweppes|del valle)/i.test(line);
-    const hasVolume = /(\d+\s*(?:l|ml|litro|litros)|lata|garrafa|600ml|2l|1\.5l|350ml)/i.test(line);
-    if (isDrink || (hasVolume && !STREET_PATTERN.test(line) && !/\bap(?:to)?\b/i.test(line))) {
-      result.drinks.push(line.replace(/^[-•*x\d\s]+\s*/i, '').trim());
-      return;
-    }
-
-    if (/\b(?:pago(?:\s+no\s+app|\s+online)?|pedido\s+pago)\b/i.test(line) && !/n[aã]o\s+pago/i.test(line)) {
-      result.isPaid = true;
-      result.paymentMethod = 'pix';
-    } else if (/\b(?:cart[aã]o|cr[eé]dito|d[eé]bito)\b/i.test(line)) {
-      result.paymentMethod = 'cartao';
-      result.isPaid = false;
-    } else if (/\b(?:dinheiro|troco|voltar)\b/i.test(line)) {
-      result.paymentMethod = 'dinheiro';
-      result.isPaid = false;
-    } else if (/\bpix\b/i.test(line)) {
-      result.paymentMethod = 'pix';
-    }
-
-    const amount = line.match(/(?:valor|total)?\s*:?[\s(]*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i);
-    const hasFinancialContext = /\b(?:valor|total|pago|pagamento|pix|cart[aã]o|dinheiro|troco|voltar)\b/i.test(line);
-    if (amount && hasFinancialContext && !result.value) result.value = formatMoneyToken(parseMoneyToken(amount[1]));
-
-    const change = line.match(/troco\s*(?:para|p\/)?\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i);
-    const returnAmount = line.match(/(?:voltar|(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s+de\s+troco)/i);
-    if (change) {
-      result.changeFor = formatMoneyToken(parseMoneyToken(change[1]));
-    } else if (returnAmount && amount) {
-      const base = parseMoneyToken(amount[1]);
-      const returnedToken = returnAmount[1] || line.match(/voltar\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i)?.[1];
-      const returned = returnedToken ? parseMoneyToken(returnedToken) : Number.NaN;
-      if (Number.isFinite(base) && Number.isFinite(returned)) result.changeFor = (base + returned).toFixed(2).replace('.', ',');
-    }
-
-    if (STREET_PATTERN.test(line) || /\bCEP\s*:?\s*\d{5}-?\d{3}\b/i.test(line)) {
-      result.address = cleanAddressLine(line, result.observations);
-      return;
-    }
-
-    if (OBSERVATION_PREFIX.test(line)) {
-      const observation = line.replace(OBSERVATION_PREFIX, '').trim();
-      if (observation) result.observations.push(observation);
-    }
-  });
-
-  result.drinks = unique(result.drinks);
-  result.observations = unique(result.observations);
-  return result;
+export function parseIfoodOrderText(text:string):ParsedIfoodOrder{
+  const result=emptyResult(); const lines=text.split(/\r?\n/).map(line=>line.trim()).filter(Boolean); let idLine=-1;
+  lines.forEach((line,index)=>{const url=mapUrl(line);if(url)result.mapsLink=url;const tokens=line.replace(/\D+/g,' ').trim().split(' ').filter(Boolean);if(!tokens.length||STREET.test(line)||/\b(?:cep|total)\b|r\$/i.test(line)||!tokens.some(token=>token.length===8))return;idLine=index;result.ifoodId||=tokens.find(token=>token.length===8)??'';const short=tokens.filter(token=>token.length===4||token.length===5);result.orderId||=short[0]??'';result.confirmationCode||=short.find(token=>token.length===4&&token!==result.orderId)??'';});
+  lines.forEach((original,index)=>{const line=spaces(original.replace(URL,' '));if(index===idLine||!line)return;
+    if(/^(?:cliente|nome)\s*:/i.test(line)){result.customerName=line.replace(/^(?:cliente|nome)\s*:\s*/i,'').trim();return;}
+    if(!result.customerName&&idLine>=0&&index>idLine&&index<=idLine+2&&!STREET.test(line)&&!/(?:cep|pago|cart[aã]o|dinheiro|pix|total)/i.test(line)&&!/\d+[.,]\d{2}/.test(line)){result.customerName=line.replace(/^[-•*]\s*/,'').trim();return;}
+    const phone=line.match(/(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4,5}[-\s]?\d{4}/)?.[0];if(phone&&!result.phone&&!/cep/i.test(line)){const digits=phone.replace(/\D/g,'');if(digits.length>=10&&digits.length<=11)result.phone=digits;}
+    const drink=/(coca|guaran[aá]|fanta|sprite|suco|refrigerante|cerveja|heineken|[aá]gua|schweppes|del valle)/i.test(line);const volume=/(\d+\s*(?:l|ml|litro|litros)|lata|garrafa)/i.test(line);if(drink||(volume&&!STREET.test(line)&&! /\bap(?:to)?\b/i.test(line))){addUnique(result.drinks,line.replace(/^[-•*x\d\s]+\s*/i,''));return;}
+    parsePayment(line,result);parseFinancial(line,result);
+    if(STREET.test(line)||/\bCEP\s*:?\s*\d{5}-?\d{3}\b/i.test(line)){result.address=cleanAddress(original,result.observations);return;}
+    if(OBS_PREFIX.test(line)){addUnique(result.observations,line.replace(OBS_PREFIX,''));return;}
+    if(INSTRUCTION.test(line)&&!/(?:pagamento|dinheiro|troco|cart[aã]o|pix)/i.test(line))addUnique(result.observations,line);
+  });return result;
 }

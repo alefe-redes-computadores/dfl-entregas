@@ -1,77 +1,32 @@
+// hooks/useStoreDashboard.ts
 'use client';
-
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { dateFromKey, dateKey, deliveryDate, routeDate, shiftDateKey } from '@/lib/operational-time';
+import type { Delivery, Route } from '@/types';
 
-export function useStoreDashboard() {
-  const deliveries = useAppStore((state) => state.deliveries);
-  const routes = useAppStore((state) => state.routes);
-  
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+export interface StoreDashboardData {
+  selectedDate:Date; selectedDateKey:string; setSelectedDateKey:(key:string)=>void;
+  goToPreviousDay:()=>void; goToNextDay:()=>void; formattedDateLabel:string;
+  selectedDateDeliveries:Delivery[]; selectedDateRoutes:Route[]; datesWithOperation:Set<string>;
+  totalEntregas:number; completedDeliveries:number; pendingDeliveries:number;
+  faturamentoTotal:number; receivedTotal:number; pendingTotal:number; ticketMedio:number;
+  revenueByMethod:Record<string,number>; routesSummary:Array<{name:string;motoboy:string;status:Route['status'];deliveries:Delivery[]}>;
+}
 
-  const goToPreviousDay = () => setSelectedDate(prev => new Date(prev.setDate(prev.getDate() - 1)));
-  const goToNextDay = () => setSelectedDate(prev => new Date(prev.setDate(prev.getDate() + 1)));
-
-  const selectedDateDeliveries = useMemo(() => {
-    const targetDateStr = new Date(selectedDate.getTime() - 3 * 3600000).toISOString().split('T')[0];
-    return deliveries.filter(d => {
-      const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
-      const brtDate = new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
-      return brtDate === targetDateStr;
-    });
-  }, [deliveries, selectedDate]);
-
-  const totalEntregas = selectedDateDeliveries.length;
-  const faturamentoTotal = selectedDateDeliveries.reduce((acc, d) => acc + (d.value || 0), 0);
-  const ticketMedio = totalEntregas > 0 ? faturamentoTotal / totalEntregas : 0;
-
-  const revenueByMethod = useMemo(() => {
-    return selectedDateDeliveries.reduce((acc, d) => {
-      const m = d.payment_method || 'dinheiro';
-      acc[m] = (acc[m] || 0) + (d.value || 0);
-      return acc;
-    }, {} as Record<string, number>);
-  }, [selectedDateDeliveries]);
-
-  // Rotas formatadas (Legado - Mantido para o Financeiro)
-  const routesSummary = useMemo(() => {
-    const summary = new Map();
-    selectedDateDeliveries.forEach(d => {
-      if (!d.route_id) return;
-      const route = routes.find(r => r.id === d.route_id);
-      if (!route) return;
-      if (!summary.has(route.id)) summary.set(route.id, { name: route.name, motoboy: route.motoboy_name, status: route.status, deliveries: [] });
-      summary.get(route.id).deliveries.push(d);
-    });
-    return Array.from(summary.values());
-  }, [selectedDateDeliveries, routes]);
-
-  // 🔥 NOVO: Puxa os Objetos de Rota completos da data selecionada
-  const selectedDateRoutes = useMemo(() => {
-    const routeIds = new Set(selectedDateDeliveries.map(d => d.route_id).filter(Boolean));
-    return routes.filter(r => routeIds.has(r.id));
-  }, [selectedDateDeliveries, routes]);
-
-  const formattedDateLabel = useMemo(() => {
-    const todayStr = new Date(Date.now() - 3 * 3600000).toISOString().split('T')[0];
-    const targetStr = new Date(selectedDate.getTime() - 3 * 3600000).toISOString().split('T')[0];
-    if (todayStr === targetStr) return 'Hoje';
-    
-    const d = new Date(selectedDate.getTime() - 3 * 3600000);
-    return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
-  }, [selectedDate]);
-
-  return {
-    selectedDate,
-    goToPreviousDay,
-    goToNextDay,
-    formattedDateLabel,
-    selectedDateDeliveries,
-    selectedDateRoutes, // <-- Enviando para o Modal
-    totalEntregas,
-    faturamentoTotal,
-    ticketMedio,
-    revenueByMethod,
-    routesSummary
-  };
+export function useStoreDashboard():StoreDashboardData {
+  const deliveries=useAppStore(state=>state.deliveries); const routes=useAppStore(state=>state.routes);
+  const [selectedDateKey,setSelectedDateKey]=useState(()=>dateKey(new Date()));
+  const selectedDate=dateFromKey(selectedDateKey);
+  const selectedDateDeliveries=useMemo(()=>deliveries.filter(delivery=>{const value=deliveryDate(delivery);return Boolean(value)&&dateKey(value)===selectedDateKey;}),[deliveries,selectedDateKey]);
+  const selectedDateRoutes=useMemo(()=>routes.filter(route=>{const value=routeDate(route);return Boolean(value)&&dateKey(value)===selectedDateKey;}),[routes,selectedDateKey]);
+  const datesWithOperation=useMemo(()=>new Set([...deliveries.map(deliveryDate),...routes.map(routeDate)].filter(Boolean).map(dateKey)),[deliveries,routes]);
+  const totalEntregas=selectedDateDeliveries.length; const completedDeliveries=selectedDateDeliveries.filter(item=>item.completed).length; const pendingDeliveries=totalEntregas-completedDeliveries;
+  const faturamentoTotal=selectedDateDeliveries.reduce((sum,item)=>sum+(item.value||0),0);
+  const receivedTotal=selectedDateDeliveries.filter(item=>item.is_paid||item.completed).reduce((sum,item)=>sum+(item.value||0),0);
+  const pendingTotal=Math.max(0,faturamentoTotal-receivedTotal); const ticketMedio=totalEntregas?faturamentoTotal/totalEntregas:0;
+  const revenueByMethod=useMemo(()=>selectedDateDeliveries.reduce<Record<string,number>>((acc,item)=>{const method=item.payment_method||'dinheiro';acc[method]=(acc[method]||0)+(item.value||0);return acc;},{}),[selectedDateDeliveries]);
+  const routesSummary=useMemo(()=>selectedDateRoutes.map(route=>({name:route.name,motoboy:route.motoboy_name,status:route.status,deliveries:selectedDateDeliveries.filter(item=>item.route_id===route.id)})),[selectedDateDeliveries,selectedDateRoutes]);
+  const formattedDateLabel=selectedDateKey===dateKey(new Date())?'Hoje':selectedDate.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  return {selectedDate,selectedDateKey,setSelectedDateKey,goToPreviousDay:()=>setSelectedDateKey(key=>shiftDateKey(key,-1)),goToNextDay:()=>setSelectedDateKey(key=>shiftDateKey(key,1)),formattedDateLabel,selectedDateDeliveries,selectedDateRoutes,datesWithOperation,totalEntregas,completedDeliveries,pendingDeliveries,faturamentoTotal,receivedTotal,pendingTotal,ticketMedio,revenueByMethod,routesSummary};
 }

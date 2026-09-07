@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Crown, MapPin, MessageCircle, PackageOpen, Plus, Search, Smartphone, Store, Trophy, UserRound } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { getCustomerStats, normalizeCustomerName } from '@/lib/customer-analytics';
+import { getCustomerStats, isOperationalCustomer, normalizeCustomerName } from '@/lib/customer-analytics';
 
 type Filter = 'todos'|'ifood'|'loja'|'com-pedidos'|'sem-pedidos';
 const money=(value:number)=>value.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -19,7 +19,7 @@ export default function CustomersPage(){
   const [filter,setFilter]=useState<Filter>('todos');
 
   const items=useMemo(()=>customers.map(customer=>({customer,stats:getCustomerStats(customer,deliveries)})),[customers,deliveries]);
-  const ranked=useMemo(()=>[...items].filter(item=>item.stats.orderCount>0).sort((a,b)=>b.stats.orderCount-a.stats.orderCount||b.stats.totalValue-a.stats.totalValue),[items]);
+  const ranked=useMemo(()=>[...items].filter(item=>item.stats.orderCount>0&&!isOperationalCustomer(item.customer)).sort((a,b)=>b.stats.orderCount-a.stats.orderCount||b.stats.totalValue-a.stats.totalValue),[items]);
   const filtered=useMemo(()=>items.filter(({customer,stats})=>{
     const term=normalizeCustomerName(query);
     const haystack=normalizeCustomerName(`${customer.name} ${customer.phone||''} ${customer.address||''} ${customer.neighborhood||''}`);

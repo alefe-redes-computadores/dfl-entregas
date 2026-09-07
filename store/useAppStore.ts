@@ -329,10 +329,15 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await setDoc(doc(db, 'motoboys', motoboy.id), safeData);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          set((state) => ({ motoboys: state.motoboys.filter((item) => item.id !== motoboy.id) }));
+          console.error(error);
+          throw error;
+        }
       },
 
       updateMotoboy: async (id, updatedData) => {
+        const previousMotoboys = get().motoboys;
         const dataWithTimestamp: Partial<Motoboy> = { ...updatedData, updated_at: new Date().toISOString() };
         set((state) => ({
           motoboys: state.motoboys.map((m) => m.id === id ? { ...m, ...dataWithTimestamp } as Motoboy : m)
@@ -340,14 +345,26 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await updateDoc(doc(db, 'motoboys', id), safeData);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          set({ motoboys: previousMotoboys });
+          console.error(error);
+          throw error;
+        }
       },
 
       deleteMotoboy: async (id) => {
+        if (get().routes.some((route) => route.motoboy_id === id)) {
+          throw new Error('Não é possível excluir um motoboy que possui rotas. Desative o cadastro para preservar o histórico.');
+        }
+        const previousMotoboys = get().motoboys;
         set((state) => ({ motoboys: state.motoboys.filter((m) => m.id !== id) }));
         try {
           await deleteDoc(doc(db, 'motoboys', id));
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          set({ motoboys: previousMotoboys });
+          console.error(error);
+          throw error;
+        }
       },
 
       addDelivery: async (delivery) => {

@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Trash2, CheckSquare, Moon, LogOut, AlertTriangle, Bike, ChevronRight, Package } from 'lucide-react';
+import { RefreshCw, Trash2, CheckSquare, Moon, LogOut, AlertTriangle, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -102,24 +102,12 @@ export default function MaisPage() {
         </div>
       </div>
 
-      {/* OPERAÇÃO (Apenas iFood) */}
+      {/* Ferramentas externas */}
       <div className="flex flex-col gap-2">
         <h3 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-          Operação Diária
+          Ferramentas
         </h3>
         <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
-          <button onClick={() => router.push('/entregas')} className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 transition-colors active:bg-zinc-800/50">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-400"><Package size={20} /></div>
-            <div className="flex-1 text-left"><p className="font-semibold text-zinc-100">Entregas e histórico</p><p className="text-xs text-zinc-500">Buscar pedidos, clientes e endereços</p></div><ChevronRight size={18} className="text-zinc-600" />
-          </button>
-          <button
-            onClick={() => router.push('/rotas')}
-            className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 transition-colors active:bg-zinc-800/50"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-400"><Bike size={20} /></div>
-            <div className="flex-1 text-left"><p className="font-semibold text-zinc-100">Rotas e histórico</p><p className="text-xs text-zinc-500">Consultar, acompanhar e editar rotas</p></div>
-            <ChevronRight size={18} className="text-zinc-600" />
-          </button>
           <button
             onClick={() => router.push('/confirmar')}
             className="flex w-full items-center gap-4 p-4 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30"

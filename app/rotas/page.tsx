@@ -39,7 +39,7 @@ export default function RoutesPage() {
   }).filter(({ route, state }) => {
     const term = query.trim().toLocaleLowerCase('pt-BR');
     return (filter === 'todas' || state === filter) && (!term || `${route.name} ${route.motoboy_name}`.toLocaleLowerCase('pt-BR').includes(term));
-  }).sort((a, b) => new Date(routeDate(b.route)).getTime() - new Date(routeDate(a.route)).getTime()), [dayRoutes, deliveries, filter, query]);
+  }).sort((a, b) => new Date(routeDate(a.route)).getTime() - new Date(routeDate(b.route)).getTime()), [dayRoutes, deliveries, filter, query]);
 
   const counts = useMemo(() => ({
     montando: dayRoutes.filter(route => route.status === 'aberta' && !route.started_at).length,

@@ -1,3 +1,4 @@
+// app/entregas/editar/page.tsx
 'use client';
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
@@ -11,6 +12,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; 
 import { extractCoordinatesFromUrl } from '@/lib/maps';
+import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer } from '@/types';
@@ -27,7 +29,6 @@ function DeliveryDetailsForm() {
   const deleteDelivery = useAppStore((state) => state.deleteDelivery);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
-  const updateCustomer = useAppStore((state) => state.updateCustomer);
 
   // Parser Mágico de Texto para Edição
   const [magicText, setMagicText] = useState('');
@@ -292,6 +293,43 @@ function DeliveryDetailsForm() {
     }
   };
 
+  const handleExecuteSmartParse = async () => {
+    if (!magicText.trim()) {
+      toast.error('Cole o texto do pedido antes de processar.');
+      return;
+    }
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+    const parsed = parseIfoodOrderText(magicText);
+    const identified: string[] = [];
+    if (parsed.orderId) { setOrderId(parsed.orderId); identified.push(`Nº #${parsed.orderId}`); }
+    if (parsed.ifoodId) { setIfoodId(parsed.ifoodId); identified.push(`ID ${parsed.ifoodId}`); }
+    if (parsed.confirmationCode) { setConfirmationCode(parsed.confirmationCode); identified.push(`Cód. ${parsed.confirmationCode}`); }
+    if (parsed.customerName) { setCustomerName(parsed.customerName); identified.push('Cliente'); }
+    if (parsed.phone) { setPhone(formatPhoneInput(parsed.phone)); identified.push('Zap'); }
+    if (parsed.address) { setStreetAddress(parsed.address); identified.push('Endereço'); }
+    if (parsed.mapsLink) { setMapsLink(parsed.mapsLink); identified.push('Link Maps'); }
+    if (parsed.paymentMethod) {
+      setPaymentMethod(parsed.paymentMethod);
+      setIsPaid(parsed.paymentMethod === 'pix' ? parsed.isPaid : false);
+      if (parsed.paymentMethod !== 'dinheiro') setChangeFor('');
+      identified.push(parsed.isPaid ? 'Pago no app' : 'Pagamento');
+    }
+    if (parsed.value) { setValue(formatCurrencyInput(parsed.value.replace(/\D/g, ''))); identified.push(`Valor R$ ${parsed.value}`); }
+    if (parsed.changeFor) { setChangeFor(formatCurrencyInput(parsed.changeFor.replace(/\D/g, ''))); identified.push(`Troco para ${parsed.changeFor}`); }
+    if (parsed.drinks.length) { setDrinks(parsed.drinks.join(', ')); identified.push('Bebidas'); }
+    if (parsed.observations.length) {
+      setObservation(current => current ? `${current} - ${parsed.observations.join(' - ')}` : parsed.observations.join(' - '));
+      identified.push('Observações');
+    }
+    if (!identified.length) {
+      toast.error('Nenhum dado reconhecido no texto.');
+      return;
+    }
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+    toast.success('Campos atualizados pelo parser.', { description: `Detectados: ${identified.join(' • ')}`, duration: 4000 });
+    setMagicText('');
+  };
+
   const addressAudit = useMemo(() => {
     const coords = extractCoordinatesFromUrl(mapsLink);
     if (coords || (mapsLink && mapsLink.includes('http'))) {
@@ -372,7 +410,7 @@ function DeliveryDetailsForm() {
       if (rawP) setPhone(formatPhoneInput(rawP));
     } else {
       toast.error('Entrega não encontrada');
-      router.push('/');
+      router.push(`/entregas/details?id=${deliveryId}`);
     }
   }, [deliveryId, deliveries, router, getCustomerById]);
 
@@ -414,11 +452,7 @@ function DeliveryDetailsForm() {
           confirmationCode: origin === 'ifood' ? confirmationCode : undefined, 
           observation, 
           origin
-        } as any);
-
-        if (customerId && rawPhone && updateCustomer) {
-          await updateCustomer(customerId, { phone: rawPhone });
-        }
+        });
       }
 
       await updateDelivery(deliveryId, {
@@ -444,6 +478,11 @@ function DeliveryDetailsForm() {
 
       toast.success('Entrega atualizada com sucesso!');
       router.push('/');
+    } catch (error) {
+      console.error('Erro ao atualizar entrega:', error);
+      toast.error('Não foi possível atualizar a entrega.', {
+        description: 'Nenhuma confirmação falsa foi mantida. Tente novamente.',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -470,7 +509,7 @@ function DeliveryDetailsForm() {
   return (
     <div className="flex flex-col gap-6 relative">
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/')} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95">
+        <button onClick={() => router.push(`/entregas/details?id=${deliveryId}`)} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95">
           <ChevronLeft size={22} />
         </button>
         <h1 className="font-heading text-xl font-bold text-zinc-50">Editar Entrega</h1>
@@ -526,7 +565,7 @@ function DeliveryDetailsForm() {
 
           <button
             type="button"
-            onClick={handleExecuteMagicParse}
+            onClick={handleExecuteSmartParse}
             className="h-11 w-full rounded-xl bg-red-500 hover:bg-red-400 font-bold text-white text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-red-500/20"
           >
             <Sparkles size={15} /> Auto-Preencher Campos
@@ -741,11 +780,11 @@ function DeliveryDetailsForm() {
           <div className={`flex flex-col gap-2 transition-all duration-300 ${isPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
             <label className="text-xs font-semibold text-zinc-400">Forma de Pagamento</label>
             <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={() => setPaymentMethod('dinheiro')} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${paymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
+              <button type="button" onClick={() => { setPaymentMethod('dinheiro'); setIsPaid(false); }} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${paymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
                 <Banknote size={20} />
                 <span className="text-xs font-bold">Dinheiro</span>
               </button>
-              <button type="button" onClick={() => setPaymentMethod('pix')} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${paymentMethod === 'pix' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
+              <button type="button" onClick={() => { setPaymentMethod('pix'); setChangeFor(''); }} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${paymentMethod === 'pix' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
                 <QrCode size={20} />
                 <span className="text-xs font-bold">Pix</span>
               </button>
@@ -756,7 +795,7 @@ function DeliveryDetailsForm() {
             </div>
           </div>
 
-          {(paymentMethod as string) !== 'cartao' && (
+          {paymentMethod === 'pix' && (
             <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800">
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-zinc-200">Pago antecipado?</span>
@@ -787,7 +826,9 @@ function DeliveryDetailsForm() {
               </span>
               <span className="text-[10px] text-zinc-500">Prioridade na sequência da rota</span>
             </div>
-            <button type="button" onClick={() => setIsUrgent(!isUrgent)} className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${isUrgent ? 'translate-x-6' : 'translate-x-1'}`} />
+            <button type="button" onClick={() => setIsUrgent(!isUrgent)} className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${isUrgent ? 'bg-red-500' : 'bg-zinc-700'}`}>
+              <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform ${isUrgent ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
           </div>
         </div>
 
