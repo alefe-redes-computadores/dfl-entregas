@@ -1,343 +1,520 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  ChevronLeft, BarChart3, Wallet, Map as MapIcon, Activity, X, 
-  CheckCircle, ChevronDown, PackageOpen, Banknote, CreditCard, QrCode, CalendarDays
+import {
+  Activity,
+  Banknote,
+  BarChart3,
+  CalendarDays,
+  ChevronDown,
+  ChevronLeft,
+  Clock3,
+  CreditCard,
+  MapPin,
+  PackageOpen,
+  Route as RouteIcon,
+  Store,
+  UserRound,
+  Wallet,
+  X,
 } from 'lucide-react';
-import { useReportsData } from '@/hooks/useReportsData';
 import { useAppStore } from '@/store/useAppStore';
-
 import { SummaryCard } from '@/components/reports/SummaryCard';
-import { BossSavingsCard } from '@/components/reports/Charts/BossSavingsCard';
-import { PaymentChart } from '@/components/reports/Charts/PaymentChart';
-import { NeighborhoodChart } from '@/components/reports/Charts/NeighborhoodChart';
-import { DailyEvolutionChart } from '@/components/reports/Charts/DailyEvolutionChart';
-import { MotoboyChart } from '@/components/reports/Charts/MotoboyChart';
-import { DayOfWeekChart } from '@/components/reports/Charts/DayOfWeekChart';
-import { OriginChart } from '@/components/reports/Charts/OriginChart';
-import { PeakHoursChart } from '@/components/reports/Charts/PeakHoursChart';
-import { LogisticsTimeChart } from '@/components/reports/Charts/LogisticsTimeChart';
+import { ReportChartCard } from '@/components/reports/ReportChartCard';
+import { DataQualityCard } from '@/components/reports/DataQualityCard';
+import { ReportDrilldownSheet } from '@/components/reports/ReportDrilldownSheet';
+import { buildReportModel } from '@/lib/reports/buildReportModel';
+import type {
+  DrilldownSelection,
+  ReportPeriodKey,
+} from '@/lib/reports/types';
 
-type TabType = 'geral' | 'financeiro' | 'operacao';
+type TabType = 'geral' | 'financeiro' | 'operacao' | 'qualidade';
 
-// Formatador oficial com ponto de milhar e vírgula nos centavos
-const formatMoney = (val: number) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const PERIODS: Array<{ value: ReportPeriodKey; label: string }> = [
+  { value: 'today', label: 'Hoje' },
+  { value: '7d', label: 'Últimos 7 dias' },
+  { value: '14d', label: 'Últimos 14 dias' },
+  { value: '30d', label: 'Últimos 30 dias' },
+  { value: 'all', label: 'Todo período' },
+];
+
+const money = (value: number) =>
+  value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
+
+function variationSubtitle(value: number | null, label: string): string | undefined {
+  if (value == null) return undefined;
+  if (value === 0) return `Sem variação ${label}`;
+  return `${value > 0 ? '+' : ''}${value.toFixed(1)}% ${label}`;
+}
 
 export default function RelatoriosPage() {
   const router = useRouter();
-  
-  // 🔥 Por padrão agora abre nos Últimos 7 Dias
-  const [selectedPeriod, setSelectedPeriod] = useState('7d'); 
-  const [isPeriodModalOpen, setIsPeriodModalOpen] = useState(false); 
+  const deliveries = useAppStore((state) => state.deliveries);
+  const routes = useAppStore((state) => state.routes);
+  const customers = useAppStore((state) => state.customers);
+
+  const [periodKey, setPeriodKey] = useState<ReportPeriodKey>('7d');
+  const [periodOpen, setPeriodOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('geral');
-  const [drilldownDay, setDrilldownDay] = useState<{ day: number; date: string } | null>(null);
+  const [drilldown, setDrilldown] = useState<DrilldownSelection | null>(null);
 
-  const deliveries = useAppStore(state => state.deliveries);
-  const routes = useAppStore(state => state.routes);
-  const reports = useReportsData();
+  const model = useMemo(
+    () =>
+      buildReportModel({
+        deliveries,
+        routes,
+        customers,
+        periodKey,
+      }),
+    [customers, deliveries, periodKey, routes],
+  );
 
-  const periodLabels: Record<string, string> = {
-    'all': 'Todo Período',
-    'today': 'Hoje',
-    '7d': 'Últimos 7 dias',
-    '14d': 'Últimos 14 dias',
-    '30d': 'Últimos 30 dias'
-  };
+  const currentPeriodLabel =
+    PERIODS.find((period) => period.value === periodKey)?.label ?? 'Período';
 
-  const TAXA_ECONOMIZADA_POR_ENTREGA = 7.00;
-
-  // FILTRO CIRÚRGICO ANTI-BUG E POR PERÍODO
-  const filteredDeliveries = useMemo(() => {
-    const countByMotoboyDay = new Map<string, number>();
-
-    deliveries.forEach(d => {
-      const route = routes.find(r => r.id === d.route_id);
-      const mName = route ? route.motoboy_name.toLowerCase() : 'avulso';
-      const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
-      const brtDate = new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
-      const key = `${brtDate}_${mName}`;
-      countByMotoboyDay.set(key, (countByMotoboyDay.get(key) || 0) + 1);
-    });
-
-    const cleanDeliveries = deliveries.filter(d => {
-      const route = routes.find(r => r.id === d.route_id);
-      const mName = route ? route.motoboy_name.toLowerCase() : 'avulso';
-      const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
-      const brtDate = new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
-      const key = `${brtDate}_${mName}`;
-
-      if ((countByMotoboyDay.get(key) || 0) > 32) return false;
-
-      if (route && route.status === 'fechada' && route.end_time) {
-        const startSource = route.started_at || route.departure_time;
-        if (!startSource) return true;
-        const start = new Date(startSource).getTime();
-        const end = new Date(route.end_time).getTime();
-        if ((end - start) < 5 * 60 * 1000) return false;
-      }
-
-      return true;
-    });
-
-    const now = new Date();
-    const today = new Date(now.getTime() - 3 * 3600000); 
-
-    return cleanDeliveries.filter(d => {
-      if (selectedPeriod === 'all') return true;
-      
-      const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
-      const dDate = new Date(dTime - 3 * 3600000);
-      
-      const targetDate = new Date(dDate.getFullYear(), dDate.getMonth(), dDate.getDate());
-      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      
-      const diffTime = todayDate.getTime() - targetDate.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-      if (selectedPeriod === 'today') return diffDays === 0;
-      if (selectedPeriod === '7d') return diffDays <= 7;
-      if (selectedPeriod === '14d') return diffDays <= 14;
-      if (selectedPeriod === '30d') return diffDays <= 30;
-      return true;
-    });
-  }, [deliveries, routes, selectedPeriod]);
-
-  // SEPARA ENTREGAS DO CHEFE (ÁLEFE)
-  const alefeDeliveries = useMemo(() => {
-    return filteredDeliveries.filter(d => {
-      const r = routes.find(x => x.id === d.route_id);
-      return r && (r.motoboy_name.toLowerCase().includes('álefe') || r.motoboy_name.toLowerCase().includes('alefe'));
-    });
-  }, [filteredDeliveries, routes]);
-
-  const savedAmount = alefeDeliveries.length * TAXA_ECONOMIZADA_POR_ENTREGA;
-  const motoboyFilteredDeliveries = filteredDeliveries.filter(d => !alefeDeliveries.includes(d));
-
-  const metrics = useMemo(() => reports.getMainMetrics(filteredDeliveries, filteredDeliveries as any, 'all'), [reports, filteredDeliveries]);
-  const dailyData = useMemo(() => reports.getDailyEvolution(filteredDeliveries, 'all'), [reports, filteredDeliveries]);
-  const paymentData = useMemo(() => reports.getPaymentStats(filteredDeliveries), [reports, filteredDeliveries]);
-  const neighborhoodData = useMemo(() => reports.getNeighborhoodStats(filteredDeliveries), [reports, filteredDeliveries]);
-  const dayOfWeekData = useMemo(() => reports.getDayOfWeekStats(filteredDeliveries), [reports, filteredDeliveries]);
-  const originData = useMemo(() => reports.getOriginStats(filteredDeliveries), [reports, filteredDeliveries]);
-  
-  const motoboyData = useMemo(() => reports.getMotoboyStats(motoboyFilteredDeliveries), [reports, motoboyFilteredDeliveries]);
-
-  const peakHoursData = useMemo(() => {
-    const rawData = reports.getPeakHoursStats(filteredDeliveries);
-    const uniqueDaysCount = new Set(filteredDeliveries.map(d => {
-      const dTime = new Date((d as any).createdAt || d.updated_at).getTime();
-      return new Date(dTime - 3 * 3600000).toISOString().split('T')[0];
-    })).size || 1;
-
-    return rawData.map((p: any) => {
-      const timeLabel = p.hour || p.time || '00h';
-      const deliveriesCount = p.count !== undefined ? p.count : (p.deliveries || 0);
-
-      return {
-        time: timeLabel,
-        deliveries: selectedPeriod === 'today' ? deliveriesCount : Math.ceil(deliveriesCount / uniqueDaysCount)
-      };
-    });
-  }, [filteredDeliveries, reports, selectedPeriod]);
-
-  const logisticsTimeData = useMemo(() => {
-    const statsMap = new Map<string, { totalMinutes: number; totalDeliveries: number }>();
-    
-    routes.forEach(route => {
-      const name = route.motoboy_name.toLowerCase();
-      if (name.includes('álefe') || name.includes('alefe')) return;
-      if (route.status !== 'fechada' || !route.end_time) return;
-
-      const startSource = route.started_at || route.departure_time;
-      if (!startSource) return;
-      const startTime = new Date(startSource).getTime();
-      const endTime = new Date(route.end_time).getTime();
-      const minutes = (endTime - startTime) / (1000 * 60);
-
-      if (minutes < 5 || minutes > 600) return; 
-
-      const routeDeliveries = filteredDeliveries.filter(d => d.route_id === route.id);
-      if (routeDeliveries.length === 0) return;
-
-      const current = statsMap.get(route.motoboy_name) || { totalMinutes: 0, totalDeliveries: 0 };
-      statsMap.set(route.motoboy_name, {
-        totalMinutes: current.totalMinutes + minutes,
-        totalDeliveries: current.totalDeliveries + routeDeliveries.length
-      });
-    });
-
-    return Array.from(statsMap.entries()).map(([name, data]) => ({
-      name,
-      avgTimePerDelivery: data.totalDeliveries > 0 ? (data.totalMinutes / data.totalDeliveries) : 0,
-      totalDeliveries: data.totalDeliveries
-    })).sort((a, b) => a.avgTimePerDelivery - b.avgTimePerDelivery);
-  }, [routes, filteredDeliveries]);
-
-  const drilldownDeliveries = useMemo(() => {
-    if (!drilldownDay) return [];
-    return filteredDeliveries.filter(d => reports.formatDate((d as any).createdAt || d.updated_at).getDate() === drilldownDay.day);
-  }, [drilldownDay, filteredDeliveries, reports]);
+  const topHour = [...model.hours].sort((a, b) => b.count - a.count)[0];
+  const topNeighborhood = model.neighborhoods[0];
+  const topMotoboy = model.motoboys[0];
 
   return (
-    <div className="flex flex-col gap-6 pb-24 relative">
-      <div className="flex items-center justify-between sticky top-0 z-20 bg-zinc-950/90 backdrop-blur-xl pt-4 pb-3 px-2 border-b border-zinc-900">
+    <div className="relative flex flex-col gap-5 pb-28">
+      <header className="sticky top-0 z-30 -mx-2 flex items-center justify-between border-b border-zinc-900 bg-zinc-950/90 px-4 pb-3 pt-4 backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/')} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 active:scale-95 transition-all shadow-sm">
+          <button
+            type="button"
+            onClick={() => router.push('/')}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400 active:scale-95"
+          >
             <ChevronLeft size={22} />
           </button>
-          <h1 className="font-heading text-xl font-black tracking-tight text-zinc-50">Dashboard</h1>
+          <div>
+            <h1 className="text-xl font-black tracking-tight text-zinc-50">
+              Relatórios
+            </h1>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+              dados reais · cobertura explícita
+            </p>
+          </div>
         </div>
-        
-        <button 
-          onClick={() => setIsPeriodModalOpen(true)}
-          className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold py-2 px-3 rounded-full active:scale-95 transition-all shadow-sm"
+
+        <button
+          type="button"
+          onClick={() => setPeriodOpen(true)}
+          className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300 active:scale-95"
         >
-          <CalendarDays size={14}/>
-          <span>{periodLabels[selectedPeriod]}</span>
-          <ChevronDown size={14} className="ml-1" />
+          <CalendarDays size={14} />
+          {currentPeriodLabel}
+          <ChevronDown size={14} />
         </button>
-      </div>
+      </header>
 
-      <div className="flex bg-zinc-900/60 p-1.5 rounded-[20px] border border-zinc-800/80 mx-2">
-        <button onClick={() => setActiveTab('geral')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[16px] font-bold text-xs transition-all duration-300 ${activeTab === 'geral' ? 'bg-zinc-800 text-emerald-400 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          <Activity size={14} /> Visão Geral
-        </button>
-        <button onClick={() => setActiveTab('financeiro')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[16px] font-bold text-xs transition-all duration-300 ${activeTab === 'financeiro' ? 'bg-zinc-800 text-amber-400 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          <Wallet size={14} /> Receitas
-        </button>
-        <button onClick={() => setActiveTab('operacao')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[16px] font-bold text-xs transition-all duration-300 ${activeTab === 'operacao' ? 'bg-zinc-800 text-sky-400 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          <MapIcon size={14} /> Logística
-        </button>
-      </div>
+      <section className="mx-2 rounded-[24px] border border-zinc-800/80 bg-zinc-900/50 p-1.5">
+        <div className="grid grid-cols-4 gap-1">
+          <TabButton
+            active={activeTab === 'geral'}
+            onClick={() => setActiveTab('geral')}
+            icon={<Activity size={13} />}
+            label="Geral"
+          />
+          <TabButton
+            active={activeTab === 'financeiro'}
+            onClick={() => setActiveTab('financeiro')}
+            icon={<Wallet size={13} />}
+            label="Receita"
+          />
+          <TabButton
+            active={activeTab === 'operacao'}
+            onClick={() => setActiveTab('operacao')}
+            icon={<RouteIcon size={13} />}
+            label="Operação"
+          />
+          <TabButton
+            active={activeTab === 'qualidade'}
+            onClick={() => setActiveTab('qualidade')}
+            icon={<BarChart3 size={13} />}
+            label="Dados"
+          />
+        </div>
+      </section>
 
-      <div className="flex flex-col gap-5 px-2 animate-in fade-in duration-500">
-        
+      <main className="flex flex-col gap-4 px-2">
+        <section className="grid grid-cols-2 gap-3">
+          <SummaryCard
+            title="Entregas"
+            value={model.metrics.totalDeliveries}
+            subtitle={variationSubtitle(
+              model.metrics.deliveryVariation,
+              'vs período anterior equivalente',
+            )}
+            icon={<PackageOpen size={20} />}
+            accentColor="emerald"
+          />
+          <SummaryCard
+            title="Faturamento"
+            value={money(model.metrics.totalRevenue)}
+            subtitle={variationSubtitle(
+              model.metrics.revenueVariation,
+              'vs período anterior equivalente',
+            )}
+            icon={<Wallet size={20} />}
+            accentColor="amber"
+          />
+        </section>
+
+        {model.metrics.ignoredDateCount > 0 && periodKey === 'all' && (
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-200">
+            {model.metrics.ignoredDateCount}{' '}
+            {model.metrics.ignoredDateCount === 1 ? 'entrega não possui' : 'entregas não possuem'}{' '}
+            timestamp de criação confiável. Elas continuam no volume e financeiro de
+            “Todo período”, mas não entram em gráficos temporais.
+          </div>
+        )}
+
         {activeTab === 'geral' && (
           <>
-            <div className="grid grid-cols-2 gap-3">
-              <SummaryCard title="Total Entregas" value={metrics.totalDeliveries} icon={<PackageOpen size={20} />} variation={metrics.variation} accentColor="emerald" />
-              {/* Formatação Perfeita do Dinheiro */}
-              <SummaryCard title="Faturamento Bruto" value={`R$ ${formatMoney(metrics.totalRevenue)}`} icon={<Wallet size={20} />} accentColor="amber" />
-            </div>
-            <DailyEvolutionChart data={dailyData} onSelectDay={setDrilldownDay} />
-            <OriginChart data={originData} />
+            <ReportChartCard
+              title="Evolução diária de entregas"
+              description="Cada ponto representa uma data completa. Meses e anos nunca são misturados pelo número do dia."
+              icon={<PackageOpen size={18} />}
+              data={model.dailyVolume}
+              chartType="line"
+              dataKey="count"
+              valueLabel="Entregas"
+              onExplore={() =>
+                setDrilldown({
+                  kind: 'daily',
+                  title: 'Histórico por dia',
+                  subtitle:
+                    'Selecione uma data para ver exatamente quais entregas formaram o ponto do gráfico.',
+                })
+              }
+            />
+
+            <ReportChartCard
+              title="Horários de entrada dos pedidos"
+              description="Volume real por hora de criação. Nenhuma faixa do dia é descartada silenciosamente."
+              icon={<Clock3 size={18} />}
+              data={model.hours}
+              dataKey="count"
+              valueLabel="Pedidos"
+              onExplore={() =>
+                setDrilldown({
+                  kind: 'hour',
+                  title: 'Histórico por horário',
+                  subtitle:
+                    'Os horários usam o timestamp de criação da entrega em America/Sao_Paulo.',
+                })
+              }
+              footer={
+                topHour
+                  ? `Maior volume no período: ${topHour.label} · ${topHour.count} pedidos`
+                  : undefined
+              }
+            />
+
+            <ReportChartCard
+              title="Dias da semana normalizados"
+              description="Média de entregas por ocorrência de cada dia da semana no período; não privilegia um dia só porque apareceu mais vezes."
+              icon={<CalendarDays size={18} />}
+              data={model.weekdays}
+              dataKey="average"
+              valueLabel="Média por ocorrência"
+              valueFormatter={(value) => value.toFixed(2)}
+              onExplore={() =>
+                setDrilldown({
+                  kind: 'weekday',
+                  title: 'Histórico por dia da semana',
+                  subtitle:
+                    'A análise mostra total, média e a amostra de ocorrências de cada dia.',
+                })
+              }
+            />
           </>
         )}
 
         {activeTab === 'financeiro' && (
           <>
-            <div className="grid grid-cols-2 gap-3">
-              <SummaryCard title="Ticket Médio" value={`R$ ${formatMoney(metrics.averageTicket)}`} icon={<BarChart3 size={20} />} accentColor="blue" />
-              <SummaryCard title="Melhor Dia" value={metrics.bestDay.day} subtitle={`R$ ${formatMoney(metrics.bestDay.revenue)}`} icon={<Wallet size={20} />} accentColor="pink" />
-            </div>
+            <section className="grid grid-cols-2 gap-3">
+              <SummaryCard
+                title="Ticket médio"
+                value={money(model.metrics.averageTicket)}
+                icon={<Banknote size={20} />}
+                accentColor="blue"
+              />
+              <SummaryCard
+                title="Pedidos com data"
+                value={model.metrics.validDateCount}
+                subtitle={`${model.metrics.ignoredDateCount} sem timestamp confiável`}
+                icon={<CalendarDays size={20} />}
+                accentColor="purple"
+              />
+            </section>
 
-            <BossSavingsCard deliveriesCount={alefeDeliveries.length} savedAmount={savedAmount} />
+            <ReportChartCard
+              title="Faturamento diário"
+              description="Receita separada do volume para evitar dois eixos e interpretações confusas."
+              icon={<Banknote size={18} />}
+              data={model.dailyRevenue}
+              chartType="line"
+              dataKey="revenue"
+              valueLabel="Faturamento"
+              valueFormatter={money}
+              onExplore={() =>
+                setDrilldown({
+                  kind: 'daily',
+                  title: 'Faturamento por dia',
+                  subtitle:
+                    'Abra uma data para conferir os pedidos que compõem o valor.',
+                })
+              }
+            />
 
-            <PaymentChart data={paymentData} />
-            <DayOfWeekChart data={dayOfWeekData} />
+            <ReportChartCard
+              title="Formas de pagamento"
+              description="Mostra volume real por método; o histórico permite conferir cada pedido."
+              icon={<CreditCard size={18} />}
+              data={model.payments}
+              dataKey="count"
+              valueLabel="Pedidos"
+              onExplore={() =>
+                setDrilldown({
+                  kind: 'payment',
+                  title: 'Pedidos por forma de pagamento',
+                })
+              }
+            />
+
+            <ReportChartCard
+              title="Origem dos pedidos"
+              description="Registros antigos sem origem permanecem como “Origem não registrada”; nunca viram iFood por suposição."
+              icon={<Store size={18} />}
+              data={model.origins}
+              dataKey="count"
+              valueLabel="Pedidos"
+              onExplore={() =>
+                setDrilldown({
+                  kind: 'origin',
+                  title: 'Pedidos por origem',
+                })
+              }
+            />
           </>
         )}
 
         {activeTab === 'operacao' && (
           <>
-             <PeakHoursChart data={peakHoursData} />
-             <LogisticsTimeChart data={logisticsTimeData} />
-             <NeighborhoodChart data={neighborhoodData} />
-             <MotoboyChart data={motoboyData} />
+            <ReportChartCard
+              title="Bairros com cobertura cadastrada"
+              description="Usa o bairro estruturado do cliente. Endereço com hífen não é usado para inventar bairro."
+              icon={<MapPin size={18} />}
+              data={model.neighborhoods.slice(0, 12)}
+              dataKey="count"
+              valueLabel="Entregas"
+              onExplore={() =>
+                setDrilldown({
+                  kind: 'neighborhood',
+                  title: 'Histórico por bairro',
+                })
+              }
+              footer={
+                topNeighborhood
+                  ? `Maior volume cadastrado: ${topNeighborhood.label} · ${topNeighborhood.count}`
+                  : 'Sem bairros estruturados suficientes para esta análise'
+              }
+            />
+
+            <ReportChartCard
+              title="Volume por motoboy"
+              description="É volume operacional, não ranking de desempenho. Faturamento não é usado para dizer quem é mais eficiente."
+              icon={<UserRound size={18} />}
+              data={model.motoboys}
+              dataKey="count"
+              valueLabel="Entregas"
+              onExplore={() =>
+                setDrilldown({
+                  kind: 'motoboy',
+                  title: 'Histórico por motoboy',
+                  subtitle:
+                    'Quantidade de entregas vinculadas às rotas de cada motoboy no período.',
+                })
+              }
+              footer={
+                topMotoboy
+                  ? `Maior volume: ${topMotoboy.label} · ${topMotoboy.count} entregas`
+                  : undefined
+              }
+            />
+
+            <section className="overflow-hidden rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <RouteIcon size={18} className="text-sky-400" />
+                    <h2 className="font-black text-zinc-100">Duração das rotas confiáveis</h2>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                    Mostra duração da rota inteira. Não divide o tempo total pelo número de entregas e não chama isso de velocidade individual.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDrilldown({
+                      kind: 'route',
+                      title: 'Duração das rotas',
+                      subtitle:
+                        'Rotas suspeitas ficam fora apenas desta métrica e aparecem em Qualidade dos dados.',
+                    })
+                  }
+                  className="rounded-full bg-zinc-950 p-2 text-zinc-400 active:scale-95"
+                >
+                  <RouteIcon size={16} />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {model.routeTimings.slice(0, 5).map((route) => (
+                  <button
+                    key={route.routeId}
+                    type="button"
+                    onClick={() =>
+                      setDrilldown({
+                        kind: 'route',
+                        key: route.routeId,
+                        title: 'Duração das rotas',
+                      })
+                    }
+                    className="flex w-full items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/45 px-3 py-3 text-left"
+                  >
+                    <div>
+                      <div className="text-xs font-bold text-zinc-200">{route.routeName}</div>
+                      <div className="mt-0.5 text-[10px] text-zinc-600">
+                        {route.motoboyName} · {route.deliveryCount} entregas
+                      </div>
+                    </div>
+                    <div className="text-sm font-black text-sky-300">
+                      {route.durationMinutes.toFixed(1)} min
+                    </div>
+                  </button>
+                ))}
+                {model.routeTimings.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-zinc-800 px-3 py-8 text-center text-xs text-zinc-600">
+                    Nenhuma rota fechada com duração confiável neste período.
+                  </div>
+                )}
+              </div>
+            </section>
           </>
         )}
-      </div>
 
-      {/* ================================================================================== */}
-      {/* MODAL DRILLDOWN DO DIA (Extrato do Gráfico) COM VISUAL PREMIUM */}
-      {/* ================================================================================== */}
-      {drilldownDay && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-zinc-950 border-t border-zinc-800 rounded-t-[32px] p-6 pb-12 max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300 relative">
-            <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-800" />
-            
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800/80">
-              <div className="flex flex-col">
-                <h2 className="text-xl font-black text-zinc-50 tracking-tight">Detalhes do Dia <span className="text-sky-400">{drilldownDay.date}</span></h2>
-                <p className="text-xs font-semibold text-zinc-500 mt-1">{drilldownDeliveries.length} {drilldownDeliveries.length === 1 ? 'entrega realizada' : 'entregas realizadas'}</p>
+        {activeTab === 'qualidade' && (
+          <>
+            <DataQualityCard
+              issues={model.quality}
+              totalDeliveries={model.metrics.totalDeliveries}
+              onExplore={() =>
+                setDrilldown({
+                  kind: 'quality',
+                  title: 'Qualidade dos dados',
+                  subtitle:
+                    'Cada problema informa exatamente qual análise deixa de usar aquele registro.',
+                })
+              }
+            />
+
+            <section className="rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 p-5">
+              <h2 className="font-black text-zinc-100">Critérios desta reconstrução</h2>
+              <div className="mt-3 space-y-2 text-xs leading-relaxed text-zinc-500">
+                <p>• `updated_at` nunca é usado como data de criação da entrega.</p>
+                <p>• Datas ausentes não recebem `new Date()`.</p>
+                <p>• Timezone é interpretado por `America/Sao_Paulo`, sem subtrair três horas manualmente.</p>
+                <p>• Últimos 7 dias representam exatamente 7 datas de calendário, incluindo hoje.</p>
+                <p>• Nenhum grupo é removido por ultrapassar 32 entregas.</p>
+                <p>• Rotas curtas ou temporalmente impossíveis continuam no volume e financeiro, mas ficam fora de duração.</p>
+                <p>• Origem ausente permanece desconhecida.</p>
+                <p>• Horários entre 06h e 16h continuam existindo se houver registros reais.</p>
               </div>
-              <button onClick={() => setDrilldownDay(null)} className="p-2 bg-zinc-900 text-zinc-400 rounded-full hover:bg-zinc-800 active:scale-95 transition-all">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="overflow-y-auto flex-1 py-4 flex flex-col gap-3 hide-scrollbar">
-              {drilldownDeliveries.length === 0 ? (
-                <div className="text-center py-10 text-zinc-500 text-sm">Nenhum dado detalhado encontrado.</div>
-              ) : (
-                drilldownDeliveries.map(d => (
-                  <div key={d.id} className="flex items-center justify-between p-4 bg-zinc-900/60 rounded-[20px] border border-zinc-800/80 shadow-sm">
-                    <div className="flex flex-col truncate pr-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-sm text-zinc-100">#{d.order_id || 'Loja'}</span>
-                        {d.is_paid && <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md"><CheckCircle size={10} /> Pago no App</span>}
-                      </div>
-                      <span className="text-xs text-zinc-400 truncate w-full flex items-center gap-1.5">
-                        <MapIcon size={12} className="shrink-0 text-zinc-600"/> {d.address_string.split('-')[0]}
-                      </span>
-                    </div>
-                    <div className="flex flex-col items-end shrink-0 gap-1">
-                      <span className="font-black text-emerald-400 text-base tracking-tight">R$ {formatMoney(d.value || 0)}</span>
-                      <span className="text-[10px] uppercase tracking-wider font-bold flex items-center gap-1 text-zinc-500">
-                         {d.payment_method === 'pix' ? <QrCode size={10} className="text-emerald-500"/> : d.payment_method === 'dinheiro' ? <Banknote size={10} className="text-amber-500"/> : <CreditCard size={10} className="text-sky-400"/>}
-                         {d.payment_method?.replace('_', ' ') || 'Dinheiro'}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+            </section>
+          </>
+        )}
+      </main>
 
-      {/* ================================================================================== */}
-      {/* MODAL SELETOR DE PERÍODO */}
-      {/* ================================================================================== */}
-      {isPeriodModalOpen && (
-        <div className="fixed inset-0 z-[70] flex flex-col justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-zinc-950 border-t border-zinc-800 rounded-t-[32px] p-6 pb-12 flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300 relative">
+      {periodOpen && (
+        <div className="fixed inset-0 z-[80] flex flex-col justify-end bg-black/80 backdrop-blur-sm">
+          <section className="rounded-t-[34px] border-t border-zinc-800 bg-zinc-950 p-6 pb-10">
             <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-800" />
-            
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-black tracking-tight text-zinc-50">Selecionar Período</h2>
-              <button onClick={() => setIsPeriodModalOpen(false)} className="p-2.5 bg-zinc-900 text-zinc-400 rounded-full hover:text-zinc-200 active:scale-95 transition-all">
-                <X size={20} />
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-xl font-black text-zinc-100">Selecionar período</h2>
+              <button
+                type="button"
+                onClick={() => setPeriodOpen(false)}
+                className="rounded-full bg-zinc-900 p-2 text-zinc-400"
+              >
+                <X size={18} />
               </button>
             </div>
-            
-            <div className="flex flex-col gap-3">
-              {[
-                { value: 'all', label: 'Todo Período' },
-                { value: 'today', label: 'Hoje' },
-                { value: '7d', label: 'Últimos 7 dias' },
-                { value: '14d', label: 'Últimos 14 dias' },
-                { value: '30d', label: 'Últimos 30 dias' },
-              ].map(opt => (
+
+            <div className="space-y-2">
+              {PERIODS.map((period) => (
                 <button
-                  key={opt.value}
-                  onClick={() => { setSelectedPeriod(opt.value); setIsPeriodModalOpen(false); }}
-                  className={`flex items-center justify-between p-4 rounded-[20px] border transition-all active:scale-[0.98] ${
-                    selectedPeriod === opt.value 
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-md' 
-                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:bg-zinc-900'
+                  key={period.value}
+                  type="button"
+                  onClick={() => {
+                    setPeriodKey(period.value);
+                    setPeriodOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-sm font-bold ${
+                    periodKey === period.value
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                      : 'border-zinc-800 bg-zinc-900/60 text-zinc-400'
                   }`}
                 >
-                  <span className="font-bold text-sm">{opt.label}</span>
-                  {selectedPeriod === opt.value && <CheckCircle size={18} className="text-emerald-500" />}
+                  {period.label}
+                  {periodKey === period.value && <Activity size={16} />}
                 </button>
               ))}
             </div>
-          </div>
+          </section>
         </div>
       )}
+
+      <ReportDrilldownSheet
+        selection={drilldown}
+        model={model}
+        onClose={() => setDrilldown(null)}
+      />
     </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col items-center justify-center gap-1 rounded-[16px] px-1 py-2 text-[10px] font-bold transition ${
+        active
+          ? 'bg-zinc-800 text-emerald-300 shadow-sm'
+          : 'text-zinc-600 hover:text-zinc-400'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
