@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Package, Eye, EyeO
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
 import type { Route } from '@/types';
+import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 
 function formatDateLabel(date: Date): string {
   const today = new Date();
@@ -43,6 +44,7 @@ export default function HomePage() {
   const routeIdsDoDia = routesDoDia.map(r => r.id);
   
   const deliveriesDoDia = deliveries.filter(d => {
+    if (!isDeliveryFulfillment(d)) return false;
     const belongsToRoute = routeIdsDoDia.includes(d.route_id);
     const deliveryDateStr = new Date(d.updated_at || Date.now()).toDateString();
     const isSameDay = deliveryDateStr === selectedDateStr;

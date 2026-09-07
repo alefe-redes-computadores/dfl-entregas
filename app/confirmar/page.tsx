@@ -29,7 +29,7 @@ function ConfirmarContent() {
     () => onlyDigits(searchParams.get('code') || '', 4),
     [searchParams]
   );
-  const returnTo = searchParams.get('returnTo') || '/';
+  const returnTo = searchParams.get('returnTo') || '/confirmacoes';
 
   const [orderId, setOrderId] = useState(initialOrderId);
   const [code, setCode] = useState(initialCode);
@@ -153,7 +153,7 @@ function ConfirmarContent() {
             className="flex shrink-0 items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[10px] font-black text-emerald-400 active:scale-95"
           >
             <CheckCircle2 size={12} />
-            Concluí
+            Voltar à central
           </button>
         </div>
       </div>

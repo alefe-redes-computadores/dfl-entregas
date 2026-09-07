@@ -1,4 +1,5 @@
 import type { Customer, Delivery, Route } from '@/types';
+import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
   compareDateKeys,
   dateFromKey,
@@ -431,17 +432,19 @@ export function buildReportModel(input: {
 
   const weekdays = buildWeekdays(current, period);
 
+  const logisticsCurrent = current.filter((delivery) => isDeliveryFulfillment(delivery));
+
   const neighborhoods = aggregate(
-    current,
+    logisticsCurrent,
     (delivery) => delivery.neighborhood,
   ).sort((a, b) => b.count - a.count);
 
   const motoboys = aggregate(
-    current,
+    logisticsCurrent,
     (delivery) => delivery.route?.motoboy_name?.trim() || 'Não atribuído',
   ).sort((a, b) => b.count - a.count);
 
-  const routeTiming = buildRouteTimings(input.routes, current);
+  const routeTiming = buildRouteTimings(input.routes, logisticsCurrent);
 
   return {
     period,
@@ -474,6 +477,6 @@ export function buildReportModel(input: {
     neighborhoods,
     motoboys,
     routeTimings: routeTiming.trusted,
-    quality: buildQuality(current, routeTiming.suspicious),
+    quality: buildQuality(logisticsCurrent, routeTiming.suspicious),
   };
 }

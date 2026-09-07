@@ -1,6 +1,7 @@
 export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debito' | 'cartao';
 export type RouteStatus = 'aberta' | 'fechada';
 export type OrderOrigin = 'ifood' | 'loja';
+export type FulfillmentMode = 'delivery' | 'pickup' | 'counter';
 export type PaymentRuleType = 'fixed' | 'per_delivery' | 'fixed_plus_variable';
 export type MotoboyType = 'fixo' | 'avulso'; 
 
@@ -31,6 +32,7 @@ export interface Route {
 export interface Delivery {
   id: string;
   route_id: string;
+  fulfillment_mode?: FulfillmentMode; // legado sem campo = delivery
   order_id?: string;
   ifood_id?: string; 
   origin: OrderOrigin;

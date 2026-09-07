@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { 
-  ChevronLeft, Store, Smartphone, Banknote, QrCode, CreditCard, 
-  ChevronDown, AlertTriangle, Navigation, CheckCircle2, Link2, MessageCircle, Info, Sparkles, ClipboardPaste
+import {
+  useState, useMemo } from 'react'; import { useRouter } from 'next/navigation'; import {    ChevronLeft, Store, Smartphone, Banknote, QrCode,
+  CreditCard, ChevronDown, AlertTriangle, Navigation, CheckCircle2, Link2,
+  MessageCircle, Info, Sparkles, ClipboardPaste, Bike, ShoppingBag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
@@ -14,7 +13,7 @@ import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import type { Delivery, OrderOrigin, Customer } from '@/types';
+import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
 
 export default function NovaEntregaPage() {
   const router = useRouter();
@@ -29,7 +28,8 @@ export default function NovaEntregaPage() {
   const [isParserOpen, setIsParserOpen] = useState(true);
 
   const [origin, setOrigin] = useState<OrderOrigin>('ifood');
-  const [routeId, setRouteId] = useState('');
+    const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>('delivery');
+const [routeId, setRouteId] = useState('');
   const [isRouteDropdownOpen, setIsRouteDropdownOpen] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [ifoodId, setIfoodId] = useState('');
@@ -162,8 +162,12 @@ export default function NovaEntregaPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!routeId || !value || !streetAddress) {
-      toast.error('Preencha os campos obrigatórios (Rota, Valor e Rua)');
+    if (!value || (fulfillmentMode === 'delivery' && (!routeId || !streetAddress))) {
+      toast.error(
+        fulfillmentMode === 'delivery'
+          ? 'Preencha os campos obrigatórios (Rota, Valor e Rua)'
+          : 'Informe o valor do pedido',
+      );
       return;
     }
     
@@ -186,15 +190,15 @@ export default function NovaEntregaPage() {
     try {
       const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
-      const cleanStreet = normalizeAddressText(streetAddress);
+      const cleanStreet = fulfillmentMode === 'delivery' ? normalizeAddressText(streetAddress) : '';
       const rawPhone = phone.replace(/\D/g, '');
 
       let customerId: string | undefined = undefined;
       if (customerName.trim()) {
         customerId = await findOrCreateCustomer(customerName, {
-          address: cleanStreet,
+          address: fulfillmentMode === 'delivery' ? cleanStreet : undefined,
           phone: rawPhone || undefined,
-          mapsLink,
+          mapsLink: fulfillmentMode === 'delivery' ? mapsLink : undefined,
           confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
           observation,
           origin,
@@ -204,7 +208,8 @@ export default function NovaEntregaPage() {
       const now = new Date().toISOString();
       const novaEntrega: Delivery = {
         id: Date.now().toString(),
-        route_id: routeId,
+        route_id: fulfillmentMode === 'delivery' ? routeId : '',
+        fulfillment_mode: fulfillmentMode,
         origin,
         order_id: origin === 'ifood' ? (orderId || undefined) : undefined,
         ifood_id: origin === 'ifood' ? (ifoodId || undefined) : undefined,
@@ -216,8 +221,8 @@ export default function NovaEntregaPage() {
         is_urgent: isUrgent,
         payment_method: paymentMethod,
         change_for: cleanChangeFor,
-        address_string: cleanStreet,
-        maps_link: mapsLink,
+        address_string: fulfillmentMode === 'delivery' ? cleanStreet : '',
+        maps_link: fulfillmentMode === 'delivery' ? mapsLink : '',
         phone: rawPhone || undefined,
         notify_whatsapp: notifyWhatsapp,
         observation,
@@ -240,17 +245,6 @@ export default function NovaEntregaPage() {
     }
   };
 
-  if (openRoutes.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20 text-center px-4">
-        <p className="text-zinc-400">Abra uma rota primeiro para registrar entregas.</p>
-        <button onClick={() => router.push('/rotas/nova')} className="rounded-xl bg-emerald-500 px-6 py-3 font-bold text-zinc-950">
-          Criar Rota Agora
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-6 relative">
       <div className="flex items-center gap-3">
@@ -259,6 +253,38 @@ export default function NovaEntregaPage() {
         </button>
         <h1 className="font-heading text-xl font-bold text-zinc-50">Nova Entrega</h1>
       </div>
+
+      {/* MODALIDADE OPERACIONAL */}
+      <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-3">
+        <div className="mb-3">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-300">Modalidade</p>
+          <p className="mt-1 text-[11px] text-zinc-500">Entrega entra em rota. Retirada e balcão ficam fora da logística.</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            ['delivery', 'Entrega', Bike],
+            ['pickup', 'Retirada', ShoppingBag],
+            ['counter', 'Balcão', Store],
+          ] as const).map(([mode, label, Icon]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => {
+                setFulfillmentMode(mode);
+                setIsRouteDropdownOpen(false);
+              }}
+              className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl border px-2 text-[11px] font-black transition-all ${
+                fulfillmentMode === mode
+                  ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
+                  : 'border-zinc-800 bg-zinc-950/30 text-zinc-500'
+              }`}
+            >
+              <Icon size={17} />
+              {label}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* SELETOR DE ORIGEM (iFood vs Loja Própria) */}
       <div className="flex gap-2 p-1 bg-zinc-900 rounded-2xl border border-zinc-800">
@@ -330,6 +356,18 @@ export default function NovaEntregaPage() {
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5 pb-10">
         
+        {fulfillmentMode === 'delivery' && (
+          <>
+            {openRoutes.length === 0 && (
+              <button
+                type="button"
+                onClick={() => router.push('/rotas/nova')}
+                className="mb-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4 text-left"
+              >
+                <p className="text-sm font-black text-amber-400">Nenhuma rota aberta</p>
+                <p className="mt-1 text-xs text-zinc-400">Crie uma rota para registrar uma entrega.</p>
+              </button>
+            )}
         {/* ROTA */}
         <div className="relative flex flex-col gap-2">
           <label className="text-sm font-semibold text-zinc-400">Selecionar Rota</label>
@@ -373,6 +411,8 @@ export default function NovaEntregaPage() {
           )}
         </div>
 
+          </>
+        )}
         {/* IDENTIFICADORES DO IFOOD */}
         {origin === 'ifood' && (
           <div className="grid grid-cols-3 gap-2 animate-in fade-in">
@@ -455,6 +495,8 @@ export default function NovaEntregaPage() {
           </div>
         </div>
 
+        {fulfillmentMode === 'delivery' && (
+          <>
         {/* ENDEREÇO E LINK MAPS */}
         <div className="flex flex-col gap-3 border-t border-zinc-800 pt-4">
           <AddressAutocomplete
@@ -504,6 +546,8 @@ export default function NovaEntregaPage() {
           </div>
         </div>
 
+          </>
+        )}
         {/* FINANCEIRO E PRODUTOS */}
         <div className="flex flex-col gap-4 border-t border-zinc-800 pt-4">
           <div className="grid grid-cols-2 gap-3">

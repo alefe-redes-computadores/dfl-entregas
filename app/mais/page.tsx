@@ -109,15 +109,15 @@ export default function MaisPage() {
         </h3>
         <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
           <button
-            onClick={() => router.push('/confirmar')}
+            onClick={() => router.push('/confirmacoes')}
             className="flex w-full items-center gap-4 p-4 transition-colors active:bg-zinc-800/50 hover:bg-zinc-800/30"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
               <CheckSquare size={20} />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-semibold text-zinc-100">Confirmar Entregas</p>
-              <p className="text-xs text-zinc-500">Portal do iFood embutido</p>
+              <p className="font-semibold text-zinc-100">Central de Confirmações</p>
+              <p className="text-xs text-zinc-500">Fila operacional do iFood e acesso ao portal</p>
             </div>
           </button>
         </div>

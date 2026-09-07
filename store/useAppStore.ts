@@ -7,6 +7,7 @@ import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import type { Route, Delivery, Customer, OrderOrigin, Motoboy, DaySchedule, StorePause, HolidayOverride } from '@/types';
+import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -448,7 +449,7 @@ export const useAppStore = create<AppState>()(
           await batch.commit();
           deliveryCommitCompleted = true;
 
-          if (updatedData.completed === true && deliveryToUpdate) {
+          if (updatedData.completed === true && deliveryToUpdate && isDeliveryFulfillment(deliveryToUpdate) && deliveryToUpdate.route_id) {
             const currentState = get();
             const routeDeliveries = currentState.deliveries.filter(d => d.route_id === deliveryToUpdate.route_id);
             const allDone = routeDeliveries.length > 0 && routeDeliveries.every(d => d.completed);
