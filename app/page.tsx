@@ -23,7 +23,9 @@ function formatDateLabel(date: Date): string {
   });
 }
 
-function firstValidTimestamp(...values: unknown[]): Date | null {
+type HomeTimestamp = Parameters<typeof parseTimestamp>[0];
+
+function firstValidTimestamp(...values: HomeTimestamp[]): Date | null {
   for (const value of values) {
     const parsed = parseTimestamp(value);
     if (parsed) return parsed;

@@ -20,18 +20,33 @@ import type {
   OperationalIntelligenceSnapshot,
 } from './types';
 
+type IntelligenceTimestamp = Parameters<typeof parseTimestamp>[0];
+
+function firstValidTimestamp(
+  ...values: IntelligenceTimestamp[]
+): Date | null {
+  for (const value of values) {
+    const parsed = parseTimestamp(value);
+    if (parsed) return parsed;
+  }
+
+  return null;
+}
+
 function deliveryTimestamp(delivery: Delivery): Date | null {
-  return parseTimestamp(delivery.created_at ?? delivery.createdAt);
+  return firstValidTimestamp(delivery.created_at, delivery.createdAt);
 }
 
 function routeTimestamp(route: Route): Date | null {
-  return parseTimestamp(
-    route.created_at ?? route.started_at ?? route.departure_time,
+  return firstValidTimestamp(
+    route.created_at,
+    route.started_at,
+    route.departure_time,
   );
 }
 
 function fuelingTimestamp(fueling: Fueling): Date | null {
-  return parseTimestamp(fueling.occurred_at ?? fueling.created_at);
+  return firstValidTimestamp(fueling.occurred_at, fueling.created_at);
 }
 
 function inWindow(date: Date | null, startKey: string, endKey: string): boolean {
@@ -237,7 +252,10 @@ function routeInsights(
   const valid = routes
     .filter((route) => route.status === 'fechada')
     .map((route) => {
-      const start = parseTimestamp(route.started_at ?? route.departure_time);
+      const start = firstValidTimestamp(
+        route.started_at,
+        route.departure_time,
+      );
       const end = parseTimestamp(route.end_time);
       if (!start || !end) return null;
 
