@@ -203,8 +203,7 @@ function buildRecurringCustomerPatterns(
         hasMapsLink: Boolean(customer?.maps_link?.trim()),
       };
     })
-    .sort((a, b) => b.deliveries - a.deliveries)
-    .slice(0, 12);
+    .sort((a, b) => b.deliveries - a.deliveries);
 }
 
 function buildRouteContexts(
@@ -229,6 +228,8 @@ function buildRouteContexts(
       if (durationMinutes == null) return null;
 
       const deliveryCount = deliveryCounts.get(route.id) || 0;
+      if (deliveryCount <= 0) return null;
+
       return {
         route,
         durationMinutes,
@@ -261,6 +262,16 @@ function buildRouteContexts(
       const comparison = byBand.get(item.sizeBand) ?? [];
       const baselineMinutes =
         comparison.length >= 5 ? median(comparison) : null;
+      const thresholdMinutes =
+        baselineMinutes == null
+          ? null
+          : Math.max(baselineMinutes * 1.5, baselineMinutes + 15);
+      const contextStatus =
+        thresholdMinutes == null
+          ? 'insufficient'
+          : item.durationMinutes > thresholdMinutes
+            ? 'above'
+            : 'within';
 
       return {
         routeId: item.route.id,
@@ -273,10 +284,12 @@ function buildRouteContexts(
         departureHour: item.departureHour,
         comparisonSample: comparison.length,
         baselineMinutes,
+        thresholdMinutes,
         deviationRatio:
           baselineMinutes && baselineMinutes > 0
             ? item.durationMinutes / baselineMinutes
             : null,
+        contextStatus,
       };
     })
     .sort((a, b) => b.durationMinutes - a.durationMinutes);
@@ -287,6 +300,20 @@ function buildMotoboyContexts(
   motoboys: Motoboy[],
 ): MotoboyOperationalContext[] {
   const motoboyById = new Map(motoboys.map((item) => [item.id, item]));
+  const motoboyByName = new Map<string, Motoboy | null>();
+
+  motoboys.forEach((motoboy) => {
+    const key = normalizeText(motoboy.name);
+    if (!key) return;
+
+    if (motoboyByName.has(key)) {
+      motoboyByName.set(key, null);
+      return;
+    }
+
+    motoboyByName.set(key, motoboy);
+  });
+
   const buckets = new Map<
     string,
     {
@@ -299,15 +326,21 @@ function buildMotoboyContexts(
 
   routeContexts.forEach((route) => {
     const id = route.motoboyId;
-    const canonical = id ? motoboyById.get(id) : null;
+    const routeName = route.motoboyName?.trim() || '';
+    const canonical =
+      (id ? motoboyById.get(id) : null) ||
+      (routeName ? motoboyByName.get(normalizeText(routeName)) : null);
+    const resolvedId = canonical?.id || id || null;
     const name =
       canonical?.name?.trim() ||
-      route.motoboyName?.trim() ||
+      routeName ||
       'Entregador não informado';
-    const key = id ? `id:${id}` : `name:${normalizeText(name)}`;
+    const key = resolvedId
+      ? `id:${resolvedId}`
+      : `name:${normalizeText(name)}`;
 
     const current = buckets.get(key) ?? {
-      motoboyId: id,
+      motoboyId: resolvedId,
       motoboyName: name,
       durations: [],
       deliveries: 0,
@@ -448,21 +481,7 @@ export function buildOperationalMemoryInsights(
   }
 
   const contextualAnomalies = memory.routeContexts
-    .filter((route) => {
-      if (
-        route.baselineMinutes == null ||
-        route.comparisonSample < 5
-      ) {
-        return false;
-      }
-
-      const threshold = Math.max(
-        route.baselineMinutes * 1.5,
-        route.baselineMinutes + 15,
-      );
-
-      return route.durationMinutes > threshold;
-    })
+    .filter((route) => route.contextStatus === 'above')
     .sort((a, b) => {
       const aRatio = a.deviationRatio ?? 0;
       const bRatio = b.deviationRatio ?? 0;

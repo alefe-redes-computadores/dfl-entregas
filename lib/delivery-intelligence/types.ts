@@ -90,7 +90,9 @@ export interface RouteOperationalContext {
   departureHour: number | null;
   comparisonSample: number;
   baselineMinutes: number | null;
+  thresholdMinutes: number | null;
   deviationRatio: number | null;
+  contextStatus: 'insufficient' | 'within' | 'above';
 }
 
 export interface MotoboyOperationalContext {
