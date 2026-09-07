@@ -1,6 +1,6 @@
 const TIME_ZONE = 'America/Sao_Paulo';
 
-type TimestampLike =
+export type TimestampLike =
   | string
   | number
   | Date
@@ -46,6 +46,17 @@ export function parseTimestamp(value: TimestampLike): Date | null {
 
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date : null;
+}
+
+export function firstValidTimestamp(
+  ...values: TimestampLike[]
+): Date | null {
+  for (const value of values) {
+    const parsed = parseTimestamp(value);
+    if (parsed) return parsed;
+  }
+
+  return null;
 }
 
 function parts(date: Date) {

@@ -3,6 +3,7 @@ import type { Customer, Delivery, Fueling, Route } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
   compareDateKeys,
+  firstValidTimestamp,
   parseTimestamp,
   saoPauloDateKey,
   saoPauloHour,
@@ -24,19 +25,6 @@ import type {
   OperationalIntelligenceInput,
   OperationalIntelligenceSnapshot,
 } from './types';
-
-type IntelligenceTimestamp = Parameters<typeof parseTimestamp>[0];
-
-function firstValidTimestamp(
-  ...values: IntelligenceTimestamp[]
-): Date | null {
-  for (const value of values) {
-    const parsed = parseTimestamp(value);
-    if (parsed) return parsed;
-  }
-
-  return null;
-}
 
 function deliveryTimestamp(delivery: Delivery): Date | null {
   return firstValidTimestamp(delivery.created_at, delivery.createdAt);

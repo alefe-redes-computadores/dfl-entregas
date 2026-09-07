@@ -6,6 +6,7 @@ import {
   dateFromKey,
   enumerateDateKeys,
   formatReportDate,
+  firstValidTimestamp,
   parseTimestamp,
   saoPauloDateKey,
   saoPauloHour,
@@ -47,7 +48,7 @@ function money(value: unknown): number {
 
 function deliveryTimestamp(delivery: Delivery): Date | null {
   // Regra de auditoria: edição NÃO transforma pedido antigo em pedido recente.
-  return parseTimestamp(delivery.created_at ?? delivery.createdAt);
+  return firstValidTimestamp(delivery.created_at, delivery.createdAt);
 }
 
 function normalizeOrigin(delivery: Delivery): ReportDelivery['originLabel'] {
@@ -264,7 +265,7 @@ function buildRouteTimings(
     if (!deliveryRouteIds.has(route.id)) return;
     if (route.status !== 'fechada') return;
 
-    const start = parseTimestamp(route.started_at ?? route.departure_time);
+    const start = firstValidTimestamp(route.started_at, route.departure_time);
     const end = parseTimestamp(route.end_time);
 
     if (!start || !end) {
@@ -298,7 +299,7 @@ function buildRouteTimings(
 }
 
 function fuelingTimestamp(fueling: Fueling): Date | null {
-  return parseTimestamp(fueling.occurred_at ?? fueling.created_at);
+  return firstValidTimestamp(fueling.occurred_at, fueling.created_at);
 }
 
 function fuelingInPeriod(
