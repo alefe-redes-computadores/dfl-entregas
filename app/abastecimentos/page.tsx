@@ -51,7 +51,7 @@ export default function FuelingsPage() {
   const monthItems = useMemo(
     () =>
       fuelings.filter(
-        (item) => operationalMonthKey(item.occurred_at) === month,
+        (item) => operationalMonthKey(fuelingDate(item)) === month,
       ),
     [fuelings, month],
   );

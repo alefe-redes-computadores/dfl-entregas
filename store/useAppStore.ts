@@ -8,6 +8,8 @@ import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, DaySchedule, StorePause, HolidayOverride } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { dateKey, deliveryDate, routeStartedAt } from '@/lib/operational-time';
+import { fuelingDate } from '@/lib/fueling-analytics';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -75,9 +77,6 @@ const sanitizeForFirebase = (obj: any) => {
   delete sanitized.is_expanded;
   return sanitized;
 };
-
-const getDeliveryCreatedAt = (delivery: Delivery): string | undefined =>
-  delivery.created_at || delivery.createdAt || delivery.updated_at;
 
 // Gerador do schedule padrão caso o usuário seja novo
 const defaultSchedule = Object.fromEntries(
@@ -219,9 +218,8 @@ export const useAppStore = create<AppState>()(
           get().fuelings.forEach(local => {
             if (!mergedFuelings.some(item => item.id === local.id)) mergedFuelings.push(local);
           });
-          mergedFuelings.sort((a, b) =>
-            new Date(b.occurred_at || b.created_at || 0).getTime() -
-            new Date(a.occurred_at || a.created_at || 0).getTime()
+          mergedFuelings.sort(
+            (a, b) => fuelingDate(b).getTime() - fuelingDate(a).getTime(),
           );
 
           const defaultSettings = get().storeSettings;
@@ -268,10 +266,10 @@ export const useAppStore = create<AppState>()(
       getDeliveriesByRoute: (routeId) => {
         const state = get();
         if (routeId === 'rota-resgate-recuperada') {
-          const selectedDateStr = state.selectedDate.toDateString();
-          return state.deliveries.filter(d => {
-            const deliveryDateStr = new Date(getDeliveryCreatedAt(d) || 0).toDateString();
-            return deliveryDateStr === selectedDateStr;
+          const selectedDateKey = dateKey(state.selectedDate);
+          return state.deliveries.filter((delivery) => {
+            const value = deliveryDate(delivery);
+            return Boolean(value) && dateKey(value) === selectedDateKey;
           });
         }
         return state.deliveries.filter((d) => d.route_id === routeId);
@@ -312,7 +310,7 @@ export const useAppStore = create<AppState>()(
         const current = previousRoutes.find((route) => route.id === routeId);
         if (!current) throw new Error('Rota não encontrada.');
         if (current.status === 'fechada') throw new Error('Reabra a rota antes de iniciá-la.');
-        if (current.started_at) return;
+        if (routeStartedAt(current)) return;
         const now = new Date().toISOString();
         set((state) => ({
           routes: state.routes.map((r) => r.id === routeId ? { ...r, started_at: now, updated_at: now } : r),
@@ -556,7 +554,7 @@ export const useAppStore = create<AppState>()(
         const routeBeforeClose = previousRoutes.find((route) => route.id === routeId);
         if (!routeBeforeClose) throw new Error('Rota não encontrada.');
         if (routeBeforeClose.status === 'fechada') return;
-        if (!routeBeforeClose.started_at) throw new Error('Inicie a rota antes de finalizá-la.');
+        if (!routeStartedAt(routeBeforeClose)) throw new Error('Inicie a rota antes de finalizá-la.');
         if (get().deliveries.some((delivery) => delivery.route_id === routeId && !delivery.completed)) {
           throw new Error('Conclua todas as entregas antes de finalizar a rota.');
         }

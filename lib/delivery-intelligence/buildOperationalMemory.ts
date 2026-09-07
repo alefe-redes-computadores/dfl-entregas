@@ -3,6 +3,7 @@ import type { Customer, Delivery, Motoboy, Route } from '@/types';
 import { isOperationalCustomer } from '@/lib/customer-analytics';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
+  firstValidTimestamp,
   parseTimestamp,
   saoPauloHour,
 } from '@/lib/reports/time';
@@ -20,16 +21,6 @@ import type {
   RecurringCustomerPattern,
   RouteOperationalContext,
 } from './types';
-
-type MemoryTimestamp = Parameters<typeof parseTimestamp>[0];
-
-function firstValidTimestamp(...values: MemoryTimestamp[]): Date | null {
-  for (const value of values) {
-    const parsed = parseTimestamp(value);
-    if (parsed) return parsed;
-  }
-  return null;
-}
 
 function deliveryTimestamp(delivery: Delivery): Date | null {
   return firstValidTimestamp(delivery.created_at, delivery.createdAt);

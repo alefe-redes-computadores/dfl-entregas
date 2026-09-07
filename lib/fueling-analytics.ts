@@ -1,5 +1,6 @@
 // lib/fueling-analytics.ts
 import type { Fueling, FuelType } from '@/types';
+import { firstValidTimestamp } from '@/lib/reports/time';
 
 export const FUEL_LABELS: Record<FuelType, string> = {
   gasolina_comum: 'Gasolina comum',
@@ -24,11 +25,12 @@ export const numberPt = (value = 0, digits = 2) =>
   });
 
 export function operationalMonthKey(value: Date | string): string {
+  const date = firstValidTimestamp(value) ?? new Date(0);
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: SAO_PAULO_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
-  }).formatToParts(new Date(value));
+  }).formatToParts(date);
 
   const year = parts.find((part) => part.type === 'year')?.value || '';
   const month = parts.find((part) => part.type === 'month')?.value || '';
@@ -36,7 +38,7 @@ export function operationalMonthKey(value: Date | string): string {
 }
 
 export function fuelingDate(value: Pick<Fueling, 'occurred_at' | 'created_at'>): Date {
-  return new Date(value.occurred_at || value.created_at || 0);
+  return firstValidTimestamp(value.occurred_at, value.created_at) ?? new Date(0);
 }
 
 export function buildFuelingMetrics(items: Fueling[]) {

@@ -1,6 +1,8 @@
 
 import type { Delivery, Route, Customer } from '@/types';
 import { resolveStopLocation, buildGoogleMapsRouteUrl, cleanAddressForMaps } from '@/lib/maps';
+import { routeStartedAt } from '@/lib/operational-time';
+import { firstValidTimestamp } from '@/lib/reports/time';
 
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -131,11 +133,11 @@ const getNumberEmoji = (num: number): string => {
 
 const formatDuration = (startTimeStr?: string, endTimeStr?: string): string | null => {
   if (!startTimeStr || !endTimeStr) return null;
-  const start = new Date(startTimeStr).getTime();
-  const end = new Date(endTimeStr).getTime();
-  if (isNaN(start) || isNaN(end) || end <= start) return null;
+  const start = firstValidTimestamp(startTimeStr);
+  const end = firstValidTimestamp(endTimeStr);
+  if (!start || !end || end.getTime() <= start.getTime()) return null;
 
-  const diffMinutes = Math.round((end - start) / 60000);
+  const diffMinutes = Math.round((end.getTime() - start.getTime()) / 60000);
   const hours = Math.floor(diffMinutes / 60);
   const mins = diffMinutes % 60;
 
@@ -321,8 +323,8 @@ export async function generateRouteMessages(
 
     if (previousRoute) {
       const prevDuration = formatDuration(
-        (previousRoute as any).started_at || (previousRoute as any).created_at,
-        (previousRoute as any).finished_at || (previousRoute as any).completed_at
+        routeStartedAt(previousRoute),
+        previousRoute.end_time,
       );
       if (prevDuration) {
         const matchPrev = previousRoute.name.match(/\d+/);
