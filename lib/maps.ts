@@ -20,13 +20,29 @@ export function extractCoordinatesFromUrl(url?: string | null): string | null {
 }
 
 /**
+ * Normaliza o texto informado sem inventar rua, bairro, número ou cidade.
+ */
+export function normalizeAddressText(rawAddress: string): string {
+  return rawAddress
+    .replace(/\r?\n+/g, ', ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/,\s*,+/g, ', ')
+    .replace(/[,|-]\s*$/, '')
+    .trim();
+}
+
+/**
  * Higieniza o endereço focando na entrega em Patos de Minas
  * Prioriza "Rua/Av, Número, Patos de Minas - MG" ignorando ruídos
  */
 export function cleanAddressForMaps(rawAddress: string): string {
   if (!rawAddress) return 'Patos de Minas, MG';
 
-  const clean = rawAddress.replace(/[#&+\|]/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean = normalizeAddressText(rawAddress)
+    .replace(/[#&+\|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   const parts = clean.split(',');
   const street = parts[0]?.trim() || '';

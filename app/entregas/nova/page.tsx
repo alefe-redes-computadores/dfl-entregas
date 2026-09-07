@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; 
-import { extractCoordinatesFromUrl } from '@/lib/maps';
+import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -128,16 +128,16 @@ export default function NovaEntregaPage() {
     if (coords || (mapsLink && mapsLink.includes('http'))) {
       return {
         status: 'precise' as const,
-        title: 'Localização 100% Precisa',
-        desc: 'Link do Maps identificado com sucesso.'
+        title: 'Link do Maps vinculado',
+        desc: 'A entrega possui uma referência direta do Google Maps.'
       };
     }
     const hasNumber = /\d+/.test(streetAddress);
     if (streetAddress.trim().length > 3 && hasNumber) {
       return {
         status: 'good' as const,
-        title: 'Endereço com Número',
-        desc: 'Rua e número prontos para entrega.'
+        title: 'Rua e número informados',
+        desc: 'Confira o bairro ou vincule um link do Maps quando houver dúvida.'
       };
     }
     if (streetAddress.trim().length > 0 && !hasNumber) {
@@ -186,7 +186,7 @@ export default function NovaEntregaPage() {
     try {
       const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
-      const cleanStreet = streetAddress.trim().replace(/[,|-]\s*$/, '');
+      const cleanStreet = normalizeAddressText(streetAddress);
       const rawPhone = phone.replace(/\D/g, '');
 
       let customerId: string | undefined = undefined;
@@ -457,11 +457,13 @@ export default function NovaEntregaPage() {
 
         {/* ENDEREÇO E LINK MAPS */}
         <div className="flex flex-col gap-3 border-t border-zinc-800 pt-4">
-          <AddressAutocomplete 
-            value={streetAddress} 
-            onChange={setStreetAddress} 
-            placeholder="Ex: Rua Major Gote, 100, Bairro"
+          <AddressAutocomplete
+            value={streetAddress}
+            onChange={setStreetAddress}
+            onMapsLinkDetected={setMapsLink}
+            placeholder="Ex: Rua Zeca Mota, 123 — Alvorada"
             label="Endereço da Entrega*"
+            localityHint="Patos de Minas · MG"
           />
 
           {addressAudit && (
