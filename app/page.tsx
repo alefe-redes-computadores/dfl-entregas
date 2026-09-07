@@ -77,18 +77,35 @@ export default function HomePage() {
   });
 
   const routeIdsDoDia = routesDoDia.map(r => r.id);
-  
-  const deliveriesDoDia = deliveries.filter((d) => {
-    if (!isDeliveryFulfillment(d)) return false;
 
-    const belongsToRoute = routeIdsDoDia.includes(d.route_id);
-    const deliveryKey = operationalKey(d.created_at, d.createdAt);
-    const isSameDay = deliveryKey === selectedDateKey;
-    const isSameMotoboy = globalMotoboy
-      ? (d as any).motoboy_name === globalMotoboy
-      : true;
+  // Movimento comercial da loja: todas as modalidades registradas na data.
+  // O filtro de motoboy é logístico e não altera o faturamento da loja.
+  const ordersDoDia = deliveries.filter((delivery) => {
+    const deliveryKey = operationalKey(
+      delivery.created_at,
+      delivery.createdAt,
+    );
 
-    return belongsToRoute || (isSameDay && isSameMotoboy && !d.route_id);
+    return deliveryKey === selectedDateKey;
+  });
+
+  // Operação logística: somente entregas reais.
+  // Pedidos ligados às rotas da data permanecem no fluxo mesmo se o registro
+  // individual estiver sem timestamp. Órfãos são mostrados na visão geral.
+  const deliveriesDoDia = deliveries.filter((delivery) => {
+    if (!isDeliveryFulfillment(delivery)) return false;
+
+    const belongsToRoute = routeIdsDoDia.includes(delivery.route_id);
+    const deliveryKey = operationalKey(
+      delivery.created_at,
+      delivery.createdAt,
+    );
+    const isSameDayOrphan =
+      !globalMotoboy &&
+      deliveryKey === selectedDateKey &&
+      !delivery.route_id;
+
+    return belongsToRoute || isSameDayOrphan;
   });
 
   const orphanedDeliveries = deliveriesDoDia.filter(d => !routeIdsDoDia.includes(d.route_id));
@@ -107,7 +124,7 @@ export default function HomePage() {
   }
 
   const totalEntregas = deliveriesDoDia.length;
-  const faturamentoTotal = deliveriesDoDia.reduce((acc, delivery) => acc + (delivery.value || 0), 0);
+  const faturamentoTotal = ordersDoDia.reduce((acc, order) => acc + (order.value || 0), 0);
 
   const openRoutes = routesDoDia.filter((r) => r.status === 'aberta');
   const closedRoutes = routesDoDia.filter((r) => r.status === 'fechada');
@@ -179,7 +196,7 @@ export default function HomePage() {
 
         <div className="flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
           <div className="flex items-center justify-between text-zinc-400">
-            <div className="flex items-center gap-2"><TrendingUp size={16} className="text-emerald-500" /><span className="text-xs font-semibold uppercase tracking-wider">Faturamento</span></div>
+            <div className="flex items-center gap-2"><TrendingUp size={16} className="text-emerald-500" /><span className="text-xs font-semibold uppercase tracking-wider">Faturamento da loja</span></div>
             <button onClick={togglePrivacyMode} className="text-zinc-500 hover:text-zinc-300 transition-colors active:scale-90">{isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}</button>
           </div>
           <p className="font-heading text-2xl font-bold text-zinc-50">{isPrivacyMode ? 'R$ •••••' : `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p>

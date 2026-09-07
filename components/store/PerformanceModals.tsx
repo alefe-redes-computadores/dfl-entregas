@@ -34,7 +34,7 @@ function Logistics(props:Props){
 
 function Revenue(props:Props){
   const router=useRouter();const data=props.dashboardData;const [filter,setFilter]=useState<PaymentFilter>('all');
-  const rows=useMemo(()=>data.selectedDateDeliveries.filter(item=>filter==='all'||(filter==='cartao'?item.payment_method?.startsWith('cartao'):item.payment_method===filter)).sort((a,b)=>new Date(deliveryDate(a)||0).getTime()-new Date(deliveryDate(b)||0).getTime()),[data.selectedDateDeliveries,filter]);
+  const rows=useMemo(()=>data.selectedDateOrders.filter(item=>filter==='all'||(filter==='cartao'?item.payment_method?.startsWith('cartao'):item.payment_method===filter)).sort((a,b)=>new Date(deliveryDate(a)||0).getTime()-new Date(deliveryDate(b)||0).getTime()),[data.selectedDateOrders,filter]);
   const hidden=(value:number)=>props.isPrivacyMode?'••••':money(value);
   const methods=[{key:'pix' as const,label:'Pix',icon:QrCode,value:data.revenueByMethod.pix||0},{key:'dinheiro' as const,label:'Dinheiro',icon:Banknote,value:data.revenueByMethod.dinheiro||0},{key:'cartao' as const,label:'Cartão',icon:CreditCard,value:(data.revenueByMethod.cartao||0)+(data.revenueByMethod.cartao_credito||0)+(data.revenueByMethod.cartao_debito||0)}];
   return <div className="fixed inset-0 z-[110] overflow-y-auto bg-zinc-950"><div className="sticky top-0 z-10 space-y-4 border-b border-zinc-800 bg-zinc-950/95 p-4 backdrop-blur-xl"><Header title="Extrato do dia" subtitle="Valores dos pedidos registrados" icon={Wallet} onClose={props.closeRevenue} tone="green"/><DateBar data={data} tone="green"/></div><main className="space-y-5 p-4 pb-32">
