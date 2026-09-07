@@ -15,6 +15,7 @@ import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete
 import { useStoreDashboard } from '@/hooks/useStoreDashboard';
 import { PerformanceModals } from '@/components/store/PerformanceModals';
 import { OperationalCalendar } from '@/components/store/OperationalCalendar';
+import { StoreTimePicker } from '@/components/store/StoreTimePicker';
 import { validateSchedule } from '@/lib/operational-time';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
 
@@ -345,11 +346,12 @@ export default function LojaPage() {
         </div>
       )}
 
-      {timePicker && (
+      {timePicker && <StoreTimePicker field={timePicker.field} hour={timePicker.hour} minute={timePicker.minute} onClose={() => setTimePicker(null)} onConfirm={confirmTimePicker} onChange={(value) => setTimePicker(current => current ? {...current,...value} : null)} />}
+      {false && timePicker && (
         <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-black/80 animate-in fade-in">
           <div className="bg-[#1a1a1a] rounded-t-[32px] p-6 pb-10 flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-300 relative">
              <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-zinc-700" />
-             <div className="flex items-center justify-between mb-8"><h3 className="font-bold text-xl text-zinc-50">Horário de {timePicker.field === 'start' ? 'início' : 'término'}</h3><button onClick={() => setTimePicker(null)} className="p-2.5 bg-zinc-800 rounded-full text-zinc-400 active:scale-90"><X size={20}/></button></div>
+             <div className="flex items-center justify-between mb-8"><h3 className="font-bold text-xl text-zinc-50">Horário de {timePicker?.field === 'start' ? 'início' : 'término'}</h3><button onClick={() => setTimePicker(null)} className="p-2.5 bg-zinc-800 rounded-full text-zinc-400 active:scale-90"><X size={20}/></button></div>
              <div className="flex justify-center gap-4 h-56 relative mb-8">
                <div className="absolute top-1/2 left-4 right-4 h-14 -translate-y-1/2 bg-[#2d2d2d] rounded-2xl pointer-events-none z-0" />
                <div className="absolute top-0 w-full h-16 bg-gradient-to-b from-[#1a1a1a] to-transparent pointer-events-none z-10"/>
@@ -357,14 +359,14 @@ export default function LojaPage() {
                <div ref={hourScrollRef} className="flex-1 flex flex-col overflow-y-auto items-center z-20 pb-[96px] pt-[96px] hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   {Array.from({length: 24}).map((_, i) => {
                     const h = String(i).padStart(2, '0');
-                    return (<div key={h} data-val={h} onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker(p => ({...p!, hour: h})); }} className="shrink-0 h-14 w-20 flex items-center justify-center cursor-pointer"><span className={`text-2xl transition-all ${timePicker.hour === h ? 'font-black text-zinc-50 scale-110' : 'font-semibold text-zinc-500'}`}>{h}</span></div>)
+                    return (<div key={h} data-val={h} onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker(p => ({...p!, hour: h})); }} className="shrink-0 h-14 w-20 flex items-center justify-center cursor-pointer"><span className={`text-2xl transition-all ${timePicker?.hour === h ? 'font-black text-zinc-50 scale-110' : 'font-semibold text-zinc-500'}`}>{h}</span></div>)
                   })}
                </div>
                <div className="flex items-center justify-center text-3xl font-black text-zinc-600 z-20 pb-2">:</div>
                <div ref={minScrollRef} className="flex-1 flex flex-col overflow-y-auto items-center z-20 pb-[96px] pt-[96px] hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   {Array.from({length: 60}).map((_, i) => {
                     const m = String(i).padStart(2, '0');
-                    return (<div key={m} data-val={m} onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker(p => ({...p!, minute: m})); }} className="shrink-0 h-14 w-20 flex items-center justify-center cursor-pointer"><span className={`text-2xl transition-all ${timePicker.minute === m ? 'font-black text-zinc-50 scale-110' : 'font-semibold text-zinc-500'}`}>{m}</span></div>)
+                    return (<div key={m} data-val={m} onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker(p => ({...p!, minute: m})); }} className="shrink-0 h-14 w-20 flex items-center justify-center cursor-pointer"><span className={`text-2xl transition-all ${timePicker?.minute === m ? 'font-black text-zinc-50 scale-110' : 'font-semibold text-zinc-500'}`}>{m}</span></div>)
                   })}
                </div>
              </div>
