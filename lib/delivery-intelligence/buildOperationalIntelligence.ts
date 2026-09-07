@@ -14,6 +14,10 @@ import {
   percentage,
   round,
 } from './statistics';
+import {
+  buildOperationalMemory,
+  buildOperationalMemoryInsights,
+} from './buildOperationalMemory';
 import type {
   IntelligenceWindow,
   OperationalInsight,
@@ -472,6 +476,21 @@ export function buildOperationalIntelligence(
     Boolean(item.route_id),
   ).length;
 
+  const memory = buildOperationalMemory({
+    deliveries,
+    routes,
+    customers: input.customers,
+    motoboys: input.motoboys,
+    minimumSample,
+  });
+  const memoryInsights = buildOperationalMemoryInsights(
+    memory,
+    minimumSample,
+  );
+  const hasContextualRouteAnomaly = memoryInsights.some(
+    (item) => item.id === 'memory-routes-contextual-duration',
+  );
+
   const insights = [
     ...qualityInsights({
       deliveries,
@@ -485,7 +504,10 @@ export function buildOperationalIntelligence(
       customers: input.customers,
       minimumSample,
     }),
-    ...routeInsights(routes, minimumSample),
+    ...memoryInsights,
+    ...(hasContextualRouteAnomaly
+      ? []
+      : routeInsights(routes, minimumSample)),
     ...fuelInsights(fuelings, minimumSample),
   ];
 
@@ -510,6 +532,7 @@ export function buildOperationalIntelligence(
       endKey,
       lookbackDays,
     },
+    memory,
     insights,
     summary: {
       positive: insights.filter((item) => item.severity === 'positive').length,

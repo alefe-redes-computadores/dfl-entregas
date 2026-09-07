@@ -7,7 +7,12 @@ export type {
   InsightSeverity,
   IntelligenceEvidence,
   IntelligenceWindow,
+  MotoboyOperationalContext,
+  NeighborhoodHourPattern,
   OperationalInsight,
+  OperationalMemory,
+  RecurringCustomerPattern,
+  RouteOperationalContext,
   OperationalIntelligenceInput,
   OperationalIntelligenceSnapshot,
 } from './types';

@@ -59,9 +59,59 @@ export interface IntelligenceWindow {
   lookbackDays: number;
 }
 
+export interface NeighborhoodHourPattern {
+  neighborhood: string;
+  hour: number;
+  deliveries: number;
+  neighborhoodSample: number;
+  shareWithinNeighborhood: number;
+}
+
+export interface RecurringCustomerPattern {
+  customerId: string;
+  customerName: string;
+  deliveries: number;
+  distinctAddresses: number;
+  dominantAddress: string | null;
+  dominantAddressCount: number;
+  addressConsistency: number;
+  hasStructuredNeighborhood: boolean;
+  hasMapsLink: boolean;
+}
+
+export interface RouteOperationalContext {
+  routeId: string;
+  routeName: string;
+  motoboyId: string | null;
+  motoboyName: string;
+  durationMinutes: number;
+  deliveryCount: number;
+  sizeBand: string;
+  departureHour: number | null;
+  comparisonSample: number;
+  baselineMinutes: number | null;
+  deviationRatio: number | null;
+}
+
+export interface MotoboyOperationalContext {
+  motoboyId: string | null;
+  motoboyName: string;
+  routeCount: number;
+  deliveryCount: number;
+  medianRouteDurationMinutes: number | null;
+}
+
+export interface OperationalMemory {
+  neighborhoodHourPatterns: NeighborhoodHourPattern[];
+  recurringCustomers: RecurringCustomerPattern[];
+  routeContexts: RouteOperationalContext[];
+  motoboyContexts: MotoboyOperationalContext[];
+}
+
 export interface OperationalIntelligenceSnapshot {
   generatedAt: string;
   window: IntelligenceWindow;
+  memory: OperationalMemory;
   insights: OperationalInsight[];
   summary: {
     positive: number;
