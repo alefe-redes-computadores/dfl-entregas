@@ -1,12 +1,15 @@
 // lib/operational-time.ts
 import type { DaySchedule, Shift, StorePause } from '@/types';
+import { firstValidTimestamp } from '@/lib/reports/time';
 
 export const OPERATION_TIME_ZONE = 'America/Sao_Paulo';
 export const dateKey = (value: Date | string) => new Intl.DateTimeFormat('en-CA', { timeZone: OPERATION_TIME_ZONE, year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date(value));
 export const dateFromKey = (key:string) => new Date(`${key}T12:00:00-03:00`);
 export const shiftDateKey = (key:string, amount:number) => { const date=dateFromKey(key); date.setDate(date.getDate()+amount); return dateKey(date); };
-export const deliveryDate = (delivery:{created_at?:string;createdAt?:string}) => delivery.created_at || delivery.createdAt || '';
-export const routeDate = (route:{created_at?:string;started_at?:string;departure_time?:string}) => route.created_at || route.started_at || route.departure_time || '';
+export const deliveryDate = (delivery:{created_at?:string;createdAt?:string}) =>
+  firstValidTimestamp(delivery.created_at, delivery.createdAt)?.toISOString() || '';
+export const routeDate = (route:{created_at?:string;started_at?:string;departure_time?:string}) =>
+  firstValidTimestamp(route.created_at, route.started_at, route.departure_time)?.toISOString() || '';
 export const minutes = (time:string) => { const match=/^(\d{2}):(\d{2})$/.exec(time); if(!match)return -1; const value=Number(match[1])*60+Number(match[2]); return Number(match[1])<24&&Number(match[2])<60?value:-1; };
 export const validShift = (shift:Shift) => minutes(shift.start)>=0 && minutes(shift.end)>=0 && shift.start!==shift.end;
 

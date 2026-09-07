@@ -1,5 +1,6 @@
 // lib/customer-analytics.ts
 import type { Customer, Delivery } from '@/types';
+import { deliveryDate } from '@/lib/operational-time';
 
 export interface CustomerStats {
   deliveries: Delivery[];
@@ -29,7 +30,7 @@ export function isOperationalCustomer(customer: Customer): boolean {
   return name === 'alefe' && address.includes('lazaro martins marciel 164') && address.includes('jardim quebec');
 }
 
-export const getDeliveryCreatedAt = (delivery: Delivery) => delivery.created_at || delivery.createdAt || delivery.updated_at;
+export const getDeliveryCreatedAt = (delivery: Delivery) => deliveryDate(delivery) || undefined;
 
 export function deliveryBelongsToCustomer(delivery: Delivery, customer: Customer): boolean {
   if (delivery.customer_id) return delivery.customer_id === customer.id;

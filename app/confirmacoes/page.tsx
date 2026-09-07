@@ -24,6 +24,8 @@ import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { useAppStore } from '@/store/useAppStore';
 import { fulfillmentLabel, getFulfillmentMode } from '@/lib/delivery-mode';
+import { deliveryDate } from '@/lib/operational-time';
+import { firstValidTimestamp } from '@/lib/reports/time';
 import {
   getIfoodConfirmationInfo,
   isIfoodOrder,
@@ -32,10 +34,6 @@ import {
 import type { Delivery } from '@/types';
 
 type QueueFilter = 'all' | IfoodConfirmationState;
-type DatedDelivery = Pick<Delivery, 'created_at' | 'createdAt' | 'updated_at'>;
-
-const createdAt = (delivery: DatedDelivery) =>
-  delivery.created_at || delivery.createdAt || delivery.updated_at || '';
 
 const dateKey = (value: Date | string) =>
   new Intl.DateTimeFormat('en-CA', {
@@ -117,7 +115,7 @@ export default function ConfirmacoesPage() {
         .map((delivery) => {
           const customer = customers.find((item) => item.id === delivery.customer_id);
           const confirmation = getIfoodConfirmationInfo(delivery, customer);
-          const created = createdAt(delivery);
+          const created = deliveryDate(delivery);
           const haystack = normalize(
             [
               delivery.order_id,
@@ -173,8 +171,8 @@ export default function ConfirmacoesPage() {
 
     const completedToday = allIfood.filter((delivery) => {
       if (!delivery.completed) return false;
-      const value = delivery.completed_at || delivery.updated_at;
-      return value ? dateKey(value) === todayKey() : false;
+      const completedAt = firstValidTimestamp(delivery.completed_at);
+      return completedAt ? dateKey(completedAt) === todayKey() : false;
     }).length;
 
     return {

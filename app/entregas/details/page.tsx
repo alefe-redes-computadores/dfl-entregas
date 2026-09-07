@@ -29,12 +29,22 @@ import {
   getFulfillmentMode,
   isDeliveryFulfillment,
 } from '@/lib/delivery-mode';
+import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
 
 const money = (value = 0) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const dateTime = (value?: string) =>
-  value ? new Date(value).toLocaleString('pt-BR') : 'Não registrado';
+const dateTime = (...values: TimestampLike[]) => {
+  const date = firstValidTimestamp(...values);
+
+  return date
+    ? date.toLocaleString('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+        timeZone: 'America/Sao_Paulo',
+      })
+    : 'Não registrado';
+};
 
 function DeliveryDetailsContent() {
   const router = useRouter();
@@ -294,7 +304,7 @@ function DeliveryDetailsContent() {
         <InfoRow
           icon={Clock3}
           label="Criado em"
-          value={dateTime(delivery.created_at || delivery.createdAt)}
+          value={dateTime(delivery.created_at, delivery.createdAt)}
         />
 
         <InfoRow

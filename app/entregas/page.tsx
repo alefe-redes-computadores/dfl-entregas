@@ -24,15 +24,12 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { fulfillmentLabel, getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { deliveryDate } from '@/lib/operational-time';
 import type { FulfillmentMode } from '@/types';
 
 type StatusFilter = 'todas' | 'pendentes' | 'concluidas' | 'incompletas';
 type OriginFilter = 'todas' | 'ifood' | 'loja';
 type FulfillmentFilter = 'todas' | FulfillmentMode;
-type DatedDelivery = { created_at?: string; createdAt?: string; updated_at?: string };
-
-const createdAt = (delivery: DatedDelivery) =>
-  delivery.created_at || delivery.createdAt || delivery.updated_at || '';
 
 const dateKey = (value: Date | string) =>
   new Intl.DateTimeFormat('en-CA', {
@@ -103,7 +100,7 @@ export default function DeliveriesPage() {
   const dayDeliveries = useMemo(
     () =>
       deliveries.filter((delivery) => {
-        const value = createdAt(delivery);
+        const value = deliveryDate(delivery);
         return value ? dateKey(value) === selectedDate : false;
       }),
     [deliveries, selectedDate],
@@ -155,7 +152,7 @@ export default function DeliveriesPage() {
         })
         .sort(
           (a, b) =>
-            new Date(createdAt(a.delivery)).getTime() - new Date(createdAt(b.delivery)).getTime(),
+            new Date(deliveryDate(a.delivery)).getTime() - new Date(deliveryDate(b.delivery)).getTime(),
         ),
     [customers, dayDeliveries, fulfillment, origin, query, routes, status],
   );
@@ -181,7 +178,7 @@ export default function DeliveriesPage() {
   }, [calendarMonth]);
 
   const datesWithDeliveries = useMemo(
-    () => new Set(deliveries.map(createdAt).filter(Boolean).map(dateKey)),
+    () => new Set(deliveries.map(deliveryDate).filter(Boolean).map(dateKey)),
     [deliveries],
   );
 
