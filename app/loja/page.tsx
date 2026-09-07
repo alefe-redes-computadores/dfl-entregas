@@ -47,10 +47,14 @@ export default function LojaPage() {
   const [isLogisticsModalOpen, setIsLogisticsModalOpen] = useState(false);
   const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Expediente Avançado
   const [activeTab, setActiveTab] = useState<'horarios' | 'pausas' | 'feriados'>('horarios');
   const [schedule, setSchedule] = useState<Record<number, DaySchedule>>({});
+  const activeMotoboys = motoboys.filter((motoboy) => motoboy.active);
+  const activeScheduleDays = DAYS_OF_WEEK.map((name, index) => ({ name, index, data: schedule[index] || { active: false, shifts: [] } })).filter((item) => item.data.active && item.data.shifts.length > 0);
   const [pauses, setPauses] = useState<StorePause[]>([]);
   const [holidaysOverrides, setHolidaysOverrides] = useState<Record<string, HolidayOverride>>({});
   const [apiHolidays, setApiHolidays] = useState<any[]>([]);
@@ -152,170 +156,362 @@ export default function LojaPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-32 animate-in fade-in duration-300 relative">
-      <PageHeader title="Minha Loja" subtitle="Centro de comando da Da Família Lanches" to="/" />
+      <PageHeader title="Minha Loja" subtitle="Central de operação da Da Família Lanches" to="/" />
 
-      <button onClick={toggleStore} className={`relative overflow-hidden flex items-center justify-between p-5 rounded-[28px] border transition-all duration-500 cursor-pointer active:scale-[0.98] ${isStoreOpen ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.1)]' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800/80'}`}>
-        <div className="flex items-center gap-4 relative z-10">
-          <div className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors duration-500 ${isStoreOpen ? 'bg-emerald-500 text-zinc-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-zinc-800 text-zinc-500'}`}><Power size={24} strokeWidth={2.5} /></div>
-          <div className="text-left flex flex-col"><span className={`text-lg font-black tracking-wide uppercase transition-colors ${isStoreOpen ? 'text-emerald-400' : 'text-zinc-400'}`}>{isStoreOpen ? 'Operação Aberta' : 'Operação Fechada'}</span><span className="text-xs font-semibold text-zinc-500">{isStoreOpen ? 'Recebendo pedidos e rotas' : 'Sistema em modo de repouso'}</span></div>
+      <section className={`overflow-hidden rounded-[30px] border ${isStoreOpen ? 'border-emerald-500/25 bg-emerald-500/[.07]' : 'border-zinc-800 bg-zinc-900/65'}`}>
+        <button
+          onClick={toggleStore}
+          className="flex w-full items-center justify-between gap-4 p-5 text-left active:scale-[0.99]"
+        >
+          <div className="flex min-w-0 items-center gap-4">
+            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${isStoreOpen ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-500'}`}>
+              <Power size={24} strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0">
+              <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${isStoreOpen ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                {isStoreOpen ? 'Operação em andamento' : 'Operação encerrada'}
+              </p>
+              <h2 className="mt-1 font-heading text-xl font-black text-zinc-50">
+                {isStoreOpen ? 'Loja aberta' : 'Loja fechada'}
+              </h2>
+              <p className="mt-1 text-[11px] font-medium text-zinc-500">
+                {isStoreOpen
+                  ? `${activeMotoboys.length} motoboy${activeMotoboys.length === 1 ? '' : 's'} ativo${activeMotoboys.length === 1 ? '' : 's'} agora`
+                  : 'Toque para iniciar a operação manualmente'}
+              </p>
+            </div>
+          </div>
+          <div className={`h-3 w-3 shrink-0 rounded-full ${isStoreOpen ? 'bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,.75)]' : 'bg-zinc-700'}`} />
+        </button>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Agora</p>
+            <h2 className="font-heading text-base font-black text-zinc-100">Central de operação</h2>
+          </div>
+          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] font-bold text-zinc-500">
+            {dashboardData.formattedDateLabel}
+          </span>
         </div>
-      </button>
 
-      <div className="flex flex-col gap-3">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2"><Users size={14} /> Gestão & Cadastros</h2>
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => router.push('/entregas')} className="rounded-[24px] border border-amber-500/20 bg-amber-500/[.06] p-4 text-left active:scale-95"><span className="text-[10px] font-bold uppercase text-amber-400">Operação</span><p className="mt-2 font-heading font-bold text-zinc-100">Entregas</p><p className="text-[11px] text-zinc-500">Consultar o dia e histórico</p></button>
-          <button onClick={() => router.push('/rotas')} className="rounded-[24px] border border-sky-500/20 bg-sky-500/[.06] p-4 text-left active:scale-95"><span className="text-[10px] font-bold uppercase text-sky-400">Logística</span><p className="mt-2 font-heading font-bold text-zinc-100">Rotas</p><p className="text-[11px] text-zinc-500">Acompanhar e organizar</p></button>
-          <button onClick={() => router.push('/motoboys')} className="bg-zinc-900/60 border border-zinc-800 hover:border-amber-500/50 p-4 rounded-[24px] flex flex-col gap-2 text-left transition-all cursor-pointer active:scale-95 group">
-            <div className="flex items-center justify-between"><div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center group-hover:scale-105 transition-transform"><Bike size={18} /></div><span className="text-[10px] font-bold text-zinc-500 uppercase">Equipe</span></div>
-            <div><p className="font-heading font-bold text-zinc-100 text-sm">Motoboys</p><p className="text-[11px] text-zinc-500">Gerenciar e cadastrar</p></div>
+          <button onClick={() => router.push('/entregas')} className="group rounded-[26px] border border-amber-500/20 bg-amber-500/[.055] p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Entregas</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.totalEntregas} registradas no período</p>
           </button>
-          <button onClick={() => router.push('/clientes')} className="bg-zinc-900/60 border border-zinc-800 hover:border-sky-500/50 p-4 rounded-[24px] flex flex-col gap-2 text-left transition-all cursor-pointer active:scale-95 group">
-            <div className="flex items-center justify-between"><div className="h-10 w-10 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center group-hover:scale-105 transition-transform"><Users size={18} /></div><span className="text-[10px] font-bold text-zinc-500 uppercase">Base</span></div>
-            <div><p className="font-heading font-bold text-zinc-100 text-sm">Clientes</p><p className="text-[11px] text-zinc-500">Endereços e histórico</p></div>
+
+          <button onClick={() => router.push('/rotas')} className="group rounded-[26px] border border-sky-500/20 bg-sky-500/[.055] p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Rotas</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'} no período</p>
+          </button>
+
+          <button onClick={() => router.push('/motoboys')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-400"><Users size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Equipe</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{activeMotoboys.length} ativo{activeMotoboys.length === 1 ? '' : 's'} na escala</p>
+          </button>
+
+          <button onClick={() => router.push('/clientes')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400"><Users size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Clientes</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Base, endereços e histórico</p>
           </button>
         </div>
-      </div>
+      </section>
 
-      <div className="flex flex-col gap-3">
-        {/* NAVEGAÇÃO DE DATAS */}
-        <div className="flex items-center justify-between px-2">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
-            <TrendingUp size={14} /> Desempenho
-          </h2>
-          <div className="flex items-center gap-1.5">
-            <button 
-              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToPreviousDay(); }} 
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 active:scale-95 transition-all"
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Leitura do período</p>
+            <h2 className="font-heading text-base font-black text-zinc-100">Resumo operacional</h2>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToPreviousDay(); }}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-500 active:scale-95"
+              aria-label="Dia anterior"
             >
-              <ChevronLeft size={14}/>
+              <ChevronLeft size={14} />
             </button>
-            <button onClick={() => setIsCalendarOpen(true)} className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full text-center min-w-[86px] active:scale-95">
+            <button
+              onClick={() => setIsCalendarOpen(true)}
+              className="min-w-[82px] rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-[10px] font-black text-zinc-300 active:scale-95"
+            >
               {dashboardData.formattedDateLabel}
             </button>
-            <button 
-              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToNextDay(); }} 
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 active:scale-95 transition-all"
+            <button
+              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToNextDay(); }}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-500 active:scale-95"
+              aria-label="Próximo dia"
             >
-              <ChevronRight size={14}/>
+              <ChevronRight size={14} />
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <button 
-            onClick={() => setIsLogisticsModalOpen(true)} 
-            className="bg-zinc-900/60 border border-zinc-800 hover:border-sky-500/40 p-4 rounded-[24px] flex flex-col gap-1.5 text-left transition-all active:scale-95 cursor-pointer"
+        <div className="overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-900/45">
+          <button
+            onClick={() => setIsLogisticsModalOpen(true)}
+            className="flex w-full items-center justify-between gap-4 border-b border-zinc-800/80 p-4 text-left active:bg-zinc-900"
           >
-            <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase">
-              <Package size={14} className="text-sky-500" /> Resumo Logístico
-            </span>
-            <span className="font-heading text-2xl font-black text-zinc-100">{dashboardData.totalEntregas}</span>
-            <span className="text-[10px] text-zinc-500 flex items-center gap-1">Ver rotas da equipe <ChevronRight size={10}/></span>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wide text-sky-500">Operação</p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-heading text-2xl font-black text-zinc-50">{dashboardData.totalEntregas}</span>
+                <span className="text-[11px] font-bold text-zinc-500">entregas</span>
+              </div>
+              <p className="mt-1 text-[10px] text-zinc-600">
+                {dashboardData.completedDeliveries} concluída{dashboardData.completedDeliveries === 1 ? '' : 's'} · {dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'}
+              </p>
+            </div>
+            <ChevronRight size={18} className="text-zinc-700" />
           </button>
-          
-          <button 
-            onClick={() => setIsRevenueModalOpen(true)} 
-            className="bg-zinc-900/60 border border-zinc-800 hover:border-emerald-500/40 p-4 rounded-[24px] flex flex-col gap-1.5 text-left transition-all active:scale-95 cursor-pointer"
-          >
-            <span className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase">
-              <TrendingUp size={14} className="text-emerald-500" /> Extrato do Dia
-            </span>
-            <span className="font-heading text-xl font-black text-emerald-400 truncate w-full">
-              {isPrivacyMode ? 'R$ •••••' : `R$ ${formatMoney(dashboardData.faturamentoTotal)}`}
-            </span>
-            <span className="text-[10px] text-zinc-500 flex items-center gap-1">Conferência de caixa <ChevronRight size={10}/></span>
-          </button>
-        </div>
-        <div className="bg-zinc-900/40 border border-zinc-800 p-4 rounded-[24px] flex flex-col gap-3">
-          <div className="flex items-center justify-between"><span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5"><Bike size={14} className="text-amber-500" /> Escala Rápida de Motoboys</span><button onClick={() => router.push('/motoboys')} className="text-[11px] font-bold text-sky-400 hover:text-sky-300">Gerenciar ➔</button></div>
-          <div className="flex flex-wrap items-center gap-2">
-            {motoboys.length > 0 ? motoboys.map(m => (<button key={m.id} onClick={() => handleToggleMotoboyScale(m.id, m.active)} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-90 ${m.active ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-sm' : 'bg-zinc-950 border border-zinc-800 text-zinc-600 opacity-60'}`}><span>{m.name}</span>{m.active && <Check size={12} className="text-amber-400" />}</button>)) : (<span className="text-xs text-zinc-600 font-semibold">Nenhum motoboy cadastrado.</span>)}
-          </div>
-        </div>
-      </div>
 
-      <div className="flex flex-col gap-3">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500 px-2 flex items-center gap-2"><Clock size={14} /> Expediente Automático</h2>
-        <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-[28px] overflow-hidden pt-2">
-          <div className="flex items-center justify-between border-b border-zinc-800 px-4">
-            <button onClick={() => setActiveTab('horarios')} className={`flex-1 py-4 text-[11px] font-bold uppercase tracking-wide text-center border-b-2 transition-colors ${activeTab === 'horarios' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-zinc-500'}`}>Horários</button>
-            <button onClick={() => setActiveTab('pausas')} className={`flex-1 py-4 text-[11px] font-bold uppercase tracking-wide text-center border-b-2 transition-colors ${activeTab === 'pausas' ? 'border-amber-500 text-amber-400' : 'border-transparent text-zinc-500'}`}>Pausas</button>
-            <button onClick={() => setActiveTab('feriados')} className={`flex-1 py-4 text-[11px] font-bold uppercase tracking-wide text-center border-b-2 transition-colors ${activeTab === 'feriados' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500'}`}>Feriados</button>
+          <button
+            onClick={() => setIsRevenueModalOpen(true)}
+            className="flex w-full items-center justify-between gap-4 p-4 text-left active:bg-zinc-900"
+          >
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wide text-emerald-500">Financeiro</p>
+              <p className="mt-1 font-heading text-xl font-black text-emerald-400">
+                {isPrivacyMode ? 'R$ •••••' : `R$ ${formatMoney(dashboardData.faturamentoTotal)}`}
+              </p>
+              <p className="mt-1 text-[10px] text-zinc-600">Conferência do movimento registrado</p>
+            </div>
+            <ChevronRight size={18} className="text-zinc-700" />
+          </button>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Equipe</p>
+            <h2 className="font-heading text-base font-black text-zinc-100">Motoboys ativos</h2>
           </div>
-          <div className="p-4 flex flex-col gap-4">
-            {activeTab === 'horarios' && (
-              <div className="flex flex-col gap-1">
-                <p className="text-xs text-zinc-400 mb-2 px-1">Defina os dias e turnos em que a loja abrirá automaticamente.</p>
-                {DAYS_OF_WEEK.map((dayName, index) => {
-                  const dayData = schedule[index] || { active: false, shifts: [] };
-                  return (
-                    <button key={index} onClick={() => openDayEditor(index)} className="flex items-center justify-between bg-zinc-950/50 hover:bg-zinc-800 border border-zinc-800/50 mb-2 rounded-xl p-4 transition-colors active:scale-[0.98]">
-                      <div className="flex flex-col items-start gap-1">
-                        <span className="font-bold text-sm text-zinc-200">{dayName}</span>
-                        {dayData.active && dayData.shifts.length > 0 ? <span className="text-[11px] text-zinc-500 font-medium">{dayData.shifts.map(s => `${s.start} às ${s.end}`).join(' e ')}</span> : <span className="text-[11px] text-zinc-500 font-medium">Loja fechada</span>}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full border ${dayData.active ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-zinc-500 bg-zinc-800 border-zinc-700'}`}>{dayData.active ? 'Aberta' : 'Fechada'}</span>
-                        <ChevronRight size={16} className="text-zinc-600" />
-                      </div>
-                    </button>
-                  );
-                })}
+          <button onClick={() => router.push('/motoboys')} className="text-[10px] font-black text-sky-400">Gerenciar</button>
+        </div>
+
+        <div className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4">
+          {activeMotoboys.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {activeMotoboys.map((motoboy) => (
+                <button
+                  key={motoboy.id}
+                  onClick={() => handleToggleMotoboyScale(motoboy.id, motoboy.active)}
+                  title="Toque para retirar da escala"
+                  className="flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs font-black text-amber-400 active:scale-95"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  {motoboy.name}
+                  <Check size={12} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-zinc-400">Nenhum motoboy ativo</p>
+                <p className="mt-1 text-[10px] text-zinc-600">Ative a equipe que está trabalhando hoje.</p>
               </div>
-            )}
-            {activeTab === 'pausas' && (
-              <div className="flex flex-col gap-3 items-center pt-2">
-                <p className="text-xs text-zinc-400 mb-2 px-1 w-full text-left">Pausas suspendem as notificações e a loja não abre no período programado.</p>
-                {pauses.length === 0 ? (
-                  <div className="py-10 flex flex-col items-center gap-2"><AlertTriangle size={32} className="text-zinc-700" /><span className="font-bold text-zinc-400">Você não tem nenhuma pausa</span><span className="text-xs text-zinc-600 text-center px-6">Crie pausas para recesso ou férias.</span></div>
-                ) : (
-                  pauses.map((p) => (
-                    <div key={p.id} className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
-                       <div className="flex flex-col gap-1"><span className="font-bold text-sm text-zinc-200">{p.reason || 'Pausa Programada'}</span><span className="text-[11px] text-zinc-500">{p.start_date.split('T')[0]} até {p.end_date.split('T')[0]}</span></div>
-                       <button onClick={() => setPauses(pauses.filter(x => x.id !== p.id))} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full"><Trash2 size={16}/></button>
-                    </div>
-                  ))
-                )}
-                <button onClick={() => setIsPauseModalOpen(true)} className="w-full h-12 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold rounded-xl text-sm active:scale-95 flex items-center justify-center gap-2 mt-4 transition-colors"><Plus size={16} /> Criar Pausa</button>
+              <button onClick={() => router.push('/motoboys')} className="rounded-xl bg-zinc-800 px-3 py-2 text-[10px] font-black text-zinc-300 active:scale-95">Selecionar</button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Automação</p>
+            <h2 className="font-heading text-base font-black text-zinc-100">Expediente</h2>
+          </div>
+          <button
+            onClick={() => { setActiveTab('horarios'); setIsScheduleEditorOpen((value) => !value); }}
+            className="text-[10px] font-black text-indigo-400"
+          >
+            {isScheduleEditorOpen ? 'Fechar editor' : 'Editar semana'}
+          </button>
+        </div>
+
+        {!isScheduleEditorOpen && (
+          <div className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-black text-zinc-200">{activeScheduleDays.length} dia{activeScheduleDays.length === 1 ? '' : 's'} programado{activeScheduleDays.length === 1 ? '' : 's'}</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-zinc-600">
+                  Horários aparecem resumidos aqui. Abra o editor somente quando precisar alterar.
+                </p>
               </div>
-            )}
-            {activeTab === 'feriados' && (
-              <div className="flex flex-col gap-1">
-                <div className="bg-sky-500/10 border border-sky-500/20 p-4 rounded-xl flex items-start gap-3 mb-4"><Info size={18} className="text-sky-500 shrink-0 mt-0.5" /><p className="text-[11px] text-sky-400/90 leading-relaxed">Feriados nacionais costumam aumentar o volume de pedidos. Prepare o estoque!</p></div>
-                {apiHolidays.length === 0 ? (
-                  <p className="text-center text-zinc-500 py-6 text-sm font-medium">Nenhum feriado próximo encontrado.</p>
-                ) : (
-                  apiHolidays.map((holiday, idx) => {
-                    const override = holidaysOverrides[holiday.date];
+              <Clock size={18} className="shrink-0 text-indigo-400" />
+            </div>
+
+            <div className="mt-4 grid grid-cols-7 gap-1.5">
+              {DAYS_OF_WEEK.map((dayName, index) => {
+                const dayData = schedule[index] || { active: false, shifts: [] };
+                const active = dayData.active && dayData.shifts.length > 0;
+                const shortNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+                return (
+                  <button
+                    key={dayName}
+                    onClick={() => openDayEditor(index)}
+                    className={`rounded-xl border px-1 py-2 text-center active:scale-95 ${active ? 'border-emerald-500/20 bg-emerald-500/[.07]' : 'border-zinc-800 bg-zinc-950/50'}`}
+                  >
+                    <span className={`block text-[8px] font-black uppercase ${active ? 'text-emerald-400' : 'text-zinc-600'}`}>{shortNames[index]}</span>
+                    <span className="mt-1 block truncate text-[8px] font-bold text-zinc-500">{active ? dayData.shifts[0].start : '—'}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 text-[9px] font-bold text-zinc-600">
+              <span>{pauses.length} pausa{pauses.length === 1 ? '' : 's'}</span>
+              <span>•</span>
+              <span>{Object.keys(holidaysOverrides).length} feriado especial</span>
+            </div>
+          </div>
+        )}
+
+        {isScheduleEditorOpen && (
+          <div className="flex flex-col overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-900/45">
+            <div className="flex items-center justify-between border-b border-zinc-800 px-4">
+              <button onClick={() => setActiveTab('horarios')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-wide text-center border-b-2 ${activeTab === 'horarios' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-zinc-500'}`}>Horários</button>
+              <button onClick={() => setActiveTab('pausas')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-wide text-center border-b-2 ${activeTab === 'pausas' ? 'border-amber-500 text-amber-400' : 'border-transparent text-zinc-500'}`}>Pausas</button>
+              <button onClick={() => setActiveTab('feriados')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-wide text-center border-b-2 ${activeTab === 'feriados' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500'}`}>Feriados</button>
+            </div>
+
+            <div className="flex flex-col gap-4 p-4">
+              {activeTab === 'horarios' && (
+                <div className="flex flex-col gap-2">
+                  {DAYS_OF_WEEK.map((dayName, index) => {
+                    const dayData = schedule[index] || { active: false, shifts: [] };
                     return (
-                      <button key={idx} onClick={() => toast.info('Em breve: Edição de Feriado', { description: holiday.name })} className="flex items-center justify-between bg-zinc-950/50 hover:bg-zinc-800 border border-zinc-800/50 mb-2 rounded-xl p-4 transition-colors active:scale-[0.98]">
-                        <div className="flex flex-col items-start gap-1"><span className="font-bold text-sm text-zinc-200">{holiday.name}</span><span className="text-[11px] text-zinc-500 font-medium">{holiday.date.split('-').reverse().join('/')} • {override ? 'Horário Especial' : 'Segue horário normal'}</span></div>
-                        <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-amber-500 border border-amber-500/30 px-3 py-1 rounded-full uppercase">Editar</span></div>
+                      <button key={index} onClick={() => openDayEditor(index)} className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/45 p-4 text-left active:scale-[0.99]">
+                        <div>
+                          <p className="text-sm font-black text-zinc-200">{dayName}</p>
+                          <p className="mt-1 text-[10px] font-medium text-zinc-600">
+                            {dayData.active && dayData.shifts.length > 0 ? dayData.shifts.map((shift) => `${shift.start} às ${shift.end}`).join(' · ') : 'Fechada'}
+                          </p>
+                        </div>
+                        <ChevronRight size={16} className="text-zinc-700" />
                       </button>
                     );
-                  })
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+                  })}
+                </div>
+              )}
 
-        <div className="flex flex-col gap-6 mt-4 p-2">
-           <div className="flex flex-col gap-2"><AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" /><p className="text-[10px] text-zinc-500 px-1 font-medium">Usado como ponto de partida para rotas no mapa.</p></div>
-           <div className="flex flex-col gap-3">
-             <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3"><div className="h-10 w-10 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center shrink-0"><AlertTriangle size={18} /></div><div className="text-left"><p className="font-bold text-zinc-100 text-sm">Alerta de Retorno</p><p className="text-[11px] text-zinc-500 font-medium">Avisa quando motoboy volta</p></div></div>
-                <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setRouteAlertsEnabled(!routeAlertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 cursor-pointer ${routeAlertsEnabled ? 'bg-amber-500' : 'bg-zinc-800 border border-zinc-700'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${routeAlertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
-             </div>
-             <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3"><div className="h-10 w-10 bg-sky-500/10 text-sky-400 rounded-full flex items-center justify-center shrink-0"><BellRing size={18} /></div><div className="text-left"><p className="font-bold text-zinc-100 text-sm">Automação de Loja</p><p className="text-[11px] text-zinc-500 font-medium">Abre e fecha sozinho</p></div></div>
-                <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setAlertsEnabled(!alertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 cursor-pointer ${alertsEnabled ? 'bg-sky-500' : 'bg-zinc-800 border border-zinc-700'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${alertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
-             </div>
-           </div>
-           <button onClick={handleSaveAllSettings} className="w-full h-14 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl text-sm transition-all shadow-xl active:scale-95 mt-4 uppercase tracking-widest flex items-center justify-center gap-2"><Check size={18} /> Salvar Tudo</button>
-        </div>
-      </div>
+              {activeTab === 'pausas' && (
+                <div className="flex flex-col gap-3">
+                  {pauses.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-zinc-800 py-8 text-center">
+                      <p className="text-xs font-bold text-zinc-500">Nenhuma pausa programada</p>
+                    </div>
+                  ) : (
+                    pauses.map((pause) => (
+                      <div key={pause.id} className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/45 p-4">
+                        <div>
+                          <p className="text-xs font-black text-zinc-300">{pause.reason || 'Pausa programada'}</p>
+                          <p className="mt-1 text-[10px] text-zinc-600">{pause.start_date.split('T')[0]} até {pause.end_date.split('T')[0]}</p>
+                        </div>
+                        <button onClick={() => setPauses(pauses.filter((item) => item.id !== pause.id))} className="rounded-full p-2 text-red-500 active:bg-red-500/10"><Trash2 size={16} /></button>
+                      </div>
+                    ))
+                  )}
+                  <button onClick={() => setIsPauseModalOpen(true)} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-zinc-800 text-xs font-black text-zinc-200 active:scale-95"><Plus size={15} /> Criar pausa</button>
+                </div>
+              )}
+
+              {activeTab === 'feriados' && (
+                <div className="flex flex-col gap-2">
+                  <div className="rounded-2xl border border-sky-500/15 bg-sky-500/[.06] p-3 text-[10px] leading-relaxed text-sky-400">
+                    Feriados podem alterar a operação. Os próximos feriados nacionais aparecem abaixo.
+                  </div>
+                  {apiHolidays.length === 0 ? (
+                    <p className="py-6 text-center text-xs font-bold text-zinc-600">Nenhum feriado próximo encontrado.</p>
+                  ) : (
+                    apiHolidays.map((holiday, idx) => {
+                      const override = holidaysOverrides[holiday.date];
+                      return (
+                        <button key={idx} onClick={() => toast.info('Em breve: Edição de Feriado', { description: holiday.name })} className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/45 p-4 text-left active:scale-[0.99]">
+                          <div>
+                            <p className="text-xs font-black text-zinc-300">{holiday.name}</p>
+                            <p className="mt-1 text-[10px] text-zinc-600">{holiday.date.split('-').reverse().join('/')} · {override ? 'Horário especial' : 'Horário normal'}</p>
+                          </div>
+                          <ChevronRight size={16} className="text-zinc-700" />
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <button
+          onClick={() => setIsSettingsOpen((value) => !value)}
+          className="flex items-center justify-between rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4 text-left active:scale-[0.99]"
+        >
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Configurações</p>
+            <p className="mt-1 text-sm font-black text-zinc-200">Origem, alertas e automação</p>
+          </div>
+          <ChevronDown size={18} className={`text-zinc-600 transition-transform ${isSettingsOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {isSettingsOpen && (
+          <div className="flex flex-col gap-4 rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-4">
+            <div className="flex flex-col gap-2">
+              <AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" />
+              <p className="px-1 text-[10px] font-medium text-zinc-600">Usado como ponto de partida das rotas.</p>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-500"><AlertTriangle size={18} /></div>
+                <div>
+                  <p className="text-sm font-black text-zinc-200">Alerta de retorno</p>
+                  <p className="text-[10px] text-zinc-600">Avisa quando o motoboy volta</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setRouteAlertsEnabled(!routeAlertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full ${routeAlertsEnabled ? 'bg-amber-500' : 'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${routeAlertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/10 text-sky-400"><BellRing size={18} /></div>
+                <div>
+                  <p className="text-sm font-black text-zinc-200">Automação da loja</p>
+                  <p className="text-[10px] text-zinc-600">Abre e fecha pelos horários</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setAlertsEnabled(!alertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full ${alertsEnabled ? 'bg-sky-500' : 'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${alertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
+            </div>
+
+            <button onClick={handleSaveAllSettings} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white active:scale-95"><Check size={16} /> Salvar configurações</button>
+          </div>
+        )}
+      </section>
 
       {editingDay !== null && (
         <div className="fixed inset-0 z-[80] flex flex-col bg-zinc-950 animate-in slide-in-from-bottom duration-300">
