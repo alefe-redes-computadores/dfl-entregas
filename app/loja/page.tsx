@@ -16,6 +16,7 @@ import { useStoreDashboard } from '@/hooks/useStoreDashboard';
 import { PerformanceModals } from '@/components/store/PerformanceModals';
 import { OperationalCalendar } from '@/components/store/OperationalCalendar';
 import { StoreTimePicker } from '@/components/store/StoreTimePicker';
+import { OperationalIntelligencePanel } from '@/components/store/OperationalIntelligencePanel';
 import { validateSchedule } from '@/lib/operational-time';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
 
@@ -243,6 +244,8 @@ export default function LojaPage() {
           </button>
         </div>
       </section>
+
+      <OperationalIntelligencePanel />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">

@@ -330,7 +330,7 @@ function buildFuelDaily(
 
   let dateKeys: string[] = [];
 
-  if (period.start) {
+  if (period.key !== 'all' && period.start) {
     dateKeys = enumerateDateKeys(
       saoPauloDateKey(period.start),
       saoPauloDateKey(period.end),
