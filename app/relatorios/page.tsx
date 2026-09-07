@@ -24,7 +24,10 @@ import { SummaryCard } from '@/components/reports/SummaryCard';
 import { ReportChartCard } from '@/components/reports/ReportChartCard';
 import { DataQualityCard } from '@/components/reports/DataQualityCard';
 import { ReportDrilldownSheet } from '@/components/reports/ReportDrilldownSheet';
+import { ReportIntelligencePanel } from '@/components/reports/ReportIntelligencePanel';
 import { buildReportModel } from '@/lib/reports/buildReportModel';
+import { buildOperationalIntelligence } from '@/lib/delivery-intelligence';
+import { saoPauloDateKey } from '@/lib/reports/time';
 import type {
   DrilldownSelection,
   ReportPeriodKey,
@@ -57,6 +60,7 @@ export default function RelatoriosPage() {
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
+  const motoboys = useAppStore((state) => state.motoboys);
   const fuelings = useAppStore((state) => state.fuelings);
 
   const [periodKey, setPeriodKey] = useState<ReportPeriodKey>('7d');
@@ -75,6 +79,37 @@ export default function RelatoriosPage() {
       }),
     [customers, deliveries, fuelings, periodKey, routes],
   );
+
+  const intelligence = useMemo(() => {
+    const window =
+      periodKey === 'all'
+        ? ({ mode: 'all' } as const)
+        : ({
+            mode: 'bounded',
+            startKey: saoPauloDateKey(model.period.start as Date),
+            endKey: saoPauloDateKey(model.period.end),
+          } as const);
+
+    return buildOperationalIntelligence({
+      deliveries,
+      routes,
+      customers,
+      motoboys,
+      fuelings,
+      minimumSample: 3,
+      includeUndatedQuality: periodKey === 'all',
+      window,
+    });
+  }, [
+    customers,
+    deliveries,
+    fuelings,
+    model.period.end,
+    model.period.start,
+    motoboys,
+    periodKey,
+    routes,
+  ]);
 
   const currentPeriodLabel =
     PERIODS.find((period) => period.value === periodKey)?.label ?? 'Período';
@@ -179,6 +214,11 @@ export default function RelatoriosPage() {
 
         {activeTab === 'geral' && (
           <>
+            <ReportIntelligencePanel
+              snapshot={intelligence}
+              periodLabel={currentPeriodLabel}
+            />
+
             <ReportChartCard
               title="Evolução diária de entregas"
               description="Cada ponto representa uma data completa. Meses e anos nunca são misturados pelo número do dia."

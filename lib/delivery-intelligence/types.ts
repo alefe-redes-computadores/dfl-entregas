@@ -29,6 +29,16 @@ export interface OperationalInsight {
   entityIds?: string[];
 }
 
+export type OperationalIntelligenceWindowInput =
+  | {
+      mode: 'bounded';
+      startKey: string;
+      endKey: string;
+    }
+  | {
+      mode: 'all';
+    };
+
 export interface OperationalIntelligenceInput {
   deliveries: Delivery[];
   routes: Route[];
@@ -38,9 +48,12 @@ export interface OperationalIntelligenceInput {
   now?: Date;
   lookbackDays?: number;
   minimumSample?: number;
+  window?: OperationalIntelligenceWindowInput;
+  includeUndatedQuality?: boolean;
 }
 
 export interface IntelligenceWindow {
+  mode: 'lookback' | 'bounded' | 'all';
   startKey: string;
   endKey: string;
   lookbackDays: number;

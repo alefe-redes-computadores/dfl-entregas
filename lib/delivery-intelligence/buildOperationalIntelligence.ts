@@ -15,6 +15,7 @@ import {
   round,
 } from './statistics';
 import type {
+  IntelligenceWindow,
   OperationalInsight,
   OperationalIntelligenceInput,
   OperationalIntelligenceSnapshot,
@@ -56,6 +57,17 @@ function inWindow(date: Date | null, startKey: string, endKey: string): boolean 
     compareDateKeys(key, startKey) >= 0 &&
     compareDateKeys(key, endKey) <= 0
   );
+}
+
+function inclusiveWindowDays(startKey: string, endKey: string): number {
+  const start = new Date(`${startKey}T12:00:00-03:00`).getTime();
+  const end = new Date(`${endKey}T12:00:00-03:00`).getTime();
+
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    return 1;
+  }
+
+  return Math.max(Math.round((end - start) / 86400000) + 1, 1);
 }
 
 function qualityInsights(input: {
@@ -371,24 +383,79 @@ export function buildOperationalIntelligence(
   input: OperationalIntelligenceInput,
 ): OperationalIntelligenceSnapshot {
   const now = input.now ?? new Date();
-  const lookbackDays = Math.min(Math.max(input.lookbackDays ?? 30, 1), 365);
+  const defaultLookbackDays = Math.min(
+    Math.max(input.lookbackDays ?? 30, 1),
+    365,
+  );
   const minimumSample = Math.max(input.minimumSample ?? 3, 2);
+  const includeUndatedQuality = input.includeUndatedQuality ?? true;
 
-  const endKey = saoPauloDateKey(now);
-  const startKey = shiftDateKey(endKey, -(lookbackDays - 1));
+  const defaultEndKey = saoPauloDateKey(now);
+  const defaultStartKey = shiftDateKey(
+    defaultEndKey,
+    -(defaultLookbackDays - 1),
+  );
+
+  const requestedWindow = input.window;
+
+  let mode: IntelligenceWindow['mode'] = 'lookback';
+  let startKey = defaultStartKey;
+  let endKey = defaultEndKey;
+  let lookbackDays = defaultLookbackDays;
+
+  if (requestedWindow?.mode === 'bounded') {
+    mode = 'bounded';
+    startKey = requestedWindow.startKey;
+    endKey = requestedWindow.endKey;
+    lookbackDays = inclusiveWindowDays(startKey, endKey);
+  }
 
   const undatedDeliveries = input.deliveries.filter(
     (item) => !deliveryTimestamp(item),
   );
-  const deliveries = input.deliveries.filter((item) =>
-    inWindow(deliveryTimestamp(item), startKey, endKey),
-  );
-  const routes = input.routes.filter((item) =>
-    inWindow(routeTimestamp(item), startKey, endKey),
-  );
-  const fuelings = input.fuelings.filter((item) =>
-    inWindow(fuelingTimestamp(item), startKey, endKey),
-  );
+
+  let deliveries: Delivery[];
+  let routes: Route[];
+  let fuelings: Fueling[];
+
+  if (requestedWindow?.mode === 'all') {
+    mode = 'all';
+
+    deliveries = input.deliveries.filter((item) =>
+      Boolean(deliveryTimestamp(item)),
+    );
+    routes = input.routes.filter((item) => Boolean(routeTimestamp(item)));
+    fuelings = input.fuelings.filter((item) => Boolean(fuelingTimestamp(item)));
+
+    const observedKeys = [
+      ...deliveries
+        .map(deliveryTimestamp)
+        .filter((item): item is Date => Boolean(item))
+        .map(saoPauloDateKey),
+      ...routes
+        .map(routeTimestamp)
+        .filter((item): item is Date => Boolean(item))
+        .map(saoPauloDateKey),
+      ...fuelings
+        .map(fuelingTimestamp)
+        .filter((item): item is Date => Boolean(item))
+        .map(saoPauloDateKey),
+    ].sort(compareDateKeys);
+
+    startKey = observedKeys[0] ?? defaultEndKey;
+    endKey = observedKeys[observedKeys.length - 1] ?? defaultEndKey;
+    lookbackDays = inclusiveWindowDays(startKey, endKey);
+  } else {
+    deliveries = input.deliveries.filter((item) =>
+      inWindow(deliveryTimestamp(item), startKey, endKey),
+    );
+    routes = input.routes.filter((item) =>
+      inWindow(routeTimestamp(item), startKey, endKey),
+    );
+    fuelings = input.fuelings.filter((item) =>
+      inWindow(fuelingTimestamp(item), startKey, endKey),
+    );
+  }
 
   const customerMap = new Map<string, Customer>(
     input.customers.map((item) => [item.id, item]),
@@ -408,7 +475,7 @@ export function buildOperationalIntelligence(
   const insights = [
     ...qualityInsights({
       deliveries,
-      undatedDeliveries,
+      undatedDeliveries: includeUndatedQuality ? undatedDeliveries : [],
       customers: input.customers,
       minimumSample,
     }),
@@ -438,6 +505,7 @@ export function buildOperationalIntelligence(
   return {
     generatedAt: now.toISOString(),
     window: {
+      mode,
       startKey,
       endKey,
       lookbackDays,
@@ -452,7 +520,7 @@ export function buildOperationalIntelligence(
     },
     coverage: {
       datedDeliveries,
-      undatedDeliveries: undatedDeliveries.length,
+      undatedDeliveries: includeUndatedQuality ? undatedDeliveries.length : 0,
       deliveryRecords: deliveries.length,
       structuredNeighborhoods,
       routedDeliveries,
