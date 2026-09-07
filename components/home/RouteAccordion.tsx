@@ -17,6 +17,8 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { generateRouteMessages, generateClientDispatchUrl } from '@/lib/whatsapp';
 import { resolveStopLocation, buildGoogleMapsRouteUrl } from '@/lib/maps';
+import { routeDate, routeStartedAt } from '@/lib/operational-time';
+import { firstValidTimestamp } from '@/lib/reports/time';
 
 interface RouteAccordionProps {
   route: Route;
@@ -54,8 +56,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   
   const routeTotalValue = deliveries.reduce((acc, curr) => acc + (curr.value || 0), 0);
 
-  const isNotStarted = route.status === 'aberta' && !route.started_at;
-  const isInProgress = route.status === 'aberta' && !!route.started_at;
+  const startedAt = routeStartedAt(route);
+  const isNotStarted = route.status === 'aberta' && !startedAt;
+  const isInProgress = route.status === 'aberta' && !!startedAt;
   const isCompleted = route.status === 'fechada';
 
   const motoboyObj = motoboys.find((m) => m.name === route.motoboy_name);
@@ -78,10 +81,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     .filter((c) => !!c.phone);
 
   let routeDuration = '';
-  if (isCompleted && route.started_at && route.end_time) {
-    const start = new Date(route.started_at).getTime();
-    const end = new Date(route.end_time).getTime();
-    const diffMins = Math.floor((end - start) / 60000);
+  if (isCompleted && startedAt && route.end_time) {
+    const start = firstValidTimestamp(startedAt);
+    const end = firstValidTimestamp(route.end_time);
+    const diffMins =
+      start && end ? Math.floor((end.getTime() - start.getTime()) / 60000) : -1;
+
     if (diffMins >= 0) {
       const hrs = Math.floor(diffMins / 60);
       const mins = diffMins % 60;
@@ -94,8 +99,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     const motoboyRoutes = allRoutes
       .filter((r) => r.motoboy_name === route.motoboy_name)
       .sort((a, b) => {
-        const timeA = new Date((a as any).created_at || a.started_at || 0).getTime();
-        const timeB = new Date((b as any).created_at || b.started_at || 0).getTime();
+        const timeA = firstValidTimestamp(routeDate(a))?.getTime() ?? Number.POSITIVE_INFINITY;
+        const timeB = firstValidTimestamp(routeDate(b))?.getTime() ?? Number.POSITIVE_INFINITY;
         return timeA - timeB;
       });
     

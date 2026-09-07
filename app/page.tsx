@@ -6,7 +6,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
 import type { Route } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
-import { parseTimestamp, saoPauloDateKey } from '@/lib/reports/time';
+import { firstValidTimestamp, saoPauloDateKey } from '@/lib/reports/time';
 import { OperationalRadar } from '@/components/home/OperationalRadar';
 
 function formatDateLabel(date: Date): string {
@@ -21,17 +21,6 @@ function formatDateLabel(date: Date): string {
     day: '2-digit',
     month: 'short',
   });
-}
-
-type HomeTimestamp = Parameters<typeof parseTimestamp>[0];
-
-function firstValidTimestamp(...values: HomeTimestamp[]): Date | null {
-  for (const value of values) {
-    const parsed = parseTimestamp(value);
-    if (parsed) return parsed;
-  }
-
-  return null;
 }
 
 function operationalKey(...values: unknown[]): string | null {
@@ -59,7 +48,6 @@ export default function HomePage() {
       r.created_at,
       r.started_at,
       r.departure_time,
-      r.updated_at,
     );
 
     return routeKey === selectedDateKey;
@@ -75,13 +63,11 @@ export default function HomePage() {
       a.created_at,
       a.started_at,
       a.departure_time,
-      a.updated_at,
     );
     const bDate = firstValidTimestamp(
       b.created_at,
       b.started_at,
       b.departure_time,
-      b.updated_at,
     );
 
     return (
@@ -141,8 +127,7 @@ export default function HomePage() {
           r.created_at,
           r.started_at,
           r.departure_time,
-          r.updated_at,
-        ) === selectedDateKey,
+            ) === selectedDateKey,
     ),
   );
 

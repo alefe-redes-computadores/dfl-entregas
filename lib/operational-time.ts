@@ -10,6 +10,8 @@ export const deliveryDate = (delivery:{created_at?:string;createdAt?:string}) =>
   firstValidTimestamp(delivery.created_at, delivery.createdAt)?.toISOString() || '';
 export const routeDate = (route:{created_at?:string;started_at?:string;departure_time?:string}) =>
   firstValidTimestamp(route.created_at, route.started_at, route.departure_time)?.toISOString() || '';
+export const routeStartedAt = (route:{started_at?:string;departure_time?:string}) =>
+  firstValidTimestamp(route.started_at, route.departure_time)?.toISOString() || '';
 export const minutes = (time:string) => { const match=/^(\d{2}):(\d{2})$/.exec(time); if(!match)return -1; const value=Number(match[1])*60+Number(match[2]); return Number(match[1])<24&&Number(match[2])<60?value:-1; };
 export const validShift = (shift:Shift) => minutes(shift.start)>=0 && minutes(shift.end)>=0 && shift.start!==shift.end;
 
