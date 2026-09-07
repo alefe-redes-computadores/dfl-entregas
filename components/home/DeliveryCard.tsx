@@ -3,8 +3,8 @@
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { 
-  Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, 
+import {
+  Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
   Smartphone, Store, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, ExternalLink, Map as MapIcon, CheckSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -36,9 +36,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const reorderDelivery = useAppStore((state) => state.reorderDelivery);
   const toggleDeliveryExpansion = useAppStore((state) => state.toggleDeliveryExpansion);
-  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode); 
+  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
-  
+
   const isExpanded = delivery.is_expanded || false;
 
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -54,8 +54,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
 
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
-  const isIfood = delivery.origin === 'ifood' || !delivery.origin; 
-  const isUrgent = delivery.is_urgent; 
+  const isIfood = delivery.origin === 'ifood' || !delivery.origin;
+  const isUrgent = delivery.is_urgent;
   const isVIP = (customer?.orderCount || 0) >= 5;
 
   const shortAddress = delivery.address_string.split('-')[0].trim();
@@ -215,7 +215,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
           </div>
         </div>
 
-        <div 
+        <div
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -242,7 +242,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                     </p>
                   </div>
                 </div>
-                
+
                 {/* Linha dos Identificadores com Press & Hold */}
                 <div className="flex items-center gap-1.5 mt-1 mb-1.5 flex-wrap">
                   {isIfood && delivery.order_id && (
@@ -251,7 +251,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                     </span>
                   )}
                   {isIfood && delivery.ifood_id && (
-                    <button 
+                    <button
                       onClick={() => triggerCopyAndRedirect(delivery.ifood_id!)}
                       onTouchStart={() => handleTouchStartLongPress(delivery.ifood_id!)}
                       onTouchEnd={handleTouchEndLongPress}
@@ -261,7 +261,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                     </button>
                   )}
                   {isIfood && (delivery.confirmation_code || customer?.last_confirmation_code) && (
-                    <button 
+                    <button
                       onClick={() => triggerCopyAndRedirect(delivery.confirmation_code || customer?.last_confirmation_code || '')}
                       onTouchStart={() => handleTouchStartLongPress(delivery.confirmation_code || customer?.last_confirmation_code || '')}
                       onTouchEnd={handleTouchEndLongPress}
@@ -281,7 +281,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                 {/* VISUALIZAÇÃO COMPACTA */}
                 {!isExpanded && (
                   <div className="flex flex-col gap-2.5 mt-2.5 pt-2.5 border-t border-zinc-800/60 w-full">
-                    
+
                     <div className="flex items-center gap-2.5">
                       <a
                         href={delivery.maps_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(delivery.address_string)}`}
@@ -303,8 +303,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                           ) : (
                             <span className={clsx("flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-black shrink-0", payment.className)}>
                               <PaymentIcon size={10} />
-                              {payment.label === 'Dinheiro' 
-                                ? `Dinheiro ${delivery.change_for ? `(Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})` : ''}` 
+                              {payment.label === 'Dinheiro'
+                                ? `Dinheiro ${delivery.change_for ? `(Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})` : ''}`
                                 : payment.label === 'Pix' ? 'QR Code Maquininha' : 'Cartão Maquininha'}
                             </span>
                           )}
@@ -334,14 +334,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
 
                     <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800/40">
                       <div className="flex items-center gap-1.5">
-                        <button 
+                        <button
                           type="button"
-                          onClick={async (e) => { 
-                            e.stopPropagation(); 
-                            if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
-                            copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code); 
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+                            copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code);
                             toast.success('Entrega copiada com sucesso!');
-                          }} 
+                          }}
                           className="flex items-center gap-1.5 h-8 px-3 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/40 active:scale-95 text-xs font-bold transition-all shadow-sm"
                         >
                           <Copy size={13} className="text-emerald-500" /> Copiar Dados
@@ -362,26 +362,26 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
 
                       {!delivery.completed && (
                         <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shrink-0 shadow-sm">
-                          <button 
+                          <button
                             type="button"
-                            onClick={async (e) => { 
-                              e.stopPropagation(); 
-                              if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
-                              reorderDelivery(delivery.route_id, delivery.id, 'up'); 
-                            }} 
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+                              reorderDelivery(delivery.route_id, delivery.id, 'up');
+                            }}
                             className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
                             title="Mover para cima"
                           >
                             <ArrowUp size={13} />
                           </button>
                           <div className="w-[1px] h-4 bg-zinc-800" />
-                          <button 
+                          <button
                             type="button"
-                            onClick={async (e) => { 
-                              e.stopPropagation(); 
-                              if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
-                              reorderDelivery(delivery.route_id, delivery.id, 'down'); 
-                            }} 
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+                              reorderDelivery(delivery.route_id, delivery.id, 'down');
+                            }}
                             className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
                             title="Mover para baixo"
                           >
@@ -447,10 +447,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                 </div>
 
                 <div className="flex items-center gap-2 mt-1">
-                  <button 
-                    onClick={() => handleTriggerAction('complete')} 
+                  <button
+                    onClick={() => handleTriggerAction('complete')}
                     className={clsx(
-                      "flex-1 flex h-12 items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all active:scale-95 shadow-lg", 
+                      "flex-1 flex h-12 items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all active:scale-95 shadow-lg",
                       delivery.completed ? "bg-zinc-800 text-zinc-400 border border-zinc-700 shadow-none" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-emerald-500/5"
                     )}
                   >
@@ -469,20 +469,20 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                     </a>
                   )}
 
-                  <Link 
-                    href={`/entregas/details?id=${delivery.id}`} 
-                    onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); }} 
+                  <Link
+                    href={`/entregas/details?id=${delivery.id}`}
+                    onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); }}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90 transition-all"
                   >
                     <Pencil size={16} />
                   </Link>
 
-                  <button 
-                    onClick={async () => { 
-                      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
-                      copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code); 
+                  <button
+                    onClick={async () => {
+                      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+                      copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code);
                       toast.success('Entrega copiada!');
-                    }} 
+                    }}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90 transition-all"
                   >
                     <Share2 size={16} strokeWidth={2.5} />
@@ -509,20 +509,21 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
             </div>
 
             <div className="flex flex-col gap-2 mt-2">
-              <button 
-                onClick={async () => { 
-                  if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); 
+              <button
+                onClick={async () => {
+                  if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
                   const targetCode = delivery.confirmation_code || customer?.last_confirmation_code || '';
                   const targetId = delivery.ifood_id || '';
+                  const returnTo = `${window.location.pathname}${window.location.search}`;
                   setConfirmRedirectModal({ isOpen: false, copiedText: '' });
-                  router.push(`/confirmar?orderId=${encodeURIComponent(targetId)}&code=${encodeURIComponent(targetCode)}`); 
-                }} 
+                  router.replace(`/confirmar?orderId=${encodeURIComponent(targetId)}&code=${encodeURIComponent(targetCode)}&returnTo=${encodeURIComponent(returnTo)}`);
+                }}
                 className="w-full h-12 bg-red-500 hover:bg-red-400 text-white font-bold rounded-xl active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2"
               >
                 <ExternalLink size={16} /> Sim, abrir portal de confirmação
               </button>
-              <button 
-                onClick={() => setConfirmRedirectModal({ isOpen: false, copiedText: '' })} 
+              <button
+                onClick={() => setConfirmRedirectModal({ isOpen: false, copiedText: '' })}
                 className="w-full h-12 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold rounded-xl active:scale-95 transition-all"
               >
                 Não, apenas copiar
@@ -548,7 +549,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
             </div>
 
             <div className="flex flex-col gap-2 mt-2">
-              <button 
+              <button
                 onClick={async () => {
                   if (isIfood && !delivery.confirmation_code && !customer?.last_confirmation_code) {
                     setIsDrinkCheckOpen(false);
@@ -562,7 +563,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
               >
                 Bebida Entregue / Conferida
               </button>
-              <button 
+              <button
                 onClick={() => setIsDrinkCheckOpen(false)}
                 className="w-full h-11 bg-zinc-800 text-zinc-400 font-semibold rounded-xl active:scale-95 transition-all text-xs"
               >
