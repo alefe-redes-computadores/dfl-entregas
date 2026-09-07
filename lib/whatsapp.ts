@@ -4,6 +4,38 @@ import { resolveStopLocation, buildGoogleMapsRouteUrl, cleanAddressForMaps } fro
 
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+type ParsedDrinkItem = {
+  qty: number;
+  name: string;
+};
+
+const parseDrinkItems = (raw?: string): ParsedDrinkItem[] => {
+  if (!raw?.trim()) return [];
+
+  return raw
+    .split(/\s*(?:,|;|\+|\n)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const match = part.match(/^(?:(\d+)\s*[xX]?\s+|([0-9]+)[xX]\s*)(.+)$/);
+      if (!match) return { qty: 1, name: part };
+
+      const qty = Number(match[1] || match[2] || 1);
+      const name = (match[3] || part).trim();
+
+      return {
+        qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
+        name,
+      };
+    });
+};
+
+const getOriginLabel = (delivery: Delivery): string => {
+  if (delivery.origin === 'ifood') return 'iFood';
+  if (delivery.origin === 'loja') return 'Loja própria';
+  return 'Origem não registrada';
+};
+
 export async function copyDeliveryToClipboard(
   delivery: Delivery,
   customerName?: string,
@@ -11,7 +43,7 @@ export async function copyDeliveryToClipboard(
 ): Promise<boolean> {
   try {
     const parts: string[] = [];
-    const isIfood = delivery.origin === 'ifood' || !delivery.origin;
+    const isIfood = delivery.origin === 'ifood';
     const valueStr = formatMoney(delivery.value || 0);
     const isUrgent = delivery.is_urgent;
     const currentCode = delivery.confirmation_code || savedCustomerCode;
@@ -35,7 +67,7 @@ export async function copyDeliveryToClipboard(
         parts.push(`🚨 *ATENÇÃO: PEGAR CÓDIGO DE 4 DÍGITOS COM O CLIENTE!*`);
       }
     } else {
-      parts.push(`🛒 *Origem:* Loja Própria`);
+      parts.push(`🛒 *Origem:* ${getOriginLabel(delivery)}`);
     }
 
     parts.push(`🏠 *Endereço:* ${delivery.address_string}`);
@@ -138,6 +170,18 @@ export async function generateRouteMessages(
     msg1.push(`🏍️ *ROTA ${getNumberEmoji(routeNumber)} - ${route.motoboy_name.toUpperCase()}* *(${totalDeliveries} Entregas)*`);
     msg1.push('');
     msg1.push(`📦 *RESUMO DAS PARADAS:*`);
+    const ifoodCount = deliveries.filter((delivery) => delivery.origin === 'ifood').length;
+    const storeCount = deliveries.filter((delivery) => delivery.origin === 'loja').length;
+    const unknownOriginCount = deliveries.length - ifoodCount - storeCount;
+
+    const originSummaryParts: string[] = [];
+    if (ifoodCount > 0) originSummaryParts.push(`${ifoodCount} iFood`);
+    if (storeCount > 0) originSummaryParts.push(`${storeCount} Loja`);
+    if (unknownOriginCount > 0) originSummaryParts.push(`${unknownOriginCount} sem origem`);
+
+    if (originSummaryParts.length > 0) {
+      msg1.push(`🧾 *Origem:* ${originSummaryParts.join(' · ')}`);
+    }
     msg1.push('');
 
     const routeMapAddresses: string[] = []; 
@@ -156,7 +200,13 @@ export async function generateRouteMessages(
       const neighborhood = customer?.neighborhood || delivery.address_string.split('-').pop()?.trim() || 'Bairro não inf.';
       const street = delivery.address_string.split(',')[0].trim();
       const shortId = delivery.order_id ? `#${delivery.order_id}` : '';
-      const isIfood = delivery.origin === 'ifood' || !delivery.origin;
+      const isIfood = delivery.origin === 'ifood';
+      const originLabel = getOriginLabel(delivery);
+      const stopOriginLabel = isIfood
+        ? `IFOOD${shortId ? ` ${shortId}` : ''}`
+        : delivery.origin === 'loja'
+          ? `LOJA${shortId ? ` ${shortId}` : ''}`
+          : `ORIGEM NÃO REGISTRADA${shortId ? ` ${shortId}` : ''}`;
       const existingCode = delivery.confirmation_code || customer?.last_confirmation_code;
       const clientPhone = (delivery.phone || customer?.phone || '').replace(/\D/g, '');
       
@@ -172,10 +222,13 @@ export async function generateRouteMessages(
       routeMapAddresses.push(stopLocation);
 
       const clientName = customer?.name || 'Cliente';
-      msg1.push(`*${emojiNum} ${clientName}* *(IFOOD ${shortId})*`);
+      msg1.push(`*${emojiNum} ${clientName}* *(${stopOriginLabel})*`);
       
       if (delivery.ifood_id) {
         msg1.push(`*ID: [${delivery.ifood_id}]*`);
+      }
+      if (!isIfood && delivery.origin !== 'loja') {
+        msg1.push(`⚠️ *Origem:* ${originLabel}`);
       }
 
       if (isIfood) {
@@ -228,19 +281,15 @@ export async function generateRouteMessages(
         }
       }
 
-      if (delivery.drinks) {
+      if (delivery.drinks?.trim()) {
         const rawDrinkStr = delivery.drinks.trim();
         msg1.push(`- 🥤 *Bebida:* ${rawDrinkStr}`);
-        const match = rawDrinkStr.match(/^(\d+)\s+(.+)$/);
-        let qty = 1; 
-        let drinkName = rawDrinkStr;
-        if (match) { 
-          qty = parseInt(match[1], 10); 
-          drinkName = match[2].trim(); 
-        }
-        const key = drinkName.toLowerCase();
-        if (!drinksSummary[key]) drinksSummary[key] = { qty: 0, name: drinkName };
-        drinksSummary[key].qty += qty;
+
+        parseDrinkItems(rawDrinkStr).forEach(({ qty, name }) => {
+          const key = name.toLowerCase();
+          if (!drinksSummary[key]) drinksSummary[key] = { qty: 0, name };
+          drinksSummary[key].qty += qty;
+        });
       }
       
       msg1.push(`━━━━━━━━━━━━━━━━━━━━━━`);
@@ -295,7 +344,7 @@ export async function generateRouteMessages(
       const clientPhone = delivery.phone || customer?.phone;
       
       const streetLabel = isDuplicate ? ` (${street})` : '';
-      const drinkInfo = delivery.drinks && delivery.drinks.trim() !== '' ? ` — 🥤 *(${delivery.drinks.trim()})*` : '';
+      const drinkInfo = delivery.drinks?.trim() ? ` — 🥤 *(${delivery.drinks.trim()})*` : '';
       const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` 📲 *[ZAP]*` : '';
       
       // Removemos o aviso sujo de [CÓDIGO] daqui para deixar a lista limpa
