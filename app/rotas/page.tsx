@@ -5,10 +5,20 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bike, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, Search, User, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { firstValidTimestamp } from '@/lib/reports/time';
 
 type Filter = 'todas' | 'montando' | 'na-rua' | 'finalizadas';
 type DatedRoute = { created_at?: string; started_at?: string; departure_time?: string; updated_at?: string };
-const routeDate = (route: DatedRoute) => route.created_at || route.started_at || route.departure_time || route.updated_at || '';
+const routeDate = (route: DatedRoute) =>
+  firstValidTimestamp(
+    route.created_at,
+    route.started_at,
+    route.departure_time,
+    route.updated_at,
+  );
+
+const routeStartedAt = (route: DatedRoute) =>
+  firstValidTimestamp(route.started_at, route.departure_time);
 const dateKey = (value: Date | string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
 const todayKey = () => dateKey(new Date());
 const fromKey = (key: string) => new Date(`${key}T12:00:00-03:00`);
@@ -34,16 +44,26 @@ export default function RoutesPage() {
     const linked = deliveries.filter(delivery => delivery.route_id === route.id);
     const completed = linked.filter(delivery => delivery.completed).length;
     const amount = linked.reduce((total, delivery) => total + (delivery.value || 0), 0);
-    const state: Exclude<Filter, 'todas'> = route.status === 'fechada' ? 'finalizadas' : route.started_at ? 'na-rua' : 'montando';
+    const startedAt = routeStartedAt(route);
+    const state: Exclude<Filter, 'todas'> =
+      route.status === 'fechada' ? 'finalizadas' : startedAt ? 'na-rua' : 'montando';
     return { route, linked, completed, amount, state };
   }).filter(({ route, state }) => {
     const term = query.trim().toLocaleLowerCase('pt-BR');
     return (filter === 'todas' || state === filter) && (!term || `${route.name} ${route.motoboy_name}`.toLocaleLowerCase('pt-BR').includes(term));
-  }).sort((a, b) => new Date(routeDate(a.route)).getTime() - new Date(routeDate(b.route)).getTime()), [dayRoutes, deliveries, filter, query]);
+  }).sort(
+    (a, b) =>
+      (routeDate(a.route)?.getTime() ?? Number.POSITIVE_INFINITY) -
+      (routeDate(b.route)?.getTime() ?? Number.POSITIVE_INFINITY),
+  ), [dayRoutes, deliveries, filter, query]);
 
   const counts = useMemo(() => ({
-    montando: dayRoutes.filter(route => route.status === 'aberta' && !route.started_at).length,
-    rua: dayRoutes.filter(route => route.status === 'aberta' && route.started_at).length,
+    montando: dayRoutes.filter(
+      route => route.status === 'aberta' && !routeStartedAt(route),
+    ).length,
+    rua: dayRoutes.filter(
+      route => route.status === 'aberta' && Boolean(routeStartedAt(route)),
+    ).length,
     finalizadas: dayRoutes.filter(route => route.status === 'fechada').length,
   }), [dayRoutes]);
 
@@ -57,7 +77,16 @@ export default function RoutesPage() {
     });
   }, [calendarMonth]);
 
-  const datesWithRoutes = useMemo(() => new Set(routes.map(routeDate).filter(Boolean).map(dateKey)), [routes]);
+  const datesWithRoutes = useMemo(
+    () =>
+      new Set(
+        routes
+          .map(routeDate)
+          .filter((value): value is Date => Boolean(value))
+          .map(dateKey),
+      ),
+    [routes],
+  );
   const selectDate = (key: string) => { setSelectedDate(key); setFilter('todas'); setCalendarOpen(false); };
 
   return <div className="flex flex-col gap-5 pb-28">
@@ -79,7 +108,7 @@ export default function RoutesPage() {
     <div className="flex flex-col gap-3">
       {rows.map(({ route, linked, completed, amount, state }) => <button key={route.id} onClick={() => router.push(`/rotas/details?id=${route.id}`)} className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4 text-left active:scale-[0.99]">
         <div className="flex items-start gap-3"><div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${state === 'na-rua' ? 'bg-sky-500/15 text-sky-400' : state === 'finalizadas' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}><Bike size={20}/></div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-heading text-base font-bold">{route.name}</p><ChevronRight size={17} className="text-zinc-600"/></div><p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400"><User size={12}/>{route.motoboy_name}</p></div></div>
-        <div className="mt-4 grid grid-cols-3 gap-2 border-t border-zinc-800/70 pt-3 text-center"><SmallStat value={`${completed}/${linked.length}`} label="Entregas"/><SmallStat value={`R$ ${amount.toLocaleString('pt-BR',{minimumFractionDigits:2})}`} label="Valor bruto"/><SmallStat value={routeDate(route) ? new Date(routeDate(route)).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}) : 'Sem horário'} label="Criada"/></div>
+        <div className="mt-4 grid grid-cols-3 gap-2 border-t border-zinc-800/70 pt-3 text-center"><SmallStat value={`${completed}/${linked.length}`} label="Entregas"/><SmallStat value={`R$ ${amount.toLocaleString('pt-BR',{minimumFractionDigits:2})}`} label="Valor bruto"/><SmallStat value={routeDate(route)?.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}) || 'Sem horário'} label="Criada"/></div>
       </button>)}
       {rows.length === 0 && <div className="rounded-3xl border border-dashed border-zinc-800 py-14 text-center"><MapPin className="mx-auto text-zinc-700"/><p className="mt-3 text-sm font-semibold text-zinc-400">Nenhuma rota em {dayLabel(selectedDate).toLowerCase()}.</p>{selectedDate !== todayKey() && <button onClick={() => selectDate(todayKey())} className="mt-3 text-xs font-bold text-emerald-400">Voltar para hoje</button>}</div>}
     </div>
