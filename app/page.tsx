@@ -6,12 +6,35 @@ import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
 import type { Route } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { parseTimestamp, saoPauloDateKey } from '@/lib/reports/time';
+import { OperationalRadar } from '@/components/home/OperationalRadar';
 
 function formatDateLabel(date: Date): string {
-  const today = new Date();
-  const isToday = date.toDateString() === today.toDateString();
-  if (isToday) return 'Hoje';
-  return date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
+  const todayKey = saoPauloDateKey(new Date());
+  const dateKey = saoPauloDateKey(date);
+
+  if (dateKey === todayKey) return 'Hoje';
+
+  return date.toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+  });
+}
+
+function firstValidTimestamp(...values: unknown[]): Date | null {
+  for (const value of values) {
+    const parsed = parseTimestamp(value);
+    if (parsed) return parsed;
+  }
+
+  return null;
+}
+
+function operationalKey(...values: unknown[]): string | null {
+  const timestamp = firstValidTimestamp(...values);
+  return timestamp ? saoPauloDateKey(timestamp) : null;
 }
 
 export default function HomePage() {
@@ -27,29 +50,56 @@ export default function HomePage() {
 
   const [globalMotoboy, setGlobalMotoboy] = useState<string | null>(null);
 
-  const selectedDateStr = selectedDate.toDateString();
+  const selectedDateKey = saoPauloDateKey(selectedDate);
   
   let routesDoDia = routes.filter((r) => {
-    const routeDate = new Date(r.created_at || r.started_at || r.departure_time || r.updated_at || 0).toDateString();
-    return routeDate === selectedDateStr;
+    const routeKey = operationalKey(
+      r.created_at,
+      r.started_at,
+      r.departure_time,
+      r.updated_at,
+    );
+
+    return routeKey === selectedDateKey;
   });
 
   if (globalMotoboy) {
     routesDoDia = routesDoDia.filter(r => r.motoboy_name === globalMotoboy);
   }
 
-  // Ordenação Cronológica de Ferro
-  routesDoDia.sort((a, b) => new Date(a.created_at || a.started_at || a.departure_time || 0).getTime() - new Date(b.created_at || b.started_at || b.departure_time || 0).getTime());
+  // Ordenação cronológica pelo primeiro timestamp realmente válido.
+  routesDoDia.sort((a, b) => {
+    const aDate = firstValidTimestamp(
+      a.created_at,
+      a.started_at,
+      a.departure_time,
+      a.updated_at,
+    );
+    const bDate = firstValidTimestamp(
+      b.created_at,
+      b.started_at,
+      b.departure_time,
+      b.updated_at,
+    );
+
+    return (
+      (aDate?.getTime() ?? Number.MAX_SAFE_INTEGER) -
+      (bDate?.getTime() ?? Number.MAX_SAFE_INTEGER)
+    );
+  });
 
   const routeIdsDoDia = routesDoDia.map(r => r.id);
   
-  const deliveriesDoDia = deliveries.filter(d => {
+  const deliveriesDoDia = deliveries.filter((d) => {
     if (!isDeliveryFulfillment(d)) return false;
+
     const belongsToRoute = routeIdsDoDia.includes(d.route_id);
-    const deliveryDateStr = new Date(d.updated_at || Date.now()).toDateString();
-    const isSameDay = deliveryDateStr === selectedDateStr;
-    const isSameMotoboy = globalMotoboy ? (d as any).motoboy_name === globalMotoboy : true;
-    
+    const deliveryKey = operationalKey(d.created_at, d.createdAt);
+    const isSameDay = deliveryKey === selectedDateKey;
+    const isSameMotoboy = globalMotoboy
+      ? (d as any).motoboy_name === globalMotoboy
+      : true;
+
     return belongsToRoute || (isSameDay && isSameMotoboy && !d.route_id);
   });
 
@@ -81,8 +131,17 @@ export default function HomePage() {
     return acc;
   }, {} as Record<string, Route[]>);
 
-  const activeMotoboysToday = motoboys.filter(m => 
-    routes.some(r => (r.motoboy_id === m.id || r.motoboy_name === m.name) && new Date(r.created_at || r.started_at || r.departure_time || 0).toDateString() === selectedDateStr)
+  const activeMotoboysToday = motoboys.filter((m) =>
+    routes.some(
+      (r) =>
+        (r.motoboy_id === m.id || r.motoboy_name === m.name) &&
+        operationalKey(
+          r.created_at,
+          r.started_at,
+          r.departure_time,
+          r.updated_at,
+        ) === selectedDateKey,
+    ),
   );
 
   // Função para pegar ícone do motoboy para o cabeçalho do grupo
@@ -122,6 +181,8 @@ export default function HomePage() {
           ))}
         </div>
       )}
+
+      <OperationalRadar />
 
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
