@@ -922,8 +922,15 @@ export default function ConfirmacoesPage() {
       </div>
 
       {isBatchOpen && (
-        <div className="fixed inset-0 z-[120] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center">
-          <div className="w-full max-w-lg rounded-[28px] border border-zinc-800 bg-zinc-950 p-5 shadow-2xl">
+        <div
+          className="fixed inset-0 z-[120] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+          onClick={() => setIsBatchOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-lg rounded-[28px] border border-zinc-800 bg-zinc-950 p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">

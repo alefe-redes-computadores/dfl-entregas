@@ -9,10 +9,12 @@ import {
   ChevronDown,
   ChevronUp,
   CircleAlert,
+  EyeOff,
   Info,
   type LucideIcon,
 } from 'lucide-react';
 import { selectOperationalHighlights } from '@/lib/delivery-intelligence';
+import { useHiddenInsightsToday } from '@/hooks/useHiddenInsightsToday';
 import type {
   InsightConfidence,
   InsightSeverity,
@@ -75,14 +77,18 @@ export function ReportIntelligencePanel({
   periodLabel,
 }: ReportIntelligencePanelProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { hiddenIds, hideForToday } = useHiddenInsightsToday();
 
   const highlights = useMemo(
     () =>
-      selectOperationalHighlights(snapshot.insights, {
-        limit: 4,
-        minimumSample: 3,
-      }),
-    [snapshot.insights],
+      selectOperationalHighlights(
+        snapshot.insights.filter((insight) => !hiddenIds.has(insight.id)),
+        {
+          limit: 4,
+          minimumSample: 3,
+        },
+      ),
+    [hiddenIds, snapshot.insights],
   );
 
   return (
@@ -222,6 +228,18 @@ export function ReportIntelligencePanel({
                         ))}
                       </div>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        hideForToday(insight.id);
+                        setExpandedId(null);
+                      }}
+                      className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/45 text-[10px] font-black text-zinc-500 active:scale-[0.99]"
+                    >
+                      <EyeOff size={14} />
+                      Ocultar por hoje
+                    </button>
                   </div>
                 )}
               </article>
