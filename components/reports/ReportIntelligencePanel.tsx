@@ -133,7 +133,7 @@ export function ReportIntelligencePanel({
           />
           <CoveragePill
             label="Abastecimentos"
-            value={snapshot.coverage.fuelRecords}
+            value={snapshot.coverage.stockSupplyRecords}
           />
         </div>
       </div>

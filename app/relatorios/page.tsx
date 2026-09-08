@@ -61,7 +61,7 @@ export default function RelatoriosPage() {
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
   const motoboys = useAppStore((state) => state.motoboys);
-  const fuelings = useAppStore((state) => state.fuelings);
+  const stockSupplies = useAppStore((state) => state.stockSupplies);
 
   const [periodKey, setPeriodKey] = useState<ReportPeriodKey>('7d');
   const [periodOpen, setPeriodOpen] = useState(false);
@@ -74,10 +74,10 @@ export default function RelatoriosPage() {
         deliveries,
         routes,
         customers,
-        fuelings,
+        stockSupplies,
         periodKey,
       }),
-    [customers, deliveries, fuelings, periodKey, routes],
+    [customers, deliveries, periodKey, routes, stockSupplies],
   );
 
   const intelligence = useMemo(() => {
@@ -95,7 +95,7 @@ export default function RelatoriosPage() {
       routes,
       customers,
       motoboys,
-      fuelings,
+      stockSupplies,
       minimumSample: 3,
       includeUndatedQuality: periodKey === 'all',
       window,
@@ -103,7 +103,7 @@ export default function RelatoriosPage() {
   }, [
     customers,
     deliveries,
-    fuelings,
+    stockSupplies,
     model.period.end,
     model.period.start,
     motoboys,
@@ -405,7 +405,7 @@ export default function RelatoriosPage() {
                     Custos operacionais
                   </p>
                   <h2 className="mt-1 font-heading text-base font-black text-zinc-100">
-                    Combustível
+                    Abastecimento de estoque
                   </h2>
                 </div>
                 <button
@@ -419,37 +419,33 @@ export default function RelatoriosPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <SummaryCard
-                  title="Gasto combustível"
-                  value={money(model.fuel.metrics.totalAmount)}
+                  title="Gasto com reposição"
+                  value={money(model.stock.metrics.totalAmount)}
                   subtitle={variationSubtitle(
-                    model.fuel.metrics.spendVariation,
+                    model.stock.metrics.spendVariation,
                     'vs período anterior equivalente',
                   )}
                   icon={<Banknote size={20} />}
                   accentColor="amber"
                 />
                 <SummaryCard
-                  title="Média por abastecimento"
-                  value={money(model.fuel.metrics.averageFueling)}
-                  subtitle={`${model.fuel.metrics.count} registro${model.fuel.metrics.count === 1 ? '' : 's'}`}
+                  title="Média por reposição"
+                  value={money(model.stock.metrics.averageSupply)}
+                  subtitle={`${model.stock.metrics.count} registro${model.stock.metrics.count === 1 ? '' : 's'}`}
                   icon={<Store size={20} />}
                   accentColor="blue"
                 />
                 <SummaryCard
-                  title="Litros registrados"
-                  value={`${model.fuel.metrics.liters.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} L`}
-                  subtitle={`${model.fuel.metrics.litersCoverageCount}/${model.fuel.metrics.count} com litros`}
+                  title="Itens registrados"
+                  value={String(model.stock.metrics.itemCount)}
+                  subtitle={`${model.stock.metrics.checkedCount}/${model.stock.metrics.count} conferidos`}
                   icon={<Activity size={20} />}
                   accentColor="purple"
                 />
                 <SummaryCard
-                  title="Preço médio / L"
-                  value={
-                    model.fuel.metrics.averagePricePerLiter
-                      ? money(model.fuel.metrics.averagePricePerLiter)
-                      : 'Sem amostra'
-                  }
-                  subtitle="Média ponderada pelos litros"
+                  title="Aguardando conferência"
+                  value={String(model.stock.metrics.count - model.stock.metrics.checkedCount)}
+                  subtitle="Reposições ainda não conferidas"
                   icon={<Wallet size={20} />}
                   accentColor="emerald"
                 />
@@ -457,23 +453,23 @@ export default function RelatoriosPage() {
             </section>
 
             <ReportChartCard
-              title="Gasto diário com combustível"
-              description="Valores efetivamente registrados no período. Não é estimativa e não representa sozinho o lucro da operação."
+              title="Gasto diário com reposição"
+              description="Valores informados nos itens trazidos para o estoque."
               icon={<Banknote size={18} />}
-              data={model.fuel.dailySpend}
+              data={model.stock.dailySpend}
               chartType="line"
               dataKey="revenue"
-              valueLabel="Combustível"
+              valueLabel="Reposição"
               valueFormatter={money}
               onExplore={() => router.push('/abastecimentos')}
               footer="Abrir histórico de abastecimentos"
             />
 
             <ReportChartCard
-              title="Custo por tipo de combustível"
-              description="Distribui o gasto real pelos combustíveis informados, sem completar dados ausentes."
+              title="Reposições por situação"
+              description="Mostra o gasto e a quantidade em cada etapa de recebimento."
               icon={<BarChart3 size={18} />}
-              data={model.fuel.byFuelType}
+              data={model.stock.byStatus}
               dataKey="revenue"
               valueLabel="Gasto"
               valueFormatter={money}
@@ -482,10 +478,10 @@ export default function RelatoriosPage() {
             />
 
             <ReportChartCard
-              title="Custo por veículo informado"
-              description="Separa o gasto por moto ou veículo. Registros sem identificação continuam visíveis como não informados."
+              title="Compras por responsável"
+              description="Separa os valores pelos responsáveis que trouxeram os itens."
               icon={<RouteIcon size={18} />}
-              data={model.fuel.byVehicle.slice(0, 12)}
+              data={model.stock.byPurchaser.slice(0, 12)}
               dataKey="revenue"
               valueLabel="Gasto"
               valueFormatter={money}
@@ -497,7 +493,7 @@ export default function RelatoriosPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-violet-400">
-                    Cobertura do combustível
+                    Cobertura do abastecimento
                   </p>
                   <h2 className="mt-1 font-black text-zinc-100">
                     Dados prontos para inteligência
@@ -508,21 +504,21 @@ export default function RelatoriosPage() {
 
               <div className="mt-4 grid grid-cols-3 gap-2">
                 {[
-                  ['Litros', model.fuel.metrics.litersCoverageCount],
-                  ['Odômetro', model.fuel.metrics.odometerCoverageCount],
-                  ['Veículo', model.fuel.metrics.vehicleCoverageCount],
+                  ['Fornecedor', model.stock.metrics.supplierCoverageCount],
+                  ['Comprador', model.stock.metrics.purchaserCoverageCount],
+                  ['Conferidos', model.stock.metrics.checkedCount],
                 ].map(([label, value]) => (
                   <div key={String(label)} className="rounded-2xl bg-zinc-950/55 p-3">
                     <p className="text-[9px] font-bold text-zinc-600">{label}</p>
                     <p className="mt-1 text-base font-black text-zinc-100">
-                      {Number(value)}/{model.fuel.metrics.count}
+                      {Number(value)}/{model.stock.metrics.count}
                     </p>
                   </div>
                 ))}
               </div>
 
               <p className="mt-3 text-[10px] leading-relaxed text-zinc-600">
-                O app ainda não calcula km/L. Quilometragem isolada não basta para consumo confiável; precisamos saber quando o tanque foi realmente completado para comparar dois abastecimentos equivalentes.
+                O relatório usa apenas os abastecimentos de estoque registrados no novo módulo. Registros antigos de combustível permanecem preservados, mas não são misturados nestas métricas.
               </p>
             </section>
           </>

@@ -1,5 +1,5 @@
-import type { Customer, Delivery, Fueling, Route } from '@/types';
-import { FUEL_LABELS } from '@/lib/fueling-analytics';
+import type { Customer, Delivery, Route, StockSupply } from '@/types';
+import { SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
   compareDateKeys,
@@ -298,16 +298,16 @@ function buildRouteTimings(
   return { trusted, suspicious };
 }
 
-function fuelingTimestamp(fueling: Fueling): Date | null {
-  return firstValidTimestamp(fueling.occurred_at, fueling.created_at);
+function supplyTimestamp(supply: StockSupply): Date | null {
+  return firstValidTimestamp(supply.occurred_at, supply.created_at);
 }
 
-function fuelingInPeriod(
-  fueling: Fueling,
+function supplyInPeriod(
+  supply: StockSupply,
   start: Date | null,
   end: Date,
 ): boolean {
-  const timestamp = fuelingTimestamp(fueling);
+  const timestamp = supplyTimestamp(supply);
   if (!timestamp) return false;
   if (!start) return true;
 
@@ -318,14 +318,14 @@ function fuelingInPeriod(
   );
 }
 
-function buildFuelDaily(
-  fuelings: Fueling[],
+function buildSupplyDaily(
+  supplies: StockSupply[],
   period: ReportPeriod,
 ): DailyBucket[] {
-  const valid = fuelings
-    .map((fueling) => ({ fueling, timestamp: fuelingTimestamp(fueling) }))
+  const valid = supplies
+    .map((supply) => ({ supply, timestamp: supplyTimestamp(supply) }))
     .filter(
-      (item): item is { fueling: Fueling; timestamp: Date } =>
+      (item): item is { supply: StockSupply; timestamp: Date } =>
         Boolean(item.timestamp),
     );
 
@@ -344,12 +344,12 @@ function buildFuelDaily(
 
   const byDate = new Map<string, { count: number; revenue: number }>();
 
-  valid.forEach(({ fueling, timestamp }) => {
+  valid.forEach(({ supply, timestamp }) => {
     const key = saoPauloDateKey(timestamp);
     const current = byDate.get(key) ?? { count: 0, revenue: 0 };
     byDate.set(key, {
       count: current.count + 1,
-      revenue: current.revenue + money(fueling.total_amount),
+      revenue: current.revenue + supplyTotal(supply),
     });
   });
 
@@ -366,63 +366,50 @@ function buildFuelDaily(
   });
 }
 
-function buildFuelReport(
-  fuelings: Fueling[],
+function buildStockReport(
+  supplies: StockSupply[],
   period: ReportPeriod,
-): ReportModel['fuel'] {
+): ReportModel['stock'] {
   const current =
     period.key === 'all'
-      ? fuelings
-      : fuelings.filter((item) =>
-          fuelingInPeriod(item, period.start, period.end),
+      ? supplies
+      : supplies.filter((item) =>
+          supplyInPeriod(item, period.start, period.end),
         );
 
   const previous =
     period.previousStart && period.previousEnd
-      ? fuelings.filter((item) =>
-          fuelingInPeriod(item, period.previousStart, period.previousEnd as Date),
+      ? supplies.filter((item) =>
+          supplyInPeriod(item, period.previousStart, period.previousEnd as Date),
         )
       : [];
 
   const totalAmount = current.reduce(
-    (sum, item) => sum + money(item.total_amount),
+    (sum, item) => sum + supplyTotal(item),
     0,
   );
   const previousAmount = previous.reduce(
-    (sum, item) => sum + money(item.total_amount),
+    (sum, item) => sum + supplyTotal(item),
     0,
   );
-  const liters = current.reduce((sum, item) => sum + money(item.liters), 0);
-
-  const pricedItems = current.filter(
-    (item) => (item.liters || 0) > 0 && (item.total_amount || 0) > 0,
-  );
-  const pricedLiters = pricedItems.reduce(
-    (sum, item) => sum + (item.liters || 0),
-    0,
-  );
-  const pricedAmount = pricedItems.reduce(
-    (sum, item) => sum + (item.total_amount || 0),
-    0,
-  );
-
-  const fuelMap = new Map<string, { count: number; revenue: number }>();
+  const itemCount = current.reduce((sum, item) => sum + item.items.length, 0);
+  const statusMap = new Map<string, { count: number; revenue: number }>();
   current.forEach((item) => {
-    const key = item.fuel_type || 'outro';
-    const bucket = fuelMap.get(key) ?? { count: 0, revenue: 0 };
-    fuelMap.set(key, {
+    const key = item.status;
+    const bucket = statusMap.get(key) ?? { count: 0, revenue: 0 };
+    statusMap.set(key, {
       count: bucket.count + 1,
-      revenue: bucket.revenue + money(item.total_amount),
+      revenue: bucket.revenue + supplyTotal(item),
     });
   });
 
-  const vehicleMap = new Map<string, { count: number; revenue: number }>();
+  const purchaserMap = new Map<string, { count: number; revenue: number }>();
   current.forEach((item) => {
-    const key = item.vehicle_label?.trim() || 'Veículo não informado';
-    const bucket = vehicleMap.get(key) ?? { count: 0, revenue: 0 };
-    vehicleMap.set(key, {
+    const key = item.purchaser_name?.trim() || 'Comprador não informado';
+    const bucket = purchaserMap.get(key) ?? { count: 0, revenue: 0 };
+    purchaserMap.set(key, {
       count: bucket.count + 1,
-      revenue: bucket.revenue + money(item.total_amount),
+      revenue: bucket.revenue + supplyTotal(item),
     });
   });
 
@@ -431,32 +418,28 @@ function buildFuelReport(
     previous,
     metrics: {
       totalAmount: Number(totalAmount.toFixed(2)),
-      liters: Number(liters.toFixed(2)),
-      averagePricePerLiter:
-        pricedLiters > 0
-          ? Number((pricedAmount / pricedLiters).toFixed(3))
-          : 0,
-      averageFueling:
+      itemCount,
+      averageSupply:
         current.length > 0
           ? Number((totalAmount / current.length).toFixed(2))
           : 0,
       count: current.length,
       spendVariation:
         period.key === 'all' ? null : variation(totalAmount, previousAmount),
-      litersCoverageCount: current.filter((item) => (item.liters || 0) > 0).length,
-      odometerCoverageCount: current.filter((item) => (item.odometer_km || 0) > 0).length,
-      vehicleCoverageCount: current.filter((item) => Boolean(item.vehicle_label?.trim())).length,
+      supplierCoverageCount: current.filter((item) => Boolean(item.supplier?.trim())).length,
+      purchaserCoverageCount: current.filter((item) => Boolean(item.purchaser_name)).length,
+      checkedCount: current.filter((item) => item.status === 'conferido').length,
     },
-    dailySpend: buildFuelDaily(current, period),
-    byFuelType: Array.from(fuelMap.entries())
+    dailySpend: buildSupplyDaily(current, period),
+    byStatus: Array.from(statusMap.entries())
       .map(([key, bucket]) => ({
         key,
-        label: FUEL_LABELS[key as keyof typeof FUEL_LABELS] || key,
+        label: SUPPLY_STATUS_LABELS[key as keyof typeof SUPPLY_STATUS_LABELS] || key,
         count: bucket.count,
         revenue: Number(bucket.revenue.toFixed(2)),
       }))
       .sort((a, b) => b.revenue - a.revenue),
-    byVehicle: Array.from(vehicleMap.entries())
+    byPurchaser: Array.from(purchaserMap.entries())
       .map(([key, bucket]) => ({
         key,
         label: key,
@@ -532,7 +515,7 @@ export function buildReportModel(input: {
   deliveries: Delivery[];
   routes: Route[];
   customers: Customer[];
-  fuelings: Fueling[];
+  stockSupplies: StockSupply[];
   periodKey: ReportPeriodKey;
 }): ReportModel {
   const routeMap = new Map(input.routes.map((route) => [route.id, route]));
@@ -617,7 +600,7 @@ export function buildReportModel(input: {
   ).sort((a, b) => b.count - a.count);
 
   const routeTiming = buildRouteTimings(input.routes, logisticsCurrent);
-  const fuel = buildFuelReport(input.fuelings, period);
+  const stock = buildStockReport(input.stockSupplies, period);
 
   return {
     period,
@@ -650,7 +633,7 @@ export function buildReportModel(input: {
     neighborhoods,
     motoboys,
     routeTimings: routeTiming.trusted,
-    fuel,
+    stock,
     quality: buildQuality(logisticsCurrent, routeTiming.suspicious),
   };
 }

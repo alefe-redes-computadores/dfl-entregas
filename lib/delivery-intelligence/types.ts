@@ -1,5 +1,5 @@
 // lib/delivery-intelligence/types.ts
-import type { Customer, Delivery, Fueling, Motoboy, Route } from '@/types';
+import type { Customer, Delivery, Motoboy, Route, StockSupply } from '@/types';
 
 export type InsightSeverity = 'positive' | 'info' | 'attention' | 'warning';
 export type InsightConfidence = 'low' | 'medium' | 'high';
@@ -9,7 +9,7 @@ export type InsightCategory =
   | 'demand'
   | 'geography'
   | 'routes'
-  | 'fuel';
+  | 'stock';
 
 export interface IntelligenceEvidence {
   label: string;
@@ -44,7 +44,7 @@ export interface OperationalIntelligenceInput {
   routes: Route[];
   customers: Customer[];
   motoboys: Motoboy[];
-  fuelings: Fueling[];
+  stockSupplies: StockSupply[];
   now?: Date;
   lookbackDays?: number;
   minimumSample?: number;
@@ -128,9 +128,9 @@ export interface OperationalIntelligenceSnapshot {
     deliveryRecords: number;
     structuredNeighborhoods: number;
     routedDeliveries: number;
-    fuelRecords: number;
-    fuelWithLiters: number;
-    fuelWithVehicle: number;
-    fuelWithOdometer: number;
+    stockSupplyRecords: number;
+    stockSupplyItems: number;
+    stockSupplyWithPurchaser: number;
+    stockSupplyChecked: number;
   };
 }

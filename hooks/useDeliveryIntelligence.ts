@@ -17,7 +17,7 @@ export function useDeliveryIntelligence(options?: {
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
   const motoboys = useAppStore((state) => state.motoboys);
-  const fuelings = useAppStore((state) => state.fuelings);
+  const stockSupplies = useAppStore((state) => state.stockSupplies);
 
   const lookbackDays = options?.lookbackDays ?? 30;
   const minimumSample = options?.minimumSample ?? 3;
@@ -29,7 +29,7 @@ export function useDeliveryIntelligence(options?: {
       routes,
       customers,
       motoboys,
-      fuelings,
+      stockSupplies,
       lookbackDays,
       minimumSample,
     });
@@ -44,7 +44,7 @@ export function useDeliveryIntelligence(options?: {
   }, [
     customers,
     deliveries,
-    fuelings,
+    stockSupplies,
     highlightLimit,
     lookbackDays,
     minimumSample,

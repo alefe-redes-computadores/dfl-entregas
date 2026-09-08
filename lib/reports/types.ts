@@ -1,4 +1,4 @@
-import type { Customer, Delivery, Fueling, Route } from '@/types';
+import type { Customer, Delivery, Route, StockSupply } from '@/types';
 
 export type ReportPeriodKey = 'today' | '7d' | '14d' | '30d' | 'all';
 
@@ -57,23 +57,22 @@ export interface DataQualityIssue {
 }
 
 
-export interface FuelReportModel {
-  current: Fueling[];
-  previous: Fueling[];
+export interface StockSupplyReportModel {
+  current: StockSupply[];
+  previous: StockSupply[];
   metrics: {
     totalAmount: number;
-    liters: number;
-    averagePricePerLiter: number;
-    averageFueling: number;
+    itemCount: number;
+    averageSupply: number;
     count: number;
     spendVariation: number | null;
-    litersCoverageCount: number;
-    odometerCoverageCount: number;
-    vehicleCoverageCount: number;
+    supplierCoverageCount: number;
+    purchaserCoverageCount: number;
+    checkedCount: number;
   };
   dailySpend: DailyBucket[];
-  byFuelType: ReportBucket[];
-  byVehicle: ReportBucket[];
+  byStatus: ReportBucket[];
+  byPurchaser: ReportBucket[];
 }
 
 export interface ReportModel {
@@ -98,7 +97,7 @@ export interface ReportModel {
   neighborhoods: ReportBucket[];
   motoboys: ReportBucket[];
   routeTimings: RouteTimingRow[];
-  fuel: FuelReportModel;
+  stock: StockSupplyReportModel;
   quality: DataQualityIssue[];
 }
 

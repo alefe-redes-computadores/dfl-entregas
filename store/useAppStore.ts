@@ -6,7 +6,7 @@ import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { fuelingDate } from '@/lib/fueling-analytics';
@@ -20,6 +20,7 @@ interface AppState {
   customers: Customer[];
   motoboys: Motoboy[];
   fuelings: Fueling[];
+  stockSupplies: StockSupply[];
   ifoodPendingConfirmations: IfoodPendingConfirmation[];
   selectedDate: Date;
   isSyncing: boolean;
@@ -72,6 +73,9 @@ interface AppState {
   addFueling: (fueling: Fueling) => Promise<void>;
   updateFueling: (id: string, updatedData: Partial<Fueling>) => Promise<void>;
   deleteFueling: (id: string) => Promise<void>;
+  addStockSupply: (supply: StockSupply) => Promise<void>;
+  updateStockSupply: (id: string, updatedData: Partial<StockSupply>) => Promise<void>;
+  deleteStockSupply: (id: string) => Promise<void>;
   addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
   updateIfoodPendingConfirmation: (id: string, data: Partial<IfoodPendingConfirmation>) => Promise<void>;
   deleteIfoodPendingConfirmation: (id: string) => Promise<void>;
@@ -103,6 +107,7 @@ export const useAppStore = create<AppState>()(
       customers: [],
       motoboys: [],
       fuelings: [],
+      stockSupplies: [],
       ifoodPendingConfirmations: [],
       selectedDate: new Date(),
       isSyncing: false,
@@ -163,7 +168,7 @@ export const useAppStore = create<AppState>()(
       logout: async () => {
         try {
           await signOut(auth);
-          set({ routes: [], deliveries: [], customers: [], motoboys: [], fuelings: [], user: null });
+          set({ routes: [], deliveries: [], customers: [], motoboys: [], fuelings: [], stockSupplies: [], user: null });
         } catch (error) { console.error('Erro no logout:', error); }
       },
 
@@ -171,12 +176,13 @@ export const useAppStore = create<AppState>()(
         if (!get().hasHydrated) return;
         set({ isSyncing: true, syncError: false }); 
         try {
-          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
+          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
             getDocs(collection(db, 'deliveries')),
             getDocs(collection(db, 'customers')),
             getDocs(collection(db, 'motoboys')),
             getDocs(collection(db, 'fuelings')),
+            getDocs(collection(db, 'stock_supplies')),
             getDocs(collection(db, 'ifood_pending_confirmations')),
             getDoc(doc(db, 'store', 'store_settings'))
           ]);
@@ -186,6 +192,7 @@ export const useAppStore = create<AppState>()(
           const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
           const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
           const fbFuelings = fuelingsSnap.docs.map(d => d.data() as Fueling);
+          const fbStockSupplies = stockSuppliesSnap.docs.map(d => d.data() as StockSupply);
           const fbPendingConfirmations = pendingConfirmationsSnap.docs.map(
             d => d.data() as IfoodPendingConfirmation,
           );
@@ -233,6 +240,14 @@ export const useAppStore = create<AppState>()(
             (a, b) => fuelingDate(b).getTime() - fuelingDate(a).getTime(),
           );
 
+          const mergedStockSupplies = [...fbStockSupplies];
+          get().stockSupplies.forEach(local => {
+            if (!mergedStockSupplies.some(item => item.id === local.id)) mergedStockSupplies.push(local);
+          });
+          mergedStockSupplies.sort(
+            (a, b) => new Date(b.occurred_at || b.created_at).getTime() - new Date(a.occurred_at || a.created_at).getTime(),
+          );
+
           const mergedPendingConfirmations = [...fbPendingConfirmations];
           get().ifoodPendingConfirmations.forEach(local => {
             if (!mergedPendingConfirmations.some(item => item.id === local.id)) {
@@ -263,6 +278,7 @@ export const useAppStore = create<AppState>()(
             customers: mergedCustomers,
             motoboys: mergedMotoboys,
             fuelings: mergedFuelings,
+            stockSupplies: mergedStockSupplies,
             ifoodPendingConfirmations: mergedPendingConfirmations,
             storeSettings: finalStoreSettings as any,
             isSyncing: false,
@@ -472,6 +488,41 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           set({ fuelings: previousFuelings });
           console.error('Erro ao excluir abastecimento:', error);
+          throw error;
+        }
+      },
+
+      addStockSupply: async (supply) => {
+        const now = new Date().toISOString();
+        const next: StockSupply = { ...supply, created_at: supply.created_at || now, updated_at: now };
+        set((state) => ({ stockSupplies: [next, ...state.stockSupplies] }));
+        try {
+          await setDoc(doc(db, 'stock_supplies', next.id), sanitizeForFirebase(next));
+        } catch (error) {
+          set((state) => ({ stockSupplies: state.stockSupplies.filter((item) => item.id !== next.id) }));
+          throw error;
+        }
+      },
+
+      updateStockSupply: async (id, updatedData) => {
+        const previous = get().stockSupplies;
+        const next: Partial<StockSupply> = { ...updatedData, updated_at: new Date().toISOString() };
+        set((state) => ({ stockSupplies: state.stockSupplies.map((item) => item.id === id ? { ...item, ...next } : item) }));
+        try {
+          await updateDoc(doc(db, 'stock_supplies', id), sanitizeForFirebase(next));
+        } catch (error) {
+          set({ stockSupplies: previous });
+          throw error;
+        }
+      },
+
+      deleteStockSupply: async (id) => {
+        const previous = get().stockSupplies;
+        set((state) => ({ stockSupplies: state.stockSupplies.filter((item) => item.id !== id) }));
+        try {
+          await deleteDoc(doc(db, 'stock_supplies', id));
+        } catch (error) {
+          set({ stockSupplies: previous });
           throw error;
         }
       },
@@ -1163,6 +1214,7 @@ export const useAppStore = create<AppState>()(
         customers: state.customers,
         motoboys: state.motoboys,
         fuelings: state.fuelings,
+        stockSupplies: state.stockSupplies,
         ifoodPendingConfirmations: state.ifoodPendingConfirmations,
         isPrivacyMode: state.isPrivacyMode,
         routeAlertsEnabled: state.routeAlertsEnabled,

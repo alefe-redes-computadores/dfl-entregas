@@ -1,5 +1,5 @@
 // lib/delivery-intelligence/buildOperationalIntelligence.ts
-import type { Customer, Delivery, Fueling, Route } from '@/types';
+import type { Customer, Delivery, Route, StockSupply } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
   compareDateKeys,
@@ -38,8 +38,8 @@ function routeTimestamp(route: Route): Date | null {
   );
 }
 
-function fuelingTimestamp(fueling: Fueling): Date | null {
-  return firstValidTimestamp(fueling.occurred_at, fueling.created_at);
+function supplyTimestamp(supply: StockSupply): Date | null {
+  return firstValidTimestamp(supply.occurred_at, supply.created_at);
 }
 
 function inWindow(date: Date | null, startKey: string, endKey: string): boolean {
@@ -308,65 +308,60 @@ function routeInsights(
   }];
 }
 
-function fuelInsights(
-  fuelings: Fueling[],
+function stockInsights(
+  supplies: StockSupply[],
   minimumSample: number,
 ): OperationalInsight[] {
-  if (fuelings.length < minimumSample) return [];
+  if (supplies.length < minimumSample) return [];
 
-  const withLiters = fuelings.filter((item) => (item.liters || 0) > 0).length;
-  const withVehicle = fuelings.filter(
-    (item) => Boolean(item.vehicle_label?.trim()),
-  ).length;
-  const withOdometer = fuelings.filter(
-    (item) => (item.odometer_km || 0) > 0,
-  ).length;
+  const withPurchaser = supplies.filter((item) => Boolean(item.purchaser_name)).length;
+  const withSupplier = supplies.filter((item) => Boolean(item.supplier?.trim())).length;
+  const checked = supplies.filter((item) => item.status === 'conferido').length;
 
-  const litersCoverage = percentage(withLiters, fuelings.length);
-  const vehicleCoverage = percentage(withVehicle, fuelings.length);
-  const odometerCoverage = percentage(withOdometer, fuelings.length);
+  const purchaserCoverage = percentage(withPurchaser, supplies.length);
+  const supplierCoverage = percentage(withSupplier, supplies.length);
+  const checkedCoverage = percentage(checked, supplies.length);
 
   const weak = [
-    { label: 'Litros', value: litersCoverage },
-    { label: 'Veículo', value: vehicleCoverage },
-    { label: 'Odômetro', value: odometerCoverage },
+    { label: 'Comprador', value: purchaserCoverage },
+    { label: 'Fornecedor', value: supplierCoverage },
+    { label: 'Conferência', value: checkedCoverage },
   ].filter((item) => item.value < 70);
 
   if (!weak.length) {
     return [{
-      id: 'fuel-good-coverage',
-      category: 'fuel',
+      id: 'stock-good-coverage',
+      category: 'stock',
       severity: 'positive',
-      confidence: confidenceFromSample(fuelings.length, minimumSample),
-      title: 'Abastecimentos com boa cobertura',
-      summary: 'Litros, veículo e odômetro já têm cobertura útil para análises futuras.',
-      explanation:
-        'O cérebro ainda não calcula km/L porque odômetro isolado não prova consumo entre tanques equivalentes.',
-      sampleSize: fuelings.length,
+      confidence: confidenceFromSample(supplies.length, minimumSample),
+      title: 'Reposições com boa cobertura',
+      summary: 'Responsável, fornecedor e conferência já têm cobertura útil.',
+      explanation: 'Os dados permitem acompanhar quem trouxe, onde comprou e se a entrada foi conferida.',
+      sampleSize: supplies.length,
       evidence: [
-        { label: 'Registros', value: String(fuelings.length) },
-        { label: 'Com litros', value: `${round(litersCoverage, 0)}%` },
-        { label: 'Com veículo', value: `${round(vehicleCoverage, 0)}%` },
-        { label: 'Com odômetro', value: `${round(odometerCoverage, 0)}%` },
+        { label: 'Registros', value: String(supplies.length) },
+        { label: 'Com comprador', value: `${round(purchaserCoverage, 0)}%` },
+        { label: 'Com fornecedor', value: `${round(supplierCoverage, 0)}%` },
+        { label: 'Conferidos', value: `${round(checkedCoverage, 0)}%` },
       ],
     }];
   }
 
   return [{
-    id: 'fuel-coverage-limited',
-    category: 'fuel',
+    id: 'stock-coverage-limited',
+    category: 'stock',
     severity: weak.length >= 2 ? 'attention' : 'info',
-    confidence: confidenceFromSample(fuelings.length, minimumSample),
-    title: 'Abastecimentos ainda têm lacunas para inteligência',
+    confidence: confidenceFromSample(supplies.length, minimumSample),
+    title: 'Reposições ainda têm lacunas para inteligência',
     summary: `${weak.map((item) => item.label.toLocaleLowerCase('pt-BR')).join(', ')} precisam de mais cobertura.`,
     explanation:
       'Os custos registrados continuam válidos. A limitação afeta apenas análises que dependem desses campos.',
-    sampleSize: fuelings.length,
+    sampleSize: supplies.length,
     evidence: [
-      { label: 'Registros', value: String(fuelings.length) },
-      { label: 'Com litros', value: `${round(litersCoverage, 0)}%` },
-      { label: 'Com veículo', value: `${round(vehicleCoverage, 0)}%` },
-      { label: 'Com odômetro', value: `${round(odometerCoverage, 0)}%` },
+      { label: 'Registros', value: String(supplies.length) },
+      { label: 'Com comprador', value: `${round(purchaserCoverage, 0)}%` },
+      { label: 'Com fornecedor', value: `${round(supplierCoverage, 0)}%` },
+      { label: 'Conferidos', value: `${round(checkedCoverage, 0)}%` },
     ],
   }];
 }
@@ -408,7 +403,7 @@ export function buildOperationalIntelligence(
 
   let deliveries: Delivery[];
   let routes: Route[];
-  let fuelings: Fueling[];
+  let stockSupplies: StockSupply[];
 
   if (requestedWindow?.mode === 'all') {
     mode = 'all';
@@ -417,7 +412,7 @@ export function buildOperationalIntelligence(
       Boolean(deliveryTimestamp(item)),
     );
     routes = input.routes.filter((item) => Boolean(routeTimestamp(item)));
-    fuelings = input.fuelings.filter((item) => Boolean(fuelingTimestamp(item)));
+    stockSupplies = input.stockSupplies.filter((item) => Boolean(supplyTimestamp(item)));
 
     const observedKeys = [
       ...deliveries
@@ -428,8 +423,8 @@ export function buildOperationalIntelligence(
         .map(routeTimestamp)
         .filter((item): item is Date => Boolean(item))
         .map(saoPauloDateKey),
-      ...fuelings
-        .map(fuelingTimestamp)
+      ...stockSupplies
+        .map(supplyTimestamp)
         .filter((item): item is Date => Boolean(item))
         .map(saoPauloDateKey),
     ].sort(compareDateKeys);
@@ -444,8 +439,8 @@ export function buildOperationalIntelligence(
     routes = input.routes.filter((item) =>
       inWindow(routeTimestamp(item), startKey, endKey),
     );
-    fuelings = input.fuelings.filter((item) =>
-      inWindow(fuelingTimestamp(item), startKey, endKey),
+    stockSupplies = input.stockSupplies.filter((item) =>
+      inWindow(supplyTimestamp(item), startKey, endKey),
     );
   }
 
@@ -496,7 +491,7 @@ export function buildOperationalIntelligence(
     ...(hasContextualRouteAnomaly
       ? []
       : routeInsights(routes, minimumSample)),
-    ...fuelInsights(fuelings, minimumSample),
+    ...stockInsights(stockSupplies, minimumSample),
   ];
 
   const severityOrder = {
@@ -535,14 +530,10 @@ export function buildOperationalIntelligence(
       deliveryRecords: deliveries.length,
       structuredNeighborhoods,
       routedDeliveries,
-      fuelRecords: fuelings.length,
-      fuelWithLiters: fuelings.filter((item) => (item.liters || 0) > 0).length,
-      fuelWithVehicle: fuelings.filter((item) =>
-        Boolean(item.vehicle_label?.trim()),
-      ).length,
-      fuelWithOdometer: fuelings.filter(
-        (item) => (item.odometer_km || 0) > 0,
-      ).length,
+      stockSupplyRecords: stockSupplies.length,
+      stockSupplyItems: stockSupplies.reduce((sum, item) => sum + item.items.length, 0),
+      stockSupplyWithPurchaser: stockSupplies.filter((item) => Boolean(item.purchaser_name)).length,
+      stockSupplyChecked: stockSupplies.filter((item) => item.status === 'conferido').length,
     },
   };
 }

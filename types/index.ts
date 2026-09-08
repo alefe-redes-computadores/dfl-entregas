@@ -23,6 +23,38 @@ export interface Fueling {
   updated_at?: string;
 }
 
+export type StockSupplyStatus = 'solicitado' | 'em_compra' | 'recebido' | 'conferido';
+export type StockSupplyUnit = 'un' | 'kg' | 'g' | 'l' | 'ml' | 'cx' | 'pct' | 'fardo';
+
+export interface StockSupplyItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: StockSupplyUnit;
+  unit_price?: number;
+  total_price?: number;
+  observation?: string;
+}
+
+export interface StockSupply {
+  id: string;
+  occurred_at: string;
+  status: StockSupplyStatus;
+  items: StockSupplyItem[];
+  products_amount: number;
+  transport_amount?: number;
+  other_costs?: number;
+  total_amount: number;
+  supplier?: string;
+  payment_method?: PaymentMethod;
+  purchaser_name?: string;
+  observation?: string;
+  received_at?: string;
+  checked_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MotoboyPaymentRule {
   type: PaymentRuleType;
   fixed_amount?: number;    
