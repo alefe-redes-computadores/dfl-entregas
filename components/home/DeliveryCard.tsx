@@ -136,7 +136,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       setInputCode('');
 
       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-      toast.success('Baixa realizada.', { duration: 1500 });
+      toast.success('Entrega concluída.', { duration: 1500 });
 
       const routeDeliveries = getDeliveriesByRoute(route.id);
       const remainingPending = routeDeliveries.filter(d => d.id !== delivery.id && !d.completed).length;
@@ -157,7 +157,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
     if (actionType === 'complete') {
       if (route.status === 'fechada') {
-        toast.error('Rota já está fechada!');
+        toast.error(
+          delivery.completed
+            ? 'Reabra a rota antes de desfazer esta baixa.'
+            : 'A rota está fechada. Reabra-a antes de dar baixa.',
+        );
         return;
       }
       if (!route.started_at) {
@@ -691,7 +695,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
               <h3 className="font-bold text-lg text-zinc-50">Conferência de Bebida</h3>
               <p className="text-xs text-zinc-400">Esta entrega inclui itens de geladeira:</p>
               <div className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-xl font-bold text-sm text-sky-400">
-                🥤 {delivery.drinks}
+                {delivery.drinks}
               </div>
             </div>
 

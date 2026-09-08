@@ -213,7 +213,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       if (routeAlertsEnabled && Capacitor.isNativePlatform()) {
       LocalNotifications.schedule({
         notifications: [{
-          title: '🎉 Rota Finalizada!',
+          title: 'Rota finalizada',
           body: `O motoboy ${route.motoboy_name} encerrou a rota.`,
           id: Math.floor(Math.random() * 100000), 
           schedule: { at: new Date(Date.now() + 1000) }, 
@@ -226,16 +226,40 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   const handleDeleteEmptyRoute = async () => {
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
-    await deleteRoute(route.id);
-    toast.success('Rota excluída com sucesso!');
+    if (actionBusy) return;
+    setActionBusy(true);
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Haptics.impact({ style: ImpactStyle.Heavy });
+      }
+      await deleteRoute(route.id);
+      toast.success('Rota excluída.');
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Não foi possível excluir a rota.',
+      );
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   const confirmReopenRoute = async () => {
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-    await reopenRoute(route.id);
-    setIsReopenModalOpen(false);
-    toast.success('Rota reaberta para correções!');
+    if (actionBusy) return;
+    setActionBusy(true);
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Haptics.impact({ style: ImpactStyle.Medium });
+      }
+      await reopenRoute(route.id);
+      setIsReopenModalOpen(false);
+      toast.success('Rota reaberta para correções.');
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Não foi possível reabrir a rota.',
+      );
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   const handleCopyMessage = async (msgType: 1 | 2) => {
@@ -559,19 +583,39 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             )}
             {route.status === 'aberta' && totalDeliveries > 0 ? (
               !route.started_at ? (
-                <button onClick={handleStartRoute} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-sky-500/10 border border-sky-500/20 py-3.5 text-sm font-bold text-sky-500 hover:bg-sky-500/20 active:scale-95">
-                  <Timer size={18} /> Iniciar Rota (Cronômetro)
+                <button
+                  onClick={handleStartRoute}
+                  disabled={actionBusy}
+                  className="flex w-full items-center justify-center gap-2 rounded-[20px] border border-sky-500/20 bg-sky-500/10 py-3.5 text-sm font-bold text-sky-500 active:scale-95 disabled:opacity-50"
+                >
+                  <Timer size={18} /> Iniciar rota
                 </button>
               ) : (
-                <button onClick={handleCloseRoute} className={clsx("flex w-full items-center justify-center gap-2 rounded-[20px] py-3.5 text-sm font-bold active:scale-95 transition-all", pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 animate-pulse" : "bg-zinc-800/80 text-zinc-300")}>
-                  <CheckCircle2 size={18} className={pendingDeliveriesCount === 0 ? "text-white" : "text-emerald-500"} />
-                  {pendingDeliveriesCount === 0 ? 'Tudo Entregue! Fechar Rota' : 'Finalizar Rota'}
+                <button
+                  onClick={handleCloseRoute}
+                  disabled={actionBusy || pendingDeliveriesCount > 0}
+                  className={clsx(
+                    "flex w-full items-center justify-center gap-2 rounded-[20px] border py-3.5 text-sm font-bold transition-all active:scale-95 disabled:active:scale-100",
+                    pendingDeliveriesCount === 0
+                      ? "border-emerald-500 bg-emerald-500 text-zinc-950 shadow-lg shadow-emerald-500/15"
+                      : "cursor-not-allowed border-zinc-800 bg-zinc-900/70 text-zinc-600",
+                    actionBusy && "opacity-50",
+                  )}
+                >
+                  <CheckCircle2 size={18} />
+                  {pendingDeliveriesCount > 0
+                    ? `${pendingDeliveriesCount} entrega${pendingDeliveriesCount === 1 ? '' : 's'} pendente${pendingDeliveriesCount === 1 ? '' : 's'}`
+                    : 'Finalizar rota'}
                 </button>
               )
             ) : null}
             {route.status === 'fechada' && (
-              <button onClick={() => setIsReopenModalOpen(true)} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-800/40 border border-zinc-700/50 py-3.5 text-sm font-semibold text-zinc-400 hover:bg-zinc-800 active:scale-95 mt-2">
-                <RotateCcw size={16} /> Reabrir Rota (Correções)
+              <button
+                onClick={() => setIsReopenModalOpen(true)}
+                disabled={actionBusy}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-[20px] border border-amber-500/20 bg-amber-500/[.06] py-3.5 text-sm font-semibold text-amber-400 active:scale-95 disabled:opacity-50"
+              >
+                <RotateCcw size={16} /> Reabrir rota para correções
               </button>
             )}
             <button onClick={() => router.push(routeDetailsHref)} className="flex w-full items-center justify-center rounded-[18px] border border-zinc-800 py-3 text-xs font-bold text-zinc-400 active:scale-95">Ver detalhes da rota</button>
@@ -810,7 +854,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               {currentFuzzyList.map((item, idx) => (
                 <div key={idx} className="bg-zinc-950 border border-zinc-800 p-3 rounded-2xl flex flex-col gap-1">
                   <span className="text-xs font-bold text-zinc-200">{item.index}️⃣ {item.name}</span>
-                  <span className="text-[11px] text-zinc-400 truncate">🏠 {item.address}</span>
+                  <span className="text-[11px] text-zinc-400 truncate">{item.address}</span>
                 </div>
               ))}
             </div>
