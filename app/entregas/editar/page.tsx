@@ -281,7 +281,7 @@ const [routeId, setRouteId] = useState('');
 
     if (identified.length > 0) {
       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
-      toast.success('Campos atualizados via Parser! 🪄', {
+      toast.success('Campos atualizados pelo parser.', {
         description: `Detectados: ${identified.join(' • ')}`,
         duration: 4000
       });
@@ -374,14 +374,14 @@ const [routeId, setRouteId] = useState('');
     if (c.observation) setObservation(c.observation);
     if (c.maps_link) setMapsLink(c.maps_link);
     if (c.last_confirmation_code) setConfirmationCode(c.last_confirmation_code);
-    toast.success('Cliente carregado! 🪄');
+    toast.success('Cliente carregado.');
   };
 
   const handleMapsLinkChange = (link: string) => {
     setMapsLink(link);
     const coords = extractCoordinatesFromUrl(link);
     if (coords) {
-      toast.success('Ponto exato capturado com precisão! 📍', {
+      toast.success('Ponto exato capturado com precisão.', {
         description: `Coordenadas: ${coords}`,
         duration: 2000
       });
@@ -523,19 +523,34 @@ const [routeId, setRouteId] = useState('');
   const routeOptions = routes.filter(r => r.status === 'aberta' || r.id === routeId);
 
   return (
-    <div className="flex flex-col gap-6 relative">
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.replace(detailsReturn)} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95">
-          <ChevronLeft size={22} />
+    <div className="relative flex flex-col gap-5 pb-28 animate-in fade-in duration-300">
+      <header className="flex items-center gap-3">
+        <button
+          onClick={() => router.replace(detailsReturn)}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400 active:scale-95"
+          aria-label="Voltar ao pedido"
+        >
+          <ChevronLeft size={21} />
         </button>
-        <h1 className="font-heading text-xl font-bold text-zinc-50">Editar Entrega</h1>
-      </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">
+            Ajustes do pedido
+          </p>
+          <h1 className="font-heading text-xl font-black text-zinc-50">
+            Editar pedido
+          </h1>
+          <p className="mt-0.5 text-[11px] text-zinc-600">
+            Atualize somente o que mudou na operação
+          </p>
+        </div>
+      </header>
 
       {/* MODALIDADE OPERACIONAL */}
-      <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-3">
-        <div className="mb-3">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-300">Modalidade</p>
-          <p className="mt-1 text-[11px] text-zinc-500">Entrega usa rota e endereço; retirada e balcão ficam fora da logística.</p>
+      <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">
+        <div className="mb-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">01 · Modalidade</p>
+          <p className="mt-1 text-sm font-black text-zinc-200">Como este pedido será atendido?</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">Entrega usa rota e endereço; retirada e balcão permanecem fora da logística.</p>
         </div>
         <div className="grid grid-cols-3 gap-2">
           {([
@@ -564,7 +579,7 @@ const [routeId, setRouteId] = useState('');
       </section>
 
       {/* SELETOR DE ORIGEM */}
-      <div className="flex gap-2 p-1 bg-zinc-900 rounded-2xl border border-zinc-800">
+      <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/40 p-3"><div className="mb-3 px-1"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">02 · Origem</p><p className="mt-1 text-sm font-black text-zinc-200">Canal do pedido</p></div><div className="flex gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/45 p-1">
         <button 
           type="button" 
           onClick={() => setOrigin('ifood')} 
@@ -585,14 +600,14 @@ const [routeId, setRouteId] = useState('');
         >
           <Store size={18} /> Loja Própria
         </button>
-      </div>
+      </div></section>
 
       {/* PARSER MÁGICO (APENAS QUANDO IFOOD) */}
       {origin === 'ifood' && (
-        <div className="flex flex-col gap-2.5 p-4 bg-gradient-to-b from-red-500/10 to-zinc-900/40 border border-red-500/20 rounded-[24px] animate-in fade-in">
+        <div className="flex flex-col gap-3 rounded-[26px] border border-red-500/20 bg-gradient-to-b from-red-500/10 to-zinc-900/40 p-4 animate-in fade-in">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">
-              <Sparkles size={14} className="text-amber-400" /> Parser de Texto iFood
+              <Sparkles size={14} className="text-amber-400" /> Leitor inteligente do iFood
             </span>
             <button 
               type="button" 
@@ -616,18 +631,23 @@ const [routeId, setRouteId] = useState('');
             onClick={handleExecuteSmartParse}
             className="h-11 w-full rounded-xl bg-red-500 hover:bg-red-400 font-bold text-white text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-red-500/20"
           >
-            <Sparkles size={15} /> Auto-Preencher Campos
+            <Sparkles size={15} /> Ler pedido e atualizar campos
           </button>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5 pb-10">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         
         {fulfillmentMode === 'delivery' && (
           <>
         {/* SELEÇÃO DE ROTA */}
+        <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+          <div className="mb-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-500">03 · Logística</p>
+            <p className="mt-1 text-sm font-black text-zinc-200">Rota responsável</p>
+          </div>
         <div className="relative flex flex-col gap-2">
-          <label className="text-sm font-semibold text-zinc-400">Selecionar Rota</label>
+          <label className="text-xs font-bold text-zinc-500">Selecionar rota</label>
           <button
             type="button"
             onClick={() => setIsRouteDropdownOpen(!isRouteDropdownOpen)}
@@ -636,7 +656,7 @@ const [routeId, setRouteId] = useState('');
             <span className={routeId ? 'text-zinc-100' : 'text-zinc-500'}>
               {routeId ? (
                 <span className="font-semibold">
-                  {routeOptions.find(r => r.id === routeId)?.name} <span className="text-zinc-400 font-normal">({routeOptions.find(r => r.id === routeId)?.motoboy_name}) {routeOptions.find(r => r.id === routeId)?.status === 'fechada' && '🔒'}</span>
+                  {routeOptions.find(r => r.id === routeId)?.name} <span className="text-zinc-400 font-normal">({routeOptions.find(r => r.id === routeId)?.motoboy_name}) {routeOptions.find(r => r.id === routeId)?.status === 'fechada' && 'Fechada'}</span>
                 </span>
               ) : 'Selecione a rota...'}
             </span>
@@ -655,7 +675,7 @@ const [routeId, setRouteId] = useState('');
                   className="flex items-center justify-between px-4 py-4 text-left text-sm active:bg-zinc-800 border-b border-zinc-800/50 last:border-0"
                 >
                   <span className={`font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>
-                    {r.name} <span className={routeId === r.id ? 'text-emerald-500/70' : 'text-zinc-500 font-normal'}>({r.motoboy_name}) {r.status === 'fechada' && '🔒'}</span>
+                    {r.name} <span className={routeId === r.id ? 'text-emerald-500/70' : 'text-zinc-500 font-normal'}>({r.motoboy_name}) {r.status === 'fechada' && 'Fechada'}</span>
                   </span>
                   {routeId === r.id ? (
                     <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
@@ -667,12 +687,15 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}
         </div>
+        </section>
 
           </>
         )}
         {/* IDENTIFICADORES DO IFOOD */}
         {origin === 'ifood' && (
-          <div className="grid grid-cols-3 gap-2 animate-in fade-in">
+          <section className="rounded-[24px] border border-red-500/15 bg-red-500/[.035] p-4 animate-in fade-in">
+            <div className="mb-3"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">04 · Identificadores iFood</p><p className="mt-1 text-[11px] text-zinc-600">Revise os códigos vinculados ao pedido.</p></div>
+          <div className="grid grid-cols-3 gap-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-emerald-400">Nº Pedido*</label>
               <input 
@@ -716,11 +739,12 @@ const [routeId, setRouteId] = useState('');
                 className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 font-mono font-bold tracking-widest focus:outline-none ${confirmationCode.length > 0 && confirmationCode.length < 4 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`} 
               />
             </div>
-          </div>
+          </div></section>
         )}
 
         {/* CLIENTE E WHATSAPP */}
-        <div className="flex flex-col gap-3 border-t border-zinc-800 pt-4">
+        <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">05 · Cliente</p><p className="mt-1 text-sm font-black text-zinc-200">Contato e identificação</p></div>
           <CustomerAutocomplete value={customerName} onChange={setCustomerName} onSelect={handleCustomerSelect} customers={customers} />
           
           <div className="grid grid-cols-1 gap-2">
@@ -752,12 +776,13 @@ const [routeId, setRouteId] = useState('');
               </button>
             </div>
           </div>
-        </div>
+        </section>
 
         {fulfillmentMode === 'delivery' && (
           <>
         {/* ENDEREÇO E LINK MAPS */}
-        <div className="flex flex-col gap-3 border-t border-zinc-800 pt-4">
+        <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">06 · Destino</p><p className="mt-1 text-sm font-black text-zinc-200">Endereço da entrega</p></div>
           <AddressAutocomplete 
             value={streetAddress} 
             onChange={setStreetAddress} 
@@ -801,12 +826,13 @@ const [routeId, setRouteId] = useState('');
               className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" 
             />
           </div>
-        </div>
+        </section>
 
           </>
         )}
         {/* FINANCEIRO, CARGA E OBS */}
-        <div className="flex flex-col gap-4 border-t border-zinc-800 pt-4">
+        <section className="flex flex-col gap-4 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400">07 · Financeiro</p><p className="mt-1 text-sm font-black text-zinc-200">Valor, pagamento e observações</p></div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-zinc-300">Valor (R$)*</label>
@@ -886,16 +912,16 @@ const [routeId, setRouteId] = useState('');
               <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform ${isUrgent ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
-        </div>
+        </section>
 
-        <div className="flex flex-col gap-3 mt-4">
+        <div className="flex flex-col gap-3 mt-1">
           <button type="submit" disabled={isSaving || isDeleting} className="h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-amber-500/20 transition-all">
-            {isSaving ? 'Salvando...' : 'Atualizar Entrega'}
+            {isSaving ? 'Salvando...' : 'Salvar alterações'}
           </button>
           
           <button type="button" onClick={handleDelete} disabled={isSaving || isDeleting} className="flex items-center justify-center gap-2 h-14 w-full rounded-2xl border border-red-500/50 text-red-500 font-bold hover:bg-red-500/10 active:scale-[0.98] disabled:opacity-60 transition-colors">
             <Trash2 size={18} />
-            {isDeleting ? 'Excluindo...' : 'Excluir Entrega'}
+            {isDeleting ? 'Excluindo...' : 'Excluir pedido'}
           </button>
         </div>
       </form>

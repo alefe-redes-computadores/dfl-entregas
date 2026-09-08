@@ -182,7 +182,7 @@ const [routeId, setRouteId] = useState('');
       const text = await navigator.clipboard.readText();
       if (text) {
         setMagicText(text);
-        toast.info('Texto colado! Clique em "Auto-Preencher" para processar.');
+        toast.info('Texto colado. Revise e toque em "Ler pedido e preencher campos".');
       }
     } catch {
       toast.error('Cole o texto manualmente na caixa.');
@@ -223,7 +223,7 @@ const [routeId, setRouteId] = useState('');
     if (c.observation) setObservation(c.observation);
     if (c.maps_link) setMapsLink(c.maps_link);
     if (c.last_confirmation_code) setConfirmationCode(c.last_confirmation_code);
-    toast.success('Cliente carregado! 🪄');
+    toast.success('Cliente carregado.');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -312,19 +312,34 @@ const [routeId, setRouteId] = useState('');
   };
 
   return (
-    <div className="flex flex-col gap-6 relative">
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.replace(deliveriesReturn)} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95">
-          <ChevronLeft size={22} />
+    <div className="relative flex flex-col gap-5 pb-28 animate-in fade-in duration-300">
+      <header className="flex items-center gap-3">
+        <button
+          onClick={() => router.replace(deliveriesReturn)}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400 active:scale-95"
+          aria-label="Voltar aos pedidos"
+        >
+          <ChevronLeft size={21} />
         </button>
-        <h1 className="font-heading text-xl font-bold text-zinc-50">Nova Entrega</h1>
-      </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">
+            Novo pedido
+          </p>
+          <h1 className="font-heading text-xl font-black text-zinc-50">
+            Cadastrar pedido
+          </h1>
+          <p className="mt-0.5 text-[11px] text-zinc-600">
+            Defina modalidade, origem e dados operacionais
+          </p>
+        </div>
+      </header>
 
       {/* MODALIDADE OPERACIONAL */}
-      <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-3">
-        <div className="mb-3">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-300">Modalidade</p>
-          <p className="mt-1 text-[11px] text-zinc-500">Entrega entra em rota. Retirada e balcão ficam fora da logística.</p>
+      <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">
+        <div className="mb-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">01 · Modalidade</p>
+          <p className="mt-1 text-sm font-black text-zinc-200">Como este pedido será atendido?</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">Entrega entra em rota. Retirada e balcão permanecem fora da logística.</p>
         </div>
         <div className="grid grid-cols-3 gap-2">
           {([
@@ -353,7 +368,7 @@ const [routeId, setRouteId] = useState('');
       </section>
 
       {/* SELETOR DE ORIGEM (iFood vs Loja Própria) */}
-      <div className="flex gap-2 p-1 bg-zinc-900 rounded-2xl border border-zinc-800">
+      <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/40 p-3"><div className="mb-3 px-1"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">02 · Origem</p><p className="mt-1 text-sm font-black text-zinc-200">De onde veio o pedido?</p></div><div className="flex gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/45 p-1">
         <button 
           type="button" 
           onClick={() => setOrigin('ifood')} 
@@ -374,7 +389,7 @@ const [routeId, setRouteId] = useState('');
         >
           <Store size={18} /> Loja Própria
         </button>
-      </div>
+      </div></section>
 
       {/* CAIXA DE TEXTO DO PARSER (APENAS QUANDO FOR IFOOD) */}
       {origin === 'ifood' && !isParserOpen && (
@@ -388,10 +403,10 @@ const [routeId, setRouteId] = useState('');
       )}
 
       {origin === 'ifood' && isParserOpen && (
-        <div className="flex flex-col gap-2.5 p-4 bg-gradient-to-b from-red-500/10 to-zinc-900/40 border border-red-500/20 rounded-[24px] animate-in fade-in">
+        <div className="flex flex-col gap-3 rounded-[26px] border border-red-500/20 bg-gradient-to-b from-red-500/10 to-zinc-900/40 p-4 animate-in fade-in">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">
-              <Sparkles size={14} className="text-amber-400" /> Parser de Texto iFood
+              <Sparkles size={14} className="text-amber-400" /> Leitor inteligente do iFood
             </span>
             <button 
               type="button" 
@@ -415,12 +430,12 @@ const [routeId, setRouteId] = useState('');
             onClick={handleExecuteMagicParse}
             className="h-11 w-full rounded-xl bg-red-500 hover:bg-red-400 font-bold text-white text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-red-500/20"
           >
-            <Sparkles size={15} /> Auto-Preencher Campos
+            <Sparkles size={15} /> Ler pedido e preencher campos
           </button>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5 pb-10">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         
         {fulfillmentMode === 'delivery' && (
           <>
@@ -435,8 +450,13 @@ const [routeId, setRouteId] = useState('');
               </button>
             )}
         {/* ROTA */}
+        <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+          <div className="mb-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-500">03 · Logística</p>
+            <p className="mt-1 text-sm font-black text-zinc-200">Rota responsável</p>
+          </div>
         <div className="relative flex flex-col gap-2">
-          <label className="text-sm font-semibold text-zinc-400">Selecionar Rota</label>
+          <label className="text-xs font-bold text-zinc-500">Selecionar rota</label>
           <button
             type="button"
             onClick={() => setIsRouteDropdownOpen(!isRouteDropdownOpen)}
@@ -476,12 +496,13 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}
         </div>
+        </section>
 
           </>
         )}
         {/* IDENTIFICADORES DO IFOOD */}
         {origin === 'ifood' && (
-          <div className="grid grid-cols-3 gap-2 animate-in fade-in">
+          <section className="rounded-[24px] border border-red-500/15 bg-red-500/[.035] p-4 animate-in fade-in"><div className="mb-3"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">04 · Identificadores iFood</p><p className="mt-1 text-[11px] text-zinc-600">Número do pedido, ID e código de confirmação.</p></div><div className="grid grid-cols-3 gap-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-emerald-400">Nº Pedido*</label>
               <input 
@@ -525,11 +546,12 @@ const [routeId, setRouteId] = useState('');
                 className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 font-mono font-bold tracking-widest focus:outline-none ${confirmationCode.length > 0 && confirmationCode.length < 4 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`} 
               />
             </div>
-          </div>
+          </div></section>
         )}
 
         {/* CLIENTE E WHATSAPP */}
-        <div className="flex flex-col gap-3 border-t border-zinc-800 pt-4">
+        <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">05 · Cliente</p><p className="mt-1 text-sm font-black text-zinc-200">Contato e identificação</p></div>
           <CustomerAutocomplete value={customerName} onChange={setCustomerName} onSelect={handleCustomerSelect} customers={customers} />
           
           <div className="flex items-center gap-2">
@@ -559,12 +581,16 @@ const [routeId, setRouteId] = useState('');
               <MessageCircle size={15} /> Avisar no Zap
             </button>
           </div>
-        </div>
+        </section>
 
         {fulfillmentMode === 'delivery' && (
           <>
         {/* ENDEREÇO E LINK MAPS */}
-        <div className="flex flex-col gap-3 border-t border-zinc-800 pt-4">
+        <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">06 · Destino</p>
+            <p className="mt-1 text-sm font-black text-zinc-200">Endereço da entrega</p>
+          </div>
           <AddressAutocomplete
             value={streetAddress}
             onChange={setStreetAddress}
@@ -610,12 +636,16 @@ const [routeId, setRouteId] = useState('');
               className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" 
             />
           </div>
-        </div>
+        </section>
 
           </>
         )}
         {/* FINANCEIRO E PRODUTOS */}
-        <div className="flex flex-col gap-4 border-t border-zinc-800 pt-4">
+        <section className="flex flex-col gap-4 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400">07 · Financeiro</p>
+            <p className="mt-1 text-sm font-black text-zinc-200">Valor, pagamento e observações</p>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-zinc-300">Valor (R$)*</label>
@@ -695,7 +725,7 @@ const [routeId, setRouteId] = useState('');
               <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${isUrgent ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
-        </div>
+        </section>
 
         <button type="submit" disabled={isSaving} className="mt-2 h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-amber-500/20 transition-all">
           {isSaving ? 'Salvando...' : 'Salvar Entrega'}

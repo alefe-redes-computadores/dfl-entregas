@@ -97,114 +97,182 @@ export default function NovaRotaPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 relative">
-      <div className="flex items-center gap-3">
-        <button 
+    <div className="relative flex flex-col gap-5 pb-28 animate-in fade-in duration-300">
+      <header className="flex items-center gap-3">
+        <button
           onClick={() => router.replace(routesReturn)}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400 active:scale-95"
+          aria-label="Voltar às rotas"
         >
-          <ChevronLeft size={22} />
+          <ChevronLeft size={21} />
         </button>
-        <h1 className="font-heading text-xl font-bold text-zinc-50">Abrir Nova Rota</h1>
-      </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-sky-500">
+            Nova rota
+          </p>
+          <h1 className="font-heading text-xl font-black text-zinc-50">
+            Abrir rota operacional
+          </h1>
+          <p className="mt-0.5 text-[11px] text-zinc-600">
+            Escolha o responsável e prepare a saída
+          </p>
+        </div>
+      </header>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-10">
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-zinc-400">Nome da Rota</label>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">
+          <div className="mb-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-sky-500">
+              01 · Identificação
+            </p>
+            <p className="mt-1 text-sm font-black text-zinc-200">
+              Nome da rota
+            </p>
+            <p className="mt-1 text-[11px] text-zinc-600">
+              Use um nome curto que seja fácil de reconhecer durante a operação.
+            </p>
+          </div>
+
           <input
             type="text"
-            placeholder="Ex: Rota 1"
+            placeholder="Ex.: Rota 1"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+            className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-950/45 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-sky-500 focus:outline-none"
             required
           />
-        </div>
+        </section>
 
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-             <label className="text-sm font-semibold text-zinc-400">Selecione o Motoboy</label>
-             <span className="text-[10px] text-zinc-500">Salvo no banco de dados</span>
+        <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-400">
+                02 · Responsável
+              </p>
+              <p className="mt-1 text-sm font-black text-zinc-200">
+                Motoboy da rota
+              </p>
+            </div>
+            <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-[9px] font-black text-zinc-500">
+              {activeMotoboys.length} ativo{activeMotoboys.length === 1 ? '' : 's'}
+            </span>
           </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-            {activeMotoboys.map((mb) => (
-              <button
-                key={mb.id}
-                type="button"
-                onClick={() => setMotoboySelection(mb.id)}
-                className={`flex h-12 items-center justify-center gap-2 rounded-xl border font-semibold transition-all ${
-                  motoboySelection === mb.id
-                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500'
-                    : 'border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:bg-zinc-800'
-                }`}
-              >
-                <User size={16} />
-                {mb.name}
-              </button>
-            ))}
-            
-            {/* Botão de Adicionar Novo */}
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(true)}
-              className="flex h-12 items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700 bg-zinc-900/30 text-zinc-400 hover:bg-zinc-800 hover:text-emerald-500 transition-all font-semibold"
-            >
-              <Plus size={16} />
-              Cadastrar Novo
-            </button>
-          </div>
-        </div>
 
-        <div className="flex flex-col gap-2 border-t border-zinc-800/80 pt-4">
-          <label className="text-sm font-semibold text-zinc-400">Troco Inicial da Rota (R$ - Opcional)</label>
-          <input
-            type="number"
-            placeholder="Ex: 50"
-            value={changeMoney}
-            onChange={(e) => setChangeMoney(e.target.value)}
-            className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
-          />
-        </div>
+          {activeMotoboys.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              {activeMotoboys.map((mb) => (
+                <button
+                  key={mb.id}
+                  type="button"
+                  onClick={() => setMotoboySelection(mb.id)}
+                  className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-black transition-all ${
+                    motoboySelection === mb.id
+                      ? 'border-violet-500/50 bg-violet-500/10 text-violet-400'
+                      : 'border-zinc-800 bg-zinc-950/35 text-zinc-500'
+                  }`}
+                >
+                  <User size={15} />
+                  <span className="truncate">{mb.name}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-zinc-800 py-7 text-center">
+              <User className="mx-auto text-zinc-700" size={21} />
+              <p className="mt-2 text-xs font-bold text-zinc-500">
+                Nenhum motoboy ativo
+              </p>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700 bg-zinc-950/30 text-xs font-black text-zinc-500 active:scale-95"
+          >
+            <Plus size={15} />
+            Cadastrar motoboy
+          </button>
+        </section>
+
+        <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">
+          <div className="mb-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-400">
+              03 · Caixa da rota
+            </p>
+            <p className="mt-1 text-sm font-black text-zinc-200">
+              Troco inicial
+            </p>
+            <p className="mt-1 text-[11px] text-zinc-600">
+              Opcional. Registre somente o dinheiro entregue ao motoboy na saída.
+            </p>
+          </div>
+
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-zinc-600">
+              R$
+            </span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0,00"
+              value={changeMoney}
+              onChange={(e) => setChangeMoney(e.target.value)}
+              className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-950/45 pl-12 pr-4 text-zinc-100 placeholder:text-zinc-700 focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
+        </section>
 
         <button
           type="submit"
           disabled={isSavingRoute}
-          className="mt-4 h-14 w-full rounded-2xl bg-emerald-500 font-bold text-zinc-950 active:scale-[0.98]"
+          className="flex h-14 w-full items-center justify-center rounded-2xl bg-sky-500 font-black text-zinc-950 active:scale-[0.98] disabled:opacity-50"
         >
-          {isSavingRoute ? 'Criando rota...' : 'Criar Rota'}
+          {isSavingRoute ? 'Criando rota...' : 'Criar rota'}
         </button>
       </form>
 
-      {/* MODAL DE CADASTRAR MOTOBOY */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-3xl p-5 shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-heading font-bold text-zinc-50">Novo Motoboy</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
-                <X size={24} />
+        <div className="fixed inset-0 z-50 flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center">
+          <div className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-950 p-5 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">
+                  Equipe
+                </p>
+                <h2 className="mt-1 font-heading text-lg font-black text-zinc-50">
+                  Cadastrar motoboy
+                </h2>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-zinc-500"
+              >
+                <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleSaveNewMotoboy} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-semibold text-zinc-400">Nome (Ex: João Vitor)</label>
-                <input 
-                  type="text" 
-                  value={newMotoboyName} 
-                  onChange={(e) => setNewMotoboyName(e.target.value)} 
+              <div>
+                <label className="text-xs font-bold text-zinc-500">Nome</label>
+                <input
+                  type="text"
+                  value={newMotoboyName}
+                  onChange={(e) => setNewMotoboyName(e.target.value)}
+                  placeholder="Ex.: João Vitor"
                   autoFocus
-                  className="h-14 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 focus:border-emerald-500 focus:outline-none" 
-                  required 
+                  className="mt-2 h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900/55 px-4 text-zinc-100 placeholder:text-zinc-700 focus:border-violet-500 focus:outline-none"
+                  required
                 />
               </div>
-              <button 
-                type="submit" 
-                disabled={isSavingMotoboy} 
-                className="mt-2 h-14 w-full rounded-xl bg-emerald-500 font-bold text-zinc-950 active:scale-95 disabled:opacity-60"
+
+              <button
+                type="submit"
+                disabled={isSavingMotoboy}
+                className="h-13 w-full rounded-xl bg-violet-500 py-3.5 font-black text-white active:scale-95 disabled:opacity-50"
               >
-                {isSavingMotoboy ? 'Salvando...' : 'Salvar Motoboy'}
+                {isSavingMotoboy ? 'Salvando...' : 'Salvar motoboy'}
               </button>
             </form>
           </div>
