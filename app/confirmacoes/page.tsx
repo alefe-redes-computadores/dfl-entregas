@@ -106,6 +106,9 @@ export default function ConfirmacoesPage() {
   const addIfoodPendingConfirmations = useAppStore(
     (state) => state.addIfoodPendingConfirmations,
   );
+  const updateIfoodPendingConfirmation = useAppStore(
+    (state) => state.updateIfoodPendingConfirmation,
+  );
   const deleteIfoodPendingConfirmation = useAppStore(
     (state) => state.deleteIfoodPendingConfirmation,
   );
@@ -115,6 +118,7 @@ export default function ConfirmacoesPage() {
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [batchText, setBatchText] = useState('');
   const [isBatchSaving, setIsBatchSaving] = useState(false);
+  const [manualView, setManualView] = useState<'pending' | 'resolved'>('pending');
   const [selectedDateKey, setSelectedDateKey] = useState(() => initialDateKey);
   const selectedDate = dateFromKey(selectedDateKey);
   const selectedDateLabel =
@@ -212,6 +216,76 @@ export default function ConfirmacoesPage() {
     };
   }, [customers, selectedIfood]);
 
+  const pendingManualConfirmations = useMemo(
+    () =>
+      ifoodPendingConfirmations
+        .filter((item) => (item.status || 'pending') === 'pending')
+        .sort(
+          (a, b) =>
+            new Date(b.updated_at || b.created_at).getTime() -
+            new Date(a.updated_at || a.created_at).getTime(),
+        ),
+    [ifoodPendingConfirmations],
+  );
+
+  const resolvedManualConfirmations = useMemo(
+    () =>
+      ifoodPendingConfirmations
+        .filter((item) => item.status === 'resolved')
+        .sort(
+          (a, b) =>
+            new Date(b.resolved_at || b.updated_at || b.created_at).getTime() -
+            new Date(a.resolved_at || a.updated_at || a.created_at).getTime(),
+        ),
+    [ifoodPendingConfirmations],
+  );
+
+  const visibleManualConfirmations =
+    manualView === 'pending'
+      ? pendingManualConfirmations
+      : resolvedManualConfirmations;
+
+  const markManualResolved = async (item: IfoodPendingConfirmation) => {
+    try {
+      await vibrate(ImpactStyle.Medium);
+      await updateIfoodPendingConfirmation(item.id, {
+        status: 'resolved',
+        resolved_at: new Date().toISOString(),
+      });
+      toast.success('Pendência marcada como resolvida.');
+    } catch {
+      toast.error('Não foi possível concluir a pendência.');
+    }
+  };
+
+  const restoreManualPending = async (item: IfoodPendingConfirmation) => {
+    try {
+      await vibrate(ImpactStyle.Light);
+      await updateIfoodPendingConfirmation(item.id, {
+        status: 'pending',
+        resolved_at: undefined,
+      });
+      toast.success('Pendência restaurada para a fila.');
+    } catch {
+      toast.error('Não foi possível restaurar a pendência.');
+    }
+  };
+
+  const permanentlyDeleteManual = async (item: IfoodPendingConfirmation) => {
+    const confirmed = window.confirm(
+      'Excluir esta pendência definitivamente? Esta ação remove o histórico.',
+    );
+    if (!confirmed) return;
+
+    try {
+      await vibrate(ImpactStyle.Medium);
+      await deleteIfoodPendingConfirmation(item.id);
+      toast.success('Histórico excluído definitivamente.');
+    } catch {
+      toast.error('Não foi possível excluir o histórico.');
+    }
+  };
+
   const normalizePendingKey = (value?: string) =>
     (value || '').replace(/\D/g, '');
 
@@ -248,6 +322,7 @@ export default function ConfirmacoesPage() {
           ifood_id: ifoodId || undefined,
           confirmation_code: confirmationCode || undefined,
           customer_name: customerName || undefined,
+          status: 'pending',
           created_at: now,
           updated_at: now,
         } satisfies IfoodPendingConfirmation;
@@ -503,112 +578,207 @@ export default function ConfirmacoesPage() {
 
       {ifoodPendingConfirmations.length > 0 && (
         <section className="space-y-3">
-          <div className="flex items-center justify-between px-1">
+          <div className="flex items-end justify-between gap-3 px-1">
             <div>
-              <h2 className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">
-                Pendências cadastradas manualmente
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-red-400">
+                Backlog manual
+              </p>
+              <h2 className="mt-1 text-sm font-black text-zinc-100">
+                Confirmações fora dos pedidos
               </h2>
-              <p className="mt-1 text-[10px] text-zinc-600">
-                Fora de pedidos, rotas e faturamento
+              <p className="mt-1 text-[10px] leading-relaxed text-zinc-600">
+                Não entra em rotas, entregas ou faturamento.
               </p>
             </div>
-            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] font-black text-zinc-400">
-              {ifoodPendingConfirmations.length}
+            <span className="shrink-0 rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] font-black text-zinc-400">
+              {pendingManualConfirmations.length} pendente{pendingManualConfirmations.length === 1 ? '' : 's'}
             </span>
           </div>
 
-          {ifoodPendingConfirmations.map((item) => {
-            const ready =
-              (item.ifood_id || '').replace(/\D/g, '').length === 8 &&
-              (item.confirmation_code || '').replace(/\D/g, '').length === 4;
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-1">
+            <button
+              type="button"
+              onClick={() => setManualView('pending')}
+              className={`rounded-xl px-3 py-2.5 text-xs font-black transition ${
+                manualView === 'pending'
+                  ? 'bg-red-500 text-white'
+                  : 'text-zinc-500'
+              }`}
+            >
+              Pendentes · {pendingManualConfirmations.length}
+            </button>
+            <button
+              type="button"
+              onClick={() => setManualView('resolved')}
+              className={`rounded-xl px-3 py-2.5 text-xs font-black transition ${
+                manualView === 'resolved'
+                  ? 'bg-emerald-500 text-zinc-950'
+                  : 'text-zinc-500'
+              }`}
+            >
+              Histórico · {resolvedManualConfirmations.length}
+            </button>
+          </div>
 
-            return (
-              <article
-                key={item.id}
-                className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-400">
-                    <Smartphone size={19} />
-                  </div>
+          {visibleManualConfirmations.length === 0 ? (
+            <div className="rounded-[24px] border border-dashed border-zinc-800 px-5 py-9 text-center">
+              {manualView === 'pending' ? (
+                <>
+                  <CheckCircle2 size={28} className="mx-auto text-emerald-500/70" />
+                  <p className="mt-3 text-sm font-black text-zinc-300">
+                    Nenhuma pendência manual
+                  </p>
+                  <p className="mt-1 text-[11px] text-zinc-600">
+                    Tudo que foi cadastrado manualmente já foi resolvido.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <TimerReset size={28} className="mx-auto text-zinc-700" />
+                  <p className="mt-3 text-sm font-black text-zinc-400">
+                    Histórico vazio
+                  </p>
+                  <p className="mt-1 text-[11px] text-zinc-600">
+                    As pendências resolvidas aparecerão aqui.
+                  </p>
+                </>
+              )}
+            </div>
+          ) : (
+            visibleManualConfirmations.map((item) => {
+              const ready =
+                (item.ifood_id || '').replace(/\D/g, '').length === 8 &&
+                (item.confirmation_code || '').replace(/\D/g, '').length === 4;
+              const resolved = item.status === 'resolved';
 
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-black text-zinc-100">
-                      {item.customer_name || 'Pendência iFood'}
-                    </p>
-                    <p className="mt-1 text-[11px] text-zinc-500">
-                      {item.order_id
-                        ? `Pedido #${item.order_id}`
-                        : 'Pedido sem número'}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={async () => {
-                      try {
-                        await deleteIfoodPendingConfirmation(item.id);
-                        toast.success('Pendência removida.');
-                      } catch {
-                        toast.error('Não foi possível remover a pendência.');
-                      }
-                    }}
-                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-500 active:scale-95"
-                    aria-label="Excluir pendência"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => copyValue(item.ifood_id || '', 'ID do pedido')}
-                    className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3 text-left active:scale-[0.98]"
-                  >
-                    <span className="block text-[9px] font-black uppercase tracking-wide text-zinc-600">
-                      ID iFood
-                    </span>
-                    <strong className="mt-1 block font-mono text-xs text-zinc-200">
-                      {item.ifood_id || 'Não informado'}
-                    </strong>
-                  </button>
-
-                  <button
-                    onClick={() =>
-                      copyValue(item.confirmation_code || '', 'Código')
-                    }
-                    className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3 text-left active:scale-[0.98]"
-                  >
-                    <span className="block text-[9px] font-black uppercase tracking-wide text-zinc-600">
-                      Código
-                    </span>
-                    <strong className="mt-1 block font-mono text-xs text-amber-400">
-                      {item.confirmation_code || 'Pendente'}
-                    </strong>
-                  </button>
-                </div>
-
-                <button
-                  onClick={() =>
-                    router.replace(
-                      `/confirmar?orderId=${encodeURIComponent(
-                        item.ifood_id || '',
-                      )}&code=${encodeURIComponent(
-                        item.confirmation_code || '',
-                      )}&returnTo=${encodeURIComponent(confirmationReturn)}`,
-                    )
-                  }
-                  className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl font-black active:scale-95 ${
-                    ready
-                      ? 'bg-red-500 text-white'
-                      : 'border border-red-500/30 bg-red-500/10 text-red-400'
+              return (
+                <article
+                  key={item.id}
+                  className={`rounded-[24px] border p-4 ${
+                    resolved
+                      ? 'border-emerald-500/15 bg-emerald-500/[.035]'
+                      : 'border-zinc-800 bg-zinc-900/45'
                   }`}
                 >
-                  <ExternalLink size={15} />
-                  {ready ? 'Confirmar no iFood' : 'Abrir portal'}
-                </button>
-              </article>
-            );
-          })}
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${
+                        resolved
+                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                          : 'border-red-500/20 bg-red-500/10 text-red-400'
+                      }`}
+                    >
+                      {resolved ? <CheckCircle2 size={19} /> : <Smartphone size={19} />}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-black text-zinc-100">
+                          {item.customer_name || 'Pendência iFood'}
+                        </p>
+                        {resolved && (
+                          <span className="shrink-0 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-400">
+                            Resolvida
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-[11px] text-zinc-500">
+                        {item.order_id
+                          ? `Pedido #${item.order_id}`
+                          : 'Pedido sem número'}
+                      </p>
+                      <p className="mt-1 text-[9px] text-zinc-700">
+                        {resolved
+                          ? `Resolvida ${waitingLabel(item.resolved_at)}`
+                          : `Criada ${waitingLabel(item.created_at)}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => copyValue(item.ifood_id || '', 'ID do pedido')}
+                      className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3 text-left active:scale-[0.98]"
+                    >
+                      <span className="block text-[9px] font-black uppercase tracking-wide text-zinc-600">
+                        ID iFood
+                      </span>
+                      <strong className="mt-1 block font-mono text-xs text-zinc-200">
+                        {item.ifood_id || 'Não informado'}
+                      </strong>
+                    </button>
+
+                    <button
+                      onClick={() => copyValue(item.confirmation_code || '', 'Código')}
+                      className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3 text-left active:scale-[0.98]"
+                    >
+                      <span className="block text-[9px] font-black uppercase tracking-wide text-zinc-600">
+                        Código
+                      </span>
+                      <strong className="mt-1 block font-mono text-xs text-amber-400">
+                        {item.confirmation_code || 'Pendente'}
+                      </strong>
+                    </button>
+                  </div>
+
+                  {!resolved ? (
+                    <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+                      <button
+                        onClick={() =>
+                          router.replace(
+                            `/confirmar?orderId=${encodeURIComponent(
+                              item.ifood_id || '',
+                            )}&code=${encodeURIComponent(
+                              item.confirmation_code || '',
+                            )}&returnTo=${encodeURIComponent(confirmationReturn)}`,
+                          )
+                        }
+                        className={`flex h-12 items-center justify-center gap-2 rounded-xl font-black active:scale-95 ${
+                          ready
+                            ? 'bg-red-500 text-white'
+                            : 'border border-red-500/30 bg-red-500/10 text-red-400'
+                        }`}
+                      >
+                        <ExternalLink size={15} />
+                        {ready ? 'Confirmar no iFood' : 'Abrir portal'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => markManualResolved(item)}
+                        className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 active:scale-95"
+                        aria-label="Marcar como resolvida"
+                        title="Marcar como resolvida"
+                      >
+                        <CheckCircle2 size={17} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+                      <button
+                        type="button"
+                        onClick={() => restoreManualPending(item)}
+                        className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 font-black text-zinc-300 active:scale-95"
+                      >
+                        <TimerReset size={15} />
+                        Restaurar para pendentes
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => permanentlyDeleteManual(item)}
+                        className="flex h-12 w-12 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 active:scale-95"
+                        aria-label="Excluir definitivamente"
+                        title="Excluir definitivamente"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  )}
+                </article>
+              );
+            })
+          )}
         </section>
       )}
 

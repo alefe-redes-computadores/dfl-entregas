@@ -104,6 +104,8 @@ export interface Motoboy {
   updated_at?: string;
 }
 
+export type IfoodPendingConfirmationStatus = 'pending' | 'resolved';
+
 export interface IfoodPendingConfirmation {
   id: string;
   order_id?: string;
@@ -112,6 +114,8 @@ export interface IfoodPendingConfirmation {
   customer_name?: string;
   value?: number;
   note?: string;
+  status?: IfoodPendingConfirmationStatus;
+  resolved_at?: string;
   created_at: string;
   updated_at: string;
 }
