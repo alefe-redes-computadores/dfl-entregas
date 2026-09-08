@@ -162,12 +162,21 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, textarea, select, [data-no-card-swipe="true"]')) {
+      setIsSwiping(false);
+      touchStartX.current = 0;
+      touchCurrentX.current = 0;
+      return;
+    }
+
     touchStartX.current = e.touches[0].clientX;
     touchCurrentX.current = e.touches[0].clientX;
     setIsSwiping(true);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isSwiping || touchStartX.current === 0) return;
     touchCurrentX.current = e.touches[0].clientX;
     const diff = touchCurrentX.current - touchStartX.current;
     if (diff > 120) setSwipeOffset(120);
@@ -176,10 +185,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   };
 
   const handleTouchEnd = async () => {
+    if (!isSwiping || touchStartX.current === 0) {
+      setSwipeOffset(0);
+      setIsSwiping(false);
+      return;
+    }
+
     const diff = touchCurrentX.current - touchStartX.current;
     const finalOffset = swipeOffset;
     setSwipeOffset(0);
     setIsSwiping(false);
+    touchStartX.current = 0;
+    touchCurrentX.current = 0;
 
     if (diff < -60 || finalOffset < -50) {
       handleTriggerAction('complete');
@@ -367,7 +384,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                             onClick={async (e) => {
                               e.stopPropagation();
                               if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                              reorderDelivery(delivery.route_id, delivery.id, 'up');
+                              try {
+                                await reorderDelivery(delivery.route_id, delivery.id, 'up');
+                              } catch {
+                                toast.error('Não foi possível salvar a nova posição.');
+                              }
                             }}
                             className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
                             title="Mover para cima"
@@ -380,7 +401,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                             onClick={async (e) => {
                               e.stopPropagation();
                               if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                              reorderDelivery(delivery.route_id, delivery.id, 'down');
+                              try {
+                                await reorderDelivery(delivery.route_id, delivery.id, 'down');
+                              } catch {
+                                toast.error('Não foi possível salvar a nova posição.');
+                              }
                             }}
                             className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
                             title="Mover para baixo"
@@ -470,7 +495,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                   )}
 
                   <Link
-                    href={`/entregas/details?id=${delivery.id}`}
+                    href={`/entregas/editar?id=${delivery.id}`}
                     onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); }}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90 transition-all"
                   >

@@ -1,49 +1,64 @@
 import type { Delivery, Customer } from '@/types';
 
+const normalizedAddress = (value?: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/\s*[-–—]\s*/g, ' - ')
+    .trim();
+
+const fallbackOrder = (delivery: Delivery) => {
+  const created = new Date(delivery.created_at || delivery.createdAt || delivery.updated_at || 0).getTime();
+  return Number.isFinite(created) ? created : Number.MAX_SAFE_INTEGER;
+};
+
 export function useOptimizedDeliveries(
-  deliveries: Delivery[], 
+  deliveries: Delivery[],
   getCustomerById: (id: string) => Customer | undefined
 ) {
-  // 1. Contador de Bairros para identificar "Vizinhos"
-  const neighborhoodCounts = deliveries.reduce((acc, d) => {
-    const cust = getCustomerById(d.customer_id);
-    const neighborhood = cust?.neighborhood?.trim().toLowerCase();
-    if (neighborhood) {
-      acc[neighborhood] = (acc[neighborhood] || 0) + 1;
-    }
+  const neighborhoodCounts = deliveries.reduce((acc, delivery) => {
+    const customer = getCustomerById(delivery.customer_id);
+    const neighborhood = customer?.neighborhood?.trim().toLowerCase();
+    if (neighborhood) acc[neighborhood] = (acc[neighborhood] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
-  // 2. Ordenação Inteligente (Urgência -> Vizinhos/Proximidade -> Resto)
+  const addressCounts = deliveries.reduce((acc, delivery) => {
+    const customer = getCustomerById(delivery.customer_id);
+    const key = normalizedAddress(delivery.address_string || customer?.address);
+    if (key) acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
   const sortedDeliveries = [...deliveries].sort((a, b) => {
-    // Entregas já concluídas sempre descem para o fim da lista
-    if (a.completed && !b.completed) return 1;
-    if (!a.completed && b.completed) return -1;
+    // Concluídas ficam agrupadas no fim, mas nenhuma regra "inteligente"
+    // pode sobrescrever a ordem manual dentro de cada grupo.
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
 
-    // REGRA DE OURO 1: Urgência absoluta no topo absoluto
-    const aUrgent = (a as any).is_urgent ? 1 : 0;
-    const bUrgent = (b as any).is_urgent ? 1 : 0;
-    if (aUrgent !== bUrgent) return bUrgent - aUrgent;
+    const aOrder = a.order_index;
+    const bOrder = b.order_index;
 
-    // REGRA DE OURO 2: Agrupamento por proximidade (mesmo bairro/endereço encadeado)
-    const custA = getCustomerById(a.customer_id);
-    const custB = getCustomerById(b.customer_id);
-    const nA = custA?.neighborhood?.trim().toLowerCase() || '';
-    const nB = custB?.neighborhood?.trim().toLowerCase() || '';
-    
-    if (nA && nB && nA === nB) return -1;
+    if (aOrder !== undefined && bOrder !== undefined && aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+    if (aOrder !== undefined && bOrder === undefined) return -1;
+    if (aOrder === undefined && bOrder !== undefined) return 1;
 
-    // Ordem manual ou cronológica padrão
-    const timeA = new Date(a.updated_at || 0).getTime();
-    const timeB = new Date(b.updated_at || 0).getTime();
-    return (a.order_index ?? timeA) - (b.order_index ?? timeB);
+    const fallbackDiff = fallbackOrder(a) - fallbackOrder(b);
+    if (fallbackDiff !== 0) return fallbackDiff;
+
+    return a.id.localeCompare(b.id);
   });
 
-  const pendingDeliveries = sortedDeliveries.filter(d => !d.completed);
+  const pendingDeliveries = sortedDeliveries.filter((delivery) => !delivery.completed);
 
   return {
     sortedDeliveries,
     pendingDeliveries,
-    neighborhoodCounts
+    neighborhoodCounts,
+    addressCounts,
+    normalizedAddress,
   };
 }

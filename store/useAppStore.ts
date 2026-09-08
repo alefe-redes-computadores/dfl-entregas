@@ -594,50 +594,76 @@ export const useAppStore = create<AppState>()(
 
       reorderDelivery: async (routeId, deliveryId, direction) => {
         const state = get();
+
         const routeDeliveries = state.deliveries
-          .filter(d => d.route_id === routeId)
+          .filter((delivery) => delivery.route_id === routeId)
           .map((delivery) => ({ ...delivery }))
           .sort((a, b) => {
-             const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
-             const orderB = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
-             return orderA - orderB;
+            if (a.completed !== b.completed) return a.completed ? 1 : -1;
+
+            const aOrder = a.order_index;
+            const bOrder = b.order_index;
+
+            if (aOrder !== undefined && bOrder !== undefined && aOrder !== bOrder) {
+              return aOrder - bOrder;
+            }
+            if (aOrder !== undefined && bOrder === undefined) return -1;
+            if (aOrder === undefined && bOrder !== undefined) return 1;
+
+            const timeA = new Date(a.created_at || a.createdAt || a.updated_at || 0).getTime();
+            const timeB = new Date(b.created_at || b.createdAt || b.updated_at || 0).getTime();
+            if (timeA !== timeB) return timeA - timeB;
+
+            return a.id.localeCompare(b.id);
           });
 
-        routeDeliveries.forEach((d, i) => d.order_index = i);
+        const pending = routeDeliveries.filter((delivery) => !delivery.completed);
+        const completed = routeDeliveries.filter((delivery) => delivery.completed);
 
-        const currentIndex = routeDeliveries.findIndex(d => d.id === deliveryId);
+        const currentIndex = pending.findIndex((delivery) => delivery.id === deliveryId);
         if (currentIndex === -1) return;
-        if (direction === 'up' && currentIndex === 0) return;
-        if (direction === 'down' && currentIndex === routeDeliveries.length - 1) return;
 
-        const targetDelivery = routeDeliveries[currentIndex];
-        const swapDelivery = routeDeliveries[direction === 'up' ? currentIndex - 1 : currentIndex + 1];
+        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+        if (targetIndex < 0 || targetIndex >= pending.length) return;
 
-        const temp = targetDelivery.order_index;
-        targetDelivery.order_index = swapDelivery.order_index;
-        swapDelivery.order_index = temp;
+        [pending[currentIndex], pending[targetIndex]] = [pending[targetIndex], pending[currentIndex]];
+
+        const normalized = [...pending, ...completed].map((delivery, index) => ({
+          ...delivery,
+          order_index: index,
+        }));
 
         const now = new Date().toISOString();
+        const nextIndexById = new Map(
+          normalized.map((delivery) => [delivery.id, delivery.order_index] as const)
+        );
 
         set((prev) => ({
-          deliveries: prev.deliveries.map(d => {
-            if (d.id === targetDelivery.id) return { ...d, order_index: targetDelivery.order_index, updated_at: now };
-            if (d.id === swapDelivery.id) return { ...d, order_index: swapDelivery.order_index, updated_at: now };
-            return d;
-          })
+          deliveries: prev.deliveries.map((delivery) => {
+            const nextIndex = nextIndexById.get(delivery.id);
+            return nextIndex === undefined
+              ? delivery
+              : { ...delivery, order_index: nextIndex, updated_at: now };
+          }),
         }));
 
         try {
           const batch = writeBatch(db);
-          batch.update(doc(db, 'deliveries', targetDelivery.id), { order_index: targetDelivery.order_index, updated_at: now });
-          batch.update(doc(db, 'deliveries', swapDelivery.id), { order_index: swapDelivery.order_index, updated_at: now });
+
+          normalized.forEach((delivery) => {
+            batch.update(doc(db, 'deliveries', delivery.id), {
+              order_index: delivery.order_index,
+              updated_at: now,
+            });
+          });
+
           await batch.commit();
         } catch (error) {
           set({ deliveries: state.deliveries });
           console.error('Erro ao salvar reordenação:', error);
           throw error;
         }
-      },
+      }
 
       toggleDeliveryExpansion: (id, isExpanded) => {
         set((state) => ({

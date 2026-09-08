@@ -64,7 +64,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const motoboyObj = motoboys.find((m) => m.name === route.motoboy_name);
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
-  const { sortedDeliveries, pendingDeliveries, neighborhoodCounts } = useOptimizedDeliveries(deliveries, getCustomerById);
+  const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress } = useOptimizedDeliveries(deliveries, getCustomerById);
 
   // Clientes com telefone para disparo de aviso de saída
   const clientsWithPhone = deliveries
@@ -280,8 +280,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           ) : (
             sortedDeliveries.map((delivery) => {
               const cust = getCustomerById(delivery.customer_id);
-              const neighborhoodKey = cust?.neighborhood?.trim().toLowerCase();
-              const isNeighbor = neighborhoodKey ? (neighborhoodCounts[neighborhoodKey] > 1) : false;
+              const addressKey = normalizedAddress(delivery.address_string || cust?.address);
+              const isNeighbor = addressKey ? (addressCounts[addressKey] > 1) : false;
               return (
                 <DeliveryCard key={delivery.id} delivery={delivery} customer={cust} route={route} isNeighbor={isNeighbor} />
               );
