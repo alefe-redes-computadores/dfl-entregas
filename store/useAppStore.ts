@@ -663,7 +663,7 @@ export const useAppStore = create<AppState>()(
           console.error('Erro ao salvar reordenação:', error);
           throw error;
         }
-      }
+      },
 
       toggleDeliveryExpansion: (id, isExpanded) => {
         set((state) => ({
