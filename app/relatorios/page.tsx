@@ -124,7 +124,7 @@ export default function RelatoriosPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => router.push('/')}
+            onClick={() => router.replace('/')}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400 active:scale-95"
           >
             <ChevronLeft size={22} />
