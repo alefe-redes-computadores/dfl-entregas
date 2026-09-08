@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, ExternalLink, Map as MapIcon, CheckSquare
+  Smartphone, Store, ArrowUp, ArrowDown, GripVertical, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, ExternalLink, Map as MapIcon, CheckSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
@@ -21,6 +21,8 @@ interface DeliveryCardProps {
   customer?: Customer;
   route: Route;
   isNeighbor?: boolean;
+  position?: number;
+  pendingCount?: number;
 }
 
 const PAYMENT_CONFIG = {
@@ -31,10 +33,11 @@ const PAYMENT_CONFIG = {
   cartao_debito: { label: 'Cartão', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10 border-sky-400/20' },
 } as const;
 
-export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: DeliveryCardProps) {
+export function DeliveryCard({ delivery, customer, route, isNeighbor = false, position, pendingCount = 0 }: DeliveryCardProps) {
   const router = useRouter();
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const reorderDelivery = useAppStore((state) => state.reorderDelivery);
+  const moveDeliveryToIndex = useAppStore((state) => state.moveDeliveryToIndex);
   const toggleDeliveryExpansion = useAppStore((state) => state.toggleDeliveryExpansion);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
@@ -46,6 +49,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
   const touchStartX = useRef(0);
   const touchCurrentX = useRef(0);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const [isHandleDragging, setIsHandleDragging] = useState(false);
+  const dragStartY = useRef(0);
+  const dragCurrentY = useRef(0);
 
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -161,6 +168,60 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
     }
   }
 
+  const canReorder =
+    route.status === 'aberta' &&
+    !delivery.completed &&
+    position !== undefined &&
+    pendingCount > 1;
+
+  const handleDragStart = async (e: React.TouchEvent<HTMLButtonElement>) => {
+    if (!canReorder) return;
+    e.stopPropagation();
+    dragStartY.current = e.touches[0].clientY;
+    dragCurrentY.current = e.touches[0].clientY;
+    setDragOffsetY(0);
+    setIsHandleDragging(true);
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+  };
+
+  const handleDragMove = (e: React.TouchEvent<HTMLButtonElement>) => {
+    if (!isHandleDragging || !canReorder) return;
+    e.stopPropagation();
+    dragCurrentY.current = e.touches[0].clientY;
+    const diff = dragCurrentY.current - dragStartY.current;
+    setDragOffsetY(Math.max(-180, Math.min(180, diff)));
+  };
+
+  const handleDragEnd = async (e: React.TouchEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (!isHandleDragging || !canReorder || position === undefined) {
+      setDragOffsetY(0);
+      setIsHandleDragging(false);
+      return;
+    }
+
+    const diff = dragCurrentY.current - dragStartY.current;
+    const requestedSteps = Math.round(diff / 92);
+    setDragOffsetY(0);
+    setIsHandleDragging(false);
+    dragStartY.current = 0;
+    dragCurrentY.current = 0;
+
+    if (requestedSteps === 0) return;
+
+    const currentIndex = position - 1;
+    const targetIndex = Math.max(0, Math.min(currentIndex + requestedSteps, pendingCount - 1));
+    if (targetIndex === currentIndex) return;
+
+    try {
+      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+      await moveDeliveryToIndex(delivery.route_id, delivery.id, targetIndex);
+      toast.success(`Parada movida para a posição ${targetIndex + 1}.`, { duration: 1300 });
+    } catch {
+      toast.error('Não foi possível salvar a nova posição.');
+    }
+  };
+
   const handleTouchStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('button, a, input, textarea, select, [data-no-card-swipe="true"]')) {
@@ -215,8 +276,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
           delivery.completed ? "opacity-65" : "shadow-sm",
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
           isNeighbor && !delivery.completed && "border-sky-500/30",
+          isHandleDragging && "z-20 scale-[1.015] border-sky-400/60 shadow-[0_18px_45px_rgba(0,0,0,0.45)]",
           isExpanded ? "bg-zinc-900/90 border border-zinc-700/80" : "bg-zinc-900/45 border border-zinc-800/80"
         )}
+        style={{ transform: isHandleDragging ? `translateY(${dragOffsetY}px)` : undefined }}
       >
         <div className={clsx(
           "absolute inset-0 flex items-center justify-between px-6 transition-colors duration-150",
@@ -241,9 +304,16 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
         >
           <div className="flex flex-col p-4">
             <div className="flex items-start gap-3">
-              <span className={clsx("flex items-center justify-center h-11 w-11 rounded-2xl shrink-0 border mt-0.5", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
-                {isIfood ? <Smartphone size={19} /> : <Store size={19} />}
-              </span>
+              <div className="relative shrink-0 mt-0.5">
+                <span className={clsx("flex items-center justify-center h-11 w-11 rounded-2xl border", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
+                  {isIfood ? <Smartphone size={19} /> : <Store size={19} />}
+                </span>
+                {position !== undefined && (
+                  <span className="absolute -left-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 px-1 text-[9px] font-black text-zinc-200 shadow-lg">
+                    {position}
+                  </span>
+                )}
+              </div>
 
               <div className="flex flex-col flex-1 truncate">
                 <div className="flex justify-between items-start">
@@ -349,6 +419,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                       </div>
                     </div>
 
+                    {(delivery.completed || route.status === 'fechada') && (
+                      <div className="flex items-center gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 px-3 py-2 text-[10px] font-bold text-zinc-500">
+                        <GripVertical size={13} />
+                        {delivery.completed ? 'Entrega concluída — posição preservada' : 'Rota fechada — ordem bloqueada'}
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800/40">
                       <div className="flex items-center gap-1.5">
                         <button
@@ -377,40 +454,57 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false }: 
                         )}
                       </div>
 
-                      {!delivery.completed && (
-                        <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shrink-0 shadow-sm">
+                      {!delivery.completed && route.status === 'aberta' && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="hidden sm:flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+                                try { await reorderDelivery(delivery.route_id, delivery.id, 'up'); }
+                                catch { toast.error('Não foi possível salvar a nova posição.'); }
+                              }}
+                              className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100"
+                              aria-label="Mover uma posição para cima"
+                            >
+                              <ArrowUp size={13} />
+                            </button>
+                            <div className="h-4 w-px bg-zinc-800" />
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+                                try { await reorderDelivery(delivery.route_id, delivery.id, 'down'); }
+                                catch { toast.error('Não foi possível salvar a nova posição.'); }
+                              }}
+                              className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100"
+                              aria-label="Mover uma posição para baixo"
+                            >
+                              <ArrowDown size={13} />
+                            </button>
+                          </div>
+
                           <button
                             type="button"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                              try {
-                                await reorderDelivery(delivery.route_id, delivery.id, 'up');
-                              } catch {
-                                toast.error('Não foi possível salvar a nova posição.');
-                              }
-                            }}
-                            className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
-                            title="Mover para cima"
+                            data-no-card-swipe="true"
+                            disabled={!canReorder}
+                            onTouchStart={handleDragStart}
+                            onTouchMove={handleDragMove}
+                            onTouchEnd={handleDragEnd}
+                            onTouchCancel={handleDragEnd}
+                            style={{ touchAction: 'none' }}
+                            className={clsx(
+                              "flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-[10px] font-black transition-all",
+                              isHandleDragging ? "border-sky-400/60 bg-sky-500/15 text-sky-300" : "border-zinc-800 bg-zinc-950 text-zinc-400",
+                              !canReorder && "opacity-40"
+                            )}
+                            aria-label={position ? `Arrastar parada ${position}` : 'Arrastar parada'}
+                            title="Segure e arraste para reordenar"
                           >
-                            <ArrowUp size={13} />
-                          </button>
-                          <div className="w-[1px] h-4 bg-zinc-800" />
-                          <button
-                            type="button"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                              try {
-                                await reorderDelivery(delivery.route_id, delivery.id, 'down');
-                              } catch {
-                                toast.error('Não foi possível salvar a nova posição.');
-                              }
-                            }}
-                            className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-100 active:bg-zinc-800 transition-colors"
-                            title="Mover para baixo"
-                          >
-                            <ArrowDown size={13} />
+                            <GripVertical size={14} />
+                            <span className="sm:hidden">Mover</span>
                           </button>
                         </div>
                       )}

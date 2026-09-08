@@ -60,6 +60,7 @@ interface AppState {
   closeRoute: (routeId: string) => Promise<void>;
   reopenRoute: (routeId: string) => Promise<void>;
   reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
+  moveDeliveryToIndex: (routeId: string, deliveryId: string, targetIndex: number) => Promise<void>;
   toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void;
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
@@ -661,6 +662,78 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           set({ deliveries: state.deliveries });
           console.error('Erro ao salvar reordenação:', error);
+          throw error;
+        }
+      },
+
+      moveDeliveryToIndex: async (routeId, deliveryId, targetIndex) => {
+        const state = get();
+
+        const routeDeliveries = state.deliveries
+          .filter((delivery) => delivery.route_id === routeId)
+          .map((delivery) => ({ ...delivery }))
+          .sort((a, b) => {
+            if (a.completed !== b.completed) return a.completed ? 1 : -1;
+
+            const aOrder = a.order_index;
+            const bOrder = b.order_index;
+
+            if (aOrder !== undefined && bOrder !== undefined && aOrder !== bOrder) {
+              return aOrder - bOrder;
+            }
+            if (aOrder !== undefined && bOrder === undefined) return -1;
+            if (aOrder === undefined && bOrder !== undefined) return 1;
+
+            const timeA = new Date(a.created_at || a.createdAt || a.updated_at || 0).getTime();
+            const timeB = new Date(b.created_at || b.createdAt || b.updated_at || 0).getTime();
+            if (timeA !== timeB) return timeA - timeB;
+
+            return a.id.localeCompare(b.id);
+          });
+
+        const pending = routeDeliveries.filter((delivery) => !delivery.completed);
+        const completed = routeDeliveries.filter((delivery) => delivery.completed);
+        const currentIndex = pending.findIndex((delivery) => delivery.id === deliveryId);
+
+        if (currentIndex === -1 || pending.length < 2) return;
+
+        const safeTarget = Math.max(0, Math.min(targetIndex, pending.length - 1));
+        if (safeTarget === currentIndex) return;
+
+        const [moved] = pending.splice(currentIndex, 1);
+        pending.splice(safeTarget, 0, moved);
+
+        const normalized = [...pending, ...completed].map((delivery, index) => ({
+          ...delivery,
+          order_index: index,
+        }));
+
+        const now = new Date().toISOString();
+        const nextIndexById = new Map(
+          normalized.map((delivery) => [delivery.id, delivery.order_index] as const)
+        );
+
+        set((prev) => ({
+          deliveries: prev.deliveries.map((delivery) => {
+            const nextIndex = nextIndexById.get(delivery.id);
+            return nextIndex === undefined
+              ? delivery
+              : { ...delivery, order_index: nextIndex, updated_at: now };
+          }),
+        }));
+
+        try {
+          const batch = writeBatch(db);
+          normalized.forEach((delivery) => {
+            batch.update(doc(db, 'deliveries', delivery.id), {
+              order_index: delivery.order_index,
+              updated_at: now,
+            });
+          });
+          await batch.commit();
+        } catch (error) {
+          set({ deliveries: state.deliveries });
+          console.error('Erro ao mover entrega para posição:', error);
           throw error;
         }
       },

@@ -282,8 +282,17 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               const cust = getCustomerById(delivery.customer_id);
               const addressKey = normalizedAddress(delivery.address_string || cust?.address);
               const isNeighbor = addressKey ? (addressCounts[addressKey] > 1) : false;
+              const pendingIndex = pendingDeliveries.findIndex((item) => item.id === delivery.id);
               return (
-                <DeliveryCard key={delivery.id} delivery={delivery} customer={cust} route={route} isNeighbor={isNeighbor} />
+                <DeliveryCard
+                  key={delivery.id}
+                  delivery={delivery}
+                  customer={cust}
+                  route={route}
+                  isNeighbor={isNeighbor}
+                  position={pendingIndex >= 0 ? pendingIndex + 1 : undefined}
+                  pendingCount={pendingDeliveries.length}
+                />
               );
             })
           )}
