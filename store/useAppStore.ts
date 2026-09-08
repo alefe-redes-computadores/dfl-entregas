@@ -6,7 +6,7 @@ import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { fuelingDate } from '@/lib/fueling-analytics';
@@ -21,6 +21,9 @@ interface AppState {
   motoboys: Motoboy[];
   fuelings: Fueling[];
   stockSupplies: StockSupply[];
+  teamMembers: TeamMember[];
+  stockProducts: StockProduct[];
+  stockMovements: StockMovement[];
   ifoodPendingConfirmations: IfoodPendingConfirmation[];
   selectedDate: Date;
   isSyncing: boolean;
@@ -76,6 +79,12 @@ interface AppState {
   addStockSupply: (supply: StockSupply) => Promise<void>;
   updateStockSupply: (id: string, updatedData: Partial<StockSupply>) => Promise<void>;
   deleteStockSupply: (id: string) => Promise<void>;
+  addTeamMember: (member: TeamMember) => Promise<void>;
+  updateTeamMember: (id: string, data: Partial<TeamMember>) => Promise<void>;
+  addStockProduct: (product: StockProduct) => Promise<void>;
+  updateStockProduct: (id: string, data: Partial<StockProduct>) => Promise<void>;
+  addStockMovement: (movement: Omit<StockMovement, 'balance_before' | 'balance_after' | 'created_at'>) => Promise<void>;
+  integrateStockSupply: (id: string) => Promise<void>;
   addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
   updateIfoodPendingConfirmation: (id: string, data: Partial<IfoodPendingConfirmation>) => Promise<void>;
   deleteIfoodPendingConfirmation: (id: string) => Promise<void>;
@@ -108,6 +117,9 @@ export const useAppStore = create<AppState>()(
       motoboys: [],
       fuelings: [],
       stockSupplies: [],
+      teamMembers: [],
+      stockProducts: [],
+      stockMovements: [],
       ifoodPendingConfirmations: [],
       selectedDate: new Date(),
       isSyncing: false,
@@ -168,7 +180,7 @@ export const useAppStore = create<AppState>()(
       logout: async () => {
         try {
           await signOut(auth);
-          set({ routes: [], deliveries: [], customers: [], motoboys: [], fuelings: [], stockSupplies: [], user: null });
+          set({ routes: [], deliveries: [], customers: [], motoboys: [], fuelings: [], stockSupplies: [], teamMembers: [], stockProducts: [], stockMovements: [], user: null });
         } catch (error) { console.error('Erro no logout:', error); }
       },
 
@@ -176,13 +188,16 @@ export const useAppStore = create<AppState>()(
         if (!get().hasHydrated) return;
         set({ isSyncing: true, syncError: false }); 
         try {
-          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
+          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
             getDocs(collection(db, 'deliveries')),
             getDocs(collection(db, 'customers')),
             getDocs(collection(db, 'motoboys')),
             getDocs(collection(db, 'fuelings')),
             getDocs(collection(db, 'stock_supplies')),
+            getDocs(collection(db, 'team_members')),
+            getDocs(collection(db, 'stock_products')),
+            getDocs(collection(db, 'stock_movements')),
             getDocs(collection(db, 'ifood_pending_confirmations')),
             getDoc(doc(db, 'store', 'store_settings'))
           ]);
@@ -193,6 +208,9 @@ export const useAppStore = create<AppState>()(
           const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
           const fbFuelings = fuelingsSnap.docs.map(d => d.data() as Fueling);
           const fbStockSupplies = stockSuppliesSnap.docs.map(d => d.data() as StockSupply);
+          const fbTeamMembers = teamMembersSnap.docs.map(d => d.data() as TeamMember);
+          const fbStockProducts = stockProductsSnap.docs.map(d => d.data() as StockProduct);
+          const fbStockMovements = stockMovementsSnap.docs.map(d => d.data() as StockMovement);
           const fbPendingConfirmations = pendingConfirmationsSnap.docs.map(
             d => d.data() as IfoodPendingConfirmation,
           );
@@ -248,6 +266,15 @@ export const useAppStore = create<AppState>()(
             (a, b) => new Date(b.occurred_at || b.created_at).getTime() - new Date(a.occurred_at || a.created_at).getTime(),
           );
 
+          const mergeById = <T extends { id: string }>(cloud: T[], local: T[]) => {
+            const merged = [...cloud];
+            local.forEach((item) => { if (!merged.some((current) => current.id === item.id)) merged.push(item); });
+            return merged;
+          };
+          const mergedTeamMembers = mergeById(fbTeamMembers, get().teamMembers).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+          const mergedStockProducts = mergeById(fbStockProducts, get().stockProducts).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+          const mergedStockMovements = mergeById(fbStockMovements, get().stockMovements).sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
+
           const mergedPendingConfirmations = [...fbPendingConfirmations];
           get().ifoodPendingConfirmations.forEach(local => {
             if (!mergedPendingConfirmations.some(item => item.id === local.id)) {
@@ -279,6 +306,9 @@ export const useAppStore = create<AppState>()(
             motoboys: mergedMotoboys,
             fuelings: mergedFuelings,
             stockSupplies: mergedStockSupplies,
+            teamMembers: mergedTeamMembers,
+            stockProducts: mergedStockProducts,
+            stockMovements: mergedStockMovements,
             ifoodPendingConfirmations: mergedPendingConfirmations,
             storeSettings: finalStoreSettings as any,
             isSyncing: false,
@@ -506,6 +536,8 @@ export const useAppStore = create<AppState>()(
 
       updateStockSupply: async (id, updatedData) => {
         const previous = get().stockSupplies;
+        const current = previous.find((item) => item.id === id);
+        if (current?.stock_integrated_at) throw new Error('Compra já integrada ao estoque e não pode ser editada.');
         const next: Partial<StockSupply> = { ...updatedData, updated_at: new Date().toISOString() };
         set((state) => ({ stockSupplies: state.stockSupplies.map((item) => item.id === id ? { ...item, ...next } : item) }));
         try {
@@ -517,12 +549,127 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteStockSupply: async (id) => {
+        const current = get().stockSupplies.find((item) => item.id === id);
+        if (current?.stock_integrated_at) throw new Error('Compra já integrada ao estoque e não pode ser excluída.');
         const previous = get().stockSupplies;
         set((state) => ({ stockSupplies: state.stockSupplies.filter((item) => item.id !== id) }));
         try {
           await deleteDoc(doc(db, 'stock_supplies', id));
         } catch (error) {
           set({ stockSupplies: previous });
+          throw error;
+        }
+      },
+
+      addTeamMember: async (member) => {
+        const previous = get().teamMembers;
+        set({ teamMembers: [...previous, member].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) });
+        try { await setDoc(doc(db, 'team_members', member.id), sanitizeForFirebase(member)); }
+        catch (error) { set({ teamMembers: previous }); throw error; }
+      },
+
+      updateTeamMember: async (id, data) => {
+        const previous = get().teamMembers;
+        const next = { ...data, updated_at: new Date().toISOString() };
+        set({ teamMembers: previous.map((item) => item.id === id ? { ...item, ...next } : item) });
+        try { await updateDoc(doc(db, 'team_members', id), sanitizeForFirebase(next)); }
+        catch (error) { set({ teamMembers: previous }); throw error; }
+      },
+
+      addStockProduct: async (product) => {
+        const previous = get().stockProducts;
+        set({ stockProducts: [...previous, product].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) });
+        try { await setDoc(doc(db, 'stock_products', product.id), sanitizeForFirebase(product)); }
+        catch (error) { set({ stockProducts: previous }); throw error; }
+      },
+
+      updateStockProduct: async (id, data) => {
+        const previous = get().stockProducts;
+        const next = { ...data, updated_at: new Date().toISOString() };
+        set({ stockProducts: previous.map((item) => item.id === id ? { ...item, ...next } : item) });
+        try { await updateDoc(doc(db, 'stock_products', id), sanitizeForFirebase(next)); }
+        catch (error) { set({ stockProducts: previous }); throw error; }
+      },
+
+      addStockMovement: async (movement) => {
+        const product = get().stockProducts.find((item) => item.id === movement.product_id);
+        if (!product) throw new Error('Produto de estoque não encontrado.');
+        const before = product.current_quantity;
+        if ((movement.type === 'saida' || movement.type === 'perda') && movement.quantity > before) {
+          throw new Error(`Saldo insuficiente. Disponível: ${before.toLocaleString('pt-BR')} ${product.unit}.`);
+        }
+        const after = movement.type === 'contagem' || movement.type === 'ajuste'
+          ? movement.quantity
+          : movement.type === 'entrada'
+            ? before + movement.quantity
+            : before - movement.quantity;
+        const createdAt = new Date().toISOString();
+        const record: StockMovement = { ...movement, balance_before: before, balance_after: after, created_at: createdAt };
+        const previousProducts = get().stockProducts;
+        const previousMovements = get().stockMovements;
+        const productPatch: Partial<StockProduct> = {
+          current_quantity: after,
+          average_cost: movement.type === 'entrada' && movement.unit_cost
+            ? Number((((before * (product.average_cost || 0)) + (movement.quantity * movement.unit_cost)) / Math.max(after, movement.quantity)).toFixed(4))
+            : product.average_cost,
+          last_counted_at: movement.type === 'contagem' ? movement.occurred_at : product.last_counted_at,
+          updated_at: createdAt,
+        };
+        set({
+          stockProducts: previousProducts.map((item) => item.id === product.id ? { ...item, ...productPatch } : item),
+          stockMovements: [record, ...previousMovements],
+        });
+        try {
+          const batch = writeBatch(db);
+          batch.update(doc(db, 'stock_products', product.id), sanitizeForFirebase(productPatch));
+          batch.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record));
+          await batch.commit();
+        } catch (error) {
+          set({ stockProducts: previousProducts, stockMovements: previousMovements });
+          throw error;
+        }
+      },
+
+      integrateStockSupply: async (id) => {
+        const supply = get().stockSupplies.find((item) => item.id === id);
+        if (!supply) throw new Error('Compra não encontrada.');
+        if (supply.stock_integrated_at) return;
+        if (supply.status !== 'recebido' && supply.status !== 'conferido') throw new Error('Marque a compra como recebida antes de conferir.');
+        const missing = supply.items.filter((item) => !item.stock_product_id);
+        if (missing.length) throw new Error(`Vincule todos os itens ao estoque. Pendente: ${missing[0].name}.`);
+        const products = get().stockProducts;
+        for (const item of supply.items) {
+          const product = products.find((candidate) => candidate.id === item.stock_product_id);
+          if (!product) throw new Error(`Produto vinculado não encontrado: ${item.name}.`);
+          if (product.unit !== item.unit) throw new Error(`Unidade incompatível em ${item.name}: compra em ${item.unit}, estoque em ${product.unit}.`);
+        }
+        const previousProducts = get().stockProducts;
+        const previousMovements = get().stockMovements;
+        const previousSupplies = get().stockSupplies;
+        const now = new Date().toISOString();
+        const nextProducts = [...previousProducts];
+        const records: StockMovement[] = [];
+        for (const item of supply.items) {
+          const index = nextProducts.findIndex((product) => product.id === item.stock_product_id);
+          const product = nextProducts[index];
+          const before = product.current_quantity;
+          const after = before + item.quantity;
+          const averageCost = item.unit_price
+            ? Number((((before * (product.average_cost || 0)) + (item.quantity * item.unit_price)) / Math.max(after, item.quantity)).toFixed(4))
+            : product.average_cost;
+          nextProducts[index] = { ...product, current_quantity: after, average_cost: averageCost, updated_at: now };
+          records.push({ id: `supply-${supply.id}-${item.id}`, product_id: product.id, product_name: product.name, type: 'entrada', quantity: item.quantity, balance_before: before, balance_after: after, unit_cost: item.unit_price, reason: `Compra${supply.supplier ? ` em ${supply.supplier}` : ''}`, supply_id: supply.id, team_member_id: supply.purchaser_id, team_member_name: supply.purchaser_name, occurred_at: supply.occurred_at, created_at: now });
+        }
+        const supplyPatch: Partial<StockSupply> = { status: 'conferido', checked_at: supply.checked_at || now, stock_integrated_at: now, updated_at: now };
+        set({ stockProducts: nextProducts, stockMovements: [...records, ...previousMovements], stockSupplies: previousSupplies.map((item) => item.id === id ? { ...item, ...supplyPatch } : item) });
+        try {
+          const batch = writeBatch(db);
+          nextProducts.forEach((product) => { const previous = previousProducts.find((item) => item.id === product.id); if (previous !== product) batch.update(doc(db, 'stock_products', product.id), sanitizeForFirebase(product)); });
+          records.forEach((record) => batch.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record)));
+          batch.update(doc(db, 'stock_supplies', id), sanitizeForFirebase(supplyPatch));
+          await batch.commit();
+        } catch (error) {
+          set({ stockProducts: previousProducts, stockMovements: previousMovements, stockSupplies: previousSupplies });
           throw error;
         }
       },
@@ -1215,6 +1362,9 @@ export const useAppStore = create<AppState>()(
         motoboys: state.motoboys,
         fuelings: state.fuelings,
         stockSupplies: state.stockSupplies,
+        teamMembers: state.teamMembers,
+        stockProducts: state.stockProducts,
+        stockMovements: state.stockMovements,
         ifoodPendingConfirmations: state.ifoodPendingConfirmations,
         isPrivacyMode: state.isPrivacyMode,
         routeAlertsEnabled: state.routeAlertsEnabled,

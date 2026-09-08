@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus,
+  Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
   AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -239,8 +239,12 @@ export default function LojaPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
-            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Abastecimentos</p>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Compras e reposições</p>
             <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Compras, reposições, transporte e conferência</p>
+          </button>
+          <button onClick={() => router.push('/estoque')} className="group rounded-[26px] border border-emerald-500/20 bg-emerald-500/[.045] p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400"><Boxes size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Estoque atual</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Saldos, contagens, perdas e lista de compra</p>
           </button>
         </div>
       </section>

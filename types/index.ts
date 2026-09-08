@@ -34,6 +34,7 @@ export interface StockSupplyItem {
   unit_price?: number;
   total_price?: number;
   observation?: string;
+  stock_product_id?: string;
 }
 
 export interface StockSupply {
@@ -48,11 +49,61 @@ export interface StockSupply {
   supplier?: string;
   payment_method?: PaymentMethod;
   purchaser_name?: string;
+  purchaser_id?: string;
   observation?: string;
   received_at?: string;
   checked_at?: string;
+  stock_integrated_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export type TeamMemberRole = 'administracao' | 'compras' | 'cozinha' | 'atendimento' | 'entrega' | 'outro';
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: TeamMemberRole;
+  phone?: string;
+  active: boolean;
+  observation?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type StockMovementType = 'entrada' | 'saida' | 'perda' | 'ajuste' | 'contagem';
+
+export interface StockProduct {
+  id: string;
+  name: string;
+  category?: string;
+  unit: StockSupplyUnit;
+  current_quantity: number;
+  minimum_quantity: number;
+  ideal_quantity?: number;
+  average_cost?: number;
+  active: boolean;
+  observation?: string;
+  last_counted_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockMovement {
+  id: string;
+  product_id: string;
+  product_name: string;
+  type: StockMovementType;
+  quantity: number;
+  balance_before: number;
+  balance_after: number;
+  unit_cost?: number;
+  reason?: string;
+  supply_id?: string;
+  team_member_id?: string;
+  team_member_name?: string;
+  occurred_at: string;
+  created_at: string;
 }
 
 export interface MotoboyPaymentRule {
