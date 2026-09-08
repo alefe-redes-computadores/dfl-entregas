@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   Clock3,
   CreditCard,
+  CupSoda,
   Edit3,
   MapPin,
   MessageCircle,
@@ -21,8 +22,12 @@ import {
   Smartphone,
   Store,
   UserRound,
+  ShieldCheck,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { useAppStore } from '@/store/useAppStore';
 import {
   fulfillmentLabel,
@@ -62,6 +67,9 @@ function DeliveryDetailsContent() {
   );
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isDrinkCheckOpen, setIsDrinkCheckOpen] = useState(false);
+  const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
+  const [inputCode, setInputCode] = useState('');
 
   if (!delivery) {
     return (
@@ -105,6 +113,17 @@ function DeliveryDetailsContent() {
         : CreditCard;
 
   const PaymentIcon = paymentIcon;
+  const isIfood = delivery.origin === 'ifood' || !delivery.origin;
+  const savedConfirmationCode =
+    delivery.confirmation_code || customer?.last_confirmation_code || '';
+  const routeIsClosed = logistics && route?.status === 'fechada';
+  const routeNotStarted = logistics && route?.status === 'aberta' && !route.started_at;
+
+  const vibrate = async (style: ImpactStyle) => {
+    if (Capacitor.isNativePlatform()) {
+      await Haptics.impact({ style });
+    }
+  };
 
   const openWhatsApp = () => {
     if (!phone) {
@@ -115,12 +134,21 @@ function DeliveryDetailsContent() {
     window.open(`https://wa.me/55${phone.replace(/\D/g, '')}`, '_blank');
   };
 
-  const completeOrder = async () => {
+  const executeCompletion = async (codeToSave?: string) => {
     if (delivery.completed || isCompleting) return;
 
     setIsCompleting(true);
+    const payload = {
+      completed: true,
+      ...(codeToSave ? { confirmation_code: codeToSave } : {}),
+    };
+
     try {
-      await updateDelivery(delivery.id, { completed: true });
+      await updateDelivery(delivery.id, payload);
+      await vibrate(ImpactStyle.Medium);
+      setIsDrinkCheckOpen(false);
+      setIsIfoodModalOpen(false);
+      setInputCode('');
       toast.success(
         mode === 'pickup'
           ? 'Retirada concluída.'
@@ -129,12 +157,77 @@ function DeliveryDetailsContent() {
             : 'Entrega concluída com sucesso.',
       );
     } catch {
+      await vibrate(ImpactStyle.Heavy);
       toast.error('Não foi possível concluir o pedido.', {
-        description: 'Confira a conexão e tente novamente.',
+        description: 'O estado anterior foi restaurado. Tente novamente.',
       });
     } finally {
       setIsCompleting(false);
     }
+  };
+
+  const handleCompletionAction = async () => {
+    if (isCompleting) return;
+    await vibrate(ImpactStyle.Light);
+
+    if (delivery.completed) {
+      if (routeIsClosed) {
+        toast.error('Reabra a rota antes de desfazer esta baixa.', {
+          description: 'Isso evita deixar uma rota fechada com entrega pendente.',
+        });
+        return;
+      }
+
+      setIsCompleting(true);
+      try {
+        await updateDelivery(delivery.id, { completed: false });
+        toast.success('Baixa desfeita.');
+      } catch {
+        toast.error('Não foi possível desfazer a baixa.');
+      } finally {
+        setIsCompleting(false);
+      }
+      return;
+    }
+
+    if (logistics) {
+      if (!route) {
+        toast.error('Esta entrega não possui uma rota válida.');
+        return;
+      }
+      if (route.status === 'fechada') {
+        toast.error('A rota está fechada. Reabra-a antes de dar baixa.');
+        return;
+      }
+      if (!route.started_at) {
+        toast.error('Inicie a rota antes de dar baixa nesta entrega.');
+        return;
+      }
+    }
+
+    if (delivery.drinks) {
+      setIsDrinkCheckOpen(true);
+      return;
+    }
+
+    if (isIfood && !savedConfirmationCode) {
+      setInputCode('');
+      setIsIfoodModalOpen(true);
+      return;
+    }
+
+    await executeCompletion(savedConfirmationCode);
+  };
+
+  const continueAfterDrinkCheck = async () => {
+    if (isIfood && !savedConfirmationCode) {
+      setIsDrinkCheckOpen(false);
+      setInputCode('');
+      setIsIfoodModalOpen(true);
+      return;
+    }
+
+    await executeCompletion(savedConfirmationCode);
   };
 
   return (
@@ -254,27 +347,69 @@ function DeliveryDetailsContent() {
           />
         )}
 
+        {delivery.drinks && (
+          <InfoRow icon={CupSoda} label="Bebidas" value={delivery.drinks} />
+        )}
+
         {delivery.observation && (
           <InfoRow icon={AlertTriangle} label="Observações" value={delivery.observation} />
         )}
       </section>
 
-      {!delivery.completed && (
+      <section className={`rounded-[24px] border p-4 ${
+        delivery.completed
+          ? 'border-emerald-500/20 bg-emerald-500/[.045]'
+          : 'border-zinc-800 bg-zinc-900/35'
+      }`}>
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
+              Baixa operacional
+            </p>
+            <p className="mt-1 text-sm font-black text-zinc-100">
+              {delivery.completed ? 'Pedido já concluído' : 'Finalizar atendimento'}
+            </p>
+          </div>
+          {logistics && (
+            <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${
+              routeIsClosed
+                ? 'bg-emerald-500/10 text-emerald-400'
+                : routeNotStarted
+                  ? 'bg-amber-500/10 text-amber-400'
+                  : 'bg-sky-500/10 text-sky-400'
+            }`}>
+              {routeIsClosed ? 'Rota fechada' : routeNotStarted ? 'Rota não iniciada' : 'Rota ativa'}
+            </span>
+          )}
+        </div>
+
         <button
-          onClick={completeOrder}
+          onClick={handleCompletionAction}
           disabled={isCompleting}
-          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950 shadow-lg shadow-emerald-500/15 active:scale-[0.98] disabled:opacity-60"
+          className={`flex h-14 w-full items-center justify-center gap-2 rounded-2xl font-black active:scale-[0.98] disabled:opacity-60 ${
+            delivery.completed
+              ? 'border border-zinc-700 bg-zinc-900 text-zinc-300'
+              : 'bg-emerald-500 text-zinc-950 shadow-lg shadow-emerald-500/15'
+          }`}
         >
           <CheckCircle2 size={19} />
           {isCompleting
-            ? 'Concluindo...'
-            : mode === 'pickup'
-              ? 'Concluir retirada'
-              : mode === 'counter'
-                ? 'Concluir pedido'
-                : 'Concluir entrega'}
+            ? 'Salvando...'
+            : delivery.completed
+              ? 'Desfazer baixa'
+              : mode === 'pickup'
+                ? 'Concluir retirada'
+                : mode === 'counter'
+                  ? 'Concluir pedido'
+                  : 'Concluir entrega'}
         </button>
-      )}
+
+        {delivery.completed && routeIsClosed && (
+          <p className="mt-2 text-center text-[10px] leading-relaxed text-zinc-600">
+            Para desfazer esta baixa, reabra a rota primeiro.
+          </p>
+        )}
+      </section>
 
       <div className={`grid gap-3 ${logistics ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {logistics && (
@@ -317,14 +452,132 @@ function DeliveryDetailsContent() {
           value={delivery.completed ? dateTime(delivery.completed_at) : 'Ainda pendente'}
         />
 
-        {delivery.confirmation_code && (
+        {delivery.ifood_id && (
           <InfoRow
             icon={Smartphone}
+            label="ID iFood"
+            value={delivery.ifood_id}
+          />
+        )}
+
+        {(delivery.confirmation_code || customer?.last_confirmation_code) && (
+          <InfoRow
+            icon={ShieldCheck}
             label="Código de confirmação"
-            value={delivery.confirmation_code}
+            value={delivery.confirmation_code || customer?.last_confirmation_code || ''}
           />
         )}
       </section>
+
+      {isDrinkCheckOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-sm rounded-[32px] border border-sky-500/30 bg-zinc-900 p-6 shadow-2xl">
+            <div className="text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400">
+                <CupSoda size={26} />
+              </div>
+              <h3 className="mt-3 font-heading text-lg font-black text-zinc-50">
+                Conferir bebidas
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                Confirme os itens de geladeira antes de concluir o atendimento.
+              </p>
+              <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-3 text-sm font-black text-sky-400">
+                {delivery.drinks}
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={continueAfterDrinkCheck}
+                disabled={isCompleting}
+                className="rounded-2xl bg-emerald-500 px-4 py-3.5 font-black text-zinc-950 active:scale-95 disabled:opacity-60"
+              >
+                Bebidas conferidas
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsDrinkCheckOpen(false)}
+                className="h-12 rounded-2xl bg-zinc-800 font-bold text-zinc-400 active:scale-95"
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isIfoodModalOpen && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-sm rounded-[32px] border border-red-500/25 bg-zinc-900 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-400">
+                  <Smartphone size={20} />
+                </div>
+                <div>
+                  <h3 className="font-heading text-base font-black text-zinc-50">
+                    Código iFood
+                  </h3>
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    {delivery.order_id ? `Pedido #${delivery.order_id}` : 'Pedido iFood'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsIfoodModalOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800 text-zinc-500 active:scale-95"
+                aria-label="Fechar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <label className="mt-5 block text-xs font-bold text-zinc-400">
+              Digite os 4 dígitos informados pelo cliente
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              autoFocus
+              placeholder="0000"
+              value={inputCode}
+              onChange={(event) => setInputCode(event.target.value.replace(/\D/g, '').slice(0, 4))}
+              className="mt-2 h-16 w-full rounded-2xl border-2 border-red-500/40 bg-zinc-950 px-4 text-center font-mono text-2xl font-black tracking-[0.25em] text-zinc-50 outline-none focus:border-red-500"
+            />
+
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (inputCode.length !== 4) {
+                    await vibrate(ImpactStyle.Heavy);
+                    toast.error('Digite os 4 dígitos ou use a opção sem código.');
+                    return;
+                  }
+                  await executeCompletion(inputCode);
+                }}
+                disabled={isCompleting}
+                className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950 active:scale-95 disabled:opacity-60"
+              >
+                <ShieldCheck size={18} />
+                Concluir com código
+              </button>
+              <button
+                type="button"
+                onClick={() => executeCompletion()}
+                disabled={isCompleting}
+                className="h-12 rounded-2xl bg-zinc-800 font-bold text-zinc-300 active:scale-95 disabled:opacity-60"
+              >
+                Concluir sem código
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
