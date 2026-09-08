@@ -259,6 +259,30 @@ export default function DeliveriesPage() {
         />
       </div>
 
+      <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/40 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600">
+              Progresso do dia
+            </p>
+            <p className="mt-1 text-sm font-black text-zinc-200">
+              {totals.completed} de {totals.all} pedidos concluídos
+            </p>
+          </div>
+          <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-[10px] font-black text-zinc-400">
+            {totals.all ? Math.round((totals.completed / totals.all) * 100) : 0}%
+          </span>
+        </div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-emerald-500 transition-all"
+            style={{
+              width: `${totals.all ? Math.round((totals.completed / totals.all) * 100) : 0}%`,
+            }}
+          />
+        </div>
+      </section>
+
       <div className="relative">
         <Search
           size={17}
@@ -272,68 +296,90 @@ export default function DeliveriesPage() {
         />
       </div>
 
-      <div className="flex gap-2 overflow-x-auto no-scrollbar">
-        <Filter size={16} className="mt-2.5 shrink-0 text-zinc-600" />
-        {(
-          [
-            ['todas', 'Todas'],
-            ['pendentes', 'Pendentes'],
-            ['concluidas', 'Concluídos'],
-            ['incompletas', 'Com atenção'],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setStatus(value)}
-            className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-bold ${
-              status === value
-                ? 'bg-zinc-100 text-zinc-950'
-                : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-3">
+        <div className="mb-3 flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <Filter size={14} className="text-zinc-500" />
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
+              Filtros operacionais
+            </p>
+          </div>
+          {(status !== 'todas' || fulfillment !== 'todas' || origin !== 'todas') && (
+            <button
+              onClick={() => {
+                setStatus('todas');
+                setFulfillment('todas');
+                setOrigin('todas');
+              }}
+              className="text-[10px] font-black text-amber-400"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
 
-      <div className="grid grid-cols-4 gap-2">
-        {(
-          [
-            ['todas', 'Todos'],
-            ['delivery', 'Entrega'],
-            ['pickup', 'Retirada'],
-            ['counter', 'Balcão'],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setFulfillment(value)}
-            className={`rounded-xl border px-2 py-2 text-[11px] font-bold ${
-              fulfillment === value
-                ? 'border-sky-500/50 bg-sky-500/10 text-sky-400'
-                : 'border-zinc-800 text-zinc-500'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {(
+            [
+              ['todas', 'Todas'],
+              ['pendentes', 'Pendentes'],
+              ['concluidas', 'Concluídos'],
+              ['incompletas', 'Com atenção'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setStatus(value)}
+              className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-bold ${
+                status === value
+                  ? 'bg-zinc-100 text-zinc-950'
+                  : 'border border-zinc-800 bg-zinc-950/40 text-zinc-500'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        {(['todas', 'ifood', 'loja'] as OriginFilter[]).map((value) => (
-          <button
-            key={value}
-            onClick={() => setOrigin(value)}
-            className={`rounded-xl border py-2 text-xs font-bold ${
-              origin === value
-                ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
-                : 'border-zinc-800 text-zinc-500'
-            }`}
-          >
-            {value === 'todas' ? 'Origem: todas' : value === 'ifood' ? 'iFood' : 'Loja'}
-          </button>
-        ))}
-      </div>
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          {(
+            [
+              ['todas', 'Todos'],
+              ['delivery', 'Entrega'],
+              ['pickup', 'Retirada'],
+              ['counter', 'Balcão'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setFulfillment(value)}
+              className={`rounded-xl border px-2 py-2 text-[10px] font-bold ${
+                fulfillment === value
+                  ? 'border-sky-500/50 bg-sky-500/10 text-sky-400'
+                  : 'border-zinc-800 bg-zinc-950/30 text-zinc-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {(['todas', 'ifood', 'loja'] as OriginFilter[]).map((value) => (
+            <button
+              key={value}
+              onClick={() => setOrigin(value)}
+              className={`rounded-xl border py-2 text-[10px] font-bold ${
+                origin === value
+                  ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
+                  : 'border-zinc-800 bg-zinc-950/30 text-zinc-600'
+              }`}
+            >
+              {value === 'todas' ? 'Todas origens' : value === 'ifood' ? 'iFood' : 'Loja'}
+            </button>
+          ))}
+        </div>
+      </section>
 
       <div className="flex flex-col gap-3">
         {rows.map(({ delivery, route, customer, incomplete, mode, logistics }) => {
@@ -344,7 +390,13 @@ export default function DeliveriesPage() {
             <button
               key={delivery.id}
               onClick={() => router.push(`/entregas/details?id=${delivery.id}&date=${encodeURIComponent(selectedDate)}`)}
-              className="w-full rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-4 text-left active:scale-[0.99]"
+              className={`w-full rounded-[24px] border p-4 text-left active:scale-[0.99] ${
+                incomplete
+                  ? 'border-amber-500/30 bg-amber-500/[.045]'
+                  : delivery.completed
+                    ? 'border-emerald-500/15 bg-emerald-500/[.025]'
+                    : 'border-zinc-800 bg-zinc-900/45'
+              }`}
             >
               <div className="flex items-start gap-3">
                 <div
@@ -362,6 +414,11 @@ export default function DeliveriesPage() {
                     <p className="truncate font-bold text-zinc-100">
                       {customer?.name || delivery.customer_name || 'Cliente não informado'}
                     </p>
+                    {delivery.order_id && (
+                      <span className="shrink-0 rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[9px] font-black text-zinc-500">
+                        #{delivery.order_id}
+                      </span>
+                    )}
                     {incomplete && (
                       <AlertTriangle size={14} className="shrink-0 text-amber-400" />
                     )}
@@ -428,19 +485,39 @@ export default function DeliveriesPage() {
         })}
 
         {rows.length === 0 && (
-          <div className="rounded-3xl border border-dashed border-zinc-800 py-14 text-center">
-            <Package className="mx-auto text-zinc-700" />
-            <p className="mt-3 text-sm font-semibold text-zinc-400">
-              Nenhum pedido em {dayLabel(selectedDate).toLowerCase()}.
+          <div className="rounded-[28px] border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-12 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-900 text-zinc-700">
+              <Package size={22} />
+            </div>
+            <p className="mt-4 text-sm font-black text-zinc-300">
+              Nenhum pedido encontrado
             </p>
-            {selectedDate !== todayKey() && (
-              <button
-                onClick={() => selectDate(todayKey())}
-                className="mt-3 text-xs font-bold text-amber-400"
-              >
-                Voltar para hoje
-              </button>
-            )}
+            <p className="mx-auto mt-1 max-w-[260px] text-[11px] leading-relaxed text-zinc-600">
+              Não há pedidos que correspondam à data e aos filtros atuais.
+            </p>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              {(status !== 'todas' || fulfillment !== 'todas' || origin !== 'todas' || query.trim()) && (
+                <button
+                  onClick={() => {
+                    setStatus('todas');
+                    setFulfillment('todas');
+                    setOrigin('todas');
+                    setQuery('');
+                  }}
+                  className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-[10px] font-black text-zinc-400"
+                >
+                  Limpar filtros
+                </button>
+              )}
+              {selectedDate !== todayKey() && (
+                <button
+                  onClick={() => selectDate(todayKey())}
+                  className="rounded-xl bg-amber-500/10 px-3 py-2 text-[10px] font-black text-amber-400"
+                >
+                  Ir para hoje
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

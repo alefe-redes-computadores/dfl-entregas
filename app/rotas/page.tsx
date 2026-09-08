@@ -109,11 +109,114 @@ export default function RoutesPage() {
     <div className="flex gap-2 overflow-x-auto no-scrollbar">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
 
     <div className="flex flex-col gap-3">
-      {rows.map(({ route, linked, completed, amount, state }) => <button key={route.id} onClick={() => router.push(`/rotas/details?id=${route.id}&date=${encodeURIComponent(selectedDate)}`)} className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4 text-left active:scale-[0.99]">
-        <div className="flex items-start gap-3"><div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${state === 'na-rua' ? 'bg-sky-500/15 text-sky-400' : state === 'finalizadas' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}><Bike size={20}/></div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-heading text-base font-bold">{route.name}</p><ChevronRight size={17} className="text-zinc-600"/></div><p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400"><User size={12}/>{route.motoboy_name}</p></div></div>
-        <div className="mt-4 grid grid-cols-3 gap-2 border-t border-zinc-800/70 pt-3 text-center"><SmallStat value={`${completed}/${linked.length}`} label="Entregas"/><SmallStat value={`R$ ${amount.toLocaleString('pt-BR',{minimumFractionDigits:2})}`} label="Valor bruto"/><SmallStat value={routeDate(route)?.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}) || 'Sem horário'} label="Criada"/></div>
-      </button>)}
-      {rows.length === 0 && <div className="rounded-3xl border border-dashed border-zinc-800 py-14 text-center"><MapPin className="mx-auto text-zinc-700"/><p className="mt-3 text-sm font-semibold text-zinc-400">Nenhuma rota em {dayLabel(selectedDate).toLowerCase()}.</p>{selectedDate !== todayKey() && <button onClick={() => selectDate(todayKey())} className="mt-3 text-xs font-bold text-emerald-400">Voltar para hoje</button>}</div>}
+      {rows.map(({ route, linked, completed, amount, state }) => {
+        const progress = linked.length ? Math.round((completed / linked.length) * 100) : 0;
+        const pending = Math.max(0, linked.length - completed);
+        const stateLabel = state === 'na-rua' ? 'Na rua' : state === 'finalizadas' ? 'Finalizada' : 'Montando';
+
+        return (
+          <button
+            key={route.id}
+            onClick={() => router.push(`/rotas/details?id=${route.id}&date=${encodeURIComponent(selectedDate)}`)}
+            className={`rounded-[26px] border p-4 text-left active:scale-[0.99] ${
+              state === 'na-rua'
+                ? 'border-sky-500/20 bg-sky-500/[.035]'
+                : state === 'finalizadas'
+                  ? 'border-emerald-500/20 bg-emerald-500/[.025]'
+                  : 'border-zinc-800 bg-zinc-900/45'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                state === 'na-rua'
+                  ? 'bg-sky-500/15 text-sky-400'
+                  : state === 'finalizadas'
+                    ? 'bg-emerald-500/15 text-emerald-400'
+                    : 'bg-zinc-800 text-zinc-400'
+              }`}>
+                <Bike size={20}/>
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate font-heading text-base font-black text-zinc-100">
+                    {route.name}
+                  </p>
+                  <span className={`shrink-0 rounded-md px-2 py-0.5 text-[9px] font-black uppercase ${
+                    state === 'na-rua'
+                      ? 'bg-sky-500/10 text-sky-400'
+                      : state === 'finalizadas'
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : 'bg-zinc-800 text-zinc-500'
+                  }`}>
+                    {stateLabel}
+                  </span>
+                </div>
+                <p className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
+                  <User size={12}/>
+                  {route.motoboy_name}
+                </p>
+              </div>
+
+              <ChevronRight size={17} className="mt-1 shrink-0 text-zinc-700"/>
+            </div>
+
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-[10px] font-bold">
+                <span className="text-zinc-500">{completed}/{linked.length} concluídas</span>
+                <span className={pending ? 'text-amber-400' : 'text-emerald-400'}>
+                  {pending ? `${pending} pendente${pending === 1 ? '' : 's'}` : 'Tudo concluído'}
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className={`h-full rounded-full ${state === 'finalizadas' ? 'bg-emerald-500' : 'bg-sky-500'}`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-zinc-800/70 pt-3">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-wide text-zinc-600">Valor bruto</p>
+                <p className="mt-1 text-sm font-black text-emerald-400">
+                  R$ {amount.toLocaleString('pt-BR',{minimumFractionDigits:2})}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] font-black uppercase tracking-wide text-zinc-600">Criada</p>
+                <p className="mt-1 text-sm font-bold text-zinc-300">
+                  {routeDate(route)?.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}) || 'Sem horário'}
+                </p>
+              </div>
+            </div>
+          </button>
+        );
+      })}
+
+      {rows.length === 0 && (
+        <div className="rounded-[28px] border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-12 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-900 text-zinc-700">
+            <MapPin size={22}/>
+          </div>
+          <p className="mt-4 text-sm font-black text-zinc-300">Nenhuma rota encontrada</p>
+          <p className="mx-auto mt-1 max-w-[250px] text-[11px] text-zinc-600">
+            Não há rotas que correspondam à data e ao filtro selecionado.
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            {filter !== 'todas' && (
+              <button onClick={() => setFilter('todas')} className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-[10px] font-black text-zinc-400">
+                Limpar filtro
+              </button>
+            )}
+            {selectedDate !== todayKey() && (
+              <button onClick={() => selectDate(todayKey())} className="rounded-xl bg-emerald-500/10 px-3 py-2 text-[10px] font-black text-emerald-400">
+                Ir para hoje
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
 
     {calendarOpen && <div className="fixed inset-0 z-50 flex items-end bg-black/75 p-3 backdrop-blur-sm sm:items-center sm:justify-center" onClick={() => setCalendarOpen(false)}><div className="w-full max-w-sm rounded-[30px] border border-zinc-800 bg-zinc-950 p-5 shadow-2xl" onClick={event => event.stopPropagation()}>
