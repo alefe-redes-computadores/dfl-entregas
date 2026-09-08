@@ -491,7 +491,10 @@ export function buildOperationalMemoryInsights(
         minimumSample,
       ),
       title: 'Há rota fora do padrão de rotas de tamanho parecido',
-      summary: `${contextualAnomalies.length} rota${contextualAnomalies.length === 1 ? '' : 's'} ficou${contextualAnomalies.length === 1 ? '' : 'ram'} bem acima da mediana do próprio grupo de paradas.`,
+      summary:
+        contextualAnomalies.length === 1
+          ? '1 rota ficou bem acima da mediana do próprio grupo de paradas.'
+          : `${contextualAnomalies.length} rotas ficaram bem acima da mediana do próprio grupo de paradas.`,
       explanation:
         'A comparação usa somente rotas confiáveis com quantidade de paradas semelhante. Ainda assim, o sinal não atribui causa ao entregador: trânsito, espera no cliente, distância e composição da rota podem explicar a diferença.',
       sampleSize: worst.comparisonSample,

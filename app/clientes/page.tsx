@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Crown, MapPin, MessageCircle, PackageOpen, Plus, Search, Smartphone, Store, Trophy, UserRound } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Crown, MapPin, MessageCircle, PackageOpen, Plus, Search, Smartphone, Store, Trophy, UserRound } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { getCustomerStats, isOperationalCustomer, normalizeCustomerName } from '@/lib/customer-analytics';
 
@@ -29,7 +29,34 @@ export default function CustomersPage(){
   const maxOrders=ranked[0]?.stats.orderCount||1;
 
   return <div className="flex flex-col gap-5 pb-28">
-    <header className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-emerald-500">Relacionamento</p><h1 className="font-heading text-2xl font-bold text-zinc-50">Clientes</h1></div><button onClick={()=>router.push('/clientes/novo')} className="flex h-11 items-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-black text-zinc-950"><Plus size={18}/>Novo</button></header>
+    <header className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <button
+          type="button"
+          onClick={() => router.replace('/loja')}
+          aria-label="Voltar para Minha Loja"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-300 active:scale-95"
+        >
+          <ChevronLeft size={20} />
+        </button>
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-[.18em] text-emerald-500">
+            Relacionamento
+          </p>
+          <h1 className="truncate font-heading text-2xl font-bold text-zinc-50">
+            Clientes
+          </h1>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => router.push('/clientes/novo')}
+        className="flex h-11 shrink-0 items-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-black text-zinc-950 active:scale-95"
+      >
+        <Plus size={18} />
+        Novo
+      </button>
+    </header>
     <div className="grid grid-cols-3 gap-2"><Metric value={customers.length} label="Clientes"/><Metric value={items.filter(item=>item.stats.orderCount>0).length} label="Com pedidos"/><Metric value={deliveries.length} label="Pedidos ligados"/></div>
 
     {ranked.length>0&&<section className="rounded-[26px] border border-amber-500/20 bg-gradient-to-b from-amber-500/[.07] to-zinc-900/35 p-4"><div className="mb-4 flex items-center justify-between"><div><p className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-400"><Trophy size={15}/>Quem mais pede</p><p className="mt-1 text-[11px] text-zinc-500">Calculado pelas entregas reais</p></div><span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-400">Top 5</span></div><div className="space-y-3">{ranked.slice(0,5).map(({customer,stats},index)=><button key={customer.id} onClick={()=>router.push(`/clientes/details?id=${customer.id}`)} className="block w-full text-left"><div className="flex items-center gap-2"><span className={`flex h-6 w-6 items-center justify-center rounded-lg text-[10px] font-black ${index===0?'bg-amber-500 text-zinc-950':'bg-zinc-800 text-zinc-400'}`}>{index===0?<Crown size={12}/>:index+1}</span><span className="min-w-0 flex-1 truncate text-xs font-bold text-zinc-200">{customer.name}</span><span className="text-xs font-black text-amber-400">{stats.orderCount}</span></div><div className="ml-8 mt-1.5 h-1.5 overflow-hidden rounded-full bg-zinc-800"><div className="h-full rounded-full bg-gradient-to-r from-amber-600 to-amber-400" style={{width:`${Math.max(8,(stats.orderCount/maxOrders)*100)}%`}}/></div></button>)}</div></section>}

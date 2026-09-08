@@ -49,7 +49,10 @@ export function SummaryCard({
           <div className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
             {title}
           </div>
-          <div className="mt-2 break-words text-2xl font-black tracking-tight text-zinc-100">
+          <div
+            className="mt-2 whitespace-nowrap text-[clamp(1.45rem,6.2vw,2rem)] font-black tracking-tight text-zinc-100"
+            title={String(value)}
+          >
             {value}
           </div>
         </div>

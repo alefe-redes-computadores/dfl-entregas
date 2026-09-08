@@ -14,7 +14,30 @@ export function MotoboyForm({initial,busy,submitLabel,onSubmit}:Props){
   const [name,setName]=useState(initial?.name||'');const [type,setType]=useState<MotoboyType>(initial?.type||'fixo');const [active,setActive]=useState(initial?.active??true);const [avatar,setAvatar]=useState(initial?.avatar||'bike-sky');
   const [ruleType,setRuleType]=useState<PaymentRuleType|''>(initial?.payment_rule?.type||'');const [fixed,setFixed]=useState(initial?.payment_rule?.fixed_amount?initial.payment_rule.fixed_amount.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');const [rate,setRate]=useState(initial?.payment_rule?.delivery_fee?initial.payment_rule.delivery_fee.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');const [threshold,setThreshold]=useState(initial?.payment_rule?.threshold?.toString()||'');const [extra,setExtra]=useState(initial?.payment_rule?.extra_fee?initial.payment_rule.extra_fee.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');
   useEffect(()=>{if(!initial)return;setName(initial.name);setType(initial.type||'fixo');setActive(initial.active);setAvatar(initial.avatar||'bike-sky');setRuleType(initial.payment_rule?.type||'');setFixed(initial.payment_rule?.fixed_amount?initial.payment_rule.fixed_amount.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');setRate(initial.payment_rule?.delivery_fee?initial.payment_rule.delivery_fee.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');setThreshold(initial.payment_rule?.threshold?.toString()||'');setExtra(initial.payment_rule?.extra_fee?initial.payment_rule.extra_fee.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');},[initial]);
-  const buildRule=():MotoboyPaymentRule|undefined=>ruleType?{type:ruleType,fixed_amount:ruleType!=='per_delivery'?moneyNumber(fixed):undefined,delivery_fee:ruleType==='per_delivery'?moneyNumber(rate):undefined,threshold:ruleType==='fixed_plus_variable'?Number(threshold)||0:undefined,extra_fee:ruleType==='fixed_plus_variable'?moneyNumber(extra):undefined}:undefined;
+  const buildRule = (): MotoboyPaymentRule | undefined => {
+    if (!ruleType) return undefined;
+
+    if (ruleType === 'fixed') {
+      return {
+        type: 'fixed',
+        fixed_amount: moneyNumber(fixed),
+      };
+    }
+
+    if (ruleType === 'per_delivery') {
+      return {
+        type: 'per_delivery',
+        delivery_fee: moneyNumber(rate),
+      };
+    }
+
+    return {
+      type: 'fixed_plus_variable',
+      fixed_amount: moneyNumber(fixed),
+      threshold: Number(threshold) || 0,
+      extra_fee: moneyNumber(extra),
+    };
+  };
   return <form onSubmit={async event=>{event.preventDefault();await onSubmit({name:name.trim(),active,type,avatar,payment_rule:buildRule()});}} className="flex flex-col gap-5 pb-10">
     <label className="flex flex-col gap-2"><span className="flex items-center gap-2 text-xs font-bold text-zinc-400"><UserRound size={14}/>Nome do entregador</span><input value={name} onChange={event=>setName(event.target.value)} placeholder="Ex: Bruno" required className="field"/></label>
     <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-1"><button type="button" onClick={()=>setType('fixo')} className={`h-12 rounded-xl text-sm font-bold ${type==='fixo'?'bg-sky-500 text-zinc-950':'text-zinc-500'}`}>Fixo</button><button type="button" onClick={()=>setType('avulso')} className={`h-12 rounded-xl text-sm font-bold ${type==='avulso'?'bg-amber-500 text-zinc-950':'text-zinc-500'}`}>Avulso</button></div>
@@ -26,4 +49,30 @@ export function MotoboyForm({initial,busy,submitLabel,onSubmit}:Props){
     <style jsx>{`.field{height:3.25rem;width:100%;border-radius:1rem;border:1px solid rgb(39 39 42);background:rgb(24 24 27/.6);padding:0 1rem;color:rgb(244 244 245);font-size:.875rem;outline:none}.field:focus{border-color:rgb(14 165 233)}`}</style>
   </form>;
 }
-function MoneyField({label,value,setValue}:{label:string;value:string;setValue:(value:string)=>void}){return <label className="mt-4 block text-[10px] font-bold text-zinc-500">{label}<div className="relative mt-1"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">R$</span><input value={value} onChange={event=>setValue(moneyInput(event.target.value))} inputMode="numeric" placeholder="0,00" className="field pl-10"/></div></label>;}
+function MoneyField({
+  label,
+  value,
+  setValue,
+}: {
+  label: string;
+  value: string;
+  setValue: (value: string) => void;
+}) {
+  return (
+    <label className="mt-4 block text-[10px] font-bold text-zinc-500">
+      {label}
+      <div className="relative mt-1">
+        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-500">
+          R$
+        </span>
+        <input
+          value={value}
+          onChange={(event) => setValue(moneyInput(event.target.value))}
+          inputMode="numeric"
+          placeholder="0,00"
+          className="h-[3.25rem] w-full rounded-2xl border border-zinc-800 bg-zinc-900/60 pl-11 pr-4 text-sm font-bold text-zinc-100 outline-none transition focus:border-sky-500"
+        />
+      </div>
+    </label>
+  );
+}
