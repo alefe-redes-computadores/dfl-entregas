@@ -15,6 +15,7 @@ import { extractCoordinatesFromUrl } from '@/lib/maps';
 import { normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
 import { getFulfillmentMode } from '@/lib/delivery-mode';
+import { dateKey, deliveryDate, routeDate } from '@/lib/operational-time';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
@@ -71,6 +72,33 @@ const [routeId, setRouteId] = useState('');
   
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const currentDelivery = useMemo(
+    () => deliveries.find((delivery) => delivery.id === deliveryId),
+    [deliveries, deliveryId],
+  );
+
+  const deliveryOperationalDateKey = useMemo(() => {
+    if (!currentDelivery) return '';
+    const value = deliveryDate(currentDelivery);
+    return value ? dateKey(value) : '';
+  }, [currentDelivery]);
+
+  const selectableRoutes = useMemo(
+    () =>
+      routes.filter((route) => {
+        if (route.status !== 'aberta') return false;
+        const value = routeDate(route);
+        return Boolean(
+          deliveryOperationalDateKey &&
+            value &&
+            dateKey(value) === deliveryOperationalDateKey,
+        );
+      }),
+    [deliveryOperationalDateKey, routes],
+  );
+
+  const currentRoute = routes.find((route) => route.id === routeId);
 
   const formatCurrencyInput = (inputValue: string) => {
     const onlyDigits = inputValue.replace(/\D/g, '');
@@ -395,7 +423,8 @@ const [routeId, setRouteId] = useState('');
     if (delivery) {
       setOrigin(delivery.origin || 'ifood');
       setFulfillmentMode(getFulfillmentMode(delivery));
-      setRouteId(delivery.route_id);
+      const linkedRoute = routes.find((route) => route.id === delivery.route_id);
+      setRouteId(linkedRoute ? delivery.route_id : '');
       setOrderId(delivery.order_id || '');
       setIfoodId(delivery.ifood_id || '');
       setValue(delivery.value ? delivery.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
@@ -423,7 +452,7 @@ const [routeId, setRouteId] = useState('');
       toast.error('Entrega não encontrada');
       router.replace(detailsReturn);
     }
-  }, [deliveryId, deliveries, router, getCustomerById]);
+  }, [deliveryId, deliveries, router, getCustomerById, routes]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -434,6 +463,17 @@ const [routeId, setRouteId] = useState('');
           : 'Informe o valor do pedido',
       );
       return;
+    }
+
+    if (fulfillmentMode === 'delivery') {
+      const selectedRoute = selectableRoutes.find((route) => route.id === routeId);
+      if (!selectedRoute) {
+        toast.error('Escolha uma rota aberta do mesmo dia deste pedido.', {
+          description:
+            'Rotas fechadas ou de outra data não podem receber novas associações.',
+        });
+        return;
+      }
     }
 
     if (origin === 'ifood') {
@@ -520,7 +560,7 @@ const [routeId, setRouteId] = useState('');
     }
   };
 
-  const routeOptions = routes.filter(r => r.status === 'aberta' || r.id === routeId);
+  const routeOptions = selectableRoutes;
 
   return (
     <div className="relative flex flex-col gap-5 pb-28 animate-in fade-in duration-300">
@@ -641,10 +681,27 @@ const [routeId, setRouteId] = useState('');
         {fulfillmentMode === 'delivery' && (
           <>
         {/* SELEÇÃO DE ROTA */}
+        {currentDelivery &&
+          (!currentDelivery.route_id ||
+            !routes.some((route) => route.id === currentDelivery.route_id)) && (
+            <div className="rounded-[22px] border border-amber-500/20 bg-amber-500/[.07] px-4 py-3">
+              <p className="text-xs font-black text-amber-300">
+                Pedido aguardando reassociação
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                O vínculo anterior não aponta para uma rota válida. Escolha abaixo
+                uma rota aberta do mesmo dia para retirar este pedido da recuperação.
+              </p>
+            </div>
+          )}
+
         <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
           <div className="mb-3">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-500">03 · Logística</p>
             <p className="mt-1 text-sm font-black text-zinc-200">Rota responsável</p>
+            <p className="mt-1 text-[11px] text-zinc-600">
+              Somente rotas abertas do mesmo dia operacional podem receber este pedido.
+            </p>
           </div>
         <div className="relative flex flex-col gap-2">
           <label className="text-xs font-bold text-zinc-500">Selecionar rota</label>
@@ -656,7 +713,10 @@ const [routeId, setRouteId] = useState('');
             <span className={routeId ? 'text-zinc-100' : 'text-zinc-500'}>
               {routeId ? (
                 <span className="font-semibold">
-                  {routeOptions.find(r => r.id === routeId)?.name} <span className="text-zinc-400 font-normal">({routeOptions.find(r => r.id === routeId)?.motoboy_name}) {routeOptions.find(r => r.id === routeId)?.status === 'fechada' && 'Fechada'}</span>
+                  {routeOptions.find(r => r.id === routeId)?.name}{' '}
+                  <span className="text-zinc-400 font-normal">
+                    ({routeOptions.find(r => r.id === routeId)?.motoboy_name})
+                  </span>
                 </span>
               ) : 'Selecione a rota...'}
             </span>
@@ -667,6 +727,12 @@ const [routeId, setRouteId] = useState('');
 
           {isRouteDropdownOpen && (
             <div className="absolute top-[84px] z-30 flex max-h-56 w-full flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl">
+              {routeOptions.length === 0 && (
+                <div className="px-4 py-4 text-xs leading-relaxed text-zinc-500">
+                  Nenhuma rota aberta deste dia. Crie ou reabra uma rota compatível
+                  antes de reassociar a entrega.
+                </div>
+              )}
               {routeOptions.map(r => (
                 <button
                   key={r.id}
@@ -675,7 +741,10 @@ const [routeId, setRouteId] = useState('');
                   className="flex items-center justify-between px-4 py-4 text-left text-sm active:bg-zinc-800 border-b border-zinc-800/50 last:border-0"
                 >
                   <span className={`font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>
-                    {r.name} <span className={routeId === r.id ? 'text-emerald-500/70' : 'text-zinc-500 font-normal'}>({r.motoboy_name}) {r.status === 'fechada' && 'Fechada'}</span>
+                    {r.name}{' '}
+                    <span className={routeId === r.id ? 'text-emerald-500/70' : 'text-zinc-500 font-normal'}>
+                      ({r.motoboy_name})
+                    </span>
                   </span>
                   {routeId === r.id ? (
                     <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />

@@ -6,7 +6,7 @@ import {
   MessageCircle, Info, Sparkles, ClipboardPaste, Bike, ShoppingBag,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { dateKey } from '@/lib/operational-time';
+import { dateKey, routeDate } from '@/lib/operational-time';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; 
@@ -32,7 +32,11 @@ export default function NovaEntregaPage() {
   const addDelivery = useAppStore((state) => state.addDelivery);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
 
-  const openRoutes = routes.filter(r => r.status === 'aberta');
+  const openRoutes = routes.filter((route) => {
+    if (route.status !== 'aberta') return false;
+    const value = routeDate(route);
+    return Boolean(value) && dateKey(value) === todayDateKey;
+  });
 
   const [magicText, setMagicText] = useState('');
   const [isParserOpen, setIsParserOpen] = useState(true);
@@ -244,6 +248,14 @@ const [routeId, setRouteId] = useState('');
       return;
     }
     
+    if (fulfillmentMode === 'delivery') {
+      const selectedRoute = openRoutes.find((route) => route.id === routeId);
+      if (!selectedRoute) {
+        toast.error('Selecione uma rota aberta da operação de hoje.');
+        return;
+      }
+    }
+
     if (origin === 'ifood') {
       if (!orderId) {
         toast.error('Pedidos do iFood exigem o Número do Pedido.');
@@ -478,6 +490,9 @@ const [routeId, setRouteId] = useState('');
           <div className="mb-3">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-500">03 · Logística</p>
             <p className="mt-1 text-sm font-black text-zinc-200">Rota responsável</p>
+            <p className="mt-1 text-[11px] text-zinc-600">
+              Somente rotas abertas da operação de hoje aparecem aqui.
+            </p>
           </div>
         <div className="relative flex flex-col gap-2">
           <label className="text-xs font-bold text-zinc-500">Selecionar rota</label>
