@@ -422,7 +422,7 @@ export default function ConfirmacoesPage() {
       }
     }
 
-    router.push(
+    router.replace(
       `/confirmar?orderId=${encodeURIComponent(ifoodId)}&code=${encodeURIComponent(
         code,
       )}&returnTo=${encodeURIComponent(confirmationReturn)}`,
@@ -451,7 +451,7 @@ export default function ConfirmacoesPage() {
 
         <button
           onClick={() =>
-            router.push(
+            router.replace(
               `/confirmar?returnTo=${encodeURIComponent(confirmationReturn)}`,
             )
           }

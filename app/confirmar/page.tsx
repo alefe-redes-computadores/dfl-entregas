@@ -17,6 +17,14 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 const onlyDigits = (value: string, max: number) =>
   value.replace(/\D/g, '').slice(0, max);
 
+const safeInternalReturnTo = (value: string | null) =>
+  value && value.startsWith('/') && !value.startsWith('//')
+    ? value
+    : '/confirmacoes';
+
+const IFOOD_CONFIRMATION_URL =
+  'https://confirmacao-entrega-propria.ifood.com.br';
+
 function ConfirmarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -29,7 +37,7 @@ function ConfirmarContent() {
     () => onlyDigits(searchParams.get('code') || '', 4),
     [searchParams]
   );
-  const returnTo = searchParams.get('returnTo') || '/confirmacoes';
+  const returnTo = safeInternalReturnTo(searchParams.get('returnTo'));
 
   const [orderId, setOrderId] = useState(initialOrderId);
   const [code, setCode] = useState(initialCode);
@@ -38,6 +46,7 @@ function ConfirmarContent() {
   useEffect(() => {
     setOrderId(initialOrderId);
     setCode(initialCode);
+    setCopiedFirstValue(false);
   }, [initialOrderId, initialCode]);
 
   useEffect(() => {
@@ -78,7 +87,7 @@ function ConfirmarContent() {
 
   const leaveConfirmation = async () => {
     await vibrate(ImpactStyle.Light);
-    router.replace(returnTo.startsWith('/') ? returnTo : '/');
+    router.replace(returnTo);
   };
 
   return (
@@ -150,19 +159,30 @@ function ConfirmarContent() {
             Como o portal do iFood roda em outro domínio, o navegador não permite que o DFL
             preencha os campos internos sozinho.
           </p>
-          <button
-            onClick={leaveConfirmation}
-            className="flex shrink-0 items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[10px] font-black text-emerald-400 active:scale-95"
-          >
-            <CheckCircle2 size={12} />
-            Voltar à central
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => window.open(IFOOD_CONFIRMATION_URL, '_blank', 'noopener,noreferrer')}
+              className="flex items-center gap-1 rounded-lg bg-zinc-800 px-2.5 py-1.5 text-[10px] font-black text-zinc-300 active:scale-95"
+              title="Abrir fora do DFL caso o portal não carregue incorporado"
+            >
+              <ExternalLink size={12} />
+              Externo
+            </button>
+            <button
+              onClick={leaveConfirmation}
+              className="flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[10px] font-black text-emerald-400 active:scale-95"
+            >
+              <CheckCircle2 size={12} />
+              Voltar
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="relative flex-1 bg-white">
         <iframe
-          src="https://confirmacao-entrega-propria.ifood.com.br"
+          src={IFOOD_CONFIRMATION_URL}
           className="absolute inset-0 h-full w-full border-none"
           title="Confirmação iFood"
           sandbox="allow-scripts allow-same-origin allow-forms"

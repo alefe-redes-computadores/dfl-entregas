@@ -90,8 +90,15 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       await Haptics.impact({ style: ImpactStyle.Heavy });
     }
 
-    await navigator.clipboard.writeText(textToCopy);
-    toast.success('Copiado para a área de transferência!', { duration: 1400 });
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      toast.success('Copiado para a área de transferência!', { duration: 1400 });
+    } catch {
+      toast.error('Não foi possível copiar automaticamente.', {
+        description: 'Toque novamente ou copie o valor manualmente.',
+      });
+      return;
+    }
 
     const normalizedId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
     const copiedDigits = textToCopy.replace(/\D/g, '');

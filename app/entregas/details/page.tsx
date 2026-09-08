@@ -12,7 +12,9 @@ import {
   Clock3,
   CreditCard,
   CupSoda,
+  Copy,
   Edit3,
+  ExternalLink,
   MapPin,
   MessageCircle,
   Navigation,
@@ -117,6 +119,10 @@ function DeliveryDetailsContent() {
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const savedConfirmationCode =
     delivery.confirmation_code || customer?.last_confirmation_code || '';
+  const normalizedIfoodId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
+  const normalizedConfirmationCode = savedConfirmationCode.replace(/\D/g, '').slice(0, 4);
+  const confirmationReturn =
+    `/entregas/details?id=${encodeURIComponent(delivery.id)}${dateSuffix}`;
   const routeIsClosed = logistics && route?.status === 'fechada';
   const operationalStartedAt = route ? routeStartedAt(route) : '';
   const routeNotStarted =
@@ -135,6 +141,39 @@ function DeliveryDetailsContent() {
     }
 
     window.open(`https://wa.me/55${phone.replace(/\D/g, '')}`, '_blank');
+  };
+
+  const copyIfoodValue = async (value: string, label: string) => {
+    if (!value) {
+      toast.error(`${label} não informado.`);
+      return;
+    }
+
+    try {
+      await vibrate(ImpactStyle.Light);
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copiado.`);
+    } catch {
+      toast.error(`Não foi possível copiar ${label.toLowerCase()}.`);
+    }
+  };
+
+  const openIfoodConfirmation = async () => {
+    await vibrate(ImpactStyle.Medium);
+
+    if (normalizedIfoodId.length === 8) {
+      try {
+        await navigator.clipboard.writeText(normalizedIfoodId);
+      } catch {
+        // Os dados permanecem visíveis e copiáveis na tela do portal.
+      }
+    }
+
+    router.replace(
+      `/confirmar?orderId=${encodeURIComponent(normalizedIfoodId)}&code=${encodeURIComponent(
+        normalizedConfirmationCode,
+      )}&returnTo=${encodeURIComponent(confirmationReturn)}`,
+    );
   };
 
   const executeCompletion = async (codeToSave?: string) => {
@@ -358,6 +397,79 @@ function DeliveryDetailsContent() {
           <InfoRow icon={AlertTriangle} label="Observações" value={delivery.observation} />
         )}
       </section>
+
+      {isIfood && (
+        <section className="rounded-[24px] border border-red-500/20 bg-red-500/[.045] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">
+                Confirmação iFood
+              </p>
+              <p className="mt-1 text-sm font-black text-zinc-100">
+                Dados prontos para o portal
+              </p>
+            </div>
+            <span
+              className={`rounded-full px-2.5 py-1 text-[9px] font-black ${
+                normalizedIfoodId.length === 8
+                  ? normalizedConfirmationCode.length === 4
+                    ? 'bg-emerald-500/10 text-emerald-400'
+                    : 'bg-amber-500/10 text-amber-400'
+                  : 'bg-red-500/10 text-red-400'
+              }`}
+            >
+              {normalizedIfoodId.length !== 8
+                ? 'Falta ID'
+                : normalizedConfirmationCode.length === 4
+                  ? 'ID + código prontos'
+                  : 'Código pendente'}
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => copyIfoodValue(normalizedIfoodId, 'ID do pedido')}
+              className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3 text-left active:scale-[0.99]"
+            >
+              <span className="text-[9px] font-black uppercase tracking-wide text-zinc-600">
+                ID de 8 dígitos
+              </span>
+              <span className="mt-1 flex items-center justify-between gap-2">
+                <strong className="truncate font-mono text-sm text-zinc-100">
+                  {normalizedIfoodId || 'Não informado'}
+                </strong>
+                <Copy size={14} className="shrink-0 text-sky-400" />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => copyIfoodValue(normalizedConfirmationCode, 'Código do cliente')}
+              className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3 text-left active:scale-[0.99]"
+            >
+              <span className="text-[9px] font-black uppercase tracking-wide text-zinc-600">
+                Código do cliente
+              </span>
+              <span className="mt-1 flex items-center justify-between gap-2">
+                <strong className="truncate font-mono text-sm text-amber-400">
+                  {normalizedConfirmationCode || 'Pendente'}
+                </strong>
+                <Copy size={14} className="shrink-0 text-amber-400" />
+              </span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={openIfoodConfirmation}
+            className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-red-500 font-black text-white active:scale-[0.98]"
+          >
+            <ExternalLink size={16} />
+            Abrir portal de confirmação
+          </button>
+        </section>
+      )}
 
       <section className={`rounded-[24px] border p-4 ${
         delivery.completed
