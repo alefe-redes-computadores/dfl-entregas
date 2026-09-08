@@ -18,14 +18,15 @@ import {
   Smartphone,
   Store,
   TimerReset,
+  CalendarDays,
+  ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { useAppStore } from '@/store/useAppStore';
 import { fulfillmentLabel, getFulfillmentMode } from '@/lib/delivery-mode';
-import { deliveryDate } from '@/lib/operational-time';
-import { firstValidTimestamp } from '@/lib/reports/time';
+import { dateFromKey, dateKey, deliveryDate, shiftDateKey } from '@/lib/operational-time';
 import {
   getIfoodConfirmationInfo,
   isIfoodOrder,
@@ -34,16 +35,6 @@ import {
 import type { Delivery } from '@/types';
 
 type QueueFilter = 'all' | IfoodConfirmationState;
-
-const dateKey = (value: Date | string) =>
-  new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(value));
-
-const todayKey = () => dateKey(new Date());
 
 const normalize = (value: unknown) =>
   String(value || '')
@@ -102,15 +93,35 @@ export default function ConfirmacoesPage() {
 
   const [filter, setFilter] = useState<QueueFilter>('all');
   const [query, setQuery] = useState('');
+  const [selectedDateKey, setSelectedDateKey] = useState(() => dateKey(new Date()));
+  const selectedDate = dateFromKey(selectedDateKey);
+  const selectedDateLabel =
+    selectedDateKey === dateKey(new Date())
+      ? 'Hoje'
+      : selectedDate.toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        });
+
 
   const allIfood = useMemo(
     () => deliveries.filter((delivery) => isIfoodOrder(delivery)),
     [deliveries],
   );
 
+  const selectedIfood = useMemo(
+    () =>
+      allIfood.filter((delivery) => {
+        const created = deliveryDate(delivery);
+        return Boolean(created) && dateKey(created) === selectedDateKey;
+      }),
+    [allIfood, selectedDateKey],
+  );
+
   const queue = useMemo(
     () =>
-      allIfood
+      selectedIfood
         .filter((delivery) => !delivery.completed)
         .map((delivery) => {
           const customer = customers.find((item) => item.id === delivery.customer_id);
@@ -159,28 +170,23 @@ export default function ConfirmacoesPage() {
             new Date(a.created || 0).getTime() - new Date(b.created || 0).getTime()
           );
         }),
-    [allIfood, customers, filter, query],
+    [selectedIfood, customers, filter, query],
   );
 
   const metrics = useMemo(() => {
-    const pending = allIfood.filter((delivery) => !delivery.completed);
+    const pending = selectedIfood.filter((delivery) => !delivery.completed);
     const withoutCode = pending.filter((delivery) => {
       const customer = customers.find((item) => item.id === delivery.customer_id);
       return getIfoodConfirmationInfo(delivery, customer).code.length !== 4;
     }).length;
-
-    const completedToday = allIfood.filter((delivery) => {
-      if (!delivery.completed) return false;
-      const completedAt = firstValidTimestamp(delivery.completed_at);
-      return completedAt ? dateKey(completedAt) === todayKey() : false;
-    }).length;
+    const completed = selectedIfood.filter((delivery) => delivery.completed).length;
 
     return {
       pending: pending.length,
       withoutCode,
-      completedToday,
+      completed,
     };
-  }, [allIfood, customers]);
+  }, [customers, selectedIfood]);
 
   const vibrate = async (style: ImpactStyle) => {
     if (Capacitor.isNativePlatform()) {
@@ -272,6 +278,38 @@ export default function ConfirmacoesPage() {
         </div>
       </section>
 
+      <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/40 p-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedDateKey((key) => shiftDateKey(key, -1))}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-400 active:scale-95"
+            aria-label="Dia anterior"
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedDateKey(dateKey(new Date()))}
+            className="flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/15 bg-red-500/[0.06] px-3 text-xs font-black text-red-300 active:scale-[0.99]"
+            aria-label="Voltar para hoje"
+          >
+            <CalendarDays size={15} />
+            {selectedDateLabel}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedDateKey((key) => shiftDateKey(key, 1))}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-400 active:scale-95"
+            aria-label="Próximo dia"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </section>
+
       <div className="grid grid-cols-3 gap-2">
         <Metric
           icon={TimerReset}
@@ -287,8 +325,8 @@ export default function ConfirmacoesPage() {
         />
         <Metric
           icon={CheckCircle2}
-          label="Concluídos hoje"
-          value={metrics.completedToday}
+          label="Concluídos"
+          value={metrics.completed}
           tone="text-emerald-400"
         />
       </div>
@@ -462,7 +500,7 @@ export default function ConfirmacoesPage() {
               Nenhuma pendência neste filtro
             </h3>
             <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-zinc-600">
-              Quando houver pedidos iFood abertos, eles aparecerão aqui automaticamente.
+              Não há pedidos iFood pendentes para esta data e filtro.
             </p>
           </div>
         )}
