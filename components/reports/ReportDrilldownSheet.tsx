@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Banknote,
   CheckCircle2,
@@ -99,6 +99,10 @@ export function ReportDrilldownSheet({
 }: ReportDrilldownSheetProps) {
   const [selectedKey, setSelectedKey] = useState<string | null>(selection?.key ?? null);
 
+  useEffect(() => {
+    setSelectedKey(selection?.key ?? null);
+  }, [selection]);
+
   const effectiveSelection = selection
     ? { ...selection, key: selectedKey ?? selection.key }
     : null;
@@ -176,7 +180,9 @@ export function ReportDrilldownSheet({
 
           {selection.kind === 'route' && (
             <div className="space-y-3">
-              {model.routeTimings.map((route) => (
+              {model.routeTimings
+                .filter((route) => !effectiveSelection.key || route.routeId === effectiveSelection.key)
+                .map((route) => (
                 <article
                   key={route.routeId}
                   className="rounded-[20px] border border-zinc-800 bg-zinc-900/60 p-4"
@@ -200,15 +206,32 @@ export function ReportDrilldownSheet({
                 </article>
               ))}
 
-              {model.routeTimings.length === 0 && (
-                <Empty label="Nenhuma rota com duração confiável neste período." />
+              {model.routeTimings.filter(
+                (route) => !effectiveSelection.key || route.routeId === effectiveSelection.key,
+              ).length === 0 && (
+                <Empty label="Nenhuma rota com duração confiável neste recorte." />
               )}
             </div>
           )}
 
           {selection.kind === 'quality' && (
             <div className="space-y-3">
-              {qualityIssues.map((issue) => (
+              <div className="grid grid-cols-2 gap-3">
+                <MiniStat
+                  label="Tipos de ocorrência"
+                  value={String(qualityIssues.filter((issue) => issue.count > 0).length)}
+                  icon={<PackageOpen size={14} />}
+                />
+                <MiniStat
+                  label="Ocorrências"
+                  value={String(
+                    qualityIssues.reduce((sum, issue) => sum + issue.count, 0),
+                  )}
+                  icon={<Clock3 size={14} />}
+                />
+              </div>
+
+              {qualityIssues.filter((issue) => issue.count > 0).map((issue) => (
                 <article
                   key={issue.key}
                   className="rounded-[20px] border border-zinc-800 bg-zinc-900/60 p-4"

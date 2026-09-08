@@ -25,6 +25,7 @@ interface ReportChartCardProps {
   valueLabel: string;
   valueFormatter?: (value: number) => string;
   onExplore: () => void;
+  onSelectBucket?: (bucket: ReportBucket) => void;
   footer?: string;
 }
 
@@ -38,6 +39,7 @@ export function ReportChartCard({
   valueLabel,
   valueFormatter,
   onExplore,
+  onSelectBucket,
   footer,
 }: ReportChartCardProps) {
   const formatter = valueFormatter ?? ((value: number) => String(value));
@@ -45,6 +47,17 @@ export function ReportChartCard({
     ...item,
     chartValue: item[dataKey] ?? 0,
   }));
+
+  const handleChartClick = (state: unknown) => {
+    if (!onSelectBucket || !state || typeof state !== 'object') return;
+
+    const activePayload = (
+      state as { activePayload?: Array<{ payload?: ReportBucket }> }
+    ).activePayload;
+    const bucket = activePayload?.[0]?.payload;
+
+    if (bucket?.key) onSelectBucket(bucket);
+  };
 
   return (
     <section className="overflow-hidden rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 shadow-sm">
@@ -55,6 +68,11 @@ export function ReportChartCard({
             <h2 className="text-base font-black tracking-tight">{title}</h2>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-zinc-500">{description}</p>
+          {onSelectBucket && chartData.length > 0 && (
+            <p className="mt-2 text-[10px] font-bold text-emerald-400/80">
+              Toque em uma barra ou ponto para abrir os registros daquele recorte.
+            </p>
+          )}
         </div>
 
         <button
@@ -75,7 +93,12 @@ export function ReportChartCard({
         <div className="h-[250px] w-full px-2 pb-1">
           <ResponsiveContainer width="100%" height="100%">
             {chartType === 'line' ? (
-              <LineChart data={chartData} margin={{ top: 16, right: 14, left: -20, bottom: 0 }}>
+              <LineChart
+                data={chartData}
+                margin={{ top: 16, right: 14, left: -20, bottom: 0 }}
+                onClick={handleChartClick}
+                style={{ cursor: onSelectBucket ? 'pointer' : 'default' }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                 <XAxis
                   dataKey="label"
@@ -110,7 +133,12 @@ export function ReportChartCard({
                 />
               </LineChart>
             ) : (
-              <BarChart data={chartData} margin={{ top: 16, right: 14, left: -20, bottom: 0 }}>
+              <BarChart
+                data={chartData}
+                margin={{ top: 16, right: 14, left: -20, bottom: 0 }}
+                onClick={handleChartClick}
+                style={{ cursor: onSelectBucket ? 'pointer' : 'default' }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                 <XAxis
                   dataKey="label"

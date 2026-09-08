@@ -235,6 +235,15 @@ export default function RelatoriosPage() {
                     'Selecione uma data para ver exatamente quais entregas formaram o ponto do gráfico.',
                 })
               }
+              onSelectBucket={(bucket) =>
+                setDrilldown({
+                  kind: 'daily',
+                  key: bucket.key,
+                  title: `Pedidos de ${bucket.label}`,
+                  subtitle:
+                    'Registros exatos que formam este ponto da evolução diária.',
+                })
+              }
             />
 
             <ReportChartCard
@@ -250,6 +259,15 @@ export default function RelatoriosPage() {
                   title: 'Histórico por horário',
                   subtitle:
                     'Os horários usam o timestamp de criação da entrega em America/Sao_Paulo.',
+                })
+              }
+              onSelectBucket={(bucket) =>
+                setDrilldown({
+                  kind: 'hour',
+                  key: bucket.key,
+                  title: `Pedidos às ${bucket.label}`,
+                  subtitle:
+                    'Pedidos criados nesta faixa horária dentro do período selecionado.',
                 })
               }
               footer={
@@ -273,6 +291,15 @@ export default function RelatoriosPage() {
                   title: 'Histórico por dia da semana',
                   subtitle:
                     'A análise mostra total, média e a amostra de ocorrências de cada dia.',
+                })
+              }
+              onSelectBucket={(bucket) =>
+                setDrilldown({
+                  kind: 'weekday',
+                  key: bucket.key,
+                  title: `Histórico · ${bucket.label}`,
+                  subtitle:
+                    'Todos os pedidos deste dia da semana dentro da janela selecionada.',
                 })
               }
             />
@@ -314,6 +341,15 @@ export default function RelatoriosPage() {
                     'Abra uma data para conferir os pedidos que compõem o valor.',
                 })
               }
+              onSelectBucket={(bucket) =>
+                setDrilldown({
+                  kind: 'daily',
+                  key: bucket.key,
+                  title: `Faturamento · ${bucket.label}`,
+                  subtitle:
+                    'Pedidos que formam exatamente o faturamento deste dia.',
+                })
+              }
             />
 
             <ReportChartCard
@@ -329,6 +365,14 @@ export default function RelatoriosPage() {
                   title: 'Pedidos por forma de pagamento',
                 })
               }
+              onSelectBucket={(bucket) =>
+                setDrilldown({
+                  kind: 'payment',
+                  key: bucket.key,
+                  title: bucket.label,
+                  subtitle: 'Pedidos registrados com esta forma de pagamento.',
+                })
+              }
             />
 
             <ReportChartCard
@@ -342,6 +386,14 @@ export default function RelatoriosPage() {
                 setDrilldown({
                   kind: 'origin',
                   title: 'Pedidos por origem',
+                })
+              }
+              onSelectBucket={(bucket) =>
+                setDrilldown({
+                  kind: 'origin',
+                  key: bucket.key,
+                  title: bucket.label,
+                  subtitle: 'Pedidos que compõem esta origem no período.',
                 })
               }
             />
@@ -491,6 +543,15 @@ export default function RelatoriosPage() {
                   title: 'Histórico por bairro',
                 })
               }
+              onSelectBucket={(bucket) =>
+                setDrilldown({
+                  kind: 'neighborhood',
+                  key: bucket.key,
+                  title: bucket.label,
+                  subtitle:
+                    'Entregas com bairro estruturado vinculadas a este recorte.',
+                })
+              }
               footer={
                 topNeighborhood
                   ? `Maior volume cadastrado: ${topNeighborhood.label} · ${topNeighborhood.count}`
@@ -511,6 +572,15 @@ export default function RelatoriosPage() {
                   title: 'Histórico por motoboy',
                   subtitle:
                     'Quantidade de entregas vinculadas às rotas de cada motoboy no período.',
+                })
+              }
+              onSelectBucket={(bucket) =>
+                setDrilldown({
+                  kind: 'motoboy',
+                  key: bucket.key,
+                  title: bucket.label,
+                  subtitle:
+                    'Entregas vinculadas às rotas deste entregador no período selecionado.',
                 })
               }
               footer={
