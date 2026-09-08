@@ -23,7 +23,7 @@ function formatDateLabel(date: Date): string {
   });
 }
 
-function operationalKey(...values: unknown[]): string | null {
+function operationalKey(...values: Parameters<typeof firstValidTimestamp>): string | null {
   const timestamp = firstValidTimestamp(...values);
   return timestamp ? saoPauloDateKey(timestamp) : null;
 }

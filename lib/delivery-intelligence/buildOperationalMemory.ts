@@ -257,7 +257,7 @@ function buildRouteContexts(
         baselineMinutes == null
           ? null
           : Math.max(baselineMinutes * 1.5, baselineMinutes + 15);
-      const contextStatus =
+      const contextStatus: RouteOperationalContext['contextStatus'] =
         thresholdMinutes == null
           ? 'insufficient'
           : item.durationMinutes > thresholdMinutes
