@@ -97,6 +97,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const storeSettings = useAppStore((state) => state.storeSettings);
   const motoboys = useAppStore((state) => state.motoboys);
 
+  const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
   const deliveries = getDeliveriesByRoute(route.id);
   const totalDeliveries = deliveries.length;
   const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
@@ -512,6 +513,16 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             )}
           </div>
 
+          {isRecoveryRoute && sortedDeliveries.length > 0 && (
+            <div className="mb-3 rounded-[20px] border border-amber-500/20 bg-amber-500/[.07] px-4 py-3">
+              <p className="text-xs font-black text-amber-300">Entregas aguardando correção</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                Estes pedidos perderam o vínculo com uma rota válida. Abra o pedido e
+                edite a rota antes de continuar a operação logística.
+              </p>
+            </div>
+          )}
+
           {sortedDeliveries.length === 0 ? (
             <p className="py-4 text-center text-sm text-zinc-600">Nenhuma entrega nesta rota ainda.</p>
           ) : (
@@ -535,12 +546,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           )}
           
           <div className="mt-2 flex flex-col gap-2">
-            {sortedDeliveries.length === 0 && isNotStarted && (
+            {sortedDeliveries.length === 0 && isNotStarted && !isRecoveryRoute && (
               <button onClick={handleDeleteEmptyRoute} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-red-500/10 border border-red-500/20 py-3.5 text-sm font-bold text-red-500 hover:bg-red-500/20 active:scale-95 transition-all">
                 <Trash2 size={18} /> Excluir Rota Vazia
               </button>
             )}
-            {sortedDeliveries.length > 0 && route.status === 'aberta' && (
+            {sortedDeliveries.length > 0 && route.status === 'aberta' && !isRecoveryRoute && (
               <div className="flex flex-col gap-2 rounded-[22px] border border-zinc-700/80 bg-zinc-950/70 p-2.5">
                 <button
                   onClick={buildOptimizerPreview}
@@ -581,7 +592,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 )}
               </div>
             )}
-            {route.status === 'aberta' && totalDeliveries > 0 ? (
+            {!isRecoveryRoute && route.status === 'aberta' && totalDeliveries > 0 ? (
               !startedAt ? (
                 <button
                   onClick={handleStartRoute}
@@ -609,7 +620,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 </button>
               )
             ) : null}
-            {route.status === 'fechada' && (
+            {!isRecoveryRoute && route.status === 'fechada' && (
               <button
                 onClick={() => setIsReopenModalOpen(true)}
                 disabled={actionBusy}
@@ -618,7 +629,14 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 <RotateCcw size={16} /> Reabrir rota para correções
               </button>
             )}
-            <button onClick={() => router.push(routeDetailsHref)} className="flex w-full items-center justify-center rounded-[18px] border border-zinc-800 py-3 text-xs font-bold text-zinc-400 active:scale-95">Ver detalhes da rota</button>
+            {!isRecoveryRoute && (
+              <button
+                onClick={() => router.push(routeDetailsHref)}
+                className="flex w-full items-center justify-center rounded-[18px] border border-zinc-800 py-3 text-xs font-bold text-zinc-400 active:scale-95"
+              >
+                Ver detalhes da rota
+              </button>
+            )}
           </div>
         </div>
       )}

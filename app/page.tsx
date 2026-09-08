@@ -77,6 +77,7 @@ export default function HomePage() {
   });
 
   const routeIdsDoDia = routesDoDia.map(r => r.id);
+  const allRouteIds = new Set(routes.map((route) => route.id));
 
   // Movimento comercial da loja: todas as modalidades registradas na data.
   // O filtro de motoboy é logístico e não altera o faturamento da loja.
@@ -100,15 +101,22 @@ export default function HomePage() {
       delivery.created_at,
       delivery.createdAt,
     );
+    const hasValidRoute = Boolean(
+      delivery.route_id && allRouteIds.has(delivery.route_id),
+    );
     const isSameDayOrphan =
       !globalMotoboy &&
       deliveryKey === selectedDateKey &&
-      !delivery.route_id;
+      !hasValidRoute;
 
     return belongsToRoute || isSameDayOrphan;
   });
 
-  const orphanedDeliveries = deliveriesDoDia.filter(d => !routeIdsDoDia.includes(d.route_id));
+  const orphanedDeliveries = deliveriesDoDia.filter(
+    (delivery) =>
+      isDeliveryFulfillment(delivery) &&
+      (!delivery.route_id || !allRouteIds.has(delivery.route_id)),
+  );
 
   if (orphanedDeliveries.length > 0 && !globalMotoboy) {
     const rescueRoute: Route = {
@@ -118,7 +126,7 @@ export default function HomePage() {
       motoboy_name: 'Sistema',
       departure_time: selectedDate.toISOString(),
       change_money: 0,
-      drinks_summary: 'Recuperado automaticamente'
+      drinks_summary: 'Entregas sem rota válida — corrigir vínculo'
     };
     routesDoDia.push(rescueRoute);
   }

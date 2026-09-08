@@ -290,9 +290,19 @@ export const useAppStore = create<AppState>()(
         const state = get();
         if (routeId === 'rota-resgate-recuperada') {
           const selectedDateKey = dateKey(state.selectedDate);
+          const validRouteIds = new Set(state.routes.map((route) => route.id));
+
           return state.deliveries.filter((delivery) => {
+            if (!isDeliveryFulfillment(delivery)) return false;
+
             const value = deliveryDate(delivery);
-            return Boolean(value) && dateKey(value) === selectedDateKey;
+            const isSelectedDate =
+              Boolean(value) && dateKey(value) === selectedDateKey;
+            const hasValidRoute = Boolean(
+              delivery.route_id && validRouteIds.has(delivery.route_id),
+            );
+
+            return isSelectedDate && !hasValidRoute;
           });
         }
         return state.deliveries.filter((d) => d.route_id === routeId);
