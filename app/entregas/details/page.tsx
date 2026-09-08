@@ -48,7 +48,11 @@ const dateTime = (...values: TimestampLike[]) => {
 
 function DeliveryDetailsContent() {
   const router = useRouter();
-  const id = useSearchParams().get('id');
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id');
+  const date = searchParams.get('date') || '';
+  const deliveriesReturn = date ? `/entregas?date=${encodeURIComponent(date)}` : '/entregas';
+  const dateSuffix = date ? `&date=${encodeURIComponent(date)}` : '';
   const delivery = useAppStore((state) => state.deliveries.find((item) => item.id === id));
   const route = useAppStore((state) =>
     state.routes.find((item) => item.id === delivery?.route_id),
@@ -70,7 +74,7 @@ function DeliveryDetailsContent() {
           </p>
         </div>
         <button
-          onClick={() => router.replace('/entregas')}
+          onClick={() => router.replace(deliveriesReturn)}
           className="rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold text-zinc-200"
         >
           Voltar aos pedidos
@@ -137,7 +141,7 @@ function DeliveryDetailsContent() {
     <div className="flex flex-col gap-5 pb-28 animate-in fade-in duration-300">
       <header className="flex items-center gap-3">
         <button
-          onClick={() => router.replace('/entregas')}
+          onClick={() => router.replace(deliveriesReturn)}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400"
         >
           <ChevronLeft size={21} />
@@ -151,7 +155,7 @@ function DeliveryDetailsContent() {
         </div>
 
         <button
-          onClick={() => router.push(`/entregas/editar?id=${delivery.id}`)}
+          onClick={() => router.push(`/entregas/editar?id=${delivery.id}${dateSuffix}`)}
           className="flex h-10 items-center gap-2 rounded-xl bg-amber-500 px-3 text-xs font-black text-zinc-950"
         >
           <Edit3 size={15} />

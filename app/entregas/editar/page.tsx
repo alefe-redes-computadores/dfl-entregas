@@ -23,6 +23,13 @@ function DeliveryDetailsForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const deliveryId = searchParams.get('id');
+  const returnDate = searchParams.get('date') || '';
+  const detailsReturn = deliveryId
+    ? `/entregas/details?id=${deliveryId}${returnDate ? `&date=${encodeURIComponent(returnDate)}` : ''}`
+    : '/entregas';
+  const deliveriesReturn = returnDate
+    ? `/entregas?date=${encodeURIComponent(returnDate)}`
+    : '/entregas';
 
   const routes = useAppStore((state) => state.routes);
   const deliveries = useAppStore((state) => state.deliveries);
@@ -414,7 +421,7 @@ const [routeId, setRouteId] = useState('');
       if (rawP) setPhone(formatPhoneInput(rawP));
     } else {
       toast.error('Entrega não encontrada');
-      router.push(`/entregas/details?id=${deliveryId}`);
+      router.replace(detailsReturn);
     }
   }, [deliveryId, deliveries, router, getCustomerById]);
 
@@ -486,7 +493,7 @@ const [routeId, setRouteId] = useState('');
       } as any);
 
       toast.success('Entrega atualizada com sucesso!');
-      router.push('/');
+      router.replace(detailsReturn);
     } catch (error) {
       console.error('Erro ao atualizar entrega:', error);
       toast.error('Não foi possível atualizar a entrega.', {
@@ -506,7 +513,7 @@ const [routeId, setRouteId] = useState('');
     try {
       await deleteDelivery(deliveryId);
       toast.success('Entrega excluída com sucesso!');
-      router.push('/');
+      router.replace(deliveriesReturn);
     } catch {
       toast.error('Erro ao excluir entrega.');
       setIsDeleting(false);
@@ -518,7 +525,7 @@ const [routeId, setRouteId] = useState('');
   return (
     <div className="flex flex-col gap-6 relative">
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push(`/entregas/details?id=${deliveryId}`)} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95">
+        <button onClick={() => router.replace(detailsReturn)} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95">
           <ChevronLeft size={22} />
         </button>
         <h1 className="font-heading text-xl font-bold text-zinc-50">Editar Entrega</h1>

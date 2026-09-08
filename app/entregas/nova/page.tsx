@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  useState, useMemo } from 'react'; import { useRouter } from 'next/navigation'; import {    ChevronLeft, Store, Smartphone, Banknote, QrCode,
+  useState, useMemo } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store, Smartphone, Banknote, QrCode,
   CreditCard, ChevronDown, AlertTriangle, Navigation, CheckCircle2, Link2,
   MessageCircle, Info, Sparkles, ClipboardPaste, Bike, ShoppingBag,
 } from 'lucide-react';
@@ -17,6 +17,9 @@ import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
 
 export default function NovaEntregaPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnDate = searchParams.get('date') || '';
+  const deliveriesReturn = returnDate ? `/entregas?date=${encodeURIComponent(returnDate)}` : '/entregas';
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
   const addDelivery = useAppStore((state) => state.addDelivery);
@@ -297,7 +300,7 @@ const [routeId, setRouteId] = useState('');
 
       await addDelivery(novaEntrega);
       toast.success('Entrega cadastrada com sucesso!');
-      router.push('/');
+      router.replace(deliveriesReturn);
     } catch (error) {
       console.error('Erro ao cadastrar entrega:', error);
       toast.error('Não foi possível cadastrar a entrega.', {
@@ -311,7 +314,7 @@ const [routeId, setRouteId] = useState('');
   return (
     <div className="flex flex-col gap-6 relative">
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/')} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95">
+        <button onClick={() => router.replace(deliveriesReturn)} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95">
           <ChevronLeft size={22} />
         </button>
         <h1 className="font-heading text-xl font-bold text-zinc-50">Nova Entrega</h1>
@@ -424,7 +427,7 @@ const [routeId, setRouteId] = useState('');
             {openRoutes.length === 0 && (
               <button
                 type="button"
-                onClick={() => router.push('/rotas/nova')}
+                onClick={() => router.push(`/rotas/nova${returnDate ? `?date=${encodeURIComponent(returnDate)}` : ''}`)}
                 className="mb-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4 text-left"
               >
                 <p className="text-sm font-black text-amber-400">Nenhuma rota aberta</p>

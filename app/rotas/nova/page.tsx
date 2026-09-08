@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, User, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
@@ -9,6 +9,9 @@ import type { Route, Motoboy } from '@/types';
 
 export default function NovaRotaPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnDate = searchParams.get('date') || '';
+  const routesReturn = returnDate ? `/rotas?date=${encodeURIComponent(returnDate)}` : '/rotas';
   const addRoute = useAppStore((state) => state.addRoute);
   const motoboys = useAppStore((state) => state.motoboys);
   const addMotoboy = useAppStore((state) => state.addMotoboy);
@@ -84,7 +87,7 @@ export default function NovaRotaPage() {
       };
       await addRoute(novaRota);
       toast.success('Rota criada e pronta para receber entregas.');
-      router.push(`/rotas/details?id=${novaRota.id}`);
+      router.replace(`/rotas/details?id=${novaRota.id}${returnDate ? `&date=${encodeURIComponent(returnDate)}` : ''}`);
     } catch (error) {
       console.error('Erro ao criar rota:', error);
       toast.error('Não foi possível criar a rota.');
@@ -97,7 +100,7 @@ export default function NovaRotaPage() {
     <div className="flex flex-col gap-6 relative">
       <div className="flex items-center gap-3">
         <button 
-          onClick={() => router.push('/')}
+          onClick={() => router.replace(routesReturn)}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400 active:scale-95"
         >
           <ChevronLeft size={22} />

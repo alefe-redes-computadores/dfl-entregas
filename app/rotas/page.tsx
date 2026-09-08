@@ -2,7 +2,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Bike, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, Search, User, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp } from '@/lib/reports/time';
@@ -27,10 +27,13 @@ const dayLabel = (key: string) => key === todayKey() ? 'Hoje' : fromKey(key).toL
 
 export default function RoutesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialDate = searchParams.get('date');
+  const initialDateKey = initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : todayKey();
   const routes = useAppStore(state => state.routes);
   const deliveries = useAppStore(state => state.deliveries);
-  const [selectedDate, setSelectedDate] = useState(todayKey);
-  const [calendarMonth, setCalendarMonth] = useState(() => fromKey(todayKey()));
+  const [selectedDate, setSelectedDate] = useState(() => initialDateKey);
+  const [calendarMonth, setCalendarMonth] = useState(() => fromKey(initialDateKey));
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('todas');
   const [query, setQuery] = useState('');
@@ -92,7 +95,7 @@ export default function RoutesPage() {
   return <div className="flex flex-col gap-5 pb-28">
     <header className="flex items-center justify-between">
       <div className="flex min-w-0 items-center gap-3"><button onClick={() => router.replace('/loja')} aria-label="Voltar para Minha Loja" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-300 active:scale-95"><ChevronLeft size={20}/></button><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Operação diária</p><h1 className="font-heading text-2xl font-bold text-zinc-50">Rotas</h1></div></div>
-      <button onClick={() => router.push('/rotas/nova')} className="flex h-11 items-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-bold text-zinc-950 active:scale-95"><Plus size={18}/>Nova</button>
+      <button onClick={() => router.push(`/rotas/nova?date=${encodeURIComponent(selectedDate)}`)} className="flex h-11 items-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-bold text-zinc-950 active:scale-95"><Plus size={18}/>Nova</button>
     </header>
 
     <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2">
@@ -106,7 +109,7 @@ export default function RoutesPage() {
     <div className="flex gap-2 overflow-x-auto no-scrollbar">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
 
     <div className="flex flex-col gap-3">
-      {rows.map(({ route, linked, completed, amount, state }) => <button key={route.id} onClick={() => router.push(`/rotas/details?id=${route.id}`)} className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4 text-left active:scale-[0.99]">
+      {rows.map(({ route, linked, completed, amount, state }) => <button key={route.id} onClick={() => router.push(`/rotas/details?id=${route.id}&date=${encodeURIComponent(selectedDate)}`)} className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4 text-left active:scale-[0.99]">
         <div className="flex items-start gap-3"><div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${state === 'na-rua' ? 'bg-sky-500/15 text-sky-400' : state === 'finalizadas' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}><Bike size={20}/></div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-heading text-base font-bold">{route.name}</p><ChevronRight size={17} className="text-zinc-600"/></div><p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400"><User size={12}/>{route.motoboy_name}</p></div></div>
         <div className="mt-4 grid grid-cols-3 gap-2 border-t border-zinc-800/70 pt-3 text-center"><SmallStat value={`${completed}/${linked.length}`} label="Entregas"/><SmallStat value={`R$ ${amount.toLocaleString('pt-BR',{minimumFractionDigits:2})}`} label="Valor bruto"/><SmallStat value={routeDate(route)?.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}) || 'Sem horário'} label="Criada"/></div>
       </button>)}

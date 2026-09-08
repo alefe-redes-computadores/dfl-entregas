@@ -2,7 +2,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
   Bike,
@@ -85,12 +85,15 @@ const fulfillmentMeta = (mode: FulfillmentMode) => {
 
 export default function DeliveriesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialDate = searchParams.get('date');
+  const initialDateKey = initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : todayKey();
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
 
-  const [selectedDate, setSelectedDate] = useState(todayKey);
-  const [calendarMonth, setCalendarMonth] = useState(() => fromKey(todayKey()));
+  const [selectedDate, setSelectedDate] = useState(() => initialDateKey);
+  const [calendarMonth, setCalendarMonth] = useState(() => fromKey(initialDateKey));
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('todas');
@@ -208,7 +211,7 @@ export default function DeliveriesPage() {
         </div>
 
         <button
-          onClick={() => router.push('/entregas/nova')}
+          onClick={() => router.push(`/entregas/nova?date=${encodeURIComponent(selectedDate)}`)}
           className="flex h-11 items-center gap-2 rounded-2xl bg-amber-500 px-4 text-sm font-black text-zinc-950 active:scale-95"
         >
           <Plus size={18} />
@@ -340,7 +343,7 @@ export default function DeliveriesPage() {
           return (
             <button
               key={delivery.id}
-              onClick={() => router.push(`/entregas/details?id=${delivery.id}`)}
+              onClick={() => router.push(`/entregas/details?id=${delivery.id}&date=${encodeURIComponent(selectedDate)}`)}
               className="w-full rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-4 text-left active:scale-[0.99]"
             >
               <div className="flex items-start gap-3">
