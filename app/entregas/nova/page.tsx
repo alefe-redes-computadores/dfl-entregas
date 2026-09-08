@@ -65,6 +65,46 @@ const [routeId, setRouteId] = useState('');
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   };
 
+  const normalizeMatchText = (value?: string | null) =>
+    (value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
+  const resolveParsedRoute = (routeNumber: string, motoboyHint: string) => {
+    const normalizedMotoboy = normalizeMatchText(motoboyHint);
+    const hasRouteNumber = Boolean(routeNumber);
+    const hasMotoboy = Boolean(normalizedMotoboy);
+
+    if (!hasRouteNumber && !hasMotoboy) {
+      return { routeId: '', candidates: [] as typeof openRoutes };
+    }
+
+    const candidates = openRoutes.filter((route) => {
+      const routeName = normalizeMatchText(route.name);
+      const motoboyName = normalizeMatchText(route.motoboy_name);
+
+      const numberMatches =
+        !hasRouteNumber ||
+        new RegExp(`(?:^|\\s)${routeNumber}(?:\\s|$)`).test(routeName);
+
+      const motoboyMatches =
+        !hasMotoboy ||
+        motoboyName === normalizedMotoboy ||
+        motoboyName.includes(normalizedMotoboy) ||
+        normalizedMotoboy.includes(motoboyName);
+
+      return numberMatches && motoboyMatches;
+    });
+
+    return {
+      routeId: candidates.length === 1 ? candidates[0].id : '',
+      candidates,
+    };
+  };
+
   const handleExecuteMagicParse = async () => {
     if (!magicText.trim()) {
       toast.error('Cole o texto do pedido antes de processar.');
@@ -85,8 +125,8 @@ const [routeId, setRouteId] = useState('');
     if (parsed.mapsLink) { setMapsLink(parsed.mapsLink); identified.push('Link Maps'); }
     if (parsed.paymentMethod) {
       setPaymentMethod(parsed.paymentMethod);
-      setIsPaid(parsed.paymentMethod === 'pix' ? parsed.isPaid : false);
-      if (parsed.paymentMethod !== 'dinheiro') setChangeFor('');
+      setIsPaid(parsed.isPaid);
+      if (parsed.paymentMethod !== 'dinheiro' || parsed.isPaid) setChangeFor('');
       identified.push(parsed.isPaid ? 'Pago no app' : 'Pagamento');
     }
     if (parsed.value) { setValue(formatCurrencyInput(parsed.value.replace(/\D/g, ''))); identified.push(`Valor R$ ${parsed.value}`); }
@@ -95,6 +135,29 @@ const [routeId, setRouteId] = useState('');
     if (parsed.observations.length > 0) {
       setObservation((current) => current ? `${current} - ${parsed.observations.join(' - ')}` : parsed.observations.join(' - '));
       identified.push('Obs');
+    }
+
+    const routeResolution = resolveParsedRoute(parsed.routeNumber, parsed.motoboyHint);
+
+    if (routeResolution.routeId) {
+      setRouteId(routeResolution.routeId);
+      const matchedRoute = routeResolution.candidates[0];
+      identified.push(`Rota ${matchedRoute.name}`);
+    } else if ((parsed.routeNumber || parsed.motoboyHint) && routeResolution.candidates.length > 1) {
+      toast.warning('Mais de uma rota combina com o texto.', {
+        description: routeResolution.candidates
+          .map((route) => `${route.name} · ${route.motoboy_name}`)
+          .join(' | '),
+        duration: 5000,
+      });
+    } else if (parsed.routeNumber || parsed.motoboyHint) {
+      toast.info('Pista de rota identificada, mas sem correspondência segura.', {
+        description: [
+          parsed.routeNumber ? `Rota ${parsed.routeNumber}` : '',
+          parsed.motoboyHint || '',
+        ].filter(Boolean).join(' · '),
+        duration: 4500,
+      });
     }
 
     if (identified.length === 0) {
@@ -217,7 +280,7 @@ const [routeId, setRouteId] = useState('');
         customer_id: customerId || '',
         customer_name: customerName.trim() || undefined,
         value: cleanValue,
-        is_paid: paymentMethod === 'pix' ? isPaid : false,
+        is_paid: isPaid,
         is_urgent: isUrgent,
         payment_method: paymentMethod,
         change_for: cleanChangeFor,

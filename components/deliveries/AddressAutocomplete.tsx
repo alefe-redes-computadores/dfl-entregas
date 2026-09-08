@@ -108,7 +108,11 @@ export function AddressAutocomplete({
           inputMode="text"
           autoComplete="street-address"
           value={value}
-          onChange={(event) => onChange(normalizeInput(event.target.value))}
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={() => {
+            const normalized = normalizeInput(value);
+            if (normalized !== value) onChange(normalized);
+          }}
           placeholder={placeholder}
           className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-11 pr-24 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none transition-colors"
         />
