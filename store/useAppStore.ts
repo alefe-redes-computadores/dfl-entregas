@@ -85,6 +85,7 @@ interface AppState {
   updateStockProduct: (id: string, data: Partial<StockProduct>) => Promise<void>;
   addStockMovement: (movement: Omit<StockMovement, 'balance_before' | 'balance_after' | 'created_at'>) => Promise<void>;
   integrateStockSupply: (id: string) => Promise<void>;
+  countStockProducts: (counts: Array<{ product_id: string; quantity: number }>, responsible?: { id?: string; name?: string }) => Promise<void>;
   addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
   updateIfoodPendingConfirmation: (id: string, data: Partial<IfoodPendingConfirmation>) => Promise<void>;
   deleteIfoodPendingConfirmation: (id: string) => Promise<void>;
@@ -578,9 +579,11 @@ export const useAppStore = create<AppState>()(
 
       addStockProduct: async (product) => {
         const previous = get().stockProducts;
-        set({ stockProducts: [...previous, product].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) });
-        try { await setDoc(doc(db, 'stock_products', product.id), sanitizeForFirebase(product)); }
-        catch (error) { set({ stockProducts: previous }); throw error; }
+        const previousMovements = get().stockMovements;
+        const initial = product.current_quantity > 0 ? { id: `initial-${product.id}`, product_id: product.id, product_name: product.name, type: 'entrada' as const, quantity: product.current_quantity, balance_before: 0, balance_after: product.current_quantity, unit_cost: product.average_cost, reason: 'Saldo inicial do cadastro', occurred_at: product.created_at, created_at: product.created_at } : null;
+        set({ stockProducts: [...previous, product].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), stockMovements: initial ? [initial, ...previousMovements] : previousMovements });
+        try { const batch = writeBatch(db); batch.set(doc(db, 'stock_products', product.id), sanitizeForFirebase(product)); if (initial) batch.set(doc(db, 'stock_movements', initial.id), sanitizeForFirebase(initial)); await batch.commit(); }
+        catch (error) { set({ stockProducts: previous, stockMovements: previousMovements }); throw error; }
       },
 
       updateStockProduct: async (id, data) => {
@@ -672,6 +675,26 @@ export const useAppStore = create<AppState>()(
           set({ stockProducts: previousProducts, stockMovements: previousMovements, stockSupplies: previousSupplies });
           throw error;
         }
+      },
+
+      countStockProducts: async (counts, responsible) => {
+        if (!counts.length) return;
+        const previousProducts = get().stockProducts;
+        const previousMovements = get().stockMovements;
+        const now = new Date().toISOString();
+        const stamp = Date.now();
+        const nextProducts = [...previousProducts];
+        const records: StockMovement[] = [];
+        counts.forEach((count, position) => {
+          const index = nextProducts.findIndex((item) => item.id === count.product_id);
+          if (index < 0 || !Number.isFinite(count.quantity) || count.quantity < 0) throw new Error('Contagem inválida.');
+          const product = nextProducts[index];
+          nextProducts[index] = { ...product, current_quantity: count.quantity, last_counted_at: now, updated_at: now };
+          records.push({ id: `count-${stamp}-${position}-${product.id}`, product_id: product.id, product_name: product.name, type: 'contagem', quantity: count.quantity, balance_before: product.current_quantity, balance_after: count.quantity, reason: 'Contagem física em lote', team_member_id: responsible?.id, team_member_name: responsible?.name, occurred_at: now, created_at: now });
+        });
+        set({ stockProducts: nextProducts, stockMovements: [...records, ...previousMovements] });
+        try { const batch = writeBatch(db); nextProducts.forEach((product) => { const before = previousProducts.find((item) => item.id === product.id); if (before !== product) batch.update(doc(db, 'stock_products', product.id), sanitizeForFirebase(product)); }); records.forEach((record) => batch.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record))); await batch.commit(); }
+        catch (error) { set({ stockProducts: previousProducts, stockMovements: previousMovements }); throw error; }
       },
 
       addDelivery: async (delivery) => {

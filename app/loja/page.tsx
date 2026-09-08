@@ -216,13 +216,13 @@ export default function LojaPage() {
             <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'} no período</p>
           </button>
 
-          <button onClick={() => router.push('/motoboys')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/equipe')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-400"><Users size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
             <p className="mt-4 font-heading text-sm font-black text-zinc-100">Equipe</p>
-            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{activeMotoboys.length} ativo{activeMotoboys.length === 1 ? '' : 's'} na escala</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Compras, cozinha, atendimento e operação</p>
           </button>
 
           <button onClick={() => router.push('/clientes')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
