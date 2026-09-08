@@ -54,6 +54,7 @@ export interface StockSupply {
   received_at?: string;
   checked_at?: string;
   stock_integrated_at?: string;
+  stock_reversed_at?: string;
   created_at: string;
   updated_at: string;
 }

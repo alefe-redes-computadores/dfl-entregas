@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField, runTransaction } from 'firebase/firestore';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
@@ -85,6 +85,7 @@ interface AppState {
   updateStockProduct: (id: string, data: Partial<StockProduct>) => Promise<void>;
   addStockMovement: (movement: Omit<StockMovement, 'balance_before' | 'balance_after' | 'created_at'>) => Promise<void>;
   integrateStockSupply: (id: string) => Promise<void>;
+  reverseStockSupply: (id: string) => Promise<void>;
   countStockProducts: (counts: Array<{ product_id: string; quantity: number }>, responsible?: { id?: string; name?: string }) => Promise<void>;
   addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
   updateIfoodPendingConfirmation: (id: string, data: Partial<IfoodPendingConfirmation>) => Promise<void>;
@@ -634,47 +635,61 @@ export const useAppStore = create<AppState>()(
       },
 
       integrateStockSupply: async (id) => {
-        const supply = get().stockSupplies.find((item) => item.id === id);
-        if (!supply) throw new Error('Compra não encontrada.');
-        if (supply.stock_integrated_at) return;
-        if (supply.status !== 'recebido' && supply.status !== 'conferido') throw new Error('Marque a compra como recebida antes de conferir.');
-        const missing = supply.items.filter((item) => !item.stock_product_id);
-        if (missing.length) throw new Error(`Vincule todos os itens ao estoque. Pendente: ${missing[0].name}.`);
-        const products = get().stockProducts;
-        for (const item of supply.items) {
-          const product = products.find((candidate) => candidate.id === item.stock_product_id);
-          if (!product) throw new Error(`Produto vinculado não encontrado: ${item.name}.`);
-          if (product.unit !== item.unit) throw new Error(`Unidade incompatível em ${item.name}: compra em ${item.unit}, estoque em ${product.unit}.`);
-        }
         const previousProducts = get().stockProducts;
         const previousMovements = get().stockMovements;
         const previousSupplies = get().stockSupplies;
-        const now = new Date().toISOString();
-        const nextProducts = [...previousProducts];
-        const records: StockMovement[] = [];
-        for (const item of supply.items) {
-          const index = nextProducts.findIndex((product) => product.id === item.stock_product_id);
-          const product = nextProducts[index];
-          const before = product.current_quantity;
-          const after = before + item.quantity;
-          const averageCost = item.unit_price
-            ? Number((((before * (product.average_cost || 0)) + (item.quantity * item.unit_price)) / Math.max(after, item.quantity)).toFixed(4))
-            : product.average_cost;
-          nextProducts[index] = { ...product, current_quantity: after, average_cost: averageCost, updated_at: now };
-          records.push({ id: `supply-${supply.id}-${item.id}`, product_id: product.id, product_name: product.name, type: 'entrada', quantity: item.quantity, balance_before: before, balance_after: after, unit_cost: item.unit_price, reason: `Compra${supply.supplier ? ` em ${supply.supplier}` : ''}`, supply_id: supply.id, team_member_id: supply.purchaser_id, team_member_name: supply.purchaser_name, occurred_at: supply.occurred_at, created_at: now });
-        }
-        const supplyPatch: Partial<StockSupply> = { status: 'conferido', checked_at: supply.checked_at || now, stock_integrated_at: now, updated_at: now };
-        set({ stockProducts: nextProducts, stockMovements: [...records, ...previousMovements], stockSupplies: previousSupplies.map((item) => item.id === id ? { ...item, ...supplyPatch } : item) });
         try {
-          const batch = writeBatch(db);
-          nextProducts.forEach((product) => { const previous = previousProducts.find((item) => item.id === product.id); if (previous !== product) batch.update(doc(db, 'stock_products', product.id), sanitizeForFirebase(product)); });
-          records.forEach((record) => batch.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record)));
-          batch.update(doc(db, 'stock_supplies', id), sanitizeForFirebase(supplyPatch));
-          await batch.commit();
+          const result = await runTransaction(db, async (transaction) => {
+            const supplyRef = doc(db, 'stock_supplies', id);
+            const supplySnap = await transaction.get(supplyRef);
+            if (!supplySnap.exists()) throw new Error('Compra não encontrada.');
+            const supply = supplySnap.data() as StockSupply;
+            if (supply.stock_integrated_at) return null;
+            if (supply.status !== 'recebido' && supply.status !== 'conferido') throw new Error('Marque a compra como recebida antes de conferir.');
+            const missing = supply.items.find((item) => !item.stock_product_id);
+            if (missing) throw new Error(`Vincule todos os itens ao estoque. Pendente: ${missing.name}.`);
+            const refs = supply.items.map((item) => doc(db, 'stock_products', item.stock_product_id!));
+            const snaps = await Promise.all(refs.map((ref) => transaction.get(ref)));
+            const now = new Date().toISOString();
+            const changed: StockProduct[] = [];
+            const records: StockMovement[] = [];
+            supply.items.forEach((item, index) => {
+              const snap = snaps[index];
+              if (!snap.exists()) throw new Error(`Produto vinculado não encontrado: ${item.name}.`);
+              const product = snap.data() as StockProduct;
+              if (product.unit !== item.unit) throw new Error(`Unidade incompatível em ${item.name}.`);
+              const before = product.current_quantity; const after = before + item.quantity;
+              const averageCost = item.unit_price ? Number((((before * (product.average_cost || 0)) + item.quantity * item.unit_price) / Math.max(after, item.quantity)).toFixed(4)) : product.average_cost;
+              const next = { ...product, current_quantity: after, average_cost: averageCost, updated_at: now };
+              changed.push(next); transaction.update(refs[index], sanitizeForFirebase(next));
+              const record: StockMovement = { id: `supply-${supply.id}-${item.id}`, product_id: product.id, product_name: product.name, type: 'entrada', quantity: item.quantity, balance_before: before, balance_after: after, unit_cost: item.unit_price, reason: `Compra${supply.supplier ? ` em ${supply.supplier}` : ''}`, supply_id: supply.id, team_member_id: supply.purchaser_id, team_member_name: supply.purchaser_name, occurred_at: supply.occurred_at, created_at: now };
+              records.push(record); transaction.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record));
+            });
+            const supplyPatch: Partial<StockSupply> = { status: 'conferido', checked_at: supply.checked_at || now, stock_integrated_at: now, updated_at: now };
+            transaction.update(supplyRef, sanitizeForFirebase(supplyPatch));
+            return { changed, records, supplyPatch };
+          });
+          if (!result) return;
+          const changedMap = new Map(result.changed.map((item) => [item.id, item]));
+          set({ stockProducts: previousProducts.map((item) => changedMap.get(item.id) || item), stockMovements: [...result.records, ...previousMovements.filter((item) => !result.records.some((record) => record.id === item.id))], stockSupplies: previousSupplies.map((item) => item.id === id ? { ...item, ...result.supplyPatch } : item) });
         } catch (error) {
           set({ stockProducts: previousProducts, stockMovements: previousMovements, stockSupplies: previousSupplies });
           throw error;
         }
+      },
+
+      reverseStockSupply: async (id) => {
+        const previousProducts = get().stockProducts; const previousMovements = get().stockMovements; const previousSupplies = get().stockSupplies;
+        try {
+          const result = await runTransaction(db, async (transaction) => {
+            const supplyRef=doc(db,'stock_supplies',id);const supplySnap=await transaction.get(supplyRef);if(!supplySnap.exists())throw new Error('Compra não encontrada.');const supply=supplySnap.data() as StockSupply;
+            if(!supply.stock_integrated_at)throw new Error('Esta compra ainda não foi integrada.');if(supply.stock_reversed_at)return null;
+            const refs=supply.items.map(item=>doc(db,'stock_products',item.stock_product_id!));const snaps=await Promise.all(refs.map(ref=>transaction.get(ref)));const now=new Date().toISOString();const changed:StockProduct[]=[];const records:StockMovement[]=[];
+            supply.items.forEach((item,index)=>{const snap=snaps[index];if(!snap.exists())throw new Error(`Produto não encontrado: ${item.name}.`);const product=snap.data() as StockProduct;if(product.current_quantity<item.quantity)throw new Error(`Não é possível estornar ${item.name}: saldo atual menor que a entrada original.`);const after=product.current_quantity-item.quantity;const previousValue=product.current_quantity*(product.average_cost||0)-item.quantity*(item.unit_price||product.average_cost||0);const averageCost=after>0?Number(Math.max(0,previousValue/after).toFixed(4)):undefined;const next={...product,current_quantity:after,average_cost:averageCost,updated_at:now};changed.push(next);transaction.update(refs[index],sanitizeForFirebase({...next,average_cost:averageCost??deleteField()}));const record:StockMovement={id:`reversal-${supply.id}-${item.id}`,product_id:product.id,product_name:product.name,type:'saida',quantity:item.quantity,balance_before:product.current_quantity,balance_after:after,unit_cost:item.unit_price,reason:'Estorno auditável de compra integrada',supply_id:supply.id,team_member_id:supply.purchaser_id,team_member_name:supply.purchaser_name,occurred_at:now,created_at:now};records.push(record);transaction.set(doc(db,'stock_movements',record.id),sanitizeForFirebase(record));});
+            const supplyPatch:Partial<StockSupply>={stock_reversed_at:now,updated_at:now};transaction.update(supplyRef,sanitizeForFirebase(supplyPatch));return{changed,records,supplyPatch};
+          });
+          if(!result)return;const changedMap=new Map(result.changed.map(item=>[item.id,item]));set({stockProducts:previousProducts.map(item=>changedMap.get(item.id)||item),stockMovements:[...result.records,...previousMovements.filter(item=>!result.records.some(record=>record.id===item.id))],stockSupplies:previousSupplies.map(item=>item.id===id?{...item,...result.supplyPatch}:item)});
+        } catch(error){set({stockProducts:previousProducts,stockMovements:previousMovements,stockSupplies:previousSupplies});throw error;}
       },
 
       countStockProducts: async (counts, responsible) => {
