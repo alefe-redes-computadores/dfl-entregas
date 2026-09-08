@@ -20,6 +20,10 @@ import {
   TimerReset,
   CalendarDays,
   ChevronRight,
+  Plus,
+  Trash2,
+  ClipboardPaste,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
@@ -32,7 +36,7 @@ import {
   isIfoodOrder,
   type IfoodConfirmationState,
 } from '@/lib/ifood-confirmations';
-import type { Delivery } from '@/types';
+import type { Delivery, IfoodPendingConfirmation } from '@/types';
 
 type QueueFilter = 'all' | IfoodConfirmationState;
 
@@ -90,9 +94,21 @@ export default function ConfirmacoesPage() {
   const router = useRouter();
   const deliveries = useAppStore((state) => state.deliveries);
   const customers = useAppStore((state) => state.customers);
+  const ifoodPendingConfirmations = useAppStore(
+    (state) => state.ifoodPendingConfirmations,
+  );
+  const addIfoodPendingConfirmations = useAppStore(
+    (state) => state.addIfoodPendingConfirmations,
+  );
+  const deleteIfoodPendingConfirmation = useAppStore(
+    (state) => state.deleteIfoodPendingConfirmation,
+  );
 
   const [filter, setFilter] = useState<QueueFilter>('all');
   const [query, setQuery] = useState('');
+  const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [batchText, setBatchText] = useState('');
+  const [isBatchSaving, setIsBatchSaving] = useState(false);
   const [selectedDateKey, setSelectedDateKey] = useState(() => dateKey(new Date()));
   const selectedDate = dateFromKey(selectedDateKey);
   const selectedDateLabel =
@@ -188,6 +204,109 @@ export default function ConfirmacoesPage() {
     };
   }, [customers, selectedIfood]);
 
+  const normalizePendingKey = (value?: string) =>
+    (value || '').replace(/\D/g, '');
+
+  const parsePendingBatch = (text: string): IfoodPendingConfirmation[] => {
+    const now = new Date().toISOString();
+
+    return text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line, index) => {
+        const parts = line
+          .split(/[;|\t]/)
+          .map((part) => part.trim())
+          .filter(Boolean);
+
+        const joined = parts.join(' ');
+        const tokens = joined.match(/\b\d{4,8}\b/g) || [];
+        const ifoodId = tokens.find((token) => token.length === 8) || '';
+        const shortTokens = tokens.filter(
+          (token) => token.length === 4 || token.length === 5,
+        );
+        const orderId = shortTokens[0] || '';
+        const confirmationCode =
+          shortTokens.find((token) => token.length === 4 && token !== orderId) || '';
+        const customerName =
+          parts.find((part) => !/\d/.test(part) && part.length >= 2) || '';
+
+        return {
+          id: `ifood-pending-${Date.now()}-${index}-${Math.random()
+            .toString(36)
+            .slice(2, 7)}`,
+          order_id: orderId || undefined,
+          ifood_id: ifoodId || undefined,
+          confirmation_code: confirmationCode || undefined,
+          customer_name: customerName || undefined,
+          created_at: now,
+          updated_at: now,
+        } satisfies IfoodPendingConfirmation;
+      });
+  };
+
+  const savePendingBatch = async () => {
+    const parsed = parsePendingBatch(batchText);
+
+    if (!parsed.length) {
+      toast.error('Cole pelo menos uma linha.');
+      return;
+    }
+
+    const existingIds = new Set(
+      [
+        ...deliveries.map((item) => item.ifood_id),
+        ...ifoodPendingConfirmations.map((item) => item.ifood_id),
+      ]
+        .filter(Boolean)
+        .map((value) => normalizePendingKey(value)),
+    );
+
+    const existingOrders = new Set(
+      [
+        ...deliveries.map((item) => item.order_id),
+        ...ifoodPendingConfirmations.map((item) => item.order_id),
+      ]
+        .filter(Boolean)
+        .map((value) => normalizePendingKey(value)),
+    );
+
+    const unique = parsed.filter((item) => {
+      const idKey = normalizePendingKey(item.ifood_id);
+      const orderKey = normalizePendingKey(item.order_id);
+
+      if (idKey && existingIds.has(idKey)) return false;
+      if (orderKey && existingOrders.has(orderKey)) return false;
+
+      if (idKey) existingIds.add(idKey);
+      if (orderKey) existingOrders.add(orderKey);
+      return true;
+    });
+
+    if (!unique.length) {
+      toast.info('Essas pendências já estão cadastradas.');
+      return;
+    }
+
+    setIsBatchSaving(true);
+
+    try {
+      await addIfoodPendingConfirmations(unique);
+      toast.success(
+        `${unique.length} pendência${unique.length === 1 ? '' : 's'} adicionada${
+          unique.length === 1 ? '' : 's'
+        }.`,
+      );
+      setBatchText('');
+      setIsBatchOpen(false);
+    } catch {
+      toast.error('Não foi possível salvar as pendências.');
+    } finally {
+      setIsBatchSaving(false);
+    }
+  };
+
   const vibrate = async (style: ImpactStyle) => {
     if (Capacitor.isNativePlatform()) {
       await Haptics.impact({ style });
@@ -257,6 +376,13 @@ export default function ConfirmacoesPage() {
         >
           <ExternalLink size={14} />
           Portal
+        </button>
+        <button
+          onClick={() => setIsBatchOpen(true)}
+          className="flex h-10 items-center gap-2 rounded-xl bg-red-500 px-3 text-[11px] font-black text-white active:scale-95"
+        >
+          <Plus size={14} />
+          Pendências
         </button>
       </header>
 
@@ -366,6 +492,117 @@ export default function ConfirmacoesPage() {
           </button>
         ))}
       </div>
+
+      {ifoodPendingConfirmations.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <div>
+              <h2 className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">
+                Pendências cadastradas manualmente
+              </h2>
+              <p className="mt-1 text-[10px] text-zinc-600">
+                Fora de pedidos, rotas e faturamento
+              </p>
+            </div>
+            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] font-black text-zinc-400">
+              {ifoodPendingConfirmations.length}
+            </span>
+          </div>
+
+          {ifoodPendingConfirmations.map((item) => {
+            const ready =
+              (item.ifood_id || '').replace(/\D/g, '').length === 8 &&
+              (item.confirmation_code || '').replace(/\D/g, '').length === 4;
+
+            return (
+              <article
+                key={item.id}
+                className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-400">
+                    <Smartphone size={19} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-black text-zinc-100">
+                      {item.customer_name || 'Pendência iFood'}
+                    </p>
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                      {item.order_id
+                        ? `Pedido #${item.order_id}`
+                        : 'Pedido sem número'}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      try {
+                        await deleteIfoodPendingConfirmation(item.id);
+                        toast.success('Pendência removida.');
+                      } catch {
+                        toast.error('Não foi possível remover a pendência.');
+                      }
+                    }}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-500 active:scale-95"
+                    aria-label="Excluir pendência"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => copyValue(item.ifood_id || '', 'ID do pedido')}
+                    className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3 text-left active:scale-[0.98]"
+                  >
+                    <span className="block text-[9px] font-black uppercase tracking-wide text-zinc-600">
+                      ID iFood
+                    </span>
+                    <strong className="mt-1 block font-mono text-xs text-zinc-200">
+                      {item.ifood_id || 'Não informado'}
+                    </strong>
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      copyValue(item.confirmation_code || '', 'Código')
+                    }
+                    className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3 text-left active:scale-[0.98]"
+                  >
+                    <span className="block text-[9px] font-black uppercase tracking-wide text-zinc-600">
+                      Código
+                    </span>
+                    <strong className="mt-1 block font-mono text-xs text-amber-400">
+                      {item.confirmation_code || 'Pendente'}
+                    </strong>
+                  </button>
+                </div>
+
+                <button
+                  onClick={() =>
+                    router.replace(
+                      `/confirmar?orderId=${encodeURIComponent(
+                        item.ifood_id || '',
+                      )}&code=${encodeURIComponent(
+                        item.confirmation_code || '',
+                      )}&returnTo=${encodeURIComponent('/confirmacoes')}`,
+                    )
+                  }
+                  className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl font-black active:scale-95 ${
+                    ready
+                      ? 'bg-red-500 text-white'
+                      : 'border border-red-500/30 bg-red-500/10 text-red-400'
+                  }`}
+                >
+                  <ExternalLink size={15} />
+                  {ready ? 'Confirmar no iFood' : 'Abrir portal'}
+                </button>
+              </article>
+            );
+          })}
+        </section>
+      )}
 
       <div className="flex flex-col gap-3">
         {queue.map(({ delivery, customer, confirmation, created }) => {
@@ -505,6 +742,78 @@ export default function ConfirmacoesPage() {
           </div>
         )}
       </div>
+
+      {isBatchOpen && (
+        <div className="fixed inset-0 z-[120] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center">
+          <div className="w-full max-w-lg rounded-[28px] border border-zinc-800 bg-zinc-950 p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">
+                  Cadastro em lote
+                </p>
+                <h2 className="mt-1 font-heading text-lg font-black text-zinc-100">
+                  Adicionar pendências iFood
+                </h2>
+              </div>
+
+              <button
+                onClick={() => setIsBatchOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-zinc-500 active:scale-95"
+                aria-label="Fechar cadastro em lote"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3">
+              <p className="text-[11px] leading-relaxed text-zinc-500">
+                Uma pendência por linha. Separe os campos por ponto e vírgula,
+                barra vertical ou tabulação. Ex.:
+                <span className="ml-1 font-mono text-zinc-300">
+                  5463 ; 60873228 ; 1234 ; João
+                </span>
+              </p>
+            </div>
+
+            <textarea
+              rows={8}
+              value={batchText}
+              onChange={(event) => setBatchText(event.target.value)}
+              placeholder={'5463 ; 60873228 ; 1234 ; João\n5488 ; 12345678 ; 4321 ; Maria'}
+              className="mt-4 w-full rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 font-mono text-xs text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-red-500/50"
+            />
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const text = await navigator.clipboard.readText();
+                    setBatchText(text);
+                    toast.success('Texto colado.');
+                  } catch {
+                    toast.error(
+                      'Não foi possível acessar a área de transferência.',
+                    );
+                  }
+                }}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 text-xs font-black text-zinc-300 active:scale-95"
+              >
+                <ClipboardPaste size={15} />
+                Colar
+              </button>
+
+              <button
+                onClick={savePendingBatch}
+                disabled={isBatchSaving}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500 text-xs font-black text-white active:scale-95 disabled:opacity-50"
+              >
+                <Plus size={15} />
+                {isBatchSaving ? 'Salvando...' : 'Salvar pendências'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

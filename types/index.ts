@@ -104,6 +104,18 @@ export interface Motoboy {
   updated_at?: string;
 }
 
+export interface IfoodPendingConfirmation {
+  id: string;
+  order_id?: string;
+  ifood_id?: string;
+  confirmation_code?: string;
+  customer_name?: string;
+  value?: number;
+  note?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Shift {
   start: string;
   end: string;

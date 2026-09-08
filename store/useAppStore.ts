@@ -6,7 +6,7 @@ import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, DaySchedule, StorePause, HolidayOverride } from '@/types';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { dateKey, deliveryDate, routeStartedAt } from '@/lib/operational-time';
 import { fuelingDate } from '@/lib/fueling-analytics';
@@ -20,6 +20,7 @@ interface AppState {
   customers: Customer[];
   motoboys: Motoboy[];
   fuelings: Fueling[];
+  ifoodPendingConfirmations: IfoodPendingConfirmation[];
   selectedDate: Date;
   isSyncing: boolean;
   syncError: boolean;
@@ -71,6 +72,9 @@ interface AppState {
   addFueling: (fueling: Fueling) => Promise<void>;
   updateFueling: (id: string, updatedData: Partial<Fueling>) => Promise<void>;
   deleteFueling: (id: string) => Promise<void>;
+  addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
+  updateIfoodPendingConfirmation: (id: string, data: Partial<IfoodPendingConfirmation>) => Promise<void>;
+  deleteIfoodPendingConfirmation: (id: string) => Promise<void>;
   findOrCreateCustomer: (name: string, details?: { address?: string; phone?: string; mapsLink?: string; confirmationCode?: string; observation?: string; origin?: OrderOrigin; }) => Promise<string>;
 }
 
@@ -99,6 +103,7 @@ export const useAppStore = create<AppState>()(
       customers: [],
       motoboys: [],
       fuelings: [],
+      ifoodPendingConfirmations: [],
       selectedDate: new Date(),
       isSyncing: false,
       syncError: false,
@@ -166,12 +171,13 @@ export const useAppStore = create<AppState>()(
         if (!get().hasHydrated) return;
         set({ isSyncing: true, syncError: false }); 
         try {
-          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, storeSnap] = await Promise.all([
+          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
             getDocs(collection(db, 'deliveries')),
             getDocs(collection(db, 'customers')),
             getDocs(collection(db, 'motoboys')),
             getDocs(collection(db, 'fuelings')),
+            getDocs(collection(db, 'ifood_pending_confirmations')),
             getDoc(doc(db, 'store', 'store_settings'))
           ]);
 
@@ -180,6 +186,9 @@ export const useAppStore = create<AppState>()(
           const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
           const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
           const fbFuelings = fuelingsSnap.docs.map(d => d.data() as Fueling);
+          const fbPendingConfirmations = pendingConfirmationsSnap.docs.map(
+            d => d.data() as IfoodPendingConfirmation,
+          );
           
           const cloudStoreSettings = storeSnap.exists() ? storeSnap.data() : null;
 
@@ -224,6 +233,17 @@ export const useAppStore = create<AppState>()(
             (a, b) => fuelingDate(b).getTime() - fuelingDate(a).getTime(),
           );
 
+          const mergedPendingConfirmations = [...fbPendingConfirmations];
+          get().ifoodPendingConfirmations.forEach(local => {
+            if (!mergedPendingConfirmations.some(item => item.id === local.id)) {
+              mergedPendingConfirmations.push(local);
+            }
+          });
+          mergedPendingConfirmations.sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+          );
+
           const defaultSettings = get().storeSettings;
           
           // Tratamento para puxar dados novos e velhos sem quebrar
@@ -243,6 +263,7 @@ export const useAppStore = create<AppState>()(
             customers: mergedCustomers,
             motoboys: mergedMotoboys,
             fuelings: mergedFuelings,
+            ifoodPendingConfirmations: mergedPendingConfirmations,
             storeSettings: finalStoreSettings as any,
             isSyncing: false,
             syncError: false
@@ -804,6 +825,72 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
+      addIfoodPendingConfirmations: async (items) => {
+        if (!items.length) return;
+
+        const previous = get().ifoodPendingConfirmations;
+        set((state) => ({
+          ifoodPendingConfirmations: [...items, ...state.ifoodPendingConfirmations],
+        }));
+
+        try {
+          const batch = writeBatch(db);
+          items.forEach((item) => {
+            batch.set(
+              doc(db, 'ifood_pending_confirmations', item.id),
+              sanitizeForFirebase(item),
+            );
+          });
+          await batch.commit();
+        } catch (error) {
+          set({ ifoodPendingConfirmations: previous });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      updateIfoodPendingConfirmation: async (id, data) => {
+        const previous = get().ifoodPendingConfirmations;
+        const updated = {
+          ...data,
+          updated_at: new Date().toISOString(),
+        };
+
+        set((state) => ({
+          ifoodPendingConfirmations: state.ifoodPendingConfirmations.map((item) =>
+            item.id === id ? { ...item, ...updated } : item,
+          ),
+        }));
+
+        try {
+          await updateDoc(
+            doc(db, 'ifood_pending_confirmations', id),
+            sanitizeForFirebase(updated),
+          );
+        } catch (error) {
+          set({ ifoodPendingConfirmations: previous });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      deleteIfoodPendingConfirmation: async (id) => {
+        const previous = get().ifoodPendingConfirmations;
+        set((state) => ({
+          ifoodPendingConfirmations: state.ifoodPendingConfirmations.filter(
+            (item) => item.id !== id,
+          ),
+        }));
+
+        try {
+          await deleteDoc(doc(db, 'ifood_pending_confirmations', id));
+        } catch (error) {
+          set({ ifoodPendingConfirmations: previous });
+          console.error(error);
+          throw error;
+        }
+      },
+
       addCustomer: async (customer) => {
         const customerWithTimestamp: Customer = { ...customer, updated_at: new Date().toISOString() };
         set((state) => ({ customers: [customerWithTimestamp, ...state.customers] }));
@@ -917,6 +1004,7 @@ export const useAppStore = create<AppState>()(
         customers: state.customers,
         motoboys: state.motoboys,
         fuelings: state.fuelings,
+        ifoodPendingConfirmations: state.ifoodPendingConfirmations,
         isPrivacyMode: state.isPrivacyMode,
         routeAlertsEnabled: state.routeAlertsEnabled,
         theme: state.theme,
