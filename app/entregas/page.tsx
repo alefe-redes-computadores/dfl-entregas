@@ -211,7 +211,16 @@ export default function DeliveriesPage() {
         </div>
 
         <button
-          onClick={() => router.push(`/entregas/nova?date=${encodeURIComponent(selectedDate)}`)}
+          onClick={() =>
+            router.push(
+              `/entregas/nova?date=${encodeURIComponent(selectedDate)}`,
+            )
+          }
+          title={
+            selectedDate !== todayKey()
+              ? 'Novo pedido será criado na operação de hoje'
+              : 'Novo pedido'
+          }
           className="flex h-11 items-center gap-2 rounded-2xl bg-amber-500 px-4 text-sm font-black text-zinc-950 active:scale-95"
         >
           <Plus size={18} />

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, User, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { dateKey } from '@/lib/operational-time';
 import { useAppStore } from '@/store/useAppStore';
 import type { Route, Motoboy } from '@/types';
 
@@ -11,7 +12,13 @@ export default function NovaRotaPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnDate = searchParams.get('date') || '';
-  const routesReturn = returnDate ? `/rotas?date=${encodeURIComponent(returnDate)}` : '/rotas';
+  const todayDateKey = dateKey(new Date());
+  const historicalContext = Boolean(returnDate && returnDate !== todayDateKey);
+  const routesReturn = historicalContext
+    ? `/rotas?date=${encodeURIComponent(todayDateKey)}`
+    : returnDate
+      ? `/rotas?date=${encodeURIComponent(returnDate)}`
+      : '/rotas';
   const addRoute = useAppStore((state) => state.addRoute);
   const motoboys = useAppStore((state) => state.motoboys);
   const addMotoboy = useAppStore((state) => state.addMotoboy);
@@ -87,7 +94,10 @@ export default function NovaRotaPage() {
       };
       await addRoute(novaRota);
       toast.success('Rota criada e pronta para receber entregas.');
-      router.replace(`/rotas/details?id=${novaRota.id}${returnDate ? `&date=${encodeURIComponent(returnDate)}` : ''}`);
+      const detailsDate = historicalContext ? todayDateKey : returnDate || todayDateKey;
+      router.replace(
+        `/rotas/details?id=${novaRota.id}&date=${encodeURIComponent(detailsDate)}`,
+      );
     } catch (error) {
       console.error('Erro ao criar rota:', error);
       toast.error('Não foi possível criar a rota.');
@@ -118,6 +128,17 @@ export default function NovaRotaPage() {
           </p>
         </div>
       </header>
+
+      {historicalContext && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[.07] px-4 py-3">
+          <p className="text-xs font-black text-amber-300">Criação na operação de hoje</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+            Você veio de uma data histórica. Esta nova rota será criada hoje e,
+            após salvar, o app continuará na operação de hoje.
+          </p>
+        </div>
+      )}
+
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">

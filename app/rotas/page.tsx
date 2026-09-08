@@ -95,7 +95,18 @@ export default function RoutesPage() {
   return <div className="flex flex-col gap-5 pb-28">
     <header className="flex items-center justify-between">
       <div className="flex min-w-0 items-center gap-3"><button onClick={() => router.replace('/loja')} aria-label="Voltar para Minha Loja" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-300 active:scale-95"><ChevronLeft size={20}/></button><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Operação diária</p><h1 className="font-heading text-2xl font-bold text-zinc-50">Rotas</h1></div></div>
-      <button onClick={() => router.push(`/rotas/nova?date=${encodeURIComponent(selectedDate)}`)} className="flex h-11 items-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-bold text-zinc-950 active:scale-95"><Plus size={18}/>Nova</button>
+      <button
+        onClick={() => router.push(`/rotas/nova?date=${encodeURIComponent(selectedDate)}`)}
+        title={
+          selectedDate !== todayKey()
+            ? 'Nova rota será criada na operação de hoje'
+            : 'Nova rota'
+        }
+        className="flex h-11 items-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-bold text-zinc-950 active:scale-95"
+      >
+        <Plus size={18} />
+        Nova
+      </button>
     </header>
 
     <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2">

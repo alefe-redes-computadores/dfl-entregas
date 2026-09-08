@@ -6,6 +6,7 @@ import {
   MessageCircle, Info, Sparkles, ClipboardPaste, Bike, ShoppingBag,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { dateKey } from '@/lib/operational-time';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; 
@@ -19,7 +20,13 @@ export default function NovaEntregaPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnDate = searchParams.get('date') || '';
-  const deliveriesReturn = returnDate ? `/entregas?date=${encodeURIComponent(returnDate)}` : '/entregas';
+  const todayDateKey = dateKey(new Date());
+  const historicalContext = Boolean(returnDate && returnDate !== todayDateKey);
+  const deliveriesReturn = historicalContext
+    ? `/entregas?date=${encodeURIComponent(todayDateKey)}`
+    : returnDate
+      ? `/entregas?date=${encodeURIComponent(returnDate)}`
+      : '/entregas';
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
   const addDelivery = useAppStore((state) => state.addDelivery);
@@ -334,6 +341,17 @@ const [routeId, setRouteId] = useState('');
         </div>
       </header>
 
+      {historicalContext && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[.07] px-4 py-3">
+          <p className="text-xs font-black text-amber-300">Criação na operação de hoje</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+            Você veio de uma data histórica. Este novo pedido será registrado hoje e,
+            ao salvar, a lista será aberta na data de hoje.
+          </p>
+        </div>
+      )}
+
+
       {/* MODALIDADE OPERACIONAL */}
       <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">
         <div className="mb-4">
@@ -442,7 +460,13 @@ const [routeId, setRouteId] = useState('');
             {openRoutes.length === 0 && (
               <button
                 type="button"
-                onClick={() => router.push(`/rotas/nova${returnDate ? `?date=${encodeURIComponent(returnDate)}` : ''}`)}
+                onClick={() =>
+                  router.push(
+                    `/rotas/nova?date=${encodeURIComponent(
+                      historicalContext ? todayDateKey : returnDate || todayDateKey,
+                    )}`,
+                  )
+                }
                 className="mb-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4 text-left"
               >
                 <p className="text-sm font-black text-amber-400">Nenhuma rota aberta</p>
