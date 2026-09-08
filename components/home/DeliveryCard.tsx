@@ -15,6 +15,7 @@ import { MiniMap } from '@/components/deliveries/MiniMap';
 import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { dateKey, deliveryDate } from '@/lib/operational-time';
 
 interface DeliveryCardProps {
   delivery: Delivery & { is_expanded?: boolean };
@@ -69,6 +70,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const hasCoordinatesOrLink = !!(customer?.maps_link || delivery.maps_link);
   const hasStreetNumber = /\d/.test(delivery.address_string);
   const activePhone = delivery.phone || customer?.phone;
+  const operationalDate = deliveryDate(delivery);
+  const operationalDateKey = operationalDate ? dateKey(operationalDate) : '';
+  const operationalDateQuery = operationalDateKey
+    ? `&date=${encodeURIComponent(operationalDateKey)}`
+    : '';
+  const confirmationReturn = operationalDateKey
+    ? `/confirmacoes?date=${encodeURIComponent(operationalDateKey)}`
+    : '/confirmacoes';
 
   const triggerCopyAndRedirect = async (
     textToCopy: string,
@@ -608,7 +617,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   )}
 
                   <Link
-                    href={`/entregas/editar?id=${delivery.id}`}
+                    href={`/entregas/editar?id=${delivery.id}${operationalDateQuery}`}
                     onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); }}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90 transition-all"
                   >
@@ -652,7 +661,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
                   const targetCode = delivery.confirmation_code || customer?.last_confirmation_code || '';
                   const targetId = delivery.ifood_id || '';
-                  const returnTo = '/confirmacoes';
+                  const returnTo = confirmationReturn;
                   setConfirmRedirectModal({ isOpen: false, copiedText: '' });
                   router.replace(`/confirmar?orderId=${encodeURIComponent(targetId)}&code=${encodeURIComponent(targetCode)}&returnTo=${encodeURIComponent(returnTo)}`);
                 }}

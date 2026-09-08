@@ -56,7 +56,7 @@ import {
   resolveStopLocation,
   type LatLngPoint,
 } from '@/lib/maps';
-import { routeDate, routeStartedAt } from '@/lib/operational-time';
+import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 
 interface RouteAccordionProps {
@@ -103,6 +103,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const progressPercent = totalDeliveries > 0 ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
   
   const routeTotalValue = deliveries.reduce((acc, curr) => acc + (curr.value || 0), 0);
+  const operationalRouteDate = routeDate(route);
+  const operationalRouteDateKey = operationalRouteDate ? dateKey(operationalRouteDate) : '';
+  const routeDetailsHref = operationalRouteDateKey
+    ? `/rotas/details?id=${route.id}&date=${encodeURIComponent(operationalRouteDateKey)}`
+    : `/rotas/details?id=${route.id}`;
 
   const startedAt = routeStartedAt(route);
   const isNotStarted = route.status === 'aberta' && !startedAt;
@@ -569,7 +574,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 <RotateCcw size={16} /> Reabrir Rota (Correções)
               </button>
             )}
-            <button onClick={() => router.push(`/rotas/details?id=${route.id}`)} className="flex w-full items-center justify-center rounded-[18px] border border-zinc-800 py-3 text-xs font-bold text-zinc-400 active:scale-95">Ver detalhes da rota</button>
+            <button onClick={() => router.push(routeDetailsHref)} className="flex w-full items-center justify-center rounded-[18px] border border-zinc-800 py-3 text-xs font-bold text-zinc-400 active:scale-95">Ver detalhes da rota</button>
           </div>
         </div>
       )}

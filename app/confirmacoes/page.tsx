@@ -2,7 +2,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -92,6 +92,12 @@ const stateMeta: Record<
 
 export default function ConfirmacoesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedDate = searchParams.get('date');
+  const initialDateKey =
+    requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+      ? requestedDate
+      : dateKey(new Date());
   const deliveries = useAppStore((state) => state.deliveries);
   const customers = useAppStore((state) => state.customers);
   const ifoodPendingConfirmations = useAppStore(
@@ -109,7 +115,7 @@ export default function ConfirmacoesPage() {
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [batchText, setBatchText] = useState('');
   const [isBatchSaving, setIsBatchSaving] = useState(false);
-  const [selectedDateKey, setSelectedDateKey] = useState(() => dateKey(new Date()));
+  const [selectedDateKey, setSelectedDateKey] = useState(() => initialDateKey);
   const selectedDate = dateFromKey(selectedDateKey);
   const selectedDateLabel =
     selectedDateKey === dateKey(new Date())
@@ -120,6 +126,8 @@ export default function ConfirmacoesPage() {
           year: 'numeric',
         });
 
+  const confirmationReturn = `/confirmacoes?date=${encodeURIComponent(selectedDateKey)}`;
+  const deliveryDateSuffix = `&date=${encodeURIComponent(selectedDateKey)}`;
 
   const allIfood = useMemo(
     () => deliveries.filter((delivery) => isIfoodOrder(delivery)),
@@ -342,7 +350,7 @@ export default function ConfirmacoesPage() {
     router.push(
       `/confirmar?orderId=${encodeURIComponent(ifoodId)}&code=${encodeURIComponent(
         code,
-      )}&returnTo=${encodeURIComponent('/confirmacoes')}`,
+      )}&returnTo=${encodeURIComponent(confirmationReturn)}`,
     );
   };
 
@@ -369,7 +377,7 @@ export default function ConfirmacoesPage() {
         <button
           onClick={() =>
             router.push(
-              `/confirmar?returnTo=${encodeURIComponent('/confirmacoes')}`,
+              `/confirmar?returnTo=${encodeURIComponent(confirmationReturn)}`,
             )
           }
           className="flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-black text-zinc-200 active:scale-95"
@@ -586,7 +594,7 @@ export default function ConfirmacoesPage() {
                         item.ifood_id || '',
                       )}&code=${encodeURIComponent(
                         item.confirmation_code || '',
-                      )}&returnTo=${encodeURIComponent('/confirmacoes')}`,
+                      )}&returnTo=${encodeURIComponent(confirmationReturn)}`,
                     )
                   }
                   className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl font-black active:scale-95 ${
@@ -696,7 +704,7 @@ export default function ConfirmacoesPage() {
               <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
                 {confirmation.state === 'missing_id' ? (
                   <button
-                    onClick={() => router.push(`/entregas/editar?id=${delivery.id}`)}
+                    onClick={() => router.push(`/entregas/editar?id=${delivery.id}${deliveryDateSuffix}`)}
                     className="flex h-12 items-center justify-center gap-2 rounded-xl bg-amber-500 font-black text-zinc-950 active:scale-95"
                   >
                     <Pencil size={15} />
@@ -719,7 +727,7 @@ export default function ConfirmacoesPage() {
                 )}
 
                 <button
-                  onClick={() => router.push(`/entregas/details?id=${delivery.id}`)}
+                  onClick={() => router.push(`/entregas/details?id=${delivery.id}${deliveryDateSuffix}`)}
                   className="flex h-12 w-12 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 active:scale-95"
                   aria-label="Abrir pedido"
                 >
