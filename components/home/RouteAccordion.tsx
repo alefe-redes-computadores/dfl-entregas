@@ -1,22 +1,61 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  ChevronDown, Bike, Wallet, CheckCircle2, RotateCcw, Timer, MapPin, 
-  Copy, User, UserRound, AlertTriangle, X, Trash2, Receipt, MessageCircle, Send
+import {
+  AlertTriangle,
+  ArrowRight,
+  Bike,
+  CheckCircle2,
+  ChevronDown,
+  Copy,
+  Crosshair,
+  MapPin,
+  MapPinned,
+  MessageCircle,
+  Navigation,
+  Receipt,
+  RotateCcw,
+  Send,
+  Sparkles,
+  Timer,
+  Trash2,
+  Undo2,
+  User,
+  UserRound,
+  Wallet,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
+
 import type { Route } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { DeliveryCard } from '@/components/home/DeliveryCard';
 import { useOptimizedDeliveries } from '@/hooks/useOptimizedDeliveries';
+
 import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
-import { generateRouteMessages, generateClientDispatchUrl } from '@/lib/whatsapp';
-import { resolveStopLocation, buildGoogleMapsRouteUrl } from '@/lib/maps';
+import {
+  Haptics,
+  ImpactStyle,
+  NotificationType,
+} from '@capacitor/haptics';
+
+import {
+  generateClientDispatchUrl,
+  generateRouteMessages,
+} from '@/lib/whatsapp';
+import {
+  buildGoogleMapsRouteUrl,
+  distanceMeters,
+  extractLatLngFromMapsUrl,
+  formatDistance,
+  optimizePointsNearestNeighbor,
+  resolveStopLocation,
+  type LatLngPoint,
+} from '@/lib/maps';
 import { routeDate, routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 
@@ -35,6 +74,14 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [currentFuzzyList, setCurrentFuzzyList] = useState<any[]>([]);
   const [pendingActionType, setPendingActionType] = useState<'copy1' | 'copy2' | 'maps' | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [optimizerOpen, setOptimizerOpen] = useState(false);
+  const [optimizerBusy, setOptimizerBusy] = useState(false);
+  const [optimizerOrigin, setOptimizerOrigin] = useState<LatLngPoint | null>(null);
+  const [optimizerOriginLabel, setOptimizerOriginLabel] = useState('Localização atual');
+  const [optimizerOrder, setOptimizerOrder] = useState<string[]>([]);
+  const [optimizerPreviousOrder, setOptimizerPreviousOrder] = useState<string[]>([]);
+  const [optimizerApproximateIds, setOptimizerApproximateIds] = useState<string[]>([]);
+  const [lastAppliedOrder, setLastAppliedOrder] = useState<string[] | null>(null);
 
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
@@ -44,6 +91,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const deleteRoute = useAppStore((state) => state.deleteRoute); 
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const allRoutes = useAppStore((state) => state.routes);
+  const setDeliveryOrder = useAppStore((state) => state.setDeliveryOrder);
   
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const storeSettings = useAppStore((state) => state.storeSettings);
@@ -65,6 +113,34 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
   const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress } = useOptimizedDeliveries(deliveries, getCustomerById);
+
+  const optimizerRows = useMemo(() => {
+    const orderIds = optimizerOrder.length > 0
+      ? optimizerOrder
+      : pendingDeliveries.map((delivery) => delivery.id);
+
+    return orderIds
+      .map((id) => pendingDeliveries.find((delivery) => delivery.id === id))
+      .filter(Boolean)
+      .map((delivery) => {
+        const customer = getCustomerById(delivery!.customer_id);
+        const point =
+          extractLatLngFromMapsUrl(delivery!.maps_link) ||
+          extractLatLngFromMapsUrl(customer?.maps_link);
+
+        return {
+          delivery: delivery!,
+          customer,
+          point,
+          approximate: optimizerApproximateIds.includes(delivery!.id),
+        };
+      });
+  }, [
+    getCustomerById,
+    optimizerApproximateIds,
+    optimizerOrder,
+    pendingDeliveries,
+  ]);
 
   // Clientes com telefone para disparo de aviso de saída
   const clientsWithPhone = deliveries
@@ -191,6 +267,138 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     setIsCopyMenuOpen(false);
   };
 
+  const getCurrentOrigin = async (): Promise<{ point: LatLngPoint | null; label: string }> => {
+    try {
+      const permission = await Geolocation.checkPermissions();
+      let locationPermission = permission.location;
+
+      if (locationPermission !== 'granted') {
+        const requested = await Geolocation.requestPermissions({
+          permissions: ['location'],
+        });
+        locationPermission = requested.location;
+      }
+
+      if (locationPermission === 'granted') {
+        const position = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 30000,
+        });
+
+        return {
+          point: {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          },
+          label: 'Minha localização atual',
+        };
+      }
+    } catch (error) {
+      console.warn('GPS indisponível para organizar rota:', error);
+    }
+
+    return { point: null, label: 'GPS indisponível' };
+  };
+
+  const buildOptimizerPreview = async () => {
+    if (optimizerBusy || pendingDeliveries.length < 2) return;
+    setOptimizerBusy(true);
+
+    try {
+      const previousIds = pendingDeliveries.map((delivery) => delivery.id);
+
+      const precise = pendingDeliveries
+        .map((delivery) => {
+          const customer = getCustomerById(delivery.customer_id);
+          const point =
+            extractLatLngFromMapsUrl(delivery.maps_link) ||
+            extractLatLngFromMapsUrl(customer?.maps_link);
+
+          return point ? { delivery, point } : null;
+        })
+        .filter(Boolean) as Array<{
+          delivery: typeof pendingDeliveries[number];
+          point: LatLngPoint;
+        }>;
+
+      const approximate = pendingDeliveries.filter(
+        (delivery) => !precise.some((item) => item.delivery.id === delivery.id),
+      );
+
+      const current = await getCurrentOrigin();
+
+      setOptimizerPreviousOrder(previousIds);
+      setOptimizerApproximateIds(approximate.map((delivery) => delivery.id));
+      setOptimizerOrigin(current.point);
+      setOptimizerOriginLabel(current.label);
+
+      if (!current.point) {
+        setOptimizerOrder(previousIds);
+        setOptimizerOpen(true);
+        toast.warning('Não foi possível usar sua localização atual.', {
+          description: 'Ative a localização do aparelho para calcular a rota por distância.',
+        });
+        return;
+      }
+
+      const optimizedPrecise = optimizePointsNearestNeighbor(current.point, precise);
+      const nextIds = [
+        ...optimizedPrecise.map((item) => item.delivery.id),
+        ...approximate.map((delivery) => delivery.id),
+      ];
+
+      setOptimizerOrder(nextIds);
+      setOptimizerOpen(true);
+
+      if (Capacitor.isNativePlatform()) {
+        await Haptics.impact({ style: ImpactStyle.Medium });
+      }
+    } finally {
+      setOptimizerBusy(false);
+    }
+  };
+
+  const applyOptimizerOrder = async () => {
+    if (optimizerOrder.length < 2 || !optimizerOrigin) return;
+    setOptimizerBusy(true);
+
+    try {
+      await setDeliveryOrder(route.id, optimizerOrder);
+      setLastAppliedOrder(optimizerPreviousOrder);
+      setOptimizerOpen(false);
+
+      if (Capacitor.isNativePlatform()) {
+        await Haptics.notification({ type: NotificationType.Success });
+      }
+
+      toast.success('Ordem sugerida aplicada.', {
+        description: 'Você pode desfazer enquanto a rota continuar aberta.',
+      });
+    } catch {
+      toast.error('Não foi possível aplicar a ordem sugerida.');
+    } finally {
+      setOptimizerBusy(false);
+    }
+  };
+
+  const undoOptimizerOrder = async () => {
+    if (!lastAppliedOrder?.length) return;
+
+    try {
+      await setDeliveryOrder(route.id, lastAppliedOrder);
+      setLastAppliedOrder(null);
+
+      if (Capacitor.isNativePlatform()) {
+        await Haptics.impact({ style: ImpactStyle.Medium });
+      }
+
+      toast.success('Ordem anterior restaurada.');
+    } catch {
+      toast.error('Não foi possível restaurar a ordem anterior.');
+    }
+  };
+
   const handleOpenMaps = async () => {
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
     
@@ -304,15 +512,44 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </button>
             )}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && (
-              <div className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-zinc-700/80 bg-zinc-950/70 p-2.5">
-                <button onClick={() => setIsCopyMenuOpen(true)} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800/80 text-sm font-semibold text-zinc-300 active:scale-95">
-                  <Copy size={18} className="text-emerald-500" />
-                  <span className="truncate">Copiar (WhatsApp)</span>
+              <div className="flex flex-col gap-2 rounded-[22px] border border-zinc-700/80 bg-zinc-950/70 p-2.5">
+                <button
+                  onClick={buildOptimizerPreview}
+                  disabled={optimizerBusy || pendingDeliveries.length < 2}
+                  className="flex w-full items-center justify-between rounded-2xl border border-violet-500/25 bg-gradient-to-r from-violet-500/15 to-sky-500/10 px-4 py-3 text-left active:scale-[0.99] disabled:opacity-40"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300">
+                      <Sparkles size={18} />
+                    </span>
+                    <div>
+                      <p className="text-xs font-black text-zinc-100">Organizar rota</p>
+                      <p className="mt-0.5 text-[10px] text-zinc-500">GPS atual + pontos precisos</p>
+                    </div>
+                  </div>
+                  <ArrowRight size={16} className="text-violet-300" />
                 </button>
-                <button onClick={handleOpenMaps} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 active:scale-95">
-                  <MapPin size={18} />
-                  <span className="truncate">Otimizar (Maps)</span>
-                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setIsCopyMenuOpen(true)} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-zinc-900 text-xs font-semibold text-zinc-300 active:scale-95">
+                    <Copy size={15} className="text-emerald-500" />
+                    WhatsApp
+                  </button>
+                  <button onClick={handleOpenMaps} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 text-xs font-bold text-white active:scale-95">
+                    <MapPin size={15} />
+                    Abrir no Maps
+                  </button>
+                </div>
+
+                {lastAppliedOrder && (
+                  <button
+                    onClick={undoOptimizerOrder}
+                    className="flex h-10 items-center justify-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 text-[11px] font-black text-amber-300 active:scale-95"
+                  >
+                    <Undo2 size={14} />
+                    Desfazer organização
+                  </button>
+                )}
               </div>
             )}
             {route.status === 'aberta' && totalDeliveries > 0 ? (
@@ -333,6 +570,137 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </button>
             )}
             <button onClick={() => router.push(`/rotas/details?id=${route.id}`)} className="flex w-full items-center justify-center rounded-[18px] border border-zinc-800 py-3 text-xs font-bold text-zinc-400 active:scale-95">Ver detalhes da rota</button>
+          </div>
+        </div>
+      )}
+
+      {optimizerOpen && (
+        <div className="fixed inset-0 z-[110] flex flex-col justify-end bg-black/85 backdrop-blur-sm animate-in fade-in">
+          <div className="max-h-[88vh] overflow-hidden rounded-t-[34px] border-t border-zinc-700 bg-[#151515]">
+            <div className="flex items-start justify-between gap-3 border-b border-zinc-800 px-5 pb-4 pt-5">
+              <div className="flex items-start gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-300">
+                  <Sparkles size={20} />
+                </span>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-400">Prévia inteligente</p>
+                  <h3 className="mt-1 font-heading text-xl font-black text-zinc-50">Nova sequência</h3>
+                  <p className="mt-1 text-[11px] text-zinc-500">Nada muda até você confirmar.</p>
+                </div>
+              </div>
+              <button onClick={() => setOptimizerOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-400">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="max-h-[calc(88vh-180px)] overflow-y-auto px-5 py-4">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-2xl border border-sky-500/20 bg-sky-500/[.07] p-3">
+                  <p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-sky-400">
+                    <Crosshair size={11} /> Origem
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-zinc-200">{optimizerOriginLabel}</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[.07] p-3">
+                  <p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-400">
+                    <MapPinned size={11} /> Precisão
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-zinc-200">
+                    {pendingDeliveries.length - optimizerApproximateIds.length}/{pendingDeliveries.length} pontos
+                  </p>
+                </div>
+              </div>
+
+              {optimizerApproximateIds.length > 0 && (
+                <div className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/[.06] p-3">
+                  <p className="flex items-center gap-2 text-[10px] font-black text-amber-300">
+                    <AlertTriangle size={13} />
+                    {optimizerApproximateIds.length} parada{optimizerApproximateIds.length !== 1 ? 's' : ''} sem coordenadas
+                  </p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
+                    Elas não entram no cálculo de distância e mantêm a ordem relativa atual.
+                  </p>
+                </div>
+              )}
+
+              {!optimizerOrigin && (
+                <div className="mt-3 rounded-2xl border border-red-500/20 bg-red-500/[.06] p-3">
+                  <p className="text-[10px] font-black text-red-300">GPS indisponível</p>
+                  <p className="mt-1 text-[10px] text-zinc-500">
+                    Ative a localização do aparelho para calcular a sequência por distância.
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-4 space-y-2">
+                {optimizerRows.map((row, index) => {
+                  const previousIndex = optimizerPreviousOrder.indexOf(row.delivery.id);
+                  const changed = previousIndex !== index;
+
+                  let legDistance: string | null = null;
+                  if (optimizerOrigin && row.point) {
+                    const previousPrecise = optimizerRows.slice(0, index).reverse().find((item) => item.point);
+                    const from = previousPrecise?.point || optimizerOrigin;
+                    legDistance = formatDistance(distanceMeters(from, row.point));
+                  }
+
+                  return (
+                    <div
+                      key={row.delivery.id}
+                      className={`rounded-[20px] border p-3 ${
+                        row.approximate
+                          ? 'border-amber-500/15 bg-amber-500/[.04]'
+                          : changed
+                            ? 'border-violet-500/20 bg-violet-500/[.06]'
+                            : 'border-zinc-800 bg-zinc-900/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`flex h-9 w-9 items-center justify-center rounded-xl text-xs font-black ${
+                          row.approximate
+                            ? 'bg-amber-500/10 text-amber-300'
+                            : 'bg-violet-500/10 text-violet-300'
+                        }`}>
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-black text-zinc-200">
+                            {row.customer?.name || row.delivery.customer_name || `Pedido ${row.delivery.order_id || ''}`}
+                          </p>
+                          <p className="mt-1 truncate text-[10px] text-zinc-500">
+                            {row.delivery.address_string || 'Endereço não informado'}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          {row.approximate ? (
+                            <span className="text-[9px] font-black text-amber-400">Aproximado</span>
+                          ) : (
+                            <span className="text-[9px] font-black text-emerald-400">{legDistance || 'Preciso'}</span>
+                          )}
+                          {changed && (
+                            <p className="mt-1 text-[9px] font-bold text-zinc-600">era {previousIndex + 1}º</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="border-t border-zinc-800 bg-zinc-950/80 p-4 pb-7">
+              <button
+                onClick={applyOptimizerOrder}
+                disabled={optimizerBusy || optimizerOrder.length < 2 || !optimizerOrigin}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-500 py-3.5 text-sm font-black text-white disabled:opacity-40"
+              >
+                <Navigation size={17} />
+                Aplicar ordem sugerida
+              </button>
+              <button onClick={() => setOptimizerOpen(false)} className="mt-2 flex h-11 w-full items-center justify-center text-xs font-bold text-zinc-500">
+                Manter ordem atual
+              </button>
+            </div>
           </div>
         </div>
       )}

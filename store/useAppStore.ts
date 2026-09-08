@@ -61,6 +61,7 @@ interface AppState {
   reopenRoute: (routeId: string) => Promise<void>;
   reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
   moveDeliveryToIndex: (routeId: string, deliveryId: string, targetIndex: number) => Promise<void>;
+  setDeliveryOrder: (routeId: string, orderedPendingIds: string[]) => Promise<void>;
   toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void;
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
@@ -737,6 +738,65 @@ export const useAppStore = create<AppState>()(
           throw error;
         }
       },
+
+      setDeliveryOrder: async (routeId, orderedPendingIds) => {
+        const state = get();
+        const routeDeliveries = state.deliveries
+          .filter((delivery) => delivery.route_id === routeId)
+          .map((delivery) => ({ ...delivery }));
+
+        const pending = routeDeliveries.filter((delivery) => !delivery.completed);
+        const completed = routeDeliveries.filter((delivery) => delivery.completed);
+        const pendingById = new Map(pending.map((delivery) => [delivery.id, delivery]));
+
+        const uniqueIds = Array.from(new Set(orderedPendingIds));
+        const validIds = uniqueIds.filter((id) => pendingById.has(id));
+        const missingIds = pending.map((delivery) => delivery.id).filter((id) => !validIds.includes(id));
+        const finalPendingIds = [...validIds, ...missingIds];
+
+        if (finalPendingIds.length !== pending.length) {
+          throw new Error('A ordem recebida não corresponde às entregas pendentes da rota.');
+        }
+
+        const orderedPending = finalPendingIds.map((id) => pendingById.get(id)!);
+        const completedSorted = [...completed].sort((a, b) => {
+          const aOrder = a.order_index ?? Number.MAX_SAFE_INTEGER;
+          const bOrder = b.order_index ?? Number.MAX_SAFE_INTEGER;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return a.id.localeCompare(b.id);
+        });
+
+        const normalized = [...orderedPending, ...completedSorted].map((delivery, index) => ({
+          ...delivery,
+          order_index: index,
+        }));
+
+        const now = new Date().toISOString();
+        const indexById = new Map(normalized.map((delivery) => [delivery.id, delivery.order_index] as const));
+
+        set((prev) => ({
+          deliveries: prev.deliveries.map((delivery) => {
+            const nextIndex = indexById.get(delivery.id);
+            return nextIndex === undefined ? delivery : { ...delivery, order_index: nextIndex, updated_at: now };
+          }),
+        }));
+
+        try {
+          const batch = writeBatch(db);
+          normalized.forEach((delivery) => {
+            batch.update(doc(db, 'deliveries', delivery.id), {
+              order_index: delivery.order_index,
+              updated_at: now,
+            });
+          });
+          await batch.commit();
+        } catch (error) {
+          set({ deliveries: state.deliveries });
+          console.error('Erro ao aplicar ordem da rota:', error);
+          throw error;
+        }
+      },
+
 
       toggleDeliveryExpansion: (id, isExpanded) => {
         set((state) => ({
