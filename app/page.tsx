@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Package, Eye, EyeOff, Filter, Users, UserRound, Bike } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Package, Eye, EyeOff, Filter, Users, UserRound, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
 import type { Route } from '@/types';
-import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { firstValidTimestamp, saoPauloDateKey } from '@/lib/reports/time';
 import { OperationalRadar } from '@/components/home/OperationalRadar';
 
@@ -124,7 +124,27 @@ export default function HomePage() {
   }
 
   const totalEntregas = deliveriesDoDia.length;
+  const storeOrdersDoDia = ordersDoDia
+    .filter((order) => !isDeliveryFulfillment(order))
+    .sort((a, b) => {
+      const aDate = firstValidTimestamp(a.created_at, a.createdAt);
+      const bDate = firstValidTimestamp(b.created_at, b.createdAt);
+      return (aDate?.getTime() ?? 0) - (bDate?.getTime() ?? 0);
+    });
+  const pickupCount = storeOrdersDoDia.filter((order) => getFulfillmentMode(order) === 'pickup').length;
+  const counterCount = storeOrdersDoDia.filter((order) => getFulfillmentMode(order) === 'counter').length;
   const faturamentoTotal = ordersDoDia.reduce((acc, order) => acc + (order.value || 0), 0);
+
+  const formatOrderTime = (order: (typeof ordersDoDia)[number]) => {
+    const timestamp = firstValidTimestamp(order.created_at, order.createdAt);
+    return timestamp
+      ? timestamp.toLocaleTimeString('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '--:--';
+  };
 
   const openRoutes = routesDoDia.filter((r) => r.status === 'aberta');
   const closedRoutes = routesDoDia.filter((r) => r.status === 'fechada');
@@ -202,6 +222,57 @@ export default function HomePage() {
           <p className="font-heading text-2xl font-bold text-zinc-50">{isPrivacyMode ? 'R$ •••••' : `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p>
         </div>
       </div>
+
+      {storeOrdersDoDia.length > 0 && !globalMotoboy && (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between px-1">
+            <div>
+              <h2 className="font-heading text-sm font-bold uppercase tracking-wide text-zinc-500">Pedidos na loja</h2>
+              <p className="mt-1 text-[11px] text-zinc-600">Fora da logística de rotas</p>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-black">
+              {pickupCount > 0 && <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-violet-400">{pickupCount} retirada{pickupCount === 1 ? '' : 's'}</span>}
+              {counterCount > 0 && <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-amber-400">{counterCount} balcão</span>}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {storeOrdersDoDia.map((order) => {
+              const mode = getFulfillmentMode(order);
+              const isPickup = mode === 'pickup';
+              const ModeIcon = isPickup ? ShoppingBag : Store;
+              return (
+                <a
+                  key={order.id}
+                  href={`/entregas/details?id=${order.id}`}
+                  className="flex w-full items-center gap-3 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-3.5 text-left transition-all active:scale-[0.99]"
+                >
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                    <ModeIcon size={19} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-black text-zinc-100">{order.customer_name || `Pedido #${order.order_id || 'sem número'}`}</p>
+                      <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase ${isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                        {isPickup ? 'Retirada' : 'Balcão'}
+                      </span>
+                    </div>
+                    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-500">
+                      <Clock3 size={10} />{formatOrderTime(order)}<span>•</span>{order.is_paid ? 'Pago' : 'Pagamento pendente'}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-black text-emerald-400">
+                      {isPrivacyMode ? 'R$ •••••' : `R$ ${(order.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    </p>
+                    {order.completed ? <CheckCircle2 size={14} className="ml-auto mt-1 text-emerald-500" /> : <Clock3 size={14} className="ml-auto mt-1 text-amber-400" />}
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {openRoutes.length > 0 && (
         <div className="flex flex-col gap-3">
