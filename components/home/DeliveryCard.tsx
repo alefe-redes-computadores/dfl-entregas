@@ -70,17 +70,36 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const hasStreetNumber = /\d/.test(delivery.address_string);
   const activePhone = delivery.phone || customer?.phone;
 
-  const triggerCopyAndRedirect = async (textToCopy: string) => {
+  const triggerCopyAndRedirect = async (
+    textToCopy: string,
+    options: { offerIfoodPortal?: boolean } = {},
+  ) => {
     if (!textToCopy) return;
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+
+    if (Capacitor.isNativePlatform()) {
+      await Haptics.impact({ style: ImpactStyle.Heavy });
+    }
+
     await navigator.clipboard.writeText(textToCopy);
-    toast.success('Copiado para a área de transferência!');
-    setConfirmRedirectModal({ isOpen: true, copiedText: textToCopy });
+    toast.success('Copiado para a área de transferência!', { duration: 1400 });
+
+    const normalizedId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
+    const copiedDigits = textToCopy.replace(/\D/g, '');
+
+    if (
+      options.offerIfoodPortal &&
+      normalizedId.length === 8 &&
+      copiedDigits === normalizedId
+    ) {
+      window.setTimeout(() => {
+        setConfirmRedirectModal({ isOpen: true, copiedText: normalizedId });
+      }, 320);
+    }
   };
 
-  const handleTouchStartLongPress = (text: string) => {
+  const handleTouchStartLongPress = (text: string, offerIfoodPortal = false) => {
     longPressTimer.current = setTimeout(() => {
-      triggerCopyAndRedirect(text);
+      void triggerCopyAndRedirect(text, { offerIfoodPortal });
     }, 450);
   };
 
@@ -339,8 +358,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   )}
                   {isIfood && delivery.ifood_id && (
                     <button
-                      onClick={() => triggerCopyAndRedirect(delivery.ifood_id!)}
-                      onTouchStart={() => handleTouchStartLongPress(delivery.ifood_id!)}
+                      onClick={() => triggerCopyAndRedirect(delivery.ifood_id!, { offerIfoodPortal: true })}
+                      onTouchStart={() => handleTouchStartLongPress(delivery.ifood_id!, true)}
                       onTouchEnd={handleTouchEndLongPress}
                       className="bg-zinc-950 border border-zinc-800 hover:border-zinc-700 active:scale-95 text-zinc-300 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0 flex items-center gap-1 transition-all"
                     >
@@ -633,7 +652,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
                   const targetCode = delivery.confirmation_code || customer?.last_confirmation_code || '';
                   const targetId = delivery.ifood_id || '';
-                  const returnTo = `${window.location.pathname}${window.location.search}`;
+                  const returnTo = '/confirmacoes';
                   setConfirmRedirectModal({ isOpen: false, copiedText: '' });
                   router.replace(`/confirmar?orderId=${encodeURIComponent(targetId)}&code=${encodeURIComponent(targetCode)}&returnTo=${encodeURIComponent(returnTo)}`);
                 }}

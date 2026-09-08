@@ -41,7 +41,7 @@ function ConfirmarContent() {
   }, [initialOrderId, initialCode]);
 
   useEffect(() => {
-    if (!initialOrderId || copiedFirstValue) return;
+    if (initialOrderId.length !== 8 || copiedFirstValue) return;
 
     const copyInitialId = async () => {
       try {
@@ -105,7 +105,7 @@ function ConfirmarContent() {
           {(orderId || code) && (
             <span className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black text-emerald-400">
               <ShieldCheck size={12} />
-              Dados prontos
+              Dados carregados
             </span>
           )}
         </div>
@@ -146,7 +146,9 @@ function ConfirmarContent() {
 
         <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/45 px-3 py-2">
           <p className="text-[10px] leading-relaxed text-zinc-500">
-            O ID é copiado automaticamente ao abrir. Use os botões acima para copiar novamente.
+            O ID de 8 dígitos é preparado e copiado ao abrir. O código também fica pronto acima.
+            Como o portal do iFood roda em outro domínio, o navegador não permite que o DFL
+            preencha os campos internos sozinho.
           </p>
           <button
             onClick={leaveConfirmation}
