@@ -595,7 +595,6 @@ export const useAppStore = create<AppState>()(
             const previousRouteReadyToClose =
               previousRoute?.status === 'aberta' &&
               Boolean(routeStartedAt(previousRoute)) &&
-              remainingPreviousRouteDeliveries.length > 0 &&
               remainingPreviousRouteDeliveries.every(
                 (delivery) => delivery.completed === true,
               );
@@ -629,12 +628,58 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteDelivery: async (id) => {
-        const previousDeliveries = get().deliveries;
-        set((state) => ({ deliveries: state.deliveries.filter((d) => d.id !== id) }));
+        const state = get();
+        const deliveryToDelete = state.deliveries.find((delivery) => delivery.id === id);
+        if (!deliveryToDelete) throw new Error('Entrega não encontrada.');
+
+        if (deliveryToDelete.completed === true) {
+          throw new Error(
+            'Desfaça a baixa antes de excluir uma entrega concluída.',
+          );
+        }
+
+        const previousDeliveries = state.deliveries;
+        const linkedRouteId = deliveryToDelete.route_id;
+
+        set((current) => ({
+          deliveries: current.deliveries.filter((delivery) => delivery.id !== id),
+        }));
+
+        let deletionCommitted = false;
         try {
           await deleteDoc(doc(db, 'deliveries', id));
+          deletionCommitted = true;
+
+          if (linkedRouteId) {
+            const currentState = get();
+            const linkedRoute = currentState.routes.find(
+              (route) => route.id === linkedRouteId,
+            );
+            const remainingDeliveries = currentState.deliveries.filter(
+              (delivery) => delivery.route_id === linkedRouteId,
+            );
+            const routeReadyToClose =
+              linkedRoute?.status === 'aberta' &&
+              Boolean(routeStartedAt(linkedRoute)) &&
+              remainingDeliveries.every(
+                (delivery) => delivery.completed === true,
+              );
+
+            if (routeReadyToClose && linkedRoute) {
+              await currentState.closeRoute(linkedRoute.id);
+            }
+          }
         } catch (error) {
-          set({ deliveries: previousDeliveries });
+          if (deletionCommitted) {
+            set({ syncError: true });
+            console.error(
+              'Entrega excluída, mas não foi possível reconciliar a rota:',
+              error,
+            );
+            return;
+          }
+
+          set({ deliveries: previousDeliveries, syncError: true });
           console.error(error);
           throw error;
         }

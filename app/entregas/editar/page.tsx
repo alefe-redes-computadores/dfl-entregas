@@ -572,8 +572,25 @@ const [routeId, setRouteId] = useState('');
   };
 
   const handleDelete = async () => {
-    if (!deliveryId) return;
-    const confirm = window.confirm("Tem certeza que deseja excluir esta entrega permanentemente?");
+    if (!deliveryId || !currentDelivery) return;
+
+    if (currentDelivery.completed === true) {
+      toast.error('Desfaça a baixa antes de excluir este pedido.', {
+        description:
+          'Isso mantém o histórico do cliente e o estado da operação consistentes.',
+      });
+      return;
+    }
+
+    const linkedRoute = routes.find(
+      (route) => route.id === currentDelivery.route_id,
+    );
+    const routeContext = linkedRoute
+      ? ` Ele será removido da rota "${linkedRoute.name}".`
+      : '';
+    const confirm = window.confirm(
+      `Tem certeza que deseja excluir esta entrega permanentemente?${routeContext}`,
+    );
     if (!confirm) return;
 
     setIsDeleting(true);
@@ -581,8 +598,12 @@ const [routeId, setRouteId] = useState('');
       await deleteDelivery(deliveryId);
       toast.success('Entrega excluída com sucesso!');
       router.replace(deliveriesReturn);
-    } catch {
-      toast.error('Erro ao excluir entrega.');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Erro ao excluir entrega.';
+      toast.error('Não foi possível excluir a entrega.', {
+        description: message,
+      });
       setIsDeleting(false);
     }
   };
