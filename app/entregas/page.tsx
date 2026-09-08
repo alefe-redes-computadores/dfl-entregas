@@ -160,14 +160,23 @@ export default function DeliveriesPage() {
     [customers, dayDeliveries, fulfillment, origin, query, routes, status],
   );
 
-  const totals = useMemo(
-    () => ({
+  const totals = useMemo(() => {
+    const attention = dayDeliveries.filter((delivery) => {
+      const route = routes.find((item) => item.id === delivery.route_id);
+      const logistics = isDeliveryFulfillment(delivery);
+      return (
+        (logistics && (!delivery.route_id || !route || !delivery.address_string)) ||
+        (delivery.origin === 'ifood' && !delivery.order_id)
+      );
+    }).length;
+
+    return {
       all: dayDeliveries.length,
       pending: dayDeliveries.filter((item) => !item.completed).length,
       completed: dayDeliveries.filter((item) => item.completed).length,
-    }),
-    [dayDeliveries],
-  );
+      attention,
+    };
+  }, [dayDeliveries, routes]);
 
   const calendarDays = useMemo(() => {
     const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
@@ -257,16 +266,47 @@ export default function DeliveriesPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <Metric icon={Package} label="Pedidos" value={totals.all} color="text-sky-400" />
         <Metric icon={Clock3} label="Pendentes" value={totals.pending} color="text-amber-400" />
-        <Metric
-          icon={CheckCircle2}
-          label="Concluídos"
-          value={totals.completed}
-          color="text-emerald-400"
-        />
+        <Metric icon={CheckCircle2} label="Concluídos" value={totals.completed} color="text-emerald-400" />
+        <button
+          type="button"
+          onClick={() => setStatus('incompletas')}
+          className={`rounded-2xl border p-3 text-left active:scale-[0.99] ${
+            totals.attention > 0
+              ? 'border-amber-500/25 bg-amber-500/[.055]'
+              : 'border-zinc-800 bg-zinc-900/50'
+          }`}
+        >
+          <AlertTriangle size={15} className={totals.attention > 0 ? 'text-amber-400' : 'text-zinc-600'} />
+          <p className="mt-2 text-xl font-black text-zinc-100">{totals.attention}</p>
+          <p className="text-[10px] text-zinc-500">Com atenção</p>
+        </button>
       </div>
+
+      {totals.attention > 0 && status !== 'incompletas' && (
+        <button
+          type="button"
+          onClick={() => setStatus('incompletas')}
+          className="flex items-center justify-between gap-3 rounded-[22px] border border-amber-500/20 bg-amber-500/[.06] px-4 py-3 text-left active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+              <AlertTriangle size={16} />
+            </span>
+            <div>
+              <p className="text-xs font-black text-amber-300">
+                {totals.attention} pedido{totals.attention === 1 ? '' : 's'} precisa{totals.attention === 1 ? '' : 'm'} de atenção
+              </p>
+              <p className="mt-1 text-[10px] text-zinc-500">
+                Rota, endereço ou identificadores obrigatórios podem estar incompletos.
+              </p>
+            </div>
+          </div>
+          <ChevronRight size={16} className="shrink-0 text-amber-400" />
+        </button>
+      )}
 
       <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/40 p-4">
         <div className="flex items-center justify-between gap-3">

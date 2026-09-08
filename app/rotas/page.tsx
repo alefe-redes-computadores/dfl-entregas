@@ -7,7 +7,7 @@ import { Bike, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Ma
 import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp } from '@/lib/reports/time';
 
-type Filter = 'todas' | 'montando' | 'na-rua' | 'finalizadas';
+type Filter = 'todas' | 'montando' | 'na-rua' | 'prontas' | 'finalizadas';
 type DatedRoute = { created_at?: string; started_at?: string; departure_time?: string; updated_at?: string };
 const routeDate = (route: DatedRoute) =>
   firstValidTimestamp(
@@ -48,8 +48,19 @@ export default function RoutesPage() {
     const completed = linked.filter(delivery => delivery.completed).length;
     const amount = linked.reduce((total, delivery) => total + (delivery.value || 0), 0);
     const startedAt = routeStartedAt(route);
+    const ready =
+      route.status === 'aberta' &&
+      Boolean(startedAt) &&
+      linked.length > 0 &&
+      completed === linked.length;
     const state: Exclude<Filter, 'todas'> =
-      route.status === 'fechada' ? 'finalizadas' : startedAt ? 'na-rua' : 'montando';
+      route.status === 'fechada'
+        ? 'finalizadas'
+        : ready
+          ? 'prontas'
+          : startedAt
+            ? 'na-rua'
+            : 'montando';
     return { route, linked, completed, amount, state };
   }).filter(({ route, state }) => {
     const term = query.trim().toLocaleLowerCase('pt-BR');
@@ -64,11 +75,18 @@ export default function RoutesPage() {
     montando: dayRoutes.filter(
       route => route.status === 'aberta' && !routeStartedAt(route),
     ).length,
-    rua: dayRoutes.filter(
-      route => route.status === 'aberta' && Boolean(routeStartedAt(route)),
-    ).length,
+    rua: dayRoutes.filter((route) => {
+      if (route.status !== 'aberta' || !routeStartedAt(route)) return false;
+      const linked = deliveries.filter((delivery) => delivery.route_id === route.id);
+      return linked.length === 0 || linked.some((delivery) => !delivery.completed);
+    }).length,
+    prontas: dayRoutes.filter((route) => {
+      if (route.status !== 'aberta' || !routeStartedAt(route)) return false;
+      const linked = deliveries.filter((delivery) => delivery.route_id === route.id);
+      return linked.length > 0 && linked.every((delivery) => delivery.completed);
+    }).length,
     finalizadas: dayRoutes.filter(route => route.status === 'fechada').length,
-  }), [dayRoutes]);
+  }), [dayRoutes, deliveries]);
 
   const calendarDays = useMemo(() => {
     const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
@@ -115,15 +133,27 @@ export default function RoutesPage() {
       <button onClick={() => setSelectedDate(value => shiftDay(value, 1))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"><ChevronRight size={21}/></button>
     </div>
 
-    <div className="grid grid-cols-3 gap-2"><Metric icon={Clock3} value={counts.montando} label="Montando"/><Metric icon={Bike} value={counts.rua} label="Na rua" tone="sky"/><Metric icon={CheckCircle2} value={counts.finalizadas} label="Finalizadas" tone="green"/></div>
+    <div className="grid grid-cols-2 gap-2">
+      <Metric icon={Clock3} value={counts.montando} label="Montando"/>
+      <Metric icon={Bike} value={counts.rua} label="Na rua" tone="sky"/>
+      <Metric icon={CheckCircle2} value={counts.prontas} label="Prontas" tone="green"/>
+      <Metric icon={CheckCircle2} value={counts.finalizadas} label="Finalizadas" tone="green"/>
+    </div>
     <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar neste dia" className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-11 pr-4 text-sm outline-none focus:border-emerald-500"/></div>
-    <div className="flex gap-2 overflow-x-auto no-scrollbar">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
+    <div className="flex gap-2 overflow-x-auto no-scrollbar">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
 
     <div className="flex flex-col gap-3">
       {rows.map(({ route, linked, completed, amount, state }) => {
         const progress = linked.length ? Math.round((completed / linked.length) * 100) : 0;
         const pending = Math.max(0, linked.length - completed);
-        const stateLabel = state === 'na-rua' ? 'Na rua' : state === 'finalizadas' ? 'Finalizada' : 'Montando';
+        const stateLabel =
+          state === 'na-rua'
+            ? 'Na rua'
+            : state === 'prontas'
+              ? 'Pronta'
+              : state === 'finalizadas'
+                ? 'Finalizada'
+                : 'Montando';
 
         return (
           <button
@@ -132,9 +162,11 @@ export default function RoutesPage() {
             className={`rounded-[26px] border p-4 text-left active:scale-[0.99] ${
               state === 'na-rua'
                 ? 'border-sky-500/20 bg-sky-500/[.035]'
-                : state === 'finalizadas'
-                  ? 'border-emerald-500/20 bg-emerald-500/[.025]'
-                  : 'border-zinc-800 bg-zinc-900/45'
+                : state === 'prontas'
+                  ? 'border-emerald-500/30 bg-emerald-500/[.055]'
+                  : state === 'finalizadas'
+                    ? 'border-emerald-500/20 bg-emerald-500/[.025]'
+                    : 'border-zinc-800 bg-zinc-900/45'
             }`}
           >
             <div className="flex items-start gap-3">
@@ -176,7 +208,11 @@ export default function RoutesPage() {
               <div className="flex items-center justify-between text-[10px] font-bold">
                 <span className="text-zinc-500">{completed}/{linked.length} concluídas</span>
                 <span className={pending ? 'text-amber-400' : 'text-emerald-400'}>
-                  {pending ? `${pending} pendente${pending === 1 ? '' : 's'}` : 'Tudo concluído'}
+                  {pending
+                    ? `${pending} pendente${pending === 1 ? '' : 's'}`
+                    : state === 'finalizadas'
+                      ? 'Finalizada'
+                      : 'Pronta para finalizar'}
                 </span>
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">

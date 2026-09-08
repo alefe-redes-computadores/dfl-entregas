@@ -132,6 +132,8 @@ export default function HomePage() {
   }
 
   const totalEntregas = deliveriesDoDia.length;
+  const pendingDeliveries = deliveriesDoDia.filter((delivery) => !delivery.completed).length;
+  const completedDeliveries = Math.max(0, totalEntregas - pendingDeliveries);
   const storeOrdersDoDia = ordersDoDia
     .filter((order) => !isDeliveryFulfillment(order))
     .sort((a, b) => {
@@ -156,6 +158,11 @@ export default function HomePage() {
 
   const openRoutes = routesDoDia.filter((r) => r.status === 'aberta');
   const closedRoutes = routesDoDia.filter((r) => r.status === 'fechada');
+  const readyRoutes = openRoutes.filter((route) => {
+    if (route.id === 'rota-resgate-recuperada') return false;
+    const linked = deliveriesDoDia.filter((delivery) => delivery.route_id === route.id);
+    return linked.length > 0 && linked.every((delivery) => delivery.completed === true);
+  });
 
   // AGRUPAMENTO DE ROTAS FECHADAS POR MOTOBOY
   const closedRoutesByMotoboy = closedRoutes.reduce((acc, route) => {
@@ -217,12 +224,49 @@ export default function HomePage() {
       <OperationalRadar />
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
-          <div className="flex items-center gap-2 text-zinc-400"><Package size={16} className="text-sky-400" /><span className="text-xs font-semibold uppercase tracking-wider">Entregas</span></div>
+        <a
+          href={`/entregas?date=${encodeURIComponent(selectedDateKey)}`}
+          className="flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4 active:scale-[0.99]"
+        >
+          <div className="flex items-center justify-between gap-2 text-zinc-400">
+            <div className="flex items-center gap-2">
+              <Package size={16} className="text-sky-400" />
+              <span className="text-xs font-semibold uppercase tracking-wider">Entregas</span>
+            </div>
+            {pendingDeliveries > 0 && (
+              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-black text-amber-400">
+                {pendingDeliveries} pendente{pendingDeliveries === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
           <p className="font-heading text-2xl font-bold text-zinc-50">{totalEntregas}</p>
-        </div>
+          <p className="text-[10px] text-zinc-600">{completedDeliveries} concluída{completedDeliveries === 1 ? '' : 's'}</p>
+        </a>
 
-        <div className="flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
+        <a
+          href={`/rotas?date=${encodeURIComponent(selectedDateKey)}`}
+          className={`flex flex-col gap-1.5 rounded-[20px] border p-4 active:scale-[0.99] ${
+            readyRoutes.length > 0
+              ? 'border-emerald-500/25 bg-emerald-500/[.055]'
+              : 'border-zinc-800 bg-zinc-900/40'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2 text-zinc-400">
+            <div className="flex items-center gap-2">
+              <Bike size={16} className="text-emerald-400" />
+              <span className="text-xs font-semibold uppercase tracking-wider">Rotas abertas</span>
+            </div>
+            {readyRoutes.length > 0 && (
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-black text-emerald-400">
+                {readyRoutes.length} pronta{readyRoutes.length === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
+          <p className="font-heading text-2xl font-bold text-zinc-50">{openRoutes.length}</p>
+          <p className="text-[10px] text-zinc-600">{closedRoutes.length} finalizada{closedRoutes.length === 1 ? '' : 's'}</p>
+        </a>
+
+        <div className="col-span-2 flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
           <div className="flex items-center justify-between text-zinc-400">
             <div className="flex items-center gap-2"><TrendingUp size={16} className="text-emerald-500" /><span className="text-xs font-semibold uppercase tracking-wider">Faturamento da loja</span></div>
             <button onClick={togglePrivacyMode} className="text-zinc-500 hover:text-zinc-300 transition-colors active:scale-90">{isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}</button>
@@ -252,7 +296,7 @@ export default function HomePage() {
               return (
                 <a
                   key={order.id}
-                  href={`/entregas/details?id=${order.id}`}
+                  href={`/entregas/details?id=${order.id}&date=${encodeURIComponent(selectedDateKey)}`}
                   className="flex w-full items-center gap-3 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-3.5 text-left transition-all active:scale-[0.99]"
                 >
                   <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
@@ -331,7 +375,14 @@ export default function HomePage() {
 
       {routesDoDia.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-16 text-center">
-          <p className="text-sm text-zinc-500">Nenhuma rota {globalMotoboy ? 'para este motoboy' : 'neste dia'}.</p>
+          <p className="text-sm font-black text-zinc-300">
+            Nenhuma rota {globalMotoboy ? 'para este motoboy' : 'neste dia'}.
+          </p>
+          <p className="mt-1 text-[11px] text-zinc-600">
+            {globalMotoboy
+              ? 'Troque o filtro da equipe para revisar o restante da operação.'
+              : 'Você pode consultar os pedidos do dia ou criar uma nova rota pela tela de Rotas.'}
+          </p>
         </div>
       )}
     </div>

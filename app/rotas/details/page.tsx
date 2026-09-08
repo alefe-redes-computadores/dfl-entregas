@@ -90,7 +90,13 @@ export default function RouteDetailsPage() {
     route.departure_time,
   );
   const state =
-    route.status === 'fechada' ? 'finalizada' : routeStartedAt ? 'rua' : 'montando';
+    route.status === 'fechada'
+      ? 'finalizada'
+      : routeStartedAt && deliveries.length > 0 && pending === 0
+        ? 'pronta'
+        : routeStartedAt
+          ? 'rua'
+          : 'montando';
 
   const action = async (kind: 'start' | 'close' | 'reopen') => {
     if (busy) return;
@@ -177,9 +183,11 @@ export default function RouteDetailsPage() {
               <p className="font-black text-zinc-100">
                 {state === 'finalizada'
                   ? 'Finalizada'
-                  : state === 'rua'
-                    ? 'Na rua'
-                    : 'Montando'}
+                  : state === 'pronta'
+                    ? 'Pronta para finalizar'
+                    : state === 'rua'
+                      ? 'Na rua'
+                      : 'Montando'}
               </p>
               <span
                 className={`h-2 w-2 rounded-full ${
@@ -220,7 +228,13 @@ export default function RouteDetailsPage() {
           <div className="flex items-center justify-between text-[10px] font-bold">
             <span className="text-zinc-500">Progresso da rota</span>
             <span className={pending ? 'text-amber-400' : 'text-emerald-400'}>
-              {pending ? `${pending} pendente${pending === 1 ? '' : 's'}` : '100% concluída'}
+              {pending
+                ? `${pending} pendente${pending === 1 ? '' : 's'}`
+                : state === 'finalizada'
+                  ? 'Finalizada'
+                  : deliveries.length > 0
+                    ? 'Pronta para finalizar'
+                    : 'Sem entregas'}
             </span>
           </div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-800">
