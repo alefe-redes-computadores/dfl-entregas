@@ -104,7 +104,7 @@ export function OperationalRadar() {
         <div className="min-w-0 flex-1">
           <button
             type="button"
-            onClick={() => router.push('/loja')}
+            onClick={() => router.push('/relatorios')}
             className="block w-full text-left active:scale-[0.99]"
           >
             <div className="flex items-center justify-between gap-3">
@@ -128,14 +128,30 @@ export function OperationalRadar() {
             </p>
           </button>
 
-          <button
-            type="button"
-            onClick={() => hideForToday(signal.id)}
-            className="mt-3 flex h-9 items-center gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/35 px-3 text-[9px] font-black text-zinc-600 active:scale-95"
-          >
-            <EyeOff size={13} />
-            Ocultar por hoje
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {signal.entityIds?.[0] && (
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(
+                    `/rotas/details?id=${encodeURIComponent(signal.entityIds![0])}`,
+                  )
+                }
+                className="flex h-9 items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.07] px-3 text-[9px] font-black text-amber-400 active:scale-95"
+              >
+                Revisar rota
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => hideForToday(signal.id)}
+              className="flex h-9 items-center gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/35 px-3 text-[9px] font-black text-zinc-600 active:scale-95"
+            >
+              <EyeOff size={13} />
+              Ocultar por hoje
+            </button>
+          </div>
         </div>
       </div>
     </article>

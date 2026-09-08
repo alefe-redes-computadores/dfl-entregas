@@ -50,7 +50,13 @@ export function SummaryCard({
             {title}
           </div>
           <div
-            className="mt-2 whitespace-nowrap text-[clamp(1.45rem,6.2vw,2rem)] font-black tracking-tight text-zinc-100"
+            className={`mt-2 whitespace-nowrap font-black tracking-tight text-zinc-100 ${
+              String(value).length >= 11
+                ? 'text-[clamp(1.15rem,5vw,1.7rem)]'
+                : String(value).length >= 8
+                  ? 'text-[clamp(1.3rem,5.5vw,1.85rem)]'
+                  : 'text-[clamp(1.45rem,6.2vw,2rem)]'
+            }`}
             title={String(value)}
           >
             {value}
