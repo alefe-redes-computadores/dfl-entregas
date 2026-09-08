@@ -353,7 +353,9 @@ export default function RouteDetailsPage() {
           <CheckCircle2 size={18} />
           {pending > 0
             ? `${pending} entrega${pending === 1 ? '' : 's'} pendente${pending === 1 ? '' : 's'}`
-            : 'Finalizar rota'}
+            : deliveries.length === 0
+              ? 'Finalizar rota sem entregas'
+              : 'Finalizar rota'}
         </button>
       )}
     </div>

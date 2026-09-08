@@ -70,6 +70,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const hasCoordinatesOrLink = !!(customer?.maps_link || delivery.maps_link);
   const hasStreetNumber = /\d/.test(delivery.address_string);
   const activePhone = delivery.phone || customer?.phone;
+  const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
   const operationalDate = deliveryDate(delivery);
   const operationalDateKey = operationalDate ? dateKey(operationalDate) : '';
   const operationalDateQuery = operationalDateKey
@@ -156,6 +157,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
 
     if (actionType === 'complete') {
+      if (isRecoveryRoute) {
+        toast.error('Corrija a rota desta entrega antes de dar baixa.', {
+          description:
+            'Pedidos em recuperação precisam ser reassociados a uma rota real.',
+        });
+        return;
+      }
+
       if (route.status === 'fechada') {
         toast.error(
           delivery.completed
@@ -201,6 +210,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   }
 
   const canReorder =
+    !isRecoveryRoute &&
     route.status === 'aberta' &&
     !delivery.completed &&
     position !== undefined &&
@@ -322,7 +332,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
             <span className="text-xs">{isExpanded ? 'Minimizar' : 'Expandir'}</span>
           </div>
           <div className={clsx("flex items-center gap-2 font-bold transition-all", isDraggingLeft ? "opacity-100 text-emerald-200 scale-110" : "opacity-40 text-zinc-400")}>
-            <span className="text-xs">Dar Baixa</span>
+            <span className="text-xs">{isRecoveryRoute ? 'Corrigir rota' : 'Dar Baixa'}</span>
             <CheckCircle2 size={20} />
           </div>
         </div>
@@ -559,7 +569,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     </span>
                   ) : !hasStreetNumber ? (
                     <span className="flex items-center gap-1 rounded bg-amber-500/15 px-2 py-1 text-[10px] font-bold text-amber-400 border border-amber-500/30">
-                      ⚠️ Sem número residencial
+                      Sem número residencial
                     </span>
                   ) : null}
                 </div>
@@ -600,12 +610,22 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="flex items-center gap-2 mt-1">
                   <button
                     onClick={() => handleTriggerAction('complete')}
+                    disabled={isRecoveryRoute}
                     className={clsx(
-                      "flex-1 flex h-12 items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all active:scale-95 shadow-lg",
-                      delivery.completed ? "bg-zinc-800 text-zinc-400 border border-zinc-700 shadow-none" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-emerald-500/5"
+                      "flex-1 flex h-12 items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all active:scale-95 shadow-lg disabled:active:scale-100",
+                      isRecoveryRoute
+                        ? "cursor-not-allowed border border-amber-500/20 bg-amber-500/[.06] text-amber-300 shadow-none"
+                        : delivery.completed
+                          ? "bg-zinc-800 text-zinc-400 border border-zinc-700 shadow-none"
+                          : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-emerald-500/5"
                     )}
                   >
-                    <CheckCircle2 size={16} />{delivery.completed ? 'Desfazer Baixa' : 'Dar Baixa'}
+                    <CheckCircle2 size={16} />
+                    {isRecoveryRoute
+                      ? 'Corrigir rota primeiro'
+                      : delivery.completed
+                        ? 'Desfazer Baixa'
+                        : 'Dar Baixa'}
                   </button>
 
                   {activePhone && (

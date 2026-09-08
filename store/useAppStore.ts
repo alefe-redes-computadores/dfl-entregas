@@ -343,6 +343,9 @@ export const useAppStore = create<AppState>()(
         const current = previousRoutes.find((route) => route.id === routeId);
         if (!current) throw new Error('Rota não encontrada.');
         if (current.status === 'fechada') throw new Error('Reabra a rota antes de iniciá-la.');
+        if (!get().deliveries.some((delivery) => delivery.route_id === routeId)) {
+          throw new Error('Adicione pelo menos uma entrega antes de iniciar a rota.');
+        }
         if (routeStartedAt(current)) return;
         const now = new Date().toISOString();
         set((state) => ({
@@ -358,6 +361,13 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteRoute: async (routeId) => {
+        const routeToDelete = get().routes.find((route) => route.id === routeId);
+        if (!routeToDelete) throw new Error('Rota não encontrada.');
+        if (routeToDelete.status === 'fechada' || routeStartedAt(routeToDelete)) {
+          throw new Error(
+            'Rotas iniciadas ou finalizadas fazem parte do histórico e não podem ser excluídas.',
+          );
+        }
         if (get().deliveries.some((delivery) => delivery.route_id === routeId)) {
           throw new Error('Não é possível excluir uma rota que possui entregas.');
         }
@@ -504,6 +514,12 @@ export const useAppStore = create<AppState>()(
           );
         }
 
+        if (routeChanged && updatedData.completed === true) {
+          throw new Error(
+            'Mova a entrega primeiro e dê baixa somente depois, já na rota correta.',
+          );
+        }
+
         if (routeChanged && nextRouteId) {
           const targetRoute = state.routes.find((route) => route.id === nextRouteId);
           if (!targetRoute) {
@@ -604,13 +620,28 @@ export const useAppStore = create<AppState>()(
             }
           }
 
-          if (updatedData.completed === true && deliveryToUpdate && isDeliveryFulfillment(deliveryToUpdate) && deliveryToUpdate.route_id) {
+          if (
+            updatedData.completed === true &&
+            isDeliveryFulfillment(nextDelivery) &&
+            nextDelivery.route_id
+          ) {
             const currentState = get();
-            const routeDeliveries = currentState.deliveries.filter(d => d.route_id === deliveryToUpdate.route_id);
-            const allDone = routeDeliveries.length > 0 && routeDeliveries.every(d => d.completed);
+            const routeDeliveries = currentState.deliveries.filter(
+              (delivery) => delivery.route_id === nextDelivery.route_id,
+            );
+            const allDone =
+              routeDeliveries.length > 0 &&
+              routeDeliveries.every((delivery) => delivery.completed === true);
+
             if (allDone) {
-              const route = currentState.routes.find(r => r.id === deliveryToUpdate.route_id);
-              if (route && route.status === 'aberta') {
+              const route = currentState.routes.find(
+                (item) => item.id === nextDelivery.route_id,
+              );
+              if (
+                route &&
+                route.status === 'aberta' &&
+                Boolean(routeStartedAt(route))
+              ) {
                 await currentState.closeRoute(route.id);
               }
             }

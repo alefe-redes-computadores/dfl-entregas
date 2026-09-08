@@ -472,7 +472,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         <div className="flex items-center gap-2 shrink-0">
           {!isCompleted ? (
             <span className={clsx("rounded-full px-2.5 py-1 text-xs font-bold", pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white" : isInProgress ? "bg-sky-500/20 text-sky-400" : "bg-zinc-800 text-zinc-400")}>
-              {pendingDeliveriesCount === 0 && totalDeliveries > 0 ? 'Concluída!' : `${pendingDeliveriesCount} pendente${pendingDeliveriesCount !== 1 ? 's' : ''}`}
+              {pendingDeliveriesCount === 0 && totalDeliveries > 0
+                ? 'Pronta para finalizar'
+                : `${pendingDeliveriesCount} pendente${pendingDeliveriesCount !== 1 ? 's' : ''}`}
             </span>
           ) : (
             <div className="flex items-center gap-2">
@@ -503,7 +505,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </span>
             )}
 
-            {clientsWithPhone.length > 0 && (
+            {!isRecoveryRoute && clientsWithPhone.length > 0 && (
               <button 
                 onClick={() => setIsDispatchModalOpen(true)}
                 className="flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition-all shadow-sm"
@@ -871,7 +873,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
               {currentFuzzyList.map((item, idx) => (
                 <div key={idx} className="bg-zinc-950 border border-zinc-800 p-3 rounded-2xl flex flex-col gap-1">
-                  <span className="text-xs font-bold text-zinc-200">{item.index}️⃣ {item.name}</span>
+                  <span className="text-xs font-bold text-zinc-200">{item.index}. {item.name}</span>
                   <span className="text-[11px] text-zinc-400 truncate">{item.address}</span>
                 </div>
               ))}
