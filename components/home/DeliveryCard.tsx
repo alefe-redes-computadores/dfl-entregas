@@ -15,7 +15,7 @@ import { MiniMap } from '@/components/deliveries/MiniMap';
 import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { dateKey, deliveryDate } from '@/lib/operational-time';
+import { dateKey, deliveryDate, routeStartedAt } from '@/lib/operational-time';
 
 interface DeliveryCardProps {
   delivery: Delivery & { is_expanded?: boolean };
@@ -164,7 +164,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         );
         return;
       }
-      if (!route.started_at) {
+      if (!routeStartedAt(route)) {
         toast.error('Inicie a rota antes de dar baixa!');
         return;
       }

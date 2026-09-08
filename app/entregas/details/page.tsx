@@ -35,6 +35,7 @@ import {
   isDeliveryFulfillment,
 } from '@/lib/delivery-mode';
 import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
+import { routeStartedAt } from '@/lib/operational-time';
 
 const money = (value = 0) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -117,7 +118,9 @@ function DeliveryDetailsContent() {
   const savedConfirmationCode =
     delivery.confirmation_code || customer?.last_confirmation_code || '';
   const routeIsClosed = logistics && route?.status === 'fechada';
-  const routeNotStarted = logistics && route?.status === 'aberta' && !route.started_at;
+  const operationalStartedAt = route ? routeStartedAt(route) : '';
+  const routeNotStarted =
+    logistics && route?.status === 'aberta' && !operationalStartedAt;
 
   const vibrate = async (style: ImpactStyle) => {
     if (Capacitor.isNativePlatform()) {
@@ -199,7 +202,7 @@ function DeliveryDetailsContent() {
         toast.error('A rota está fechada. Reabra-a antes de dar baixa.');
         return;
       }
-      if (!route.started_at) {
+      if (!routeStartedAt(route)) {
         toast.error('Inicie a rota antes de dar baixa nesta entrega.');
         return;
       }

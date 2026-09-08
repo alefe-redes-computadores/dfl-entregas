@@ -252,6 +252,9 @@ export default function RouteDetailsPage() {
             value={fmt(route.started_at, route.departure_time)}
           />
           <TimelineRow label="Encerrada" value={fmt(route.end_time)} />
+          {route.reopened_at && (
+            <TimelineRow label="Reaberta para correções" value={fmt(route.reopened_at)} />
+          )}
         </div>
       </section>
 

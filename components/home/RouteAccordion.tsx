@@ -582,7 +582,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </div>
             )}
             {route.status === 'aberta' && totalDeliveries > 0 ? (
-              !route.started_at ? (
+              !startedAt ? (
                 <button
                   onClick={handleStartRoute}
                   disabled={actionBusy}

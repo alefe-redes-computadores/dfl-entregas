@@ -601,13 +601,28 @@ export const useAppStore = create<AppState>()(
 
       reopenRoute: async (routeId) => {
         const previousRoutes = get().routes;
+        const current = previousRoutes.find((route) => route.id === routeId);
+        if (!current) throw new Error('Rota não encontrada.');
+        if (current.status !== 'fechada') return;
+
         const now = new Date().toISOString();
+
+        // end_time é o primeiro encerramento operacional real da rota.
+        // Reabrir serve para correções posteriores e não pode distorcer a duração histórica.
         set((state) => ({
-          // Removido o end_time: undefined, o tempo oficial da rota agora fica salvo!
-          routes: state.routes.map((r) => r.id === routeId ? { ...r, status: 'aberta', end_time: undefined, reopened_at: now, updated_at: now } : r),
+          routes: state.routes.map((r) =>
+            r.id === routeId
+              ? { ...r, status: 'aberta', reopened_at: now, updated_at: now }
+              : r
+          ),
         }));
+
         try {
-          await updateDoc(doc(db, 'routes', routeId), { status: 'aberta', end_time: deleteField(), reopened_at: now, updated_at: now });
+          await updateDoc(doc(db, 'routes', routeId), {
+            status: 'aberta',
+            reopened_at: now,
+            updated_at: now,
+          });
         } catch (error) {
           set({ routes: previousRoutes });
           console.error(error);
