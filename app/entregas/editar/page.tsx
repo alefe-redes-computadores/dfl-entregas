@@ -99,6 +99,16 @@ const [routeId, setRouteId] = useState('');
   );
 
   const currentRoute = routes.find((route) => route.id === routeId);
+  const originalFulfillmentMode = currentDelivery
+    ? getFulfillmentMode(currentDelivery)
+    : 'delivery';
+  const routeChanged = Boolean(
+    currentDelivery && routeId !== currentDelivery.route_id,
+  );
+  const fulfillmentChanged = Boolean(
+    currentDelivery && fulfillmentMode !== originalFulfillmentMode,
+  );
+  const operationalAssignmentChanged = routeChanged || fulfillmentChanged;
 
   const formatCurrencyInput = (inputValue: string) => {
     const onlyDigits = inputValue.replace(/\D/g, '');
@@ -465,14 +475,31 @@ const [routeId, setRouteId] = useState('');
       return;
     }
 
+    if (currentDelivery?.completed && operationalAssignmentChanged) {
+      toast.error('Desfaça a baixa antes de alterar a logística deste pedido.', {
+        description:
+          'Uma entrega concluída preserva a rota e a modalidade usadas no histórico operacional.',
+      });
+      return;
+    }
+
     if (fulfillmentMode === 'delivery') {
-      const selectedRoute = selectableRoutes.find((route) => route.id === routeId);
-      if (!selectedRoute) {
-        toast.error('Escolha uma rota aberta do mesmo dia deste pedido.', {
-          description:
-            'Rotas fechadas ou de outra data não podem receber novas associações.',
-        });
-        return;
+      const keepsExistingValidRoute =
+        Boolean(
+          currentDelivery?.route_id &&
+            routeId === currentDelivery.route_id &&
+            routes.some((route) => route.id === currentDelivery.route_id),
+        );
+
+      if (!keepsExistingValidRoute) {
+        const selectedRoute = selectableRoutes.find((route) => route.id === routeId);
+        if (!selectedRoute) {
+          toast.error('Escolha uma rota aberta do mesmo dia deste pedido.', {
+            description:
+              'Rotas fechadas ou de outra data não podem receber novas associações.',
+          });
+          return;
+        }
       }
     }
 
@@ -713,15 +740,30 @@ const [routeId, setRouteId] = useState('');
             <span className={routeId ? 'text-zinc-100' : 'text-zinc-500'}>
               {routeId ? (
                 <span className="font-semibold">
-                  {routeOptions.find(r => r.id === routeId)?.name}{' '}
+                  {(routeOptions.find((route) => route.id === routeId) || currentRoute)?.name}{' '}
                   <span className="text-zinc-400 font-normal">
-                    ({routeOptions.find(r => r.id === routeId)?.motoboy_name})
+                    ({(routeOptions.find((route) => route.id === routeId) || currentRoute)?.motoboy_name})
+                    {currentRoute?.status === 'fechada' ? ' · vínculo histórico' : ''}
                   </span>
                 </span>
               ) : 'Selecione a rota...'}
             </span>
             <ChevronDown size={20} className={`text-zinc-500 transition-transform ${isRouteDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
+
+          {currentRoute?.status === 'fechada' && !routeChanged && (
+            <p className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-[11px] leading-relaxed text-zinc-500">
+              Esta rota está fechada e será preservada como vínculo histórico.
+              Você ainda pode corrigir os demais dados do pedido.
+            </p>
+          )}
+
+          {currentDelivery?.completed && (
+            <p className="rounded-xl border border-amber-500/20 bg-amber-500/[.06] px-3 py-2 text-[11px] leading-relaxed text-amber-300">
+              Para trocar rota ou modalidade, primeiro reabra a rota quando necessário
+              e desfaça a baixa da entrega.
+            </p>
+          )}
 
           {isRouteDropdownOpen && <div className="fixed inset-0 z-20" onClick={() => setIsRouteDropdownOpen(false)} />}
 

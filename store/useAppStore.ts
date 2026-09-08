@@ -8,7 +8,7 @@ import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
-import { dateKey, deliveryDate, routeStartedAt } from '@/lib/operational-time';
+import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { fuelingDate } from '@/lib/fueling-analytics';
 
 interface AppState {
@@ -492,6 +492,42 @@ export const useAppStore = create<AppState>()(
         const deliveryToUpdate = state.deliveries.find((d) => d.id === id);
         if (!deliveryToUpdate) throw new Error('Entrega não encontrada.');
 
+        const nextRouteId =
+          updatedData.route_id !== undefined
+            ? updatedData.route_id
+            : deliveryToUpdate.route_id;
+        const routeChanged = nextRouteId !== deliveryToUpdate.route_id;
+
+        if (routeChanged && deliveryToUpdate.completed === true) {
+          throw new Error(
+            'Desfaça a baixa antes de mover uma entrega concluída para outra rota.',
+          );
+        }
+
+        if (routeChanged && nextRouteId) {
+          const targetRoute = state.routes.find((route) => route.id === nextRouteId);
+          if (!targetRoute) {
+            throw new Error('A rota de destino não existe.');
+          }
+          if (targetRoute.status !== 'aberta') {
+            throw new Error('A rota de destino precisa estar aberta.');
+          }
+
+          const deliveryKey = deliveryDate(deliveryToUpdate);
+          const targetRouteKey = routeDate(targetRoute);
+          if (
+            !deliveryKey ||
+            !targetRouteKey ||
+            dateKey(deliveryKey) !== dateKey(targetRouteKey)
+          ) {
+            throw new Error(
+              'A rota de destino precisa ser do mesmo dia operacional da entrega.',
+            );
+          }
+        }
+
+        const previousRouteId = deliveryToUpdate.route_id;
+
         const now = new Date().toISOString();
         const isCompleting = updatedData.completed === true && deliveryToUpdate.completed !== true;
         const isReopening = updatedData.completed === false && deliveryToUpdate.completed === true;
@@ -546,6 +582,28 @@ export const useAppStore = create<AppState>()(
           }
           await batch.commit();
           deliveryCommitCompleted = true;
+
+          if (routeChanged && previousRouteId) {
+            const currentState = get();
+            const previousRoute = currentState.routes.find(
+              (route) => route.id === previousRouteId,
+            );
+            const remainingPreviousRouteDeliveries =
+              currentState.deliveries.filter(
+                (delivery) => delivery.route_id === previousRouteId,
+              );
+            const previousRouteReadyToClose =
+              previousRoute?.status === 'aberta' &&
+              Boolean(routeStartedAt(previousRoute)) &&
+              remainingPreviousRouteDeliveries.length > 0 &&
+              remainingPreviousRouteDeliveries.every(
+                (delivery) => delivery.completed === true,
+              );
+
+            if (previousRouteReadyToClose && previousRoute) {
+              await currentState.closeRoute(previousRoute.id);
+            }
+          }
 
           if (updatedData.completed === true && deliveryToUpdate && isDeliveryFulfillment(deliveryToUpdate) && deliveryToUpdate.route_id) {
             const currentState = get();
