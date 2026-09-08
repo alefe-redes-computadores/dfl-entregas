@@ -11,3 +11,8 @@ yarn-error.log*
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+
+# DFL Entregas — artefatos locais de cirurgia/auditoria
+.dfl-backups/
+dfl-entregas-cirurgia-*.sh
+auditoria-*.txt
