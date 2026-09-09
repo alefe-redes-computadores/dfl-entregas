@@ -20,6 +20,7 @@ import { OperationalIntelligencePanel } from '@/components/store/OperationalInte
 import { validateSchedule } from '@/lib/operational-time';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
 import { requestDeviceLocation } from '@/lib/device-location';
+import { extractLatLngFromMapsUrl, parseCoordinateString } from '@/lib/maps';
 
 const DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
@@ -45,6 +46,7 @@ export default function LojaPage() {
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [storeAddress, setStoreAddress] = useState('Patos de Minas, MG');
   const [storePoint, setStorePoint] = useState<{lat:number;lng:number}|null>(null);
+  const [storeLocationReference,setStoreLocationReference]=useState('');
 
   // Dashboard Hook
   const dashboardData = useStoreDashboard();
@@ -80,6 +82,7 @@ export default function LojaPage() {
       setAlertsEnabled(storeSettings.alertsEnabled ?? false);
       setStoreAddress(storeSettings.storeAddress || 'Patos de Minas, MG');
       setStorePoint(Number.isFinite(storeSettings.storeLatitude)&&Number.isFinite(storeSettings.storeLongitude)?{lat:Number(storeSettings.storeLatitude),lng:Number(storeSettings.storeLongitude)}:null);
+      setStoreLocationReference(storeSettings.storeMapsLink||'');
       setSchedule(storeSettings.schedule || {});
       setPauses(storeSettings.pauses || []);
       setHolidaysOverrides(storeSettings.holidaysOverrides || {});
@@ -111,11 +114,12 @@ export default function LojaPage() {
   const handleSaveAllSettings = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-    await updateStoreSettings({ ...storeSettings, isOpen: isStoreOpen, storeAddress: storeAddress.trim(), storeLatitude:storePoint?.lat, storeLongitude:storePoint?.lng, alertsEnabled, schedule, pauses, holidaysOverrides });
+    await updateStoreSettings({ ...storeSettings, isOpen: isStoreOpen, storeAddress: storeAddress.trim(), storeLatitude:storePoint?.lat, storeLongitude:storePoint?.lng, storeMapsLink:storeLocationReference.trim()||undefined, alertsEnabled, schedule, pauses, holidaysOverrides });
     toast.success('Expediente salvo com sucesso!');
   };
 
   const captureStoreLocation=async()=>{try{setStorePoint(await requestDeviceLocation());toast.success('Localização da loja capturada. Salve as configurações.')}catch(error){toast.error('Não foi possível capturar a localização.',{description:error instanceof Error?error.message:'Confira a permissão do navegador.'})}};
+  const applyStoreReference=()=>{const point=parseCoordinateString(storeLocationReference)||extractLatLngFromMapsUrl(storeLocationReference);if(!point)return toast.error('Cole coordenadas ou um link completo do Maps com latitude e longitude.');setStorePoint(point);toast.success('Origem da loja reconhecida. Salve as configurações.')};
 
   const handleToggleMotoboyScale = async (id: string, active: boolean) => {
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
@@ -507,6 +511,7 @@ export default function LojaPage() {
               <AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" />
               <p className="px-1 text-[10px] font-medium text-zinc-600">Usado como ponto de partida das rotas.</p>
               <button type="button" onClick={captureStoreLocation} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-sky-500/25 bg-sky-500/[.07] text-xs font-black text-sky-400"><Crosshair size={15}/>{storePoint?'Localização precisa salva':'Usar localização atual da loja'}</button>
+              <div className="grid grid-cols-[1fr_auto] gap-2"><input value={storeLocationReference} onChange={e=>setStoreLocationReference(e.target.value)} placeholder="Coordenadas ou link completo do Maps" className="h-11 min-w-0 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-xs text-zinc-200 outline-none focus:border-sky-500"/><button type="button" onClick={applyStoreReference} className="rounded-xl border border-zinc-700 px-3 text-[10px] font-black text-zinc-300">Usar</button></div>
             </div>
 
             <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">

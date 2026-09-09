@@ -58,6 +58,7 @@ import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 import { requestDeviceLocation } from '@/lib/device-location';
+import { geocodeStoreAddress } from '@/lib/store-geocoding';
 
 interface RouteAccordionProps {
   route: Route;
@@ -78,6 +79,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [optimizerBusy, setOptimizerBusy] = useState(false);
   const [optimizerOrigin, setOptimizerOrigin] = useState<LatLngPoint | null>(null);
   const [optimizerOriginLabel, setOptimizerOriginLabel] = useState('Localização atual');
+  const [optimizerLocationError, setOptimizerLocationError] = useState('');
   const [optimizerOrder, setOptimizerOrder] = useState<string[]>([]);
   const [optimizerPreviousOrder, setOptimizerPreviousOrder] = useState<string[]>([]);
   const [optimizerApproximateIds, setOptimizerApproximateIds] = useState<string[]>([]);
@@ -92,6 +94,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const allRoutes = useAppStore((state) => state.routes);
   const setDeliveryOrder = useAppStore((state) => state.setDeliveryOrder);
+  const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
   
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const storeSettings = useAppStore((state) => state.storeSettings);
@@ -299,9 +302,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   const getCurrentOrigin = async (): Promise<{ point: LatLngPoint | null; label: string }> => {
     try {
-      return { point: await requestDeviceLocation(), label: 'Minha localização atual' };
+      const point=await requestDeviceLocation();setOptimizerLocationError('');return { point, label: 'Minha localização atual' };
     } catch (error) {
       console.warn('GPS indisponível para organizar rota:', error);
+      setOptimizerLocationError(error instanceof Error?error.message:'Não foi possível consultar a localização.');
     }
 
     const lat = Number(storeSettings?.storeLatitude);
@@ -309,6 +313,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
       return { point: { lat, lng }, label: 'Localização salva da loja' };
     }
+    const linkedStorePoint=extractLatLngFromMapsUrl(storeSettings?.storeMapsLink);
+    if(linkedStorePoint)return {point:linkedStorePoint,label:'Link salvo da loja'};
+    const storeAddress=storeSettings?.storeAddress?.trim();
+    if(storeAddress){try{const point=await geocodeStoreAddress(storeAddress);await updateStoreSettings({storeLatitude:point.lat,storeLongitude:point.lng});setOptimizerLocationError('');return{point,label:'Endereço cadastrado da loja'}}catch(error){setOptimizerLocationError(error instanceof Error?`GPS falhou e o endereço da loja não pôde ser localizado: ${error.message}`:'Origem indisponível.')}}
     return { point: null, label: 'GPS e localização da loja indisponíveis' };
   };
 
@@ -682,8 +690,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 <div className="mt-3 rounded-2xl border border-red-500/20 bg-red-500/[.06] p-3">
                   <p className="text-[10px] font-black text-red-300">GPS indisponível</p>
                   <p className="mt-1 text-[10px] text-zinc-500">
-                    Ative a localização do aparelho para calcular a sequência por distância.
+                    {optimizerLocationError || 'Não foi possível determinar a origem.'}
                   </p>
+                  <button onClick={buildOptimizerPreview} disabled={optimizerBusy} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-red-500/10 text-[10px] font-black text-red-300 disabled:opacity-40"><Crosshair size={13}/>{optimizerBusy?'Consultando GPS...':'Tentar GPS novamente'}</button>
                 </div>
               )}
 

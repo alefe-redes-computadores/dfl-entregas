@@ -42,6 +42,7 @@ interface AppState {
     storeAddress?: string;
     storeLatitude?: number;
     storeLongitude?: number;
+    storeMapsLink?: string;
     routeReminderEnabled?: boolean;
     autoCloseCompletedRoutes?: boolean;
     // 🔥 NOVOS CAMPOS DE EXPEDIENTE AVANÇADO
