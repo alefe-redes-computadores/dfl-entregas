@@ -6,10 +6,11 @@ import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, StockSupplier, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { fuelingDate } from '@/lib/fueling-analytics';
+import { INITIAL_STOCK_PRODUCTS, INITIAL_STOCK_SUPPLIERS, STOCK_CATALOG_VERSION } from '@/lib/stock-catalog';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -21,6 +22,7 @@ interface AppState {
   motoboys: Motoboy[];
   fuelings: Fueling[];
   stockSupplies: StockSupply[];
+  stockSuppliers: StockSupplier[];
   teamMembers: TeamMember[];
   stockProducts: StockProduct[];
   stockMovements: StockMovement[];
@@ -79,6 +81,9 @@ interface AppState {
   addStockSupply: (supply: StockSupply) => Promise<void>;
   updateStockSupply: (id: string, updatedData: Partial<StockSupply>) => Promise<void>;
   deleteStockSupply: (id: string) => Promise<void>;
+  addStockSupplier: (supplier: StockSupplier) => Promise<void>;
+  updateStockSupplier: (id: string, data: Partial<StockSupplier>) => Promise<void>;
+  seedStockCatalog: () => Promise<{ products: number; suppliers: number }>;
   addTeamMember: (member: TeamMember) => Promise<void>;
   updateTeamMember: (id: string, data: Partial<TeamMember>) => Promise<void>;
   addStockProduct: (product: StockProduct) => Promise<void>;
@@ -119,6 +124,7 @@ export const useAppStore = create<AppState>()(
       motoboys: [],
       fuelings: [],
       stockSupplies: [],
+      stockSuppliers: [],
       teamMembers: [],
       stockProducts: [],
       stockMovements: [],
@@ -182,7 +188,7 @@ export const useAppStore = create<AppState>()(
       logout: async () => {
         try {
           await signOut(auth);
-          set({ routes: [], deliveries: [], customers: [], motoboys: [], fuelings: [], stockSupplies: [], teamMembers: [], stockProducts: [], stockMovements: [], user: null });
+          set({ routes: [], deliveries: [], customers: [], motoboys: [], fuelings: [], stockSupplies: [], stockSuppliers: [], teamMembers: [], stockProducts: [], stockMovements: [], user: null });
         } catch (error) { console.error('Erro no logout:', error); }
       },
 
@@ -190,13 +196,14 @@ export const useAppStore = create<AppState>()(
         if (!get().hasHydrated) return;
         set({ isSyncing: true, syncError: false }); 
         try {
-          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
+          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, stockSuppliersSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
             getDocs(collection(db, 'deliveries')),
             getDocs(collection(db, 'customers')),
             getDocs(collection(db, 'motoboys')),
             getDocs(collection(db, 'fuelings')),
             getDocs(collection(db, 'stock_supplies')),
+            getDocs(collection(db, 'stock_suppliers')),
             getDocs(collection(db, 'team_members')),
             getDocs(collection(db, 'stock_products')),
             getDocs(collection(db, 'stock_movements')),
@@ -210,6 +217,7 @@ export const useAppStore = create<AppState>()(
           const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
           const fbFuelings = fuelingsSnap.docs.map(d => d.data() as Fueling);
           const fbStockSupplies = stockSuppliesSnap.docs.map(d => d.data() as StockSupply);
+          const fbStockSuppliers = stockSuppliersSnap.docs.map(d => d.data() as StockSupplier);
           const fbTeamMembers = teamMembersSnap.docs.map(d => d.data() as TeamMember);
           const fbStockProducts = stockProductsSnap.docs.map(d => d.data() as StockProduct);
           const fbStockMovements = stockMovementsSnap.docs.map(d => d.data() as StockMovement);
@@ -274,6 +282,7 @@ export const useAppStore = create<AppState>()(
             return merged;
           };
           const mergedTeamMembers = mergeById(fbTeamMembers, get().teamMembers).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+          const mergedStockSuppliers = mergeById(fbStockSuppliers, get().stockSuppliers).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
           const mergedStockProducts = mergeById(fbStockProducts, get().stockProducts).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
           const mergedStockMovements = mergeById(fbStockMovements, get().stockMovements).sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
 
@@ -308,6 +317,7 @@ export const useAppStore = create<AppState>()(
             motoboys: mergedMotoboys,
             fuelings: mergedFuelings,
             stockSupplies: mergedStockSupplies,
+            stockSuppliers: mergedStockSuppliers,
             teamMembers: mergedTeamMembers,
             stockProducts: mergedStockProducts,
             stockMovements: mergedStockMovements,
@@ -561,6 +571,38 @@ export const useAppStore = create<AppState>()(
           set({ stockSupplies: previous });
           throw error;
         }
+      },
+
+      addStockSupplier: async (supplier) => {
+        const previous = get().stockSuppliers;
+        set({ stockSuppliers: [...previous, supplier].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) });
+        try { await setDoc(doc(db, 'stock_suppliers', supplier.id), sanitizeForFirebase(supplier)); }
+        catch (error) { set({ stockSuppliers: previous }); throw error; }
+      },
+
+      updateStockSupplier: async (id, data) => {
+        const previous = get().stockSuppliers;
+        const next = { ...data, updated_at: new Date().toISOString() };
+        set({ stockSuppliers: previous.map((item) => item.id === id ? { ...item, ...next } : item) });
+        try { await updateDoc(doc(db, 'stock_suppliers', id), sanitizeForFirebase(next)); }
+        catch (error) { set({ stockSuppliers: previous }); throw error; }
+      },
+
+      seedStockCatalog: async () => {
+        const markerRef = doc(db, 'store', 'stock_catalog');
+        const result = await runTransaction(db, async (transaction) => {
+          const productRefs = INITIAL_STOCK_PRODUCTS.map((item) => doc(db, 'stock_products', item.id));
+          const supplierRefs = INITIAL_STOCK_SUPPLIERS.map((item) => doc(db, 'stock_suppliers', item.id));
+          const productSnaps = await Promise.all(productRefs.map((ref) => transaction.get(ref)));
+          const supplierSnaps = await Promise.all(supplierRefs.map((ref) => transaction.get(ref)));
+          let products = 0; let suppliers = 0;
+          productSnaps.forEach((snap, index) => { if (!snap.exists()) { transaction.set(productRefs[index], sanitizeForFirebase(INITIAL_STOCK_PRODUCTS[index])); products += 1; } });
+          supplierSnaps.forEach((snap, index) => { if (!snap.exists()) { transaction.set(supplierRefs[index], sanitizeForFirebase(INITIAL_STOCK_SUPPLIERS[index])); suppliers += 1; } });
+          transaction.set(markerRef, { version: STOCK_CATALOG_VERSION, installed_at: new Date().toISOString() }, { merge: true });
+          return { products, suppliers };
+        });
+        await get().initData();
+        return result;
       },
 
       addTeamMember: async (member) => {
@@ -1400,6 +1442,7 @@ export const useAppStore = create<AppState>()(
         motoboys: state.motoboys,
         fuelings: state.fuelings,
         stockSupplies: state.stockSupplies,
+        stockSuppliers: state.stockSuppliers,
         teamMembers: state.teamMembers,
         stockProducts: state.stockProducts,
         stockMovements: state.stockMovements,

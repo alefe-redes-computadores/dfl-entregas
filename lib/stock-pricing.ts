@@ -1,0 +1,9 @@
+// lib/stock-pricing.ts
+import type { StockProduct, StockSupplier, StockSupply } from '@/types';
+
+export type StockPriceInsight={product:StockProduct;samples:number;median:number;lowest:number;latest:number;bestSupplier?:string;savingPercent?:number;confidence:'baixa'|'média'|'alta'};
+const median=(values:number[])=>{const sorted=[...values].sort((a,b)=>a-b);const middle=Math.floor(sorted.length/2);return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2};
+export function buildStockPriceInsights(products:StockProduct[],supplies:StockSupply[],suppliers:StockSupplier[]):StockPriceInsight[]{
+ const supplierNames=new Map(suppliers.map(s=>[s.id,s.name]));
+ return products.map(product=>{const rows=supplies.filter(s=>s.status==='recebido'||s.status==='conferido').flatMap(s=>s.items.filter(i=>i.stock_product_id===product.id&&Number(i.unit_price)>0).map(i=>({price:Number(i.unit_price),supplier:supplierNames.get(s.supplier_id||'')||s.supplier||'Fornecedor não informado',date:new Date(s.occurred_at||s.created_at).getTime()}))).sort((a,b)=>b.date-a.date);if(!rows.length)return null;const values=rows.map(r=>r.price);const bySupplier=new Map<string,number[]>();rows.forEach(r=>bySupplier.set(r.supplier,[...(bySupplier.get(r.supplier)||[]),r.price]));const supplierMedians=Array.from(bySupplier).map(([name,prices])=>({name,value:median(prices),samples:prices.length})).sort((a,b)=>a.value-b.value);const best=supplierMedians[0];const med=median(values);return{product,samples:rows.length,median:med,lowest:Math.min(...values),latest:rows[0].price,bestSupplier:best?.name,savingPercent:med>0&&best?Math.max(0,(med-best.value)/med*100):0,confidence:rows.length>=8?'alta':rows.length>=3?'média':'baixa'} as StockPriceInsight}).filter((item):item is StockPriceInsight=>Boolean(item)).sort((a,b)=>(b.savingPercent||0)-(a.savingPercent||0));
+}

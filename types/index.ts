@@ -26,6 +26,28 @@ export interface Fueling {
 export type StockSupplyStatus = 'solicitado' | 'em_compra' | 'recebido' | 'conferido';
 export type StockSupplyUnit = 'un' | 'kg' | 'g' | 'l' | 'ml' | 'cx' | 'pct' | 'fardo';
 
+export type StockSupplierType = 'supermercado' | 'embalagens' | 'acougue' | 'gas' | 'hortifruti' | 'distribuidor' | 'outro';
+
+export interface StockSupplier {
+  id: string;
+  name: string;
+  type: StockSupplierType;
+  active: boolean;
+  phone?: string;
+  address?: string;
+  observation?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockProductPresentation {
+  id: string;
+  label: string;
+  purchase_unit: StockSupplyUnit;
+  conversion_quantity: number;
+  active: boolean;
+}
+
 export interface StockSupplyItem {
   id: string;
   name: string;
@@ -35,6 +57,12 @@ export interface StockSupplyItem {
   total_price?: number;
   observation?: string;
   stock_product_id?: string;
+  presentation_id?: string;
+  presentation_label?: string;
+  purchase_quantity?: number;
+  purchase_unit?: StockSupplyUnit;
+  conversion_quantity?: number;
+  purchase_unit_price?: number;
 }
 
 export interface StockSupply {
@@ -47,6 +75,7 @@ export interface StockSupply {
   other_costs?: number;
   total_amount: number;
   supplier?: string;
+  supplier_id?: string;
   payment_method?: PaymentMethod;
   purchaser_name?: string;
   purchaser_id?: string;
@@ -86,6 +115,9 @@ export interface StockProduct {
   active: boolean;
   observation?: string;
   last_counted_at?: string;
+  icon?: string;
+  color?: string;
+  presentations?: StockProductPresentation[];
   created_at: string;
   updated_at: string;
 }
