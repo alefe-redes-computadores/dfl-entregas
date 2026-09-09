@@ -8,6 +8,7 @@ import type { Route } from '@/types';
 import { getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { firstValidTimestamp, saoPauloDateKey } from '@/lib/reports/time';
 import { OperationalRadar } from '@/components/home/OperationalRadar';
+import { ShiftBriefing } from '@/components/home/ShiftBriefing';
 
 function formatDateLabel(date: Date): string {
   const todayKey = saoPauloDateKey(new Date());
@@ -199,6 +200,8 @@ export default function HomePage() {
         <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200"><CalendarDays size={15} className="text-emerald-500" />{formatDateLabel(selectedDate)}</div>
         <button onClick={goToNextDay} className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 active:scale-90"><ChevronRight size={18} /></button>
       </div>
+
+      <ShiftBriefing />
 
       {activeMotoboysToday.length > 0 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">

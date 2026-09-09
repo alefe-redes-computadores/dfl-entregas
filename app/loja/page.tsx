@@ -4,12 +4,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
-  AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft
+  AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft, Crosshair
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Geolocation } from '@capacitor/geolocation';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import { useStoreDashboard } from '@/hooks/useStoreDashboard';
@@ -38,10 +39,12 @@ export default function LojaPage() {
   const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
+  const settingsProtectionOff = storeSettings.routeReminderEnabled === false && storeSettings.autoCloseCompletedRoutes === false;
 
   const [isStoreOpen, setIsStoreOpen] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [storeAddress, setStoreAddress] = useState('Patos de Minas, MG');
+  const [storePoint, setStorePoint] = useState<{lat:number;lng:number}|null>(null);
 
   // Dashboard Hook
   const dashboardData = useStoreDashboard();
@@ -76,6 +79,7 @@ export default function LojaPage() {
       setIsStoreOpen(storeSettings.isOpen ?? false);
       setAlertsEnabled(storeSettings.alertsEnabled ?? false);
       setStoreAddress(storeSettings.storeAddress || 'Patos de Minas, MG');
+      setStorePoint(Number.isFinite(storeSettings.storeLatitude)&&Number.isFinite(storeSettings.storeLongitude)?{lat:Number(storeSettings.storeLatitude),lng:Number(storeSettings.storeLongitude)}:null);
       setSchedule(storeSettings.schedule || {});
       setPauses(storeSettings.pauses || []);
       setHolidaysOverrides(storeSettings.holidaysOverrides || {});
@@ -107,9 +111,11 @@ export default function LojaPage() {
   const handleSaveAllSettings = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-    await updateStoreSettings({ ...storeSettings, isOpen: isStoreOpen, storeAddress: storeAddress.trim(), alertsEnabled, schedule, pauses, holidaysOverrides });
+    await updateStoreSettings({ ...storeSettings, isOpen: isStoreOpen, storeAddress: storeAddress.trim(), storeLatitude:storePoint?.lat, storeLongitude:storePoint?.lng, alertsEnabled, schedule, pauses, holidaysOverrides });
     toast.success('Expediente salvo com sucesso!');
   };
+
+  const captureStoreLocation=async()=>{try{let permission=(await Geolocation.checkPermissions()).location;if(permission!=='granted')permission=(await Geolocation.requestPermissions({permissions:['location']})).location;if(permission!=='granted')throw new Error();const position=await Geolocation.getCurrentPosition({enableHighAccuracy:true,timeout:12000});setStorePoint({lat:position.coords.latitude,lng:position.coords.longitude});toast.success('Localização da loja capturada. Salve as configurações.')}catch{toast.error('Não foi possível capturar a localização da loja.')}};
 
   const handleToggleMotoboyScale = async (id: string, active: boolean) => {
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
@@ -500,6 +506,7 @@ export default function LojaPage() {
             <div className="flex flex-col gap-2">
               <AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" />
               <p className="px-1 text-[10px] font-medium text-zinc-600">Usado como ponto de partida das rotas.</p>
+              <button type="button" onClick={captureStoreLocation} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-sky-500/25 bg-sky-500/[.07] text-xs font-black text-sky-400"><Crosshair size={15}/>{storePoint?'Localização precisa salva':'Usar localização atual da loja'}</button>
             </div>
 
             <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
@@ -522,6 +529,11 @@ export default function LojaPage() {
                 </div>
               </div>
               <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setAlertsEnabled(!alertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full ${alertsEnabled ? 'bg-sky-500' : 'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${alertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
+              <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/10 text-violet-400"><BellRing size={18}/></div><div><p className="text-sm font-black text-zinc-200">Proteção de rotas</p><p className="text-[10px] text-zinc-600">Lembra às 23:30 e fecha concluídas esquecidas</p></div></div>
+              <button type="button" onClick={()=>updateStoreSettings({routeReminderEnabled:settingsProtectionOff,autoCloseCompletedRoutes:settingsProtectionOff})} className={`relative inline-flex h-8 w-14 items-center rounded-full ${!settingsProtectionOff?'bg-violet-500':'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${!settingsProtectionOff?'translate-x-7':'translate-x-1'}`}/></button>
             </div>
 
             <button onClick={handleSaveAllSettings} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white active:scale-95"><Check size={16} /> Salvar configurações</button>

@@ -40,6 +40,10 @@ interface AppState {
     activeDays: number[]; // Legado
     alertsEnabled: boolean;
     storeAddress?: string;
+    storeLatitude?: number;
+    storeLongitude?: number;
+    routeReminderEnabled?: boolean;
+    autoCloseCompletedRoutes?: boolean;
     // 🔥 NOVOS CAMPOS DE EXPEDIENTE AVANÇADO
     schedule?: Record<number, DaySchedule>;
     pauses?: StorePause[];
@@ -144,7 +148,9 @@ export const useAppStore = create<AppState>()(
         storeAddress: 'Patos de Minas, MG',
         schedule: defaultSchedule,
         pauses: [],
-        holidaysOverrides: {}
+        holidaysOverrides: {},
+        routeReminderEnabled: true,
+        autoCloseCompletedRoutes: true,
       },
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
@@ -1054,6 +1060,7 @@ export const useAppStore = create<AppState>()(
 
       reorderDelivery: async (routeId, deliveryId, direction) => {
         const state = get();
+        if (state.deliveries.find((delivery) => delivery.id === deliveryId)?.order_locked) throw new Error('Destrave a parada antes de reordenar.');
 
         const routeDeliveries = state.deliveries
           .filter((delivery) => delivery.route_id === routeId)
@@ -1127,6 +1134,7 @@ export const useAppStore = create<AppState>()(
 
       moveDeliveryToIndex: async (routeId, deliveryId, targetIndex) => {
         const state = get();
+        if (state.deliveries.find((delivery) => delivery.id === deliveryId)?.order_locked) throw new Error('Destrave a parada antes de reordenar.');
 
         const routeDeliveries = state.deliveries
           .filter((delivery) => delivery.route_id === routeId)

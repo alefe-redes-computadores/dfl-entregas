@@ -24,6 +24,8 @@ interface DeliveryCardProps {
   isNeighbor?: boolean;
   position?: number;
   pendingCount?: number;
+  neighborPosition?: number;
+  neighborTotal?: number;
 }
 
 const PAYMENT_CONFIG = {
@@ -34,7 +36,7 @@ const PAYMENT_CONFIG = {
   cartao_debito: { label: 'Cartão', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10 border-sky-400/20' },
 } as const;
 
-export function DeliveryCard({ delivery, customer, route, isNeighbor = false, position, pendingCount = 0 }: DeliveryCardProps) {
+export function DeliveryCard({ delivery, customer, route, isNeighbor = false, position, pendingCount = 0, neighborPosition, neighborTotal }: DeliveryCardProps) {
   const router = useRouter();
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const reorderDelivery = useAppStore((state) => state.reorderDelivery);
@@ -216,12 +218,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
   }
 
+  const orderLocked = delivery.order_locked === true;
   const canReorder =
     !isRecoveryRoute &&
     route.status === 'aberta' &&
     !delivery.completed &&
     position !== undefined &&
-    pendingCount > 1;
+    pendingCount > 1 &&
+    !orderLocked;
 
   const handleDragStart = async (e: React.TouchEvent<HTMLButtonElement>) => {
     if (!canReorder) return;
@@ -250,7 +254,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
 
     const diff = dragCurrentY.current - dragStartY.current;
-    const requestedSteps = Math.round(diff / 92);
+    // Um gesto move exatamente uma posição; cards expandidos têm alturas diferentes.
+    const requestedSteps = Math.abs(diff) < 42 ? 0 : diff > 0 ? 1 : -1;
     setDragOffsetY(0);
     setIsHandleDragging(false);
     dragStartY.current = 0;
@@ -461,7 +466,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                           {isNeighbor && (
                             <span className="rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 px-1.5 py-0.5 text-[9px] font-extrabold uppercase shrink-0">
-                              Vizinho / Mesmo Local
+                              Vizinhas {neighborPosition || 1}/{neighborTotal || 2}
                             </span>
                           )}
                         </div>
@@ -505,16 +510,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                       {!delivery.completed && route.status === 'aberta' && (
                         <div className="flex items-center gap-1.5 shrink-0">
+                          <button type="button" onClick={async(e)=>{e.stopPropagation();try{await updateDelivery(delivery.id,{order_locked:!orderLocked,order_source:'manual',order_updated_at:new Date().toISOString()});toast.success(orderLocked?'Parada destravada.':'Parada travada na sequência.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{orderLocked?'Destravar':'Travar'}</button>
                           <div className="hidden sm:flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
                             <button
                               type="button"
+                              disabled={orderLocked}
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
                                 try { await reorderDelivery(delivery.route_id, delivery.id, 'up'); }
                                 catch { toast.error('Não foi possível salvar a nova posição.'); }
                               }}
-                              className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100"
+                              className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100 disabled:opacity-30"
                               aria-label="Mover uma posição para cima"
                             >
                               <ArrowUp size={13} />
@@ -522,13 +529,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             <div className="h-4 w-px bg-zinc-800" />
                             <button
                               type="button"
+                              disabled={orderLocked}
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
                                 try { await reorderDelivery(delivery.route_id, delivery.id, 'down'); }
                                 catch { toast.error('Não foi possível salvar a nova posição.'); }
                               }}
-                              className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100"
+                              className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100 disabled:opacity-30"
                               aria-label="Mover uma posição para baixo"
                             >
                               <ArrowDown size={13} />
@@ -538,7 +546,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           <button
                             type="button"
                             data-no-card-swipe="true"
-                            disabled={!canReorder}
+                            disabled={!canReorder || orderLocked}
                             onTouchStart={handleDragStart}
                             onTouchMove={handleDragMove}
                             onTouchEnd={handleDragEnd}
@@ -547,7 +555,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             className={clsx(
                               "flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-[10px] font-black transition-all",
                               isHandleDragging ? "border-sky-400/60 bg-sky-500/15 text-sky-300" : "border-zinc-800 bg-zinc-950 text-zinc-400",
-                              !canReorder && "opacity-40"
+                              (!canReorder || orderLocked) && "opacity-40"
                             )}
                             aria-label={position ? `Arrastar parada ${position}` : 'Arrastar parada'}
                             title="Segure e arraste para reordenar"

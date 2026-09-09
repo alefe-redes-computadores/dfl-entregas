@@ -254,7 +254,7 @@ function routeInsights(
   minimumSample: number,
 ): OperationalInsight[] {
   const valid = routes
-    .filter((route) => route.status === 'fechada')
+    .filter((route) => route.status === 'fechada' && (routeTimestamp(route)?.getTime() || 0) >= new Date('2026-09-09T00:00:00-03:00').getTime())
     .map((route) => {
       const start = firstValidTimestamp(
         route.started_at,
@@ -459,9 +459,14 @@ export function buildOperationalIntelligence(
     Boolean(item.route_id),
   ).length;
 
+  // A nova régua operacional começa nesta implantação. Rotas históricas continuam
+  // nos relatórios, mas não geram alertas de duração na inteligência nova.
+  const intelligenceRoutes = routes.filter((route) =>
+    (routeTimestamp(route)?.getTime() || 0) >= new Date('2026-09-09T00:00:00-03:00').getTime(),
+  );
   const memory = buildOperationalMemory({
     deliveries,
-    routes,
+    routes: intelligenceRoutes,
     customers: input.customers,
     motoboys: input.motoboys,
     minimumSample,
@@ -490,7 +495,7 @@ export function buildOperationalIntelligence(
     ...memoryInsights,
     ...(hasContextualRouteAnomaly
       ? []
-      : routeInsights(routes, minimumSample)),
+      : routeInsights(intelligenceRoutes, minimumSample)),
     ...stockInsights(stockSupplies, minimumSample),
   ];
 

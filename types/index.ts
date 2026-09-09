@@ -157,6 +157,7 @@ export interface Route {
   started_at?: string;
   end_time?: string;
   reopened_at?: string;
+  auto_closed_at?: string;
   change_money: number;
   drinks_summary?: string;
   created_at?: string;
@@ -182,6 +183,9 @@ export interface Delivery {
   drinks?: string;
   completed?: boolean;
   order_index?: number; 
+  order_locked?: boolean;
+  order_source?: 'manual' | 'smart';
+  order_updated_at?: string;
   is_urgent?: boolean;
   phone?: string;
   notify_whatsapp?: boolean;

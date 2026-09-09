@@ -1,4 +1,5 @@
 import type { Delivery, Customer } from '@/types';
+import { deliveryPoint, neighborMetadata } from '@/lib/route-intelligence';
 
 const normalizedAddress = (value?: string) =>
   String(value || '')
@@ -53,6 +54,7 @@ export function useOptimizedDeliveries(
   });
 
   const pendingDeliveries = sortedDeliveries.filter((delivery) => !delivery.completed);
+  const neighborMeta = neighborMetadata(sortedDeliveries.map(delivery => ({ delivery, customer: getCustomerById(delivery.customer_id), point: deliveryPoint(delivery, getCustomerById(delivery.customer_id)) })));
 
   return {
     sortedDeliveries,
@@ -60,5 +62,6 @@ export function useOptimizedDeliveries(
     neighborhoodCounts,
     addressCounts,
     normalizedAddress,
+    neighborMeta,
   };
 }

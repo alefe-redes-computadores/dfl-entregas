@@ -52,12 +52,12 @@ import {
   distanceMeters,
   extractLatLngFromMapsUrl,
   formatDistance,
-  optimizePointsNearestNeighbor,
   resolveStopLocation,
   type LatLngPoint,
 } from '@/lib/maps';
 import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
+import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 
 interface RouteAccordionProps {
   route: Route;
@@ -118,7 +118,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const motoboyObj = motoboys.find((m) => m.name === route.motoboy_name);
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
-  const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress } = useOptimizedDeliveries(deliveries, getCustomerById);
+  const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress, neighborMeta } = useOptimizedDeliveries(deliveries, getCustomerById);
 
   const optimizerRows = useMemo(() => {
     const orderIds = optimizerOrder.length > 0
@@ -328,7 +328,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       console.warn('GPS indisponível para organizar rota:', error);
     }
 
-    return { point: null, label: 'GPS indisponível' };
+    const lat = Number(storeSettings?.storeLatitude);
+    const lng = Number(storeSettings?.storeLongitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { point: { lat, lng }, label: 'Localização salva da loja' };
+    }
+    return { point: null, label: 'GPS e localização da loja indisponíveis' };
   };
 
   const buildOptimizerPreview = async () => {
@@ -372,11 +377,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         return;
       }
 
-      const optimizedPrecise = optimizePointsNearestNeighbor(current.point, precise);
-      const nextIds = [
-        ...optimizedPrecise.map((item) => item.delivery.id),
-        ...approximate.map((delivery) => delivery.id),
-      ];
+      const smartStops = pendingDeliveries.map((delivery) => {
+        const customer = getCustomerById(delivery.customer_id);
+        return { delivery, customer, point: deliveryPoint(delivery, customer) };
+      });
+      const nextIds = buildSmartRouteOrder(current.point, smartStops).map((item) => item.delivery.id);
 
       setOptimizerOrder(nextIds);
       setOptimizerOpen(true);
@@ -395,6 +400,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
     try {
       await setDeliveryOrder(route.id, optimizerOrder);
+      const now = new Date().toISOString();
+      await Promise.all(optimizerOrder.map((id) => useAppStore.getState().updateDelivery(id, { order_locked: true, order_source: 'smart', order_updated_at: now })));
       setLastAppliedOrder(optimizerPreviousOrder);
       setOptimizerOpen(false);
 
@@ -532,6 +539,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               const cust = getCustomerById(delivery.customer_id);
               const addressKey = normalizedAddress(delivery.address_string || cust?.address);
               const isNeighbor = addressKey ? (addressCounts[addressKey] > 1) : false;
+              const nearby = neighborMeta.get(delivery.id);
               const pendingIndex = pendingDeliveries.findIndex((item) => item.id === delivery.id);
               return (
                 <DeliveryCard
@@ -539,7 +547,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   delivery={delivery}
                   customer={cust}
                   route={route}
-                  isNeighbor={isNeighbor}
+                  isNeighbor={Boolean(isNeighbor || nearby)}
+                  neighborPosition={nearby?.position}
+                  neighborTotal={nearby?.total}
                   position={pendingIndex >= 0 ? pendingIndex + 1 : undefined}
                   pendingCount={pendingDeliveries.length}
                 />
@@ -566,7 +576,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                     </span>
                     <div>
                       <p className="text-xs font-black text-zinc-100">Organizar rota</p>
-                      <p className="mt-0.5 text-[10px] text-zinc-500">GPS atual + pontos precisos</p>
+                      <p className="mt-0.5 text-[10px] text-zinc-500">Urgentes primeiro · GPS ou loja</p>
                     </div>
                   </div>
                   <ArrowRight size={16} className="text-violet-300" />

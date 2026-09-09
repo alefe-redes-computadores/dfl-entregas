@@ -7,6 +7,7 @@ import { AuthGuard } from '@/components/auth/AuthGuard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import ClientInit from '@/components/ClientInit';
 import { StoreAutomation } from '@/components/StoreAutomation';
+import { RouteOperations } from '@/components/RouteOperations';
 import './globals.css';
 
 const poppins = Poppins({
@@ -47,6 +48,7 @@ export default function RootLayout({
       <body>
         <ClientInit />
         <StoreAutomation />
+        <RouteOperations />
         <ErrorBoundary>
           <AuthGuard>
             <div className="mx-auto flex min-h-screen max-w-md flex-col bg-zinc-950 text-zinc-100">
