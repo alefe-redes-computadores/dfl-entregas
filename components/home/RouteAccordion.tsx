@@ -35,7 +35,6 @@ import { DeliveryCard } from '@/components/home/DeliveryCard';
 import { useOptimizedDeliveries } from '@/hooks/useOptimizedDeliveries';
 
 import { Capacitor } from '@capacitor/core';
-import { Geolocation } from '@capacitor/geolocation';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import {
   Haptics,
@@ -58,6 +57,7 @@ import {
 import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
+import { requestDeviceLocation } from '@/lib/device-location';
 
 interface RouteAccordionProps {
   route: Route;
@@ -299,31 +299,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   const getCurrentOrigin = async (): Promise<{ point: LatLngPoint | null; label: string }> => {
     try {
-      const permission = await Geolocation.checkPermissions();
-      let locationPermission = permission.location;
-
-      if (locationPermission !== 'granted') {
-        const requested = await Geolocation.requestPermissions({
-          permissions: ['location'],
-        });
-        locationPermission = requested.location;
-      }
-
-      if (locationPermission === 'granted') {
-        const position = await Geolocation.getCurrentPosition({
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 30000,
-        });
-
-        return {
-          point: {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          },
-          label: 'Minha localização atual',
-        };
-      }
+      return { point: await requestDeviceLocation(), label: 'Minha localização atual' };
     } catch (error) {
       console.warn('GPS indisponível para organizar rota:', error);
     }
@@ -371,8 +347,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       if (!current.point) {
         setOptimizerOrder(previousIds);
         setOptimizerOpen(true);
-        toast.warning('Não foi possível usar sua localização atual.', {
-          description: 'Ative a localização do aparelho para calcular a rota por distância.',
+        toast.warning('Não foi possível obter a localização.', {
+          description: 'Autorize a localização para este site ou salve a posição da loja nas configurações.',
         });
         return;
       }
@@ -583,13 +559,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 </button>
 
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => setIsCopyMenuOpen(true)} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-zinc-900 text-xs font-semibold text-zinc-300 active:scale-95">
-                    <Copy size={15} className="text-emerald-500" />
-                    WhatsApp
+                  <button onClick={() => setIsCopyMenuOpen(true)} className="flex min-h-16 items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[.07] p-3 text-left active:scale-[.98]">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-400"><MessageCircle size={16}/></span>
+                    <span><b className="block text-[11px] text-zinc-100">Enviar rota</b><small className="mt-0.5 block text-[9px] text-zinc-500">WhatsApp</small></span>
                   </button>
-                  <button onClick={handleOpenMaps} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 text-xs font-bold text-white active:scale-95">
-                    <MapPin size={15} />
-                    Abrir no Maps
+                  <button onClick={handleOpenMaps} className="flex min-h-16 items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/[.08] p-3 text-left active:scale-[.98]">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-400"><Navigation size={16}/></span>
+                    <span><b className="block text-[11px] text-zinc-100">Abrir trajeto</b><small className="mt-0.5 block text-[9px] text-zinc-500">Google Maps</small></span>
                   </button>
                 </div>
 

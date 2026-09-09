@@ -10,7 +10,6 @@ import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { Geolocation } from '@capacitor/geolocation';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import { useStoreDashboard } from '@/hooks/useStoreDashboard';
@@ -20,6 +19,7 @@ import { StoreTimePicker } from '@/components/store/StoreTimePicker';
 import { OperationalIntelligencePanel } from '@/components/store/OperationalIntelligencePanel';
 import { validateSchedule } from '@/lib/operational-time';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
+import { requestDeviceLocation } from '@/lib/device-location';
 
 const DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
@@ -115,7 +115,7 @@ export default function LojaPage() {
     toast.success('Expediente salvo com sucesso!');
   };
 
-  const captureStoreLocation=async()=>{try{let permission=(await Geolocation.checkPermissions()).location;if(permission!=='granted')permission=(await Geolocation.requestPermissions({permissions:['location']})).location;if(permission!=='granted')throw new Error();const position=await Geolocation.getCurrentPosition({enableHighAccuracy:true,timeout:12000});setStorePoint({lat:position.coords.latitude,lng:position.coords.longitude});toast.success('Localização da loja capturada. Salve as configurações.')}catch{toast.error('Não foi possível capturar a localização da loja.')}};
+  const captureStoreLocation=async()=>{try{setStorePoint(await requestDeviceLocation());toast.success('Localização da loja capturada. Salve as configurações.')}catch(error){toast.error('Não foi possível capturar a localização.',{description:error instanceof Error?error.message:'Confira a permissão do navegador.'})}};
 
   const handleToggleMotoboyScale = async (id: string, active: boolean) => {
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
