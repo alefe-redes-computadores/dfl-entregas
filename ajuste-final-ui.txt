@@ -1,0 +1,275 @@
+=== CLIENTES ===
+// app/clientes/page.tsx
+'use client';
+
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { ChevronRight, Crown, MapPin, MessageCircle, PackageOpen, Plus, Search, Smartphone, Store, Trophy, UserRound } from 'lucide-react';
+import { useAppStore } from '@/store/useAppStore';
+import { getCustomerStats, isOperationalCustomer, normalizeCustomerName } from '@/lib/customer-analytics';
+
+type Filter = 'todos'|'ifood'|'loja'|'com-pedidos'|'sem-pedidos';
+const money=(value:number)=>value.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const phoneMask=(value?:string)=>{const digits=(value||'').replace(/\D/g,'');return digits.length===11?`(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`:value||'';};
+
+export default function CustomersPage(){
+  const router=useRouter();
+  const customers=useAppStore(state=>state.customers);
+  const deliveries=useAppStore(state=>state.deliveries);
+  const [query,setQuery]=useState('');
+  const [filter,setFilter]=useState<Filter>('todos');
+
+  const items=useMemo(()=>customers.map(customer=>({customer,stats:getCustomerStats(customer,deliveries)})),[customers,deliveries]);
+  const ranked=useMemo(()=>[...items].filter(item=>item.stats.orderCount>0&&!isOperationalCustomer(item.customer)).sort((a,b)=>b.stats.orderCount-a.stats.orderCount||b.stats.totalValue-a.stats.totalValue),[items]);
+  const filtered=useMemo(()=>items.filter(({customer,stats})=>{
+    const term=normalizeCustomerName(query);
+    const haystack=normalizeCustomerName(`${customer.name} ${customer.phone||''} ${customer.address||''} ${customer.neighborhood||''}`);
+    const origin=customer.origin||'ifood';
+    return (!term||haystack.includes(term))&&(filter==='todos'||filter===origin||(filter==='com-pedidos'&&stats.orderCount>0)||(filter==='sem-pedidos'&&stats.orderCount===0));
+  }).sort((a,b)=>a.customer.name.localeCompare(b.customer.name,'pt-BR')),[filter,items,query]);
+  const maxOrders=ranked[0]?.stats.orderCount||1;
+
+  return <div className="flex flex-col gap-5 pb-28">
+    <header className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-emerald-500">Relacionamento</p><h1 className="font-heading text-2xl font-bold text-zinc-50">Clientes</h1></div><button onClick={()=>router.push('/clientes/novo')} className="flex h-11 items-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-black text-zinc-950"><Plus size={18}/>Novo</button></header>
+    <div className="grid grid-cols-3 gap-2"><Metric value={customers.length} label="Clientes"/><Metric value={items.filter(item=>item.stats.orderCount>0).length} label="Com pedidos"/><Metric value={deliveries.length} label="Pedidos ligados"/></div>
+
+    {ranked.length>0&&<section className="rounded-[26px] border border-amber-500/20 bg-gradient-to-b from-amber-500/[.07] to-zinc-900/35 p-4"><div className="mb-4 flex items-center justify-between"><div><p className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-400"><Trophy size={15}/>Quem mais pede</p><p className="mt-1 text-[11px] text-zinc-500">Calculado pelas entregas reais</p></div><span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-400">Top 5</span></div><div className="space-y-3">{ranked.slice(0,5).map(({customer,stats},index)=><button key={customer.id} onClick={()=>router.push(`/clientes/details?id=${customer.id}`)} className="block w-full text-left"><div className="flex items-center gap-2"><span className={`flex h-6 w-6 items-center justify-center rounded-lg text-[10px] font-black ${index===0?'bg-amber-500 text-zinc-950':'bg-zinc-800 text-zinc-400'}`}>{index===0?<Crown size={12}/>:index+1}</span><span className="min-w-0 flex-1 truncate text-xs font-bold text-zinc-200">{customer.name}</span><span className="text-xs font-black text-amber-400">{stats.orderCount}</span></div><div className="ml-8 mt-1.5 h-1.5 overflow-hidden rounded-full bg-zinc-800"><div className="h-full rounded-full bg-gradient-to-r from-amber-600 to-amber-400" style={{width:`${Math.max(8,(stats.orderCount/maxOrders)*100)}%`}}/></div></button>)}</div></section>}
+
+    <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Nome, telefone, endereço ou bairro" className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900/55 pl-11 pr-4 text-sm outline-none focus:border-emerald-500"/></div>
+    <div className="flex gap-2 overflow-x-auto no-scrollbar">{([['todos','Todos'],['com-pedidos','Com pedidos'],['sem-pedidos','Sem pedidos'],['ifood','iFood'],['loja','Loja']] as const).map(([value,label])=><button key={value} onClick={()=>setFilter(value)} className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-bold ${filter===value?'bg-zinc-100 text-zinc-950':'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
+
+    <div className="flex flex-col gap-3">{filtered.map(({customer,stats})=><button key={customer.id} onClick={()=>router.push(`/clientes/details?id=${customer.id}`)} className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4 text-left active:scale-[.99]"><div className="flex items-start gap-3"><div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${(customer.origin||'ifood')==='ifood'?'bg-red-500/10 text-red-400':'bg-emerald-500/10 text-emerald-400'}`}><UserRound size={19}/></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate font-bold text-zinc-100">{customer.name}</p>{(customer.origin||'ifood')==='ifood'?<Smartphone size={13} className="text-red-400"/>:<Store size={13} className="text-emerald-400"/>}</div>{customer.phone&&<p className="mt-1 flex items-center gap-1 text-xs text-emerald-400"><MessageCircle size={11}/>{phoneMask(customer.phone)}</p>}{(customer.address||customer.neighborhood)&&<p className="mt-1 truncate text-xs text-zinc-500"><MapPin size={11} className="mr-1 inline"/>{customer.address||customer.neighborhood}</p>}</div><ChevronRight size={17} className="mt-1 text-zinc-600"/></div><div className="mt-4 grid grid-cols-3 gap-2 border-t border-zinc-800/70 pt-3 text-center"><Small value={String(stats.orderCount)} label="Pedidos"/><Small value={money(stats.totalValue)} label="Valor"/><Small value={money(stats.averageTicket)} label="Ticket médio"/></div></button>)}{filtered.length===0&&<div className="rounded-3xl border border-dashed border-zinc-800 py-14 text-center"><PackageOpen className="mx-auto text-zinc-700"/><p className="mt-3 text-sm text-zinc-500">Nenhum cliente encontrado.</p></div>}</div>
+  </div>;
+}
+
+function Metric({value,label}:{value:number;label:string}){return <div className="rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3"><p className="text-xl font-black text-zinc-100">{value}</p><p className="truncate text-[10px] text-zinc-500">{label}</p></div>;}
+function Small({value,label}:{value:string;label:string}){return <div><p className="truncate text-xs font-bold text-zinc-200">{value}</p><p className="text-[10px] text-zinc-500">{label}</p></div>;}
+=== MOTOBOY EDITAR ===
+// app/motoboys/editar/page.tsx
+'use client';
+import { Suspense,useState } from 'react';import { useRouter,useSearchParams } from 'next/navigation';import { toast } from 'sonner';import { PageHeader } from '@/components/layout/PageHeader';import { MotoboyForm,type MotoboyFormValue } from '@/components/motoboys/MotoboyForm';import { useAppStore } from '@/store/useAppStore';
+function Content(){const router=useRouter();const id=useSearchParams().get('id');const motoboy=useAppStore(state=>state.motoboys.find(item=>item.id===id));const update=useAppStore(state=>state.updateMotoboy);const [busy,setBusy]=useState(false);if(!motoboy)return <div><PageHeader title="Entregador não encontrado" to="/motoboys"/></div>;const save=async(value:MotoboyFormValue)=>{setBusy(true);try{await update(motoboy.id,value);toast.success('Cadastro atualizado.');router.push(`/motoboys/details?id=${motoboy.id}`);}catch{toast.error('Não foi possível salvar.');}finally{setBusy(false);}};return <div><PageHeader title="Editar entregador" subtitle={motoboy.name} to={`/motoboys/details?id=${motoboy.id}`}/><MotoboyForm initial={motoboy} submitLabel="Salvar alterações" busy={busy} onSubmit={save}/></div>;}
+export default function EditMotoboyPage(){return <Suspense fallback={<p className="py-16 text-center text-zinc-500">Carregando...</p>}><Content/></Suspense>;}
+=== MOTOBOY FORM ===
+// components/motoboys/MotoboyForm.tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Bike, Calculator, Check, Package, UserRound } from 'lucide-react';
+import type { Motoboy, MotoboyPaymentRule, MotoboyType, PaymentRuleType } from '@/types';
+
+export interface MotoboyFormValue { name:string; active:boolean; type:MotoboyType; avatar:string; payment_rule?:MotoboyPaymentRule; }
+interface Props { initial?:Motoboy; busy?:boolean; submitLabel:string; onSubmit:(value:MotoboyFormValue)=>Promise<void>; }
+const moneyInput=(value:string)=>{const digits=value.replace(/\D/g,'');return digits?(Number(digits)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}):'';};
+const moneyNumber=(value:string)=>Number(value.replace(/\./g,'').replace(',','.'))||0;
+
+export function MotoboyForm({initial,busy,submitLabel,onSubmit}:Props){
+  const [name,setName]=useState(initial?.name||'');const [type,setType]=useState<MotoboyType>(initial?.type||'fixo');const [active,setActive]=useState(initial?.active??true);const [avatar,setAvatar]=useState(initial?.avatar||'bike-sky');
+  const [ruleType,setRuleType]=useState<PaymentRuleType|''>(initial?.payment_rule?.type||'');const [fixed,setFixed]=useState(initial?.payment_rule?.fixed_amount?initial.payment_rule.fixed_amount.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');const [rate,setRate]=useState(initial?.payment_rule?.delivery_fee?initial.payment_rule.delivery_fee.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');const [threshold,setThreshold]=useState(initial?.payment_rule?.threshold?.toString()||'');const [extra,setExtra]=useState(initial?.payment_rule?.extra_fee?initial.payment_rule.extra_fee.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');
+  useEffect(()=>{if(!initial)return;setName(initial.name);setType(initial.type||'fixo');setActive(initial.active);setAvatar(initial.avatar||'bike-sky');setRuleType(initial.payment_rule?.type||'');setFixed(initial.payment_rule?.fixed_amount?initial.payment_rule.fixed_amount.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');setRate(initial.payment_rule?.delivery_fee?initial.payment_rule.delivery_fee.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');setThreshold(initial.payment_rule?.threshold?.toString()||'');setExtra(initial.payment_rule?.extra_fee?initial.payment_rule.extra_fee.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');},[initial]);
+  const buildRule=():MotoboyPaymentRule|undefined=>ruleType?{type:ruleType,fixed_amount:ruleType!=='per_delivery'?moneyNumber(fixed):undefined,delivery_fee:ruleType==='per_delivery'?moneyNumber(rate):undefined,threshold:ruleType==='fixed_plus_variable'?Number(threshold)||0:undefined,extra_fee:ruleType==='fixed_plus_variable'?moneyNumber(extra):undefined}:undefined;
+  return <form onSubmit={async event=>{event.preventDefault();await onSubmit({name:name.trim(),active,type,avatar,payment_rule:buildRule()});}} className="flex flex-col gap-5 pb-10">
+    <label className="flex flex-col gap-2"><span className="flex items-center gap-2 text-xs font-bold text-zinc-400"><UserRound size={14}/>Nome do entregador</span><input value={name} onChange={event=>setName(event.target.value)} placeholder="Ex: Bruno" required className="field"/></label>
+    <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-1"><button type="button" onClick={()=>setType('fixo')} className={`h-12 rounded-xl text-sm font-bold ${type==='fixo'?'bg-sky-500 text-zinc-950':'text-zinc-500'}`}>Fixo</button><button type="button" onClick={()=>setType('avulso')} className={`h-12 rounded-xl text-sm font-bold ${type==='avulso'?'bg-amber-500 text-zinc-950':'text-zinc-500'}`}>Avulso</button></div>
+    <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4"><div className="mb-3 flex items-center gap-2"><Calculator size={16} className="text-emerald-400"/><div><p className="text-xs font-black uppercase text-zinc-300">Regra de pagamento</p><p className="text-[10px] text-zinc-500">Nenhum valor é preenchido automaticamente</p></div></div><div className="flex flex-col gap-2">{([['','Configurar depois'],['fixed','Diária fixa'],['per_delivery','Por entrega'],['fixed_plus_variable','Fixo + entregas extras']] as const).map(([value,label])=><button key={value||'none'} type="button" onClick={()=>setRuleType(value)} className={`flex h-11 items-center justify-between rounded-xl px-3 text-left text-xs font-bold ${ruleType===value?'bg-zinc-800 text-zinc-100':'text-zinc-500'}`}>{label}{ruleType===value&&<Check size={15} className="text-emerald-400"/>}</button>)}</div>
+      {ruleType==='fixed'&&<MoneyField label="Valor da diária" value={fixed} setValue={setFixed}/>} {ruleType==='per_delivery'&&<MoneyField label="Valor por entrega" value={rate} setValue={setRate}/>} {ruleType==='fixed_plus_variable'&&<div className="mt-4 grid grid-cols-2 gap-3"><MoneyField label="Base fixa" value={fixed} setValue={setFixed}/><label className="text-[10px] font-bold text-zinc-500">Entregas inclusas<input type="number" min="0" value={threshold} onChange={event=>setThreshold(event.target.value)} className="field mt-1"/></label><div className="col-span-2"><MoneyField label="Valor por entrega extra" value={extra} setValue={setExtra}/></div></div>}
+    </section>
+    {initial&&<div className={`flex items-center justify-between rounded-2xl border p-4 ${active?'border-emerald-500/20 bg-emerald-500/5':'border-red-500/20 bg-red-500/5'}`}><div><p className="text-sm font-bold text-zinc-200">Entregador ativo</p><p className="text-[10px] text-zinc-500">Inativos não aparecem em novas rotas</p></div><button type="button" onClick={()=>setActive(value=>!value)} className={`relative h-7 w-12 rounded-full ${active?'bg-emerald-500':'bg-zinc-700'}`}><span className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition-transform ${active?'translate-x-5':'translate-x-0'}`}/></button></div>}
+    <button disabled={busy||!name.trim()} className="h-14 rounded-2xl bg-amber-500 font-black text-zinc-950 disabled:opacity-50">{busy?'Salvando...':submitLabel}</button>
+    <style jsx>{`.field{height:3.25rem;width:100%;border-radius:1rem;border:1px solid rgb(39 39 42);background:rgb(24 24 27/.6);padding:0 1rem;color:rgb(244 244 245);font-size:.875rem;outline:none}.field:focus{border-color:rgb(14 165 233)}`}</style>
+  </form>;
+}
+function MoneyField({label,value,setValue}:{label:string;value:string;setValue:(value:string)=>void}){return <label className="mt-4 block text-[10px] font-bold text-zinc-500">{label}<div className="relative mt-1"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">R$</span><input value={value} onChange={event=>setValue(moneyInput(event.target.value))} inputMode="numeric" placeholder="0,00" className="field pl-10"/></div></label>;}
+=== UPDATE MOTOBOY ===
+store/useAppStore.ts-58-  addDelivery: (delivery: Delivery) => Promise<void>;
+store/useAppStore.ts-59-  updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
+store/useAppStore.ts-60-  deleteDelivery: (id: string) => Promise<void>;
+store/useAppStore.ts-61-  closeRoute: (routeId: string) => Promise<void>;
+store/useAppStore.ts-62-  reopenRoute: (routeId: string) => Promise<void>;
+store/useAppStore.ts-63-  reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
+store/useAppStore.ts-64-  moveDeliveryToIndex: (routeId: string, deliveryId: string, targetIndex: number) => Promise<void>;
+store/useAppStore.ts-65-  setDeliveryOrder: (routeId: string, orderedPendingIds: string[]) => Promise<void>;
+store/useAppStore.ts-66-  toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void;
+store/useAppStore.ts-67-  addCustomer: (customer: Customer) => Promise<void>;
+store/useAppStore.ts-68-  updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
+store/useAppStore.ts-69-  addMotoboy: (motoboy: Motoboy) => Promise<void>;
+store/useAppStore.ts:70:  updateMotoboy: (id: string, updatedData: Partial<Motoboy>) => Promise<void>;
+store/useAppStore.ts-71-  deleteMotoboy: (id: string) => Promise<void>;
+store/useAppStore.ts-72-  addFueling: (fueling: Fueling) => Promise<void>;
+store/useAppStore.ts-73-  updateFueling: (id: string, updatedData: Partial<Fueling>) => Promise<void>;
+store/useAppStore.ts-74-  deleteFueling: (id: string) => Promise<void>;
+store/useAppStore.ts-75-  addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
+store/useAppStore.ts-76-  updateIfoodPendingConfirmation: (id: string, data: Partial<IfoodPendingConfirmation>) => Promise<void>;
+store/useAppStore.ts-77-  deleteIfoodPendingConfirmation: (id: string) => Promise<void>;
+store/useAppStore.ts-78-  findOrCreateCustomer: (name: string, details?: { address?: string; phone?: string; mapsLink?: string; confirmationCode?: string; observation?: string; origin?: OrderOrigin; }) => Promise<string>;
+store/useAppStore.ts-79-}
+store/useAppStore.ts-80-
+store/useAppStore.ts-81-const sanitizeForFirebase = (obj: any) => {
+store/useAppStore.ts-82-  const sanitized = Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
+--
+store/useAppStore.ts-386-        const dataWithTimestamp: Motoboy = { ...motoboy, updated_at: new Date().toISOString() };
+store/useAppStore.ts-387-        set((state) => ({ motoboys: [...state.motoboys, dataWithTimestamp] }));
+store/useAppStore.ts-388-        try {
+store/useAppStore.ts-389-          const safeData = sanitizeForFirebase(dataWithTimestamp);
+store/useAppStore.ts-390-          await setDoc(doc(db, 'motoboys', motoboy.id), safeData);
+store/useAppStore.ts-391-        } catch (error) {
+store/useAppStore.ts-392-          set((state) => ({ motoboys: state.motoboys.filter((item) => item.id !== motoboy.id) }));
+store/useAppStore.ts-393-          console.error(error);
+store/useAppStore.ts-394-          throw error;
+store/useAppStore.ts-395-        }
+store/useAppStore.ts-396-      },
+store/useAppStore.ts-397-
+store/useAppStore.ts:398:      updateMotoboy: async (id, updatedData) => {
+store/useAppStore.ts-399-        const previousMotoboys = get().motoboys;
+store/useAppStore.ts-400-        const dataWithTimestamp: Partial<Motoboy> = { ...updatedData, updated_at: new Date().toISOString() };
+store/useAppStore.ts-401-        set((state) => ({
+store/useAppStore.ts-402-          motoboys: state.motoboys.map((m) => m.id === id ? { ...m, ...dataWithTimestamp } as Motoboy : m)
+store/useAppStore.ts-403-        }));
+store/useAppStore.ts-404-        try {
+store/useAppStore.ts-405-          const safeData = sanitizeForFirebase(dataWithTimestamp);
+store/useAppStore.ts:406:          await updateDoc(doc(db, 'motoboys', id), safeData);
+store/useAppStore.ts-407-        } catch (error) {
+store/useAppStore.ts-408-          set({ motoboys: previousMotoboys });
+store/useAppStore.ts-409-          console.error(error);
+store/useAppStore.ts-410-          throw error;
+store/useAppStore.ts-411-        }
+store/useAppStore.ts-412-      },
+store/useAppStore.ts-413-
+store/useAppStore.ts-414-      deleteMotoboy: async (id) => {
+store/useAppStore.ts-415-        if (get().routes.some((route) => route.motoboy_id === id)) {
+store/useAppStore.ts-416-          throw new Error('Não é possível excluir um motoboy que possui rotas. Desative o cadastro para preservar o histórico.');
+store/useAppStore.ts-417-        }
+store/useAppStore.ts-418-        const previousMotoboys = get().motoboys;
+--
+lib/motoboy-analytics.ts-17-  if(!rule)return {amount:0,description:'Regra de pagamento não configurada'};
+lib/motoboy-analytics.ts-18-  if(rule.type==='fixed')return {amount:rule.fixed_amount||0,description:`Diária fixa: R$ ${(rule.fixed_amount||0).toFixed(2).replace('.',',')}`};
+lib/motoboy-analytics.ts-19-  if(rule.type==='per_delivery'){const rate=rule.delivery_fee||0;return {amount:deliveryCount*rate,description:`${deliveryCount} entregas × R$ ${rate.toFixed(2).replace('.',',')}`};}
+lib/motoboy-analytics.ts-20-  const fixed=rule.fixed_amount||0;const threshold=rule.threshold||0;const extraFee=rule.extra_fee||0;const extras=Math.max(0,deliveryCount-threshold);
+lib/motoboy-analytics.ts-21-  return {amount:fixed+(extras*extraFee),description:extras?`Base R$ ${fixed.toFixed(2).replace('.',',')} + ${extras} extras × R$ ${extraFee.toFixed(2).replace('.',',')}`:`Base até ${threshold} entregas: R$ ${fixed.toFixed(2).replace('.',',')}`};
+lib/motoboy-analytics.ts-22-}
+lib/motoboy-analytics.ts-23-
+lib/motoboy-analytics.ts-24-export function getMotoboyDayData(motoboy:Motoboy,date:string,routes:Route[],deliveries:Delivery[],vales:ValeInput[]=[],cashHandedOver=true){
+lib/motoboy-analytics.ts-25-  const dayRoutes=getMotoboyRoutes(motoboy,routes).filter(route=>{const value=routeOperationalDate(route);return value?operationalDateKey(value)===date:false;});
+lib/motoboy-analytics.ts-26-  const routeIds=new Set(dayRoutes.map(route=>route.id));
+lib/motoboy-analytics.ts-27-  const completedDeliveries=deliveries.filter(delivery=>routeIds.has(delivery.route_id)&&delivery.completed===true);
+lib/motoboy-analytics.ts-28-  const cashCollected=completedDeliveries.filter(delivery=>delivery.payment_method==='dinheiro'&&!delivery.is_paid).reduce((sum,delivery)=>sum+(delivery.value||0),0);
+lib/motoboy-analytics.ts:29:  const fee=calculateMotoboyFee(motoboy.payment_rule,completedDeliveries.length);
+lib/motoboy-analytics.ts-30-  const totalVales=vales.reduce((sum,vale)=>sum+vale.amount,0);
+lib/motoboy-analytics.ts-31-  const liquidFee=Math.max(0,fee.amount-totalVales);
+lib/motoboy-analytics.ts-32-  const difference=cashCollected-liquidFee;
+lib/motoboy-analytics.ts-33-  return {routes:dayRoutes,completedRoutes:dayRoutes.filter(route=>route.status==='fechada').length,deliveries:completedDeliveries,cashCollected,fee,totalVales,liquidFee,mustReturn:!cashHandedOver&&difference>0,balance:cashHandedOver?liquidFee:Math.abs(difference)};
+lib/motoboy-analytics.ts-34-}
+=== SUMMARY CARD ===
+// components/reports/SummaryCard.tsx
+'use client';
+
+import { ReactNode } from 'react';
+import { TrendingUp, TrendingDown } from 'lucide-react';
+
+interface SummaryCardProps {
+  title: string;
+  value: string | number;
+  subtitle?: string;
+  icon: ReactNode;
+  variation?: number;
+  accentColor?: 'emerald' | 'amber' | 'blue' | 'purple' | 'pink';
+  delay?: number;
+}
+
+export function SummaryCard({ 
+  title, 
+  value, 
+  subtitle, 
+  icon, 
+  variation, 
+  accentColor = 'emerald',
+  delay = 0 
+}: SummaryCardProps) {
+  const colorClasses = {
+    emerald: 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/20',
+    amber: 'from-amber-500/20 to-amber-600/10 border-amber-500/20',
+    blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/20',
+    purple: 'from-purple-500/20 to-purple-600/10 border-purple-500/20',
+    pink: 'from-pink-500/20 to-pink-600/10 border-pink-500/20',
+  };
+
+  const iconColors = {
+    emerald: 'text-emerald-500',
+    amber: 'text-amber-500',
+    blue: 'text-blue-500',
+    purple: 'text-purple-500',
+    pink: 'text-pink-500',
+  };
+
+  return (
+    <div
+      className={`rounded-[22px] border bg-gradient-to-br ${colorClasses[accentColor]} p-4 backdrop-blur-sm animate-fadeInUp`}
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
+            {title}
+          </div>
+          <div className="mt-2 break-words text-2xl font-black tracking-tight text-zinc-100">
+            {value}
+          </div>
+        </div>
+
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950/35 ${iconColors[accentColor]}`}>
+          {icon}
+        </div>
+      </div>
+
+      {subtitle && (
+        <div className="mt-2 text-[10px] font-semibold leading-relaxed text-zinc-500">
+          {subtitle}
+        </div>
+      )}
+
+      {variation !== undefined && variation !== 0 && (
+        <div className={`mt-2 flex items-center gap-1 text-[10px] font-bold ${variation > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+          {variation > 0 ? (
+            <TrendingUp className="h-3 w-3" />
+          ) : (
+            <TrendingDown className="h-3 w-3" />
+          )}
+          <span>{Math.abs(variation)}%</span>
+          <span className="text-zinc-500">vs período anterior</span>
+        </div>
+      )}
+    </div>
+  );
+}=== INSIGHT TEXTO ===
+lib/delivery-intelligence/buildOperationalMemory.ts-478-      const bRatio = b.deviationRatio ?? 0;
+lib/delivery-intelligence/buildOperationalMemory.ts-479-      return bRatio - aRatio;
+lib/delivery-intelligence/buildOperationalMemory.ts-480-    });
+lib/delivery-intelligence/buildOperationalMemory.ts-481-
+lib/delivery-intelligence/buildOperationalMemory.ts-482-  if (contextualAnomalies.length > 0) {
+lib/delivery-intelligence/buildOperationalMemory.ts-483-    const worst = contextualAnomalies[0];
+lib/delivery-intelligence/buildOperationalMemory.ts-484-
+lib/delivery-intelligence/buildOperationalMemory.ts-485-    insights.push({
+lib/delivery-intelligence/buildOperationalMemory.ts-486-      id: 'memory-routes-contextual-duration',
+lib/delivery-intelligence/buildOperationalMemory.ts-487-      category: 'routes',
+lib/delivery-intelligence/buildOperationalMemory.ts-488-      severity: 'attention',
+lib/delivery-intelligence/buildOperationalMemory.ts-489-      confidence: confidenceFromSample(
+lib/delivery-intelligence/buildOperationalMemory.ts-490-        worst.comparisonSample,
+lib/delivery-intelligence/buildOperationalMemory.ts-491-        minimumSample,
+lib/delivery-intelligence/buildOperationalMemory.ts-492-      ),
+lib/delivery-intelligence/buildOperationalMemory.ts:493:      title: 'Há rota fora do padrão de rotas de tamanho parecido',
+lib/delivery-intelligence/buildOperationalMemory.ts:494:      summary: `${contextualAnomalies.length} rota${contextualAnomalies.length === 1 ? '' : 's'} ficou${contextualAnomalies.length === 1 ? '' : 'ram'} bem acima da mediana do próprio grupo de paradas.`,
+lib/delivery-intelligence/buildOperationalMemory.ts-495-      explanation:
+lib/delivery-intelligence/buildOperationalMemory.ts-496-        'A comparação usa somente rotas confiáveis com quantidade de paradas semelhante. Ainda assim, o sinal não atribui causa ao entregador: trânsito, espera no cliente, distância e composição da rota podem explicar a diferença.',
+lib/delivery-intelligence/buildOperationalMemory.ts-497-      sampleSize: worst.comparisonSample,
+lib/delivery-intelligence/buildOperationalMemory.ts-498-      entityIds: contextualAnomalies.map((item) => item.routeId),
+lib/delivery-intelligence/buildOperationalMemory.ts-499-      evidence: [
+lib/delivery-intelligence/buildOperationalMemory.ts-500-        { label: 'Grupo comparável', value: worst.sizeBand },
+lib/delivery-intelligence/buildOperationalMemory.ts-501-        {
+lib/delivery-intelligence/buildOperationalMemory.ts-502-          label: 'Rotas no grupo',
+lib/delivery-intelligence/buildOperationalMemory.ts-503-          value: String(worst.comparisonSample),
+lib/delivery-intelligence/buildOperationalMemory.ts-504-        },
+lib/delivery-intelligence/buildOperationalMemory.ts-505-        {
+lib/delivery-intelligence/buildOperationalMemory.ts-506-          label: 'Mediana do grupo',
+lib/delivery-intelligence/buildOperationalMemory.ts-507-          value: `${round(worst.baselineMinutes || 0)} min`,
+lib/delivery-intelligence/buildOperationalMemory.ts-508-        },
+lib/delivery-intelligence/buildOperationalMemory.ts-509-        {

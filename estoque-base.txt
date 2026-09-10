@@ -1,0 +1,745 @@
+=== COMMIT ===
+f339a0b
+=== TYPES ===
+export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debito' | 'cartao';
+export type RouteStatus = 'aberta' | 'fechada';
+export type OrderOrigin = 'ifood' | 'loja';
+export type FulfillmentMode = 'delivery' | 'pickup' | 'counter';
+export type PaymentRuleType = 'fixed' | 'per_delivery' | 'fixed_plus_variable';
+export type MotoboyType = 'fixo' | 'avulso';
+export type FuelType = 'gasolina_comum' | 'gasolina_aditivada' | 'etanol' | 'diesel' | 'outro';
+
+export interface Fueling {
+  id: string;
+  occurred_at: string;
+  fuel_type: FuelType;
+  total_amount: number;
+  liters?: number;
+  price_per_liter?: number;
+  odometer_km?: number;
+  station?: string;
+  vehicle_label?: string;
+  motoboy_id?: string;
+  motoboy_name?: string;
+  observation?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type StockSupplyStatus = 'solicitado' | 'em_compra' | 'recebido' | 'conferido';
+export type StockSupplyUnit = 'un' | 'kg' | 'g' | 'l' | 'ml' | 'cx' | 'pct' | 'fardo';
+
+export interface StockSupplyItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: StockSupplyUnit;
+  unit_price?: number;
+  total_price?: number;
+  observation?: string;
+}
+
+export interface StockSupply {
+  id: string;
+  occurred_at: string;
+  status: StockSupplyStatus;
+  items: StockSupplyItem[];
+  products_amount: number;
+  transport_amount?: number;
+  other_costs?: number;
+  total_amount: number;
+  supplier?: string;
+  payment_method?: PaymentMethod;
+  purchaser_name?: string;
+  observation?: string;
+  received_at?: string;
+  checked_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MotoboyPaymentRule {
+  type: PaymentRuleType;
+  fixed_amount?: number;    
+  delivery_fee?: number;    
+  threshold?: number;       
+  extra_fee?: number;       
+}
+
+export interface Route {
+  id: string;
+  name: string;
+  status: RouteStatus;
+  motoboy_name: string;
+  motoboy_id?: string;
+  departure_time?: string; // Legado: novas rotas usam started_at como saída real
+  started_at?: string;
+  end_time?: string;
+  reopened_at?: string;
+  change_money: number;
+  drinks_summary?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Delivery {
+  id: string;
+  route_id: string;
+  fulfillment_mode?: FulfillmentMode; // legado sem campo = delivery
+  order_id?: string;
+  ifood_id?: string; 
+  origin: OrderOrigin;
+  confirmation_code?: string; 
+  customer_id: string;
+  value: number;
+  is_paid: boolean;
+  payment_method: PaymentMethod;
+  change_for?: number;
+  address_string: string;
+  maps_link: string;
+  observation?: string;
+  drinks?: string;
+  completed?: boolean;
+  order_index?: number; 
+  is_urgent?: boolean;
+  phone?: string;
+  notify_whatsapp?: boolean;
+  customer_name?: string;
+  createdAt?: string; // Campo legado ainda lido pelos relatórios atuais
+  created_at?: string;
+  completed_at?: string;
+  updated_at?: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone?: string;
+  origin?: OrderOrigin;
+  neighborhood?: string;
+  address?: string;
+  maps_link?: string;
+  observation?: string;
+  last_confirmation_code?: string;
+  avatar?: string; 
+  createdAt?: string;
+  updated_at?: string;
+  orderCount?: number; 
+  totalSpent?: number; 
+}
+
+export interface Motoboy {
+  id: string;
+  name: string;
+  active: boolean; 
+  type?: MotoboyType; 
+  avatar?: string; 
+  payment_rule?: MotoboyPaymentRule; 
+  createdAt?: string;
+  updated_at?: string;
+}
+
+export type IfoodPendingConfirmationStatus = 'pending' | 'resolved';
+
+export interface IfoodPendingConfirmation {
+  id: string;
+  order_id?: string;
+  ifood_id?: string;
+  confirmation_code?: string;
+  customer_name?: string;
+  value?: number;
+  note?: string;
+  status?: IfoodPendingConfirmationStatus;
+  resolved_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Shift {
+  start: string;
+  end: string;
+}
+
+export interface DaySchedule {
+  active: boolean;
+  shifts: Shift[];
+}
+
+export interface StorePause {
+  id: string;
+  start_date: string;
+  end_date: string;
+  reason?: string;
+}
+
+export interface HolidayOverride {
+  date: string;
+  active: boolean;
+  shifts: Shift[];
+}
+=== STORE SUPPLIES ===
+1-import { create } from 'zustand';
+2-import { persist } from 'zustand/middleware';
+3-import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField } from 'firebase/firestore';
+4-import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
+5-import { db, auth, googleProvider } from '@/lib/firebase';
+6-import { Capacitor } from '@capacitor/core';
+7-import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+8-import { LocalNotifications } from '@capacitor/local-notifications';
+9:import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
+10-import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+11-import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
+12-import { fuelingDate } from '@/lib/fueling-analytics';
+13-
+14-interface AppState {
+15-  user: FirebaseUser | null;
+16-  authLoaded: boolean;
+17-  hasHydrated: boolean;
+18-  routes: Route[];
+19-  deliveries: (Delivery & { is_expanded?: boolean })[];
+20-  customers: Customer[];
+21-  motoboys: Motoboy[];
+22-  fuelings: Fueling[];
+23:  stockSupplies: StockSupply[];
+24-  ifoodPendingConfirmations: IfoodPendingConfirmation[];
+25-  selectedDate: Date;
+26-  isSyncing: boolean;
+27-  syncError: boolean;
+28-  isPrivacyMode: boolean; 
+29-  routeAlertsEnabled: boolean;
+30-  theme: 'dark' | 'light' | 'system';
+31-  storeSettings: {
+32-    isOpen: boolean;
+33-    openingTime: string; // Legado
+34-    closingTime: string; // Legado
+35-    activeDays: number[]; // Legado
+36-    alertsEnabled: boolean;
+37-    storeAddress?: string;
+38-    // 🔥 NOVOS CAMPOS DE EXPEDIENTE AVANÇADO
+--
+61-  deleteDelivery: (id: string) => Promise<void>;
+62-  closeRoute: (routeId: string) => Promise<void>;
+63-  reopenRoute: (routeId: string) => Promise<void>;
+64-  reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
+65-  moveDeliveryToIndex: (routeId: string, deliveryId: string, targetIndex: number) => Promise<void>;
+66-  setDeliveryOrder: (routeId: string, orderedPendingIds: string[]) => Promise<void>;
+67-  toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void;
+68-  addCustomer: (customer: Customer) => Promise<void>;
+69-  updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
+70-  addMotoboy: (motoboy: Motoboy) => Promise<void>;
+71-  updateMotoboy: (id: string, updatedData: Partial<Motoboy>) => Promise<void>;
+72-  deleteMotoboy: (id: string) => Promise<void>;
+73-  addFueling: (fueling: Fueling) => Promise<void>;
+74-  updateFueling: (id: string, updatedData: Partial<Fueling>) => Promise<void>;
+75-  deleteFueling: (id: string) => Promise<void>;
+76:  addStockSupply: (supply: StockSupply) => Promise<void>;
+77:  updateStockSupply: (id: string, updatedData: Partial<StockSupply>) => Promise<void>;
+78:  deleteStockSupply: (id: string) => Promise<void>;
+79-  addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
+80-  updateIfoodPendingConfirmation: (id: string, data: Partial<IfoodPendingConfirmation>) => Promise<void>;
+81-  deleteIfoodPendingConfirmation: (id: string) => Promise<void>;
+82-  findOrCreateCustomer: (name: string, details?: { address?: string; phone?: string; mapsLink?: string; confirmationCode?: string; observation?: string; origin?: OrderOrigin; }) => Promise<string>;
+83-}
+84-
+85-const sanitizeForFirebase = (obj: any) => {
+86-  const sanitized = Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
+87-  delete sanitized.is_expanded;
+88-  return sanitized;
+89-};
+90-
+91-// Gerador do schedule padrão caso o usuário seja novo
+92-const defaultSchedule = Object.fromEntries(
+93-  [0, 1, 2, 3, 4, 5, 6].map(day => [
+--
+170-          await signOut(auth);
+171-          set({ routes: [], deliveries: [], customers: [], motoboys: [], fuelings: [], stockSupplies: [], user: null });
+172-        } catch (error) { console.error('Erro no logout:', error); }
+173-      },
+174-
+175-      initData: async () => {
+176-        if (!get().hasHydrated) return;
+177-        set({ isSyncing: true, syncError: false }); 
+178-        try {
+179-          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
+180-            getDocs(collection(db, 'routes')),
+181-            getDocs(collection(db, 'deliveries')),
+182-            getDocs(collection(db, 'customers')),
+183-            getDocs(collection(db, 'motoboys')),
+184-            getDocs(collection(db, 'fuelings')),
+185:            getDocs(collection(db, 'stock_supplies')),
+186-            getDocs(collection(db, 'ifood_pending_confirmations')),
+187-            getDoc(doc(db, 'store', 'store_settings'))
+188-          ]);
+189-
+190-          const fbRoutes = routesSnap.docs.map(d => d.data() as Route);
+191-          const fbDeliveries = deliveriesSnap.docs.map(d => d.data() as Delivery);
+192-          const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
+193-          const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
+194-          const fbFuelings = fuelingsSnap.docs.map(d => d.data() as Fueling);
+195:          const fbStockSupplies = stockSuppliesSnap.docs.map(d => d.data() as StockSupply);
+196-          const fbPendingConfirmations = pendingConfirmationsSnap.docs.map(
+197-            d => d.data() as IfoodPendingConfirmation,
+198-          );
+199-          
+200-          const cloudStoreSettings = storeSnap.exists() ? storeSnap.data() : null;
+201-
+202-          const mergedRoutes = [...fbRoutes];
+203-          get().routes.forEach(local => {
+204-            if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
+205-          });
+206-
+207-          let mergedDeliveries: (Delivery & { is_expanded?: boolean })[] = [...fbDeliveries].map(fbDel => {
+208-            const localDel = get().deliveries.find(l => l.id === fbDel.id);
+209-            return {
+210-              ...fbDel,
+--
+480-        }
+481-      },
+482-
+483-      deleteFueling: async (id) => {
+484-        const previousFuelings = get().fuelings;
+485-        set((state) => ({ fuelings: state.fuelings.filter((item) => item.id !== id) }));
+486-        try {
+487-          await deleteDoc(doc(db, 'fuelings', id));
+488-        } catch (error) {
+489-          set({ fuelings: previousFuelings });
+490-          console.error('Erro ao excluir abastecimento:', error);
+491-          throw error;
+492-        }
+493-      },
+494-
+495:      addStockSupply: async (supply) => {
+496-        const now = new Date().toISOString();
+497:        const next: StockSupply = { ...supply, created_at: supply.created_at || now, updated_at: now };
+498-        set((state) => ({ stockSupplies: [next, ...state.stockSupplies] }));
+499-        try {
+500:          await setDoc(doc(db, 'stock_supplies', next.id), sanitizeForFirebase(next));
+501-        } catch (error) {
+502-          set((state) => ({ stockSupplies: state.stockSupplies.filter((item) => item.id !== next.id) }));
+503-          throw error;
+504-        }
+505-      },
+506-
+507:      updateStockSupply: async (id, updatedData) => {
+508-        const previous = get().stockSupplies;
+509:        const next: Partial<StockSupply> = { ...updatedData, updated_at: new Date().toISOString() };
+510-        set((state) => ({ stockSupplies: state.stockSupplies.map((item) => item.id === id ? { ...item, ...next } : item) }));
+511-        try {
+512:          await updateDoc(doc(db, 'stock_supplies', id), sanitizeForFirebase(next));
+513-        } catch (error) {
+514-          set({ stockSupplies: previous });
+515-          throw error;
+516-        }
+517-      },
+518-
+519:      deleteStockSupply: async (id) => {
+520-        const previous = get().stockSupplies;
+521-        set((state) => ({ stockSupplies: state.stockSupplies.filter((item) => item.id !== id) }));
+522-        try {
+523:          await deleteDoc(doc(db, 'stock_supplies', id));
+524-        } catch (error) {
+525-          set({ stockSupplies: previous });
+526-          throw error;
+527-        }
+528-      },
+529-
+530-      addDelivery: async (delivery) => {
+531-        const now = new Date().toISOString();
+532-        const deliveryWithTimestamp = { 
+533-          ...delivery, 
+534-          createdAt: delivery.createdAt || delivery.created_at || now,
+535-          created_at: delivery.created_at || delivery.createdAt || now,
+536-          updated_at: now 
+537-        } as Delivery;
+538-        
+=== SUPPLY LIB ===
+// lib/stock-supply.ts
+import type { StockSupply, StockSupplyStatus, StockSupplyUnit } from '@/types';
+
+export const SUPPLY_STATUS_LABELS: Record<StockSupplyStatus, string> = {
+  solicitado: 'Solicitado',
+  em_compra: 'Em compra',
+  recebido: 'Recebido',
+  conferido: 'Conferido',
+};
+
+export const SUPPLY_UNIT_LABELS: Record<StockSupplyUnit, string> = {
+  un: 'Unidade', kg: 'Quilo', g: 'Grama', l: 'Litro', ml: 'Mililitro',
+  cx: 'Caixa', pct: 'Pacote', fardo: 'Fardo',
+};
+
+export const supplyDate = (item: Pick<StockSupply, 'occurred_at' | 'created_at'>) => {
+  const date = new Date(item.occurred_at || item.created_at);
+  return Number.isNaN(date.getTime()) ? new Date(0) : date;
+};
+
+export const supplyTotal = (item: Pick<StockSupply, 'items' | 'total_amount'>) => {
+  const itemTotal = item.items.reduce((sum, current) => sum + (current.total_price || 0), 0);
+  return Number((item.total_amount || itemTotal).toFixed(2));
+};
+
+export const money = (value = 0) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+export function buildStockSupplyMetrics(items: StockSupply[]) {
+  return {
+    count: items.length,
+    totalAmount: Number(items.reduce((sum, item) => sum + supplyTotal(item), 0).toFixed(2)),
+    itemCount: items.reduce((sum, item) => sum + item.items.length, 0),
+    pendingCount: items.filter((item) => item.status === 'solicitado' || item.status === 'em_compra').length,
+    uncheckedCount: items.filter((item) => item.status === 'recebido').length,
+  };
+}
+=== SUPPLY COMPONENTS ===
+components/stock-supplies/StockSupplyForm.tsx
+// components/stock-supplies/StockSupplyForm.tsx
+'use client';
+
+import { useMemo, useState } from 'react';
+import { PackagePlus, Plus, Save, Trash2, UserRound } from 'lucide-react';
+import type { PaymentMethod, StockSupply, StockSupplyItem, StockSupplyStatus, StockSupplyUnit } from '@/types';
+import { SUPPLY_STATUS_LABELS, SUPPLY_UNIT_LABELS, supplyTotal } from '@/lib/stock-supply';
+
+export type StockSupplyFormValue = Omit<StockSupply, 'id' | 'created_at' | 'updated_at'>;
+type DraftItem = StockSupplyItem & { quantity_text: string; unit_price_text: string };
+
+const parseMoney = (value: string) => {
+  const normalized = value.trim().replace(/\./g, '').replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+const decimal = (value?: number) => value ? String(value).replace('.', ',') : '';
+const newItem = (): DraftItem => ({ id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: '', quantity: 1, unit: 'un', quantity_text: '1', unit_price_text: '' });
+const localDateTime = (value?: string) => {
+  const date = value ? new Date(value) : new Date();
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+
+export function StockSupplyForm({ initial, defaultBuyerName, busy, submitLabel, onSubmit }: {
+  initial?: StockSupply; defaultBuyerName?: string; busy?: boolean; submitLabel: string;
+  onSubmit: (value: StockSupplyFormValue) => Promise<void>;
+}) {
+  const [occurredAt, setOccurredAt] = useState(localDateTime(initial?.occurred_at));
+  const [status, setStatus] = useState<StockSupplyStatus>(initial?.status || 'solicitado');
+  const [supplier, setSupplier] = useState(initial?.supplier || '');
+  const [purchaserName, setPurchaserName] = useState(initial?.purchaser_name || defaultBuyerName || 'Álefe');
+  const [transport, setTransport] = useState(decimal(initial?.transport_amount));
+  const [otherCosts, setOtherCosts] = useState(decimal(initial?.other_costs));
+  const [payment, setPayment] = useState<PaymentMethod | ''>(initial?.payment_method || '');
+  const [observation, setObservation] = useState(initial?.observation || '');
+  const [items, setItems] = useState<DraftItem[]>(initial?.items?.length ? initial.items.map((item) => ({ ...item, quantity_text: decimal(item.quantity), unit_price_text: decimal(item.unit_price) })) : [newItem()]);
+
+  const normalizedItems = useMemo(() => items.map(({ quantity_text, unit_price_text, ...item }) => {
+    const quantity = parseMoney(quantity_text);
+    const unitPrice = parseMoney(unit_price_text);
+    return { ...item, name: item.name.trim(), quantity, unit_price: unitPrice || undefined, total_price: unitPrice ? Number((quantity * unitPrice).toFixed(2)) : undefined };
+  }).filter((item) => item.name && item.quantity > 0), [items]);
+  const productsAmount = supplyTotal({ items: normalizedItems, total_amount: 0 });
+  const transportAmount = parseMoney(transport);
+  const otherCostsAmount = parseMoney(otherCosts);
+  const total = Number((productsAmount + transportAmount + otherCostsAmount).toFixed(2));
+  const field = 'mt-2 h-13 w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-sm text-zinc-100 outline-none focus:border-amber-500';
+  const update = (id: string, data: Partial<DraftItem>) => setItems((current) => current.map((item) => item.id === id ? { ...item, ...data } : item));
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!occurredAt || !normalizedItems.length) return;
+    const now = new Date().toISOString();
+    await onSubmit({ occurred_at: new Date(occurredAt).toISOString(), status, items: normalizedItems, products_amount: productsAmount, transport_amount: transportAmount || undefined, other_costs: otherCostsAmount || undefined, total_amount: total, supplier: supplier.trim() || undefined, payment_method: payment || undefined, purchaser_name: purchaserName.trim() || undefined, observation: observation.trim() || undefined, received_at: status === 'recebido' || status === 'conferido' ? initial?.received_at || now : undefined, checked_at: status === 'conferido' ? initial?.checked_at || now : undefined });
+  };
+
+  return <form onSubmit={submit} className="flex flex-col gap-5 pb-28">
+    <section className="rounded-[26px] border border-amber-500/20 bg-amber-500/[.05] p-4">
+      <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><PackagePlus size={20}/></div><div><p className="font-heading text-sm font-black text-zinc-100">Compra para reposição</p><p className="mt-1 text-[10px] text-zinc-500">Registre produtos, transporte e custo real da compra.</p></div></div>
+    </section>
+    <label className="text-xs font-bold text-zinc-400">Data e hora<input type="datetime-local" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} className={field} required/></label>
+    <div><p className="mb-2 text-xs font-bold text-zinc-400">Situação</p><div className="grid grid-cols-2 gap-2">{(Object.entries(SUPPLY_STATUS_LABELS) as [StockSupplyStatus,string][]).map(([key,label]) => <button type="button" key={key} onClick={() => setStatus(key)} className={`rounded-xl border px-3 py-3 text-xs font-bold ${status===key?'border-amber-500/50 bg-amber-500/10 text-amber-400':'border-zinc-800 bg-zinc-900 text-zinc-500'}`}>{label}</button>)}</div></div>
+    <label className="text-xs font-bold text-zinc-400">Comprado por<div className="relative"><UserRound size={15} className="absolute left-4 top-1/2 mt-1 -translate-y-1/2 text-zinc-600"/><input value={purchaserName} onChange={(e)=>setPurchaserName(e.target.value)} placeholder="Nome de quem realizou a compra" className={`${field} pl-11`}/></div></label>
+    <label className="text-xs font-bold text-zinc-400">Fornecedor / local<input value={supplier} onChange={(e)=>setSupplier(e.target.value)} placeholder="Ex.: supermercado, distribuidora..." className={field}/></label>
+    <section className="space-y-3"><div className="flex items-center justify-between"><div><p className="text-xs font-black text-zinc-200">Itens do abastecimento*</p><p className="text-[10px] text-zinc-600">Adicione quantos produtos precisar.</p></div><button type="button" onClick={()=>setItems(c=>[...c,newItem()])} className="flex h-9 items-center gap-1 rounded-xl bg-amber-500/10 px-3 text-xs font-black text-amber-400"><Plus size={14}/>Item</button></div>
+      {items.map((item,index)=><article key={item.id} className="rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-4"><div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase text-zinc-600">Item {index+1}</p>{items.length>1&&<button type="button" onClick={()=>setItems(c=>c.filter(x=>x.id!==item.id))} className="text-red-400"><Trash2 size={15}/></button>}</div><input value={item.name} onChange={(e)=>update(item.id,{name:e.target.value})} placeholder="Nome do produto" className={field}/><div className="mt-3 grid grid-cols-3 gap-2"><input inputMode="decimal" value={item.quantity_text} onChange={(e)=>update(item.id,{quantity_text:e.target.value})} placeholder="Qtd." className={`${field} mt-0 px-3`}/><select value={item.unit} onChange={(e)=>update(item.id,{unit:e.target.value as StockSupplyUnit})} className={`${field} mt-0 px-2`}>{Object.entries(SUPPLY_UNIT_LABELS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select><input inputMode="decimal" value={item.unit_price_text} onChange={(e)=>update(item.id,{unit_price_text:e.target.value})} placeholder="R$/un" className={`${field} mt-0 px-3`}/></div></article>)}
+    </section>
+    <div className="grid grid-cols-2 gap-3"><label className="text-xs font-bold text-zinc-400">Uber / frete<input inputMode="decimal" value={transport} onChange={(e)=>setTransport(e.target.value)} placeholder="0,00" className={field}/></label><label className="text-xs font-bold text-zinc-400">Outros custos<input inputMode="decimal" value={otherCosts} onChange={(e)=>setOtherCosts(e.target.value)} placeholder="0,00" className={field}/></label></div>
+    <div className="grid grid-cols-2 gap-3"><label className="text-xs font-bold text-zinc-400">Pagamento<select value={payment} onChange={(e)=>setPayment(e.target.value as PaymentMethod|'')} className={field}><option value="">Não informado</option><option value="dinheiro">Dinheiro</option><option value="pix">Pix</option><option value="cartao">Cartão</option></select></label><div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[.05] p-4"><p className="text-[10px] font-bold text-zinc-500">Produtos + transporte</p><p className="mt-2 font-heading text-xl font-black text-emerald-400">{total.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</p></div></div>
+    <label className="text-xs font-bold text-zinc-400">Observação<textarea value={observation} onChange={(e)=>setObservation(e.target.value)} rows={3} className="mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-100 outline-none focus:border-amber-500" placeholder="Faltas, substituições, comprovante..."/></label>
+    <button disabled={busy||!normalizedItems.length} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-amber-500 font-black text-zinc-950 disabled:opacity-40"><Save size={18}/>{busy?'Salvando...':submitLabel}</button>
+  </form>;
+}
+=== SUPPLY PAGES ===
+app/abastecimentos/novo/page.tsx
+// app/abastecimentos/novo/page.tsx
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { StockSupplyForm, type StockSupplyFormValue } from '@/components/stock-supplies/StockSupplyForm';
+import { useAppStore } from '@/store/useAppStore';
+import type { StockSupply } from '@/types';
+
+export default function NewStockSupplyPage() {
+  const router = useRouter();
+  const user = useAppStore((state) => state.user);
+  const addStockSupply = useAppStore((state) => state.addStockSupply);
+  const [busy, setBusy] = useState(false);
+  const save = async (value: StockSupplyFormValue) => {
+    setBusy(true);
+    try {
+      const now = new Date().toISOString();
+      const supply: StockSupply = { id: `supply-${Date.now()}`, ...value, created_at: now, updated_at: now };
+      await addStockSupply(supply);
+      toast.success('Abastecimento de estoque registrado.');
+      router.replace('/abastecimentos');
+    } catch (error) {
+      console.error(error); toast.error('Não foi possível registrar o abastecimento.');
+    } finally { setBusy(false); }
+  };
+  return <div><PageHeader title="Nova compra" subtitle="Reposição de produtos da loja" to="/abastecimentos"/><StockSupplyForm defaultBuyerName={user?.displayName || 'Álefe'} busy={busy} submitLabel="Registrar compra" onSubmit={save}/></div>;
+}
+app/abastecimentos/editar/page.tsx
+// app/abastecimentos/editar/page.tsx
+'use client';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { StockSupplyForm, type StockSupplyFormValue } from '@/components/stock-supplies/StockSupplyForm';
+import { useAppStore } from '@/store/useAppStore';
+
+function Content() {
+  const router = useRouter(); const id = useSearchParams().get('id');
+  const supplies = useAppStore((state) => state.stockSupplies); const user = useAppStore((state) => state.user);
+  const updateStockSupply = useAppStore((state) => state.updateStockSupply); const supply = supplies.find((item) => item.id === id);
+  const [busy, setBusy] = useState(false);
+  if (!supply) return <PageHeader title="Abastecimento não encontrado" to="/abastecimentos"/>;
+  const save = async (value: StockSupplyFormValue) => { setBusy(true); try { await updateStockSupply(supply.id, value); toast.success('Abastecimento atualizado.'); router.replace(`/abastecimentos/detalhes?id=${supply.id}`); } catch (error) { console.error(error); toast.error('Não foi possível salvar.'); } finally { setBusy(false); } };
+  return <div><PageHeader title="Editar compra" subtitle={`${supply.items.length} item${supply.items.length === 1 ? '' : 's'}`} to={`/abastecimentos/detalhes?id=${supply.id}`}/><StockSupplyForm initial={supply} defaultBuyerName={user?.displayName || 'Álefe'} busy={busy} submitLabel="Salvar alterações" onSubmit={save}/></div>;
+}
+export default function EditStockSupplyPage() { return <Suspense fallback={<p className="py-20 text-center text-zinc-500">Carregando...</p>}><Content/></Suspense>; }
+app/abastecimentos/detalhes/page.tsx
+// app/abastecimentos/detalhes/page.tsx
+'use client';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { CalendarDays, CheckCircle2, Edit3, Store, Trash2, UserRound, Wallet } from 'lucide-react';
+import { toast } from 'sonner';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { useAppStore } from '@/store/useAppStore';
+import { money, SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';
+
+function Content() {
+  const router = useRouter(); const id = useSearchParams().get('id');
+  const supply = useAppStore((state) => state.stockSupplies.find((item) => item.id === id));
+  const update = useAppStore((state) => state.updateStockSupply); const remove = useAppStore((state) => state.deleteStockSupply);
+  const [busy, setBusy] = useState(false);
+  if (!supply) return <PageHeader title="Abastecimento não encontrado" to="/abastecimentos"/>;
+  const advance = async () => {
+    const next = supply.status === 'solicitado' ? 'em_compra' : supply.status === 'em_compra' ? 'recebido' : supply.status === 'recebido' ? 'conferido' : null;
+    if (!next) return; setBusy(true);
+    try { const now = new Date().toISOString(); await update(supply.id, { status: next, received_at: next === 'recebido' ? now : supply.received_at, checked_at: next === 'conferido' ? now : supply.checked_at }); toast.success(`Status: ${SUPPLY_STATUS_LABELS[next]}.`); } finally { setBusy(false); }
+  };
+  const deleteRecord = async () => { if (!confirm('Excluir este abastecimento permanentemente?')) return; setBusy(true); try { await remove(supply.id); toast.success('Registro excluído.'); router.replace('/abastecimentos'); } catch { toast.error('Não foi possível excluir.'); setBusy(false); } };
+  return <div className="pb-28">
+    <PageHeader title="Detalhes do abastecimento" subtitle={SUPPLY_STATUS_LABELS[supply.status]} to="/abastecimentos"/>
+    <section className="rounded-[28px] border border-amber-500/20 bg-amber-500/[.05] p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-amber-400">Total registrado</p><p className="mt-2 font-heading text-3xl font-black text-zinc-100">{money(supplyTotal(supply))}</p></div><span className="rounded-full bg-amber-500/10 px-3 py-2 text-[10px] font-black text-amber-400">{SUPPLY_STATUS_LABELS[supply.status]}</span></div><div className="mt-5 grid grid-cols-2 gap-3 text-xs text-zinc-400"><p className="flex gap-2"><UserRound size={15}/>{supply.purchaser_name || 'Comprador não informado'}</p><p className="flex gap-2"><Store size={15}/>{supply.supplier || 'Fornecedor não informado'}</p><p className="flex gap-2"><CalendarDays size={15}/>{new Date(supply.occurred_at).toLocaleString('pt-BR')}</p><p className="flex gap-2"><Wallet size={15}/>{supply.payment_method || 'Pagamento não informado'}</p></div></section>
+    <section className="mt-5 space-y-3"><h2 className="font-heading text-base font-black text-zinc-100">Itens ({supply.items.length})</h2>{supply.items.map((item) => <article key={item.id} className="rounded-[22px] border border-zinc-800 bg-zinc-900/50 p-4"><div className="flex justify-between gap-3"><div><p className="font-black text-zinc-100">{item.name}</p><p className="mt-1 text-xs text-zinc-500">{item.quantity.toLocaleString('pt-BR')} {item.unit}</p></div><p className="font-black text-emerald-400">{item.total_price ? money(item.total_price) : 'Sem preço'}</p></div></article>)}</section>
+    <section className="mt-5 grid grid-cols-3 gap-2"><div className="rounded-2xl bg-zinc-900/50 p-3"><p className="text-[9px] text-zinc-600">Produtos</p><p className="mt-1 text-xs font-black text-zinc-200">{money(supply.products_amount)}</p></div><div className="rounded-2xl bg-zinc-900/50 p-3"><p className="text-[9px] text-zinc-600">Uber / frete</p><p className="mt-1 text-xs font-black text-zinc-200">{money(supply.transport_amount || 0)}</p></div><div className="rounded-2xl bg-zinc-900/50 p-3"><p className="text-[9px] text-zinc-600">Outros</p><p className="mt-1 text-xs font-black text-zinc-200">{money(supply.other_costs || 0)}</p></div></section>
+    {supply.observation && <section className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-4"><p className="text-[10px] font-black uppercase text-zinc-600">Observação</p><p className="mt-2 text-sm text-zinc-300">{supply.observation}</p></section>}
+    <div className="mt-6 grid grid-cols-2 gap-2"><button onClick={() => router.push(`/abastecimentos/editar?id=${supply.id}`)} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-zinc-800 text-sm font-bold text-zinc-200"><Edit3 size={16}/>Editar</button><button onClick={deleteRecord} disabled={busy} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-red-500/20 text-sm font-bold text-red-400"><Trash2 size={16}/>Excluir</button></div>
+    {supply.status !== 'conferido' && <button onClick={advance} disabled={busy} className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950"><CheckCircle2 size={18}/>{supply.status === 'recebido' ? 'Marcar como conferido' : supply.status === 'em_compra' ? 'Marcar como recebido' : 'Iniciar compra'}</button>}
+  </div>;
+}
+export default function StockSupplyDetailsPage() { return <Suspense fallback={<p className="py-20 text-center text-zinc-500">Carregando...</p>}><Content/></Suspense>; }
+app/abastecimentos/page.tsx
+// app/abastecimentos/page.tsx
+'use client';
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, PackageOpen, Plus, Search, UserRound, Wallet } from 'lucide-react';
+import { useAppStore } from '@/store/useAppStore';
+import { buildStockSupplyMetrics, money, SUPPLY_STATUS_LABELS, supplyDate, supplyTotal } from '@/lib/stock-supply';
+import type { StockSupplyStatus } from '@/types';
+
+const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+export default function StockSuppliesPage() {
+  const router = useRouter(); const supplies = useAppStore((state) => state.stockSupplies);
+  const [month, setMonth] = useState(() => new Date()); const [query, setQuery] = useState(''); const [status, setStatus] = useState<StockSupplyStatus | 'todos'>('todos');
+  const monthly = useMemo(() => supplies.filter((item) => monthKey(supplyDate(item)) === monthKey(month)), [month, supplies]);
+  const filtered = useMemo(() => monthly.filter((item) => { const haystack = `${item.supplier || ''} ${item.purchaser_name || ''} ${item.items.map((x) => x.name).join(' ')}`.toLocaleLowerCase('pt-BR'); return (status === 'todos' || item.status === status) && haystack.includes(query.trim().toLocaleLowerCase('pt-BR')); }), [monthly, query, status]);
+  const metrics = useMemo(() => buildStockSupplyMetrics(monthly), [monthly]);
+  const moveMonth = (amount: number) => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
+  return <div className="flex flex-col gap-5 pb-28">
+    <header className="flex items-center justify-between"><div className="flex items-center gap-3"><button onClick={() => router.replace('/loja')} className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400"><ChevronLeft size={21}/></button><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-amber-400">Estoque operacional</p><h1 className="font-heading text-2xl font-black text-zinc-100">Abastecimentos</h1></div></div><button onClick={() => router.push('/abastecimentos/novo')} className="flex h-12 items-center gap-2 rounded-2xl bg-amber-500 px-4 font-black text-zinc-950"><Plus size={18}/>Novo</button></header>
+    <section className="flex items-center justify-between rounded-[26px] border border-zinc-800 bg-zinc-900/50 p-3"><button onClick={() => moveMonth(-1)} className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400"><ChevronLeft size={18}/></button><div className="text-center"><CalendarDays size={16} className="mx-auto text-amber-400"/><p className="mt-1 font-black capitalize text-zinc-100">{month.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</p></div><button onClick={() => moveMonth(1)} className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400"><ChevronRight size={18}/></button></section>
+    <section className="grid grid-cols-2 gap-3"><Metric icon={Wallet} label="Gasto no mês" value={money(metrics.totalAmount)}/><Metric icon={PackageOpen} label="Itens registrados" value={String(metrics.itemCount)}/><Metric icon={UserRound} label="Abastecimentos" value={String(metrics.count)}/><Metric icon={CheckCircle2} label="Aguardando ação" value={String(metrics.pendingCount + metrics.uncheckedCount)}/></section>
+    <div className="relative"><Search size={19} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600"/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Buscar produto, fornecedor ou comprador" className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-12 pr-4 text-sm text-zinc-100 outline-none focus:border-amber-500"/></div>
+    <div className="flex gap-2 overflow-x-auto pb-1">{(['todos','solicitado','em_compra','recebido','conferido'] as const).map((key)=><button key={key} onClick={()=>setStatus(key)} className={`shrink-0 rounded-xl border px-4 py-2 text-xs font-bold ${status===key?'border-amber-500/40 bg-amber-500/10 text-amber-400':'border-zinc-800 bg-zinc-900 text-zinc-500'}`}>{key==='todos'?'Todos':SUPPLY_STATUS_LABELS[key]}</button>)}</div>
+    <section className="space-y-3">{filtered.map((item)=><button key={item.id} onClick={()=>router.push(`/abastecimentos/detalhes?id=${item.id}`)} className="w-full rounded-[26px] border border-zinc-800 bg-zinc-900/50 p-5 text-left active:scale-[.99]"><div className="flex items-start justify-between gap-3"><div><span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[9px] font-black uppercase text-amber-400">{SUPPLY_STATUS_LABELS[item.status]}</span><p className="mt-3 font-heading text-lg font-black text-zinc-100">{item.supplier || 'Abastecimento de estoque'}</p><p className="mt-1 text-xs text-zinc-500">{item.items.slice(0,3).map(x=>x.name).join(' • ')}{item.items.length>3?` +${item.items.length-3}`:''}</p></div><p className="font-black text-emerald-400">{money(supplyTotal(item))}</p></div><div className="mt-4 flex items-center justify-between border-t border-zinc-800/70 pt-3 text-[10px] text-zinc-500"><span className="flex items-center gap-1"><UserRound size={12}/>{item.purchaser_name || 'Comprador não informado'}</span><span>{supplyDate(item).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span></div></button>)}{!filtered.length&&<div className="rounded-[28px] border border-dashed border-zinc-800 py-14 text-center"><PackageOpen size={34} className="mx-auto text-zinc-700"/><p className="mt-3 text-sm font-bold text-zinc-400">Nenhum abastecimento encontrado</p><p className="mt-1 text-xs text-zinc-600">Registre os itens trazidos para o estoque.</p></div>}</section>
+  </div>;
+}
+function Metric({label,value,icon:Icon}:{label:string;value:string;icon:typeof Wallet}){return <div className="rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-4"><Icon size={15} className="text-amber-400"/><p className="mt-3 truncate font-heading text-lg font-black text-zinc-100">{value}</p><p className="mt-1 text-[10px] font-bold text-zinc-600">{label}</p></div>}
+=== LOJA ===
+                  ? `${activeMotoboys.length} motoboy${activeMotoboys.length === 1 ? '' : 's'} ativo${activeMotoboys.length === 1 ? '' : 's'} agora`
+                  : 'Toque para iniciar a operação manualmente'}
+              </p>
+            </div>
+          </div>
+          <div className={`h-3 w-3 shrink-0 rounded-full ${isStoreOpen ? 'bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,.75)]' : 'bg-zinc-700'}`} />
+        </button>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Agora</p>
+            <h2 className="font-heading text-base font-black text-zinc-100">Central de operação</h2>
+          </div>
+          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] font-bold text-zinc-500">
+            {dashboardData.formattedDateLabel}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[26px] border border-amber-500/25 bg-gradient-to-br from-amber-500/[.09] to-zinc-900/40 p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Entregas</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.totalEntregas} registradas no período</p>
+          </button>
+
+          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[26px] border border-sky-500/25 bg-gradient-to-br from-sky-500/[.09] to-zinc-900/40 p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Rotas</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'} no período</p>
+          </button>
+
+          <button onClick={() => router.push('/motoboys')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-400"><Users size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Equipe</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{activeMotoboys.length} ativo{activeMotoboys.length === 1 ? '' : 's'} na escala</p>
+          </button>
+
+          <button onClick={() => router.push('/clientes')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400"><Users size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Clientes</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Base, endereços e histórico</p>
+          </button>
+
+          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[26px] border border-amber-500/20 bg-amber-500/[.045] p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Abastecimentos</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Compras, reposições, transporte e conferência</p>
+          </button>
+        </div>
+      </section>
+
+      <OperationalIntelligencePanel />
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Leitura do período</p>
+            <h2 className="font-heading text-base font-black text-zinc-100">Resumo operacional</h2>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToPreviousDay(); }}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-500 active:scale-95"
+              aria-label="Dia anterior"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              onClick={() => setIsCalendarOpen(true)}
+              className="min-w-[82px] rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-[10px] font-black text-zinc-300 active:scale-95"
+            >
+              {dashboardData.formattedDateLabel}
+            </button>
+            <button
+              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToNextDay(); }}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-500 active:scale-95"
+              aria-label="Próximo dia"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-900/45">
+          <button
+            onClick={() => setIsLogisticsModalOpen(true)}
+            className="flex w-full items-center justify-between gap-4 border-b border-zinc-800/80 p-4 text-left active:bg-zinc-900"
+          >
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wide text-sky-500">Operação</p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-heading text-2xl font-black text-zinc-50">{dashboardData.totalEntregas}</span>
+                <span className="text-[11px] font-bold text-zinc-500">entregas</span>
+              </div>
+              <p className="mt-1 text-[10px] text-zinc-600">
+                {dashboardData.completedDeliveries} concluída{dashboardData.completedDeliveries === 1 ? '' : 's'} · {dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'}
+              </p>
+            </div>
+            <ChevronRight size={18} className="text-zinc-700" />
+          </button>
+
+          <button
+            onClick={() => setIsRevenueModalOpen(true)}
+=== PACKAGE ===
+{
+  "name": "dfl-entregas",
+  "version": "0.4.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/geolocation": "^6.1.1",
+    "@capacitor/haptics": "^6.0.0",
+    "@capacitor/local-notifications": "^6.0.0",
+    "@capacitor/push-notifications": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0",
+    "@codetrix-studio/capacitor-google-auth": "latest",
+    "clsx": "^2.1.1",
+    "firebase": "^10.12.2",
+    "lucide-react": "^0.436.0",
+    "next": "14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7",
+    "sonner": "^1.5.0",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "@types/google.maps": "^3.58.1",
+    "@types/node": "^20.14.15",
+    "@types/react": "^18.3.4",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.5",
+    "postcss": "^8.4.41",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.5.4"
+  }
+}

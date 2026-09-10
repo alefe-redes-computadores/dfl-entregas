@@ -1,0 +1,125 @@
+===== FILE: lib/stock-supply.ts =====
+// lib/stock-supply.ts
+import type { StockSupply, StockSupplyStatus, StockSupplyUnit } from '@/types';
+
+export const SUPPLY_STATUS_LABELS: Record<StockSupplyStatus, string> = {
+  solicitado: 'Solicitado',
+  em_compra: 'Em compra',
+  recebido: 'Recebido',
+  conferido: 'Conferido',
+};
+
+export const SUPPLY_UNIT_LABELS: Record<StockSupplyUnit, string> = {
+  un: 'Unidade', kg: 'Quilo', g: 'Grama', l: 'Litro', ml: 'Mililitro',
+  cx: 'Caixa', pct: 'Pacote', fardo: 'Fardo',
+};
+
+export const supplyDate = (item: Pick<StockSupply, 'occurred_at' | 'created_at'>) => {
+  const date = new Date(item.occurred_at || item.created_at);
+  return Number.isNaN(date.getTime()) ? new Date(0) : date;
+};
+
+export const supplyTotal = (item: Pick<StockSupply, 'items' | 'total_amount'>) => {
+  const itemTotal = item.items.reduce((sum, current) => sum + (current.total_price || 0), 0);
+  return Number((item.total_amount || itemTotal).toFixed(2));
+};
+
+export const money = (value = 0) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+export function buildStockSupplyMetrics(items: StockSupply[]) {
+  return {
+    count: items.length,
+    totalAmount: Number(items.reduce((sum, item) => sum + supplyTotal(item), 0).toFixed(2)),
+    itemCount: items.reduce((sum, item) => sum + item.items.length, 0),
+    pendingCount: items.filter((item) => item.status === 'solicitado' || item.status === 'em_compra').length,
+    uncheckedCount: items.filter((item) => item.status === 'recebido').length,
+  };
+}
+
+===== FILE: app/abastecimentos/novo/page.tsx =====
+// app/abastecimentos/novo/page.tsx
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { StockSupplyForm, type StockSupplyFormValue } from '@/components/stock-supplies/StockSupplyForm';
+import { useAppStore } from '@/store/useAppStore';
+import type { StockSupply } from '@/types';
+
+export default function NewStockSupplyPage() {
+  const router = useRouter();
+  const user = useAppStore((state) => state.user);
+  const addStockSupply = useAppStore((state) => state.addStockSupply);
+  const [busy, setBusy] = useState(false);
+  const save = async (value: StockSupplyFormValue) => {
+    setBusy(true);
+    try {
+      const now = new Date().toISOString();
+      const supply: StockSupply = { id: `supply-${Date.now()}`, ...value, created_at: now, updated_at: now };
+      await addStockSupply(supply);
+      toast.success('Abastecimento de estoque registrado.');
+      router.replace('/abastecimentos');
+    } catch (error) {
+      console.error(error); toast.error('Não foi possível registrar o abastecimento.');
+    } finally { setBusy(false); }
+  };
+  return <div><PageHeader title="Nova compra" subtitle="Reposição de produtos da loja" to="/abastecimentos"/><StockSupplyForm defaultBuyerName={user?.displayName || 'Álefe'} busy={busy} submitLabel="Registrar compra" onSubmit={save}/></div>;
+}
+
+===== FILE: app/abastecimentos/editar/page.tsx =====
+// app/abastecimentos/editar/page.tsx
+'use client';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { StockSupplyForm, type StockSupplyFormValue } from '@/components/stock-supplies/StockSupplyForm';
+import { useAppStore } from '@/store/useAppStore';
+
+function Content() {
+  const router = useRouter(); const id = useSearchParams().get('id');
+  const supplies = useAppStore((state) => state.stockSupplies); const user = useAppStore((state) => state.user);
+  const updateStockSupply = useAppStore((state) => state.updateStockSupply); const supply = supplies.find((item) => item.id === id);
+  const [busy, setBusy] = useState(false);
+  if (!supply) return <PageHeader title="Abastecimento não encontrado" to="/abastecimentos"/>;
+  const save = async (value: StockSupplyFormValue) => { setBusy(true); try { await updateStockSupply(supply.id, value); toast.success('Abastecimento atualizado.'); router.replace(`/abastecimentos/detalhes?id=${supply.id}`); } catch (error) { console.error(error); toast.error('Não foi possível salvar.'); } finally { setBusy(false); } };
+  return <div><PageHeader title="Editar compra" subtitle={`${supply.items.length} item${supply.items.length === 1 ? '' : 's'}`} to={`/abastecimentos/detalhes?id=${supply.id}`}/><StockSupplyForm initial={supply} defaultBuyerName={user?.displayName || 'Álefe'} busy={busy} submitLabel="Salvar alterações" onSubmit={save}/></div>;
+}
+export default function EditStockSupplyPage() { return <Suspense fallback={<p className="py-20 text-center text-zinc-500">Carregando...</p>}><Content/></Suspense>; }
+
+===== FILE: app/abastecimentos/detalhes/page.tsx =====
+// app/abastecimentos/detalhes/page.tsx
+'use client';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { CalendarDays, CheckCircle2, Edit3, Store, Trash2, UserRound, Wallet } from 'lucide-react';
+import { toast } from 'sonner';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { useAppStore } from '@/store/useAppStore';
+import { money, SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';
+
+function Content() {
+  const router = useRouter(); const id = useSearchParams().get('id');
+  const supply = useAppStore((state) => state.stockSupplies.find((item) => item.id === id));
+  const update = useAppStore((state) => state.updateStockSupply); const remove = useAppStore((state) => state.deleteStockSupply);
+  const [busy, setBusy] = useState(false);
+  if (!supply) return <PageHeader title="Abastecimento não encontrado" to="/abastecimentos"/>;
+  const advance = async () => {
+    const next = supply.status === 'solicitado' ? 'em_compra' : supply.status === 'em_compra' ? 'recebido' : supply.status === 'recebido' ? 'conferido' : null;
+    if (!next) return; setBusy(true);
+    try { const now = new Date().toISOString(); await update(supply.id, { status: next, received_at: next === 'recebido' ? now : supply.received_at, checked_at: next === 'conferido' ? now : supply.checked_at }); toast.success(`Status: ${SUPPLY_STATUS_LABELS[next]}.`); } finally { setBusy(false); }
+  };
+  const deleteRecord = async () => { if (!confirm('Excluir este abastecimento permanentemente?')) return; setBusy(true); try { await remove(supply.id); toast.success('Registro excluído.'); router.replace('/abastecimentos'); } catch { toast.error('Não foi possível excluir.'); setBusy(false); } };
+  return <div className="pb-28">
+    <PageHeader title="Detalhes do abastecimento" subtitle={SUPPLY_STATUS_LABELS[supply.status]} to="/abastecimentos"/>
+    <section className="rounded-[28px] border border-amber-500/20 bg-amber-500/[.05] p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-amber-400">Total registrado</p><p className="mt-2 font-heading text-3xl font-black text-zinc-100">{money(supplyTotal(supply))}</p></div><span className="rounded-full bg-amber-500/10 px-3 py-2 text-[10px] font-black text-amber-400">{SUPPLY_STATUS_LABELS[supply.status]}</span></div><div className="mt-5 grid grid-cols-2 gap-3 text-xs text-zinc-400"><p className="flex gap-2"><UserRound size={15}/>{supply.purchaser_name || 'Comprador não informado'}</p><p className="flex gap-2"><Store size={15}/>{supply.supplier || 'Fornecedor não informado'}</p><p className="flex gap-2"><CalendarDays size={15}/>{new Date(supply.occurred_at).toLocaleString('pt-BR')}</p><p className="flex gap-2"><Wallet size={15}/>{supply.payment_method || 'Pagamento não informado'}</p></div></section>
+    <section className="mt-5 space-y-3"><h2 className="font-heading text-base font-black text-zinc-100">Itens ({supply.items.length})</h2>{supply.items.map((item) => <article key={item.id} className="rounded-[22px] border border-zinc-800 bg-zinc-900/50 p-4"><div className="flex justify-between gap-3"><div><p className="font-black text-zinc-100">{item.name}</p><p className="mt-1 text-xs text-zinc-500">{item.quantity.toLocaleString('pt-BR')} {item.unit}</p></div><p className="font-black text-emerald-400">{item.total_price ? money(item.total_price) : 'Sem preço'}</p></div></article>)}</section>
+    <section className="mt-5 grid grid-cols-3 gap-2"><div className="rounded-2xl bg-zinc-900/50 p-3"><p className="text-[9px] text-zinc-600">Produtos</p><p className="mt-1 text-xs font-black text-zinc-200">{money(supply.products_amount)}</p></div><div className="rounded-2xl bg-zinc-900/50 p-3"><p className="text-[9px] text-zinc-600">Uber / frete</p><p className="mt-1 text-xs font-black text-zinc-200">{money(supply.transport_amount || 0)}</p></div><div className="rounded-2xl bg-zinc-900/50 p-3"><p className="text-[9px] text-zinc-600">Outros</p><p className="mt-1 text-xs font-black text-zinc-200">{money(supply.other_costs || 0)}</p></div></section>
+    {supply.observation && <section className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-4"><p className="text-[10px] font-black uppercase text-zinc-600">Observação</p><p className="mt-2 text-sm text-zinc-300">{supply.observation}</p></section>}
+    <div className="mt-6 grid grid-cols-2 gap-2"><button onClick={() => router.push(`/abastecimentos/editar?id=${supply.id}`)} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-zinc-800 text-sm font-bold text-zinc-200"><Edit3 size={16}/>Editar</button><button onClick={deleteRecord} disabled={busy} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-red-500/20 text-sm font-bold text-red-400"><Trash2 size={16}/>Excluir</button></div>
+    {supply.status !== 'conferido' && <button onClick={advance} disabled={busy} className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950"><CheckCircle2 size={18}/>{supply.status === 'recebido' ? 'Marcar como conferido' : supply.status === 'em_compra' ? 'Marcar como recebido' : 'Iniciar compra'}</button>}
+  </div>;
+}
+export default function StockSupplyDetailsPage() { return <Suspense fallback={<p className="py-20 text-center text-zinc-500">Carregando...</p>}><Content/></Suspense>; }
+

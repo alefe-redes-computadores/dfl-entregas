@@ -103,10 +103,34 @@ interface AppState {
   findOrCreateCustomer: (name: string, details?: { address?: string; phone?: string; mapsLink?: string; confirmationCode?: string; observation?: string; origin?: OrderOrigin; }) => Promise<string>;
 }
 
-const sanitizeForFirebase = (obj: any) => {
-  const sanitized = Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
-  delete sanitized.is_expanded;
-  return sanitized;
+const sanitizeForFirebase = (value: any): any => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeForFirebase(item))
+      .filter((item) => item !== undefined);
+  }
+
+  if (typeof value === 'object') {
+    const proto = Object.getPrototypeOf(value);
+
+    // Preserva Timestamp, FieldValue/deleteField e outras instâncias especiais
+    // do Firebase em vez de desmontá-las como objetos comuns.
+    if (proto !== Object.prototype && proto !== null) return value;
+
+    const sanitized = Object.fromEntries(
+      Object.entries(value)
+        .filter(([key, item]) => key !== 'is_expanded' && item !== undefined)
+        .map(([key, item]) => [key, sanitizeForFirebase(item)])
+        .filter(([, item]) => item !== undefined),
+    );
+
+    return sanitized;
+  }
+
+  return value;
 };
 
 // Gerador do schedule padrão caso o usuário seja novo

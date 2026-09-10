@@ -1,0 +1,2076 @@
+=== COMMIT ===
+f339a0b
+=== STORE ===
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField } from 'firebase/firestore';
+import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
+import { db, auth, googleProvider } from '@/lib/firebase';
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
+import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
+import { fuelingDate } from '@/lib/fueling-analytics';
+
+interface AppState {
+  user: FirebaseUser | null;
+  authLoaded: boolean;
+  hasHydrated: boolean;
+  routes: Route[];
+  deliveries: (Delivery & { is_expanded?: boolean })[];
+  customers: Customer[];
+  motoboys: Motoboy[];
+  fuelings: Fueling[];
+  stockSupplies: StockSupply[];
+  ifoodPendingConfirmations: IfoodPendingConfirmation[];
+  selectedDate: Date;
+  isSyncing: boolean;
+  syncError: boolean;
+  isPrivacyMode: boolean; 
+  routeAlertsEnabled: boolean;
+  theme: 'dark' | 'light' | 'system';
+  storeSettings: {
+    isOpen: boolean;
+    openingTime: string; // Legado
+    closingTime: string; // Legado
+    activeDays: number[]; // Legado
+    alertsEnabled: boolean;
+    storeAddress?: string;
+    // 🔥 NOVOS CAMPOS DE EXPEDIENTE AVANÇADO
+    schedule?: Record<number, DaySchedule>;
+    pauses?: StorePause[];
+    holidaysOverrides?: Record<string, HolidayOverride>;
+  };
+  setHasHydrated: (value: boolean) => void;
+  togglePrivacyMode: () => void; 
+  setRouteAlertsEnabled: (enabled: boolean) => void; 
+  setTheme: (theme: 'dark' | 'light' | 'system') => void;
+  updateStoreSettings: (settings: Partial<AppState['storeSettings']>) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+  initData: () => Promise<void>;
+  goToPreviousDay: () => void;
+  goToNextDay: () => void;
+  getDeliveriesByRoute: (routeId: string) => Delivery[];
+  getCustomerById: (customerId?: string) => Customer | undefined;
+  addRoute: (route: Route) => Promise<void>;
+  updateRoute: (routeId: string, data: Partial<Route>) => Promise<void>;
+  startRoute: (routeId: string) => Promise<void>; 
+  deleteRoute: (routeId: string) => Promise<void>;
+  addDelivery: (delivery: Delivery) => Promise<void>;
+  updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
+  deleteDelivery: (id: string) => Promise<void>;
+  closeRoute: (routeId: string) => Promise<void>;
+  reopenRoute: (routeId: string) => Promise<void>;
+  reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
+  moveDeliveryToIndex: (routeId: string, deliveryId: string, targetIndex: number) => Promise<void>;
+  setDeliveryOrder: (routeId: string, orderedPendingIds: string[]) => Promise<void>;
+  toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void;
+  addCustomer: (customer: Customer) => Promise<void>;
+  updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
+  addMotoboy: (motoboy: Motoboy) => Promise<void>;
+  updateMotoboy: (id: string, updatedData: Partial<Motoboy>) => Promise<void>;
+  deleteMotoboy: (id: string) => Promise<void>;
+  addFueling: (fueling: Fueling) => Promise<void>;
+  updateFueling: (id: string, updatedData: Partial<Fueling>) => Promise<void>;
+  deleteFueling: (id: string) => Promise<void>;
+  addStockSupply: (supply: StockSupply) => Promise<void>;
+  updateStockSupply: (id: string, updatedData: Partial<StockSupply>) => Promise<void>;
+  deleteStockSupply: (id: string) => Promise<void>;
+  addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
+  updateIfoodPendingConfirmation: (id: string, data: Partial<IfoodPendingConfirmation>) => Promise<void>;
+  deleteIfoodPendingConfirmation: (id: string) => Promise<void>;
+  findOrCreateCustomer: (name: string, details?: { address?: string; phone?: string; mapsLink?: string; confirmationCode?: string; observation?: string; origin?: OrderOrigin; }) => Promise<string>;
+}
+
+const sanitizeForFirebase = (obj: any) => {
+  const sanitized = Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
+  delete sanitized.is_expanded;
+  return sanitized;
+};
+
+// Gerador do schedule padrão caso o usuário seja novo
+const defaultSchedule = Object.fromEntries(
+  [0, 1, 2, 3, 4, 5, 6].map(day => [
+    day, 
+    { active: day !== 1, shifts: [{ start: '18:00', end: '23:59' }] }
+  ])
+);
+
+export const useAppStore = create<AppState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      authLoaded: false,
+      hasHydrated: false,
+      routes: [],
+      deliveries: [],
+      customers: [],
+      motoboys: [],
+      fuelings: [],
+      stockSupplies: [],
+      ifoodPendingConfirmations: [],
+      selectedDate: new Date(),
+      isSyncing: false,
+      syncError: false,
+      isPrivacyMode: false,
+      routeAlertsEnabled: false,
+      theme: 'system',
+      storeSettings: {
+        isOpen: false,
+        openingTime: '18:00',
+        closingTime: '23:59',
+        activeDays: [1, 2, 3, 4, 5, 6, 0],
+        alertsEnabled: false,
+        storeAddress: 'Patos de Minas, MG',
+        schedule: defaultSchedule,
+        pauses: [],
+        holidaysOverrides: {}
+      },
+
+      setHasHydrated: (value) => set({ hasHydrated: value }),
+      togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })), 
+      setRouteAlertsEnabled: (enabled) => set({ routeAlertsEnabled: enabled }), 
+      setTheme: (theme) => set({ theme }),
+      
+      updateStoreSettings: async (settings) => {
+        const currentSettings = get().storeSettings;
+        const newSettings = { ...currentSettings, ...settings };
+        
+        set({ storeSettings: newSettings });
+
+        try {
+          const safeData = sanitizeForFirebase(newSettings);
+          await setDoc(doc(db, 'store', 'store_settings'), safeData, { merge: true });
+        } catch (error) {
+          console.error('Erro ao salvar configurações:', error);
+        }
+      },
+
+      loginWithGoogle: async () => {
+        try {
+          if (Capacitor.isNativePlatform()) {
+            GoogleAuth.initialize({
+              clientId: '773967662232-pjodqa7f4c4drrhl80439amdp27u31ha.apps.googleusercontent.com',
+              scopes: ['profile', 'email'],
+              grantOfflineAccess: true,
+            });
+            const googleUser = await GoogleAuth.signIn();
+            const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+            await signInWithCredential(auth, credential);
+          } else {
+            await signInWithPopup(auth, googleProvider);
+          }
+        } catch (error: any) {
+          alert(`Erro no login: ${error?.message || 'Erro desconhecido'}`);
+        }
+      },
+
+      logout: async () => {
+        try {
+          await signOut(auth);
+          set({ routes: [], deliveries: [], customers: [], motoboys: [], fuelings: [], stockSupplies: [], user: null });
+        } catch (error) { console.error('Erro no logout:', error); }
+      },
+
+      initData: async () => {
+        if (!get().hasHydrated) return;
+        set({ isSyncing: true, syncError: false }); 
+        try {
+          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
+            getDocs(collection(db, 'routes')),
+            getDocs(collection(db, 'deliveries')),
+            getDocs(collection(db, 'customers')),
+            getDocs(collection(db, 'motoboys')),
+            getDocs(collection(db, 'fuelings')),
+            getDocs(collection(db, 'stock_supplies')),
+            getDocs(collection(db, 'ifood_pending_confirmations')),
+            getDoc(doc(db, 'store', 'store_settings'))
+          ]);
+
+          const fbRoutes = routesSnap.docs.map(d => d.data() as Route);
+          const fbDeliveries = deliveriesSnap.docs.map(d => d.data() as Delivery);
+          const fbCustomers = customersSnap.docs.map(d => d.data() as Customer);
+          const fbMotoboys = motoboysSnap.docs.map(d => d.data() as Motoboy);
+          const fbFuelings = fuelingsSnap.docs.map(d => d.data() as Fueling);
+          const fbStockSupplies = stockSuppliesSnap.docs.map(d => d.data() as StockSupply);
+          const fbPendingConfirmations = pendingConfirmationsSnap.docs.map(
+            d => d.data() as IfoodPendingConfirmation,
+          );
+          
+          const cloudStoreSettings = storeSnap.exists() ? storeSnap.data() : null;
+
+          const mergedRoutes = [...fbRoutes];
+          get().routes.forEach(local => {
+            if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
+          });
+
+          let mergedDeliveries: (Delivery & { is_expanded?: boolean })[] = [...fbDeliveries].map(fbDel => {
+            const localDel = get().deliveries.find(l => l.id === fbDel.id);
+            return {
+              ...fbDel,
+              is_expanded: localDel ? localDel.is_expanded : false
+            };
+          });
+
+          get().deliveries.forEach(local => {
+            if (!mergedDeliveries.some(m => m.id === local.id)) mergedDeliveries.push(local);
+          });
+          
+          mergedDeliveries.sort((a, b) => {
+             const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
+             const orderB = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
+             return orderA - orderB;
+          });
+
+          const mergedCustomers = [...fbCustomers];
+          get().customers.forEach(local => {
+            if (!mergedCustomers.some(m => m.id === local.id)) mergedCustomers.push(local);
+          });
+
+          const mergedMotoboys = [...fbMotoboys];
+          get().motoboys.forEach(local => {
+            if (!mergedMotoboys.some(m => m.id === local.id)) mergedMotoboys.push(local);
+          });
+
+          const mergedFuelings = [...fbFuelings];
+          get().fuelings.forEach(local => {
+            if (!mergedFuelings.some(item => item.id === local.id)) mergedFuelings.push(local);
+          });
+          mergedFuelings.sort(
+            (a, b) => fuelingDate(b).getTime() - fuelingDate(a).getTime(),
+          );
+
+          const mergedStockSupplies = [...fbStockSupplies];
+          get().stockSupplies.forEach(local => {
+            if (!mergedStockSupplies.some(item => item.id === local.id)) mergedStockSupplies.push(local);
+          });
+          mergedStockSupplies.sort(
+            (a, b) => new Date(b.occurred_at || b.created_at).getTime() - new Date(a.occurred_at || a.created_at).getTime(),
+          );
+
+          const mergedPendingConfirmations = [...fbPendingConfirmations];
+          get().ifoodPendingConfirmations.forEach(local => {
+            if (!mergedPendingConfirmations.some(item => item.id === local.id)) {
+              mergedPendingConfirmations.push(local);
+            }
+          });
+          mergedPendingConfirmations.sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+          );
+
+          const defaultSettings = get().storeSettings;
+          
+          // Tratamento para puxar dados novos e velhos sem quebrar
+          const finalStoreSettings = cloudStoreSettings 
+            ? { 
+                ...defaultSettings, 
+                ...cloudStoreSettings,
+                schedule: (cloudStoreSettings as any).schedule || defaultSettings.schedule,
+                pauses: (cloudStoreSettings as any).pauses || defaultSettings.pauses,
+                holidaysOverrides: (cloudStoreSettings as any).holidaysOverrides || defaultSettings.holidaysOverrides,
+              }
+            : defaultSettings;
+
+          set({
+            routes: mergedRoutes,
+            deliveries: mergedDeliveries,
+            customers: mergedCustomers,
+            motoboys: mergedMotoboys,
+            fuelings: mergedFuelings,
+            stockSupplies: mergedStockSupplies,
+            ifoodPendingConfirmations: mergedPendingConfirmations,
+            storeSettings: finalStoreSettings as any,
+            isSyncing: false,
+            syncError: false
+          });
+        } catch (error) {
+          console.error('Erro ao sincronizar:', error);
+          set({ isSyncing: false, syncError: true }); 
+        }
+      },
+
+      goToPreviousDay: () => set((state) => {
+        const prev = new Date(state.selectedDate);
+        prev.setDate(prev.getDate() - 1);
+        return { selectedDate: prev };
+      }),
+
+      goToNextDay: () => set((state) => {
+        const next = new Date(state.selectedDate);
+        next.setDate(next.getDate() + 1);
+        return { selectedDate: next };
+      }),
+
+      getDeliveriesByRoute: (routeId) => {
+        const state = get();
+        if (routeId === 'rota-resgate-recuperada') {
+          const selectedDateKey = dateKey(state.selectedDate);
+          const validRouteIds = new Set(state.routes.map((route) => route.id));
+
+          return state.deliveries.filter((delivery) => {
+            if (!isDeliveryFulfillment(delivery)) return false;
+
+            const value = deliveryDate(delivery);
+            const isSelectedDate =
+              Boolean(value) && dateKey(value) === selectedDateKey;
+            const hasValidRoute = Boolean(
+              delivery.route_id && validRouteIds.has(delivery.route_id),
+            );
+
+            return isSelectedDate && !hasValidRoute;
+          });
+        }
+        return state.deliveries.filter((d) => d.route_id === routeId);
+      },
+
+      getCustomerById: (customerId) => customerId ? get().customers.find((c) => c.id === customerId) : undefined,
+
+      addRoute: async (route) => {
+        const now = new Date().toISOString();
+        const routeWithTimestamp: Route = { ...route, created_at: route.created_at || now, updated_at: now };
+        set((state) => ({ routes: [routeWithTimestamp, ...state.routes] }));
+        try {
+          const safeData = sanitizeForFirebase(routeWithTimestamp);
+          await setDoc(doc(db, 'routes', route.id), safeData);
+        } catch (error) {
+          set((state) => ({ routes: state.routes.filter((r) => r.id !== route.id) }));
+          console.error(error);
+          throw error;
+        }
+      },
+
+      updateRoute: async (routeId, data) => {
+        const previousRoutes = get().routes;
+        const now = new Date().toISOString();
+        const nextData: Partial<Route> = { ...data, updated_at: now };
+        set((state) => ({ routes: state.routes.map((route) => route.id === routeId ? { ...route, ...nextData } : route) }));
+        try {
+          await updateDoc(doc(db, 'routes', routeId), sanitizeForFirebase(nextData));
+        } catch (error) {
+          set({ routes: previousRoutes });
+          console.error('Erro ao atualizar rota:', error);
+          throw error;
+        }
+      },
+
+      startRoute: async (routeId) => {
+        const previousRoutes = get().routes;
+        const current = previousRoutes.find((route) => route.id === routeId);
+        if (!current) throw new Error('Rota não encontrada.');
+        if (current.status === 'fechada') throw new Error('Reabra a rota antes de iniciá-la.');
+        if (!get().deliveries.some((delivery) => delivery.route_id === routeId)) {
+          throw new Error('Adicione pelo menos uma entrega antes de iniciar a rota.');
+        }
+        if (routeStartedAt(current)) return;
+        const now = new Date().toISOString();
+        set((state) => ({
+          routes: state.routes.map((r) => r.id === routeId ? { ...r, started_at: now, updated_at: now } : r),
+        }));
+        try {
+          await updateDoc(doc(db, 'routes', routeId), { started_at: now, departure_time: now, updated_at: now });
+        } catch (error) {
+          set({ routes: previousRoutes });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      deleteRoute: async (routeId) => {
+        const routeToDelete = get().routes.find((route) => route.id === routeId);
+        if (!routeToDelete) throw new Error('Rota não encontrada.');
+        if (routeToDelete.status === 'fechada' || routeStartedAt(routeToDelete)) {
+          throw new Error(
+            'Rotas iniciadas ou finalizadas fazem parte do histórico e não podem ser excluídas.',
+          );
+        }
+        if (get().deliveries.some((delivery) => delivery.route_id === routeId)) {
+          throw new Error('Não é possível excluir uma rota que possui entregas.');
+        }
+        const previousRoutes = get().routes;
+        set((state) => ({ routes: state.routes.filter((r) => r.id !== routeId) }));
+        try {
+          await deleteDoc(doc(db, 'routes', routeId));
+        } catch (error) {
+          set({ routes: previousRoutes });
+          console.error('Erro ao excluir rota:', error);
+          throw error;
+        }
+      },
+
+      addMotoboy: async (motoboy) => {
+        const dataWithTimestamp: Motoboy = { ...motoboy, updated_at: new Date().toISOString() };
+        set((state) => ({ motoboys: [...state.motoboys, dataWithTimestamp] }));
+        try {
+          const safeData = sanitizeForFirebase(dataWithTimestamp);
+          await setDoc(doc(db, 'motoboys', motoboy.id), safeData);
+        } catch (error) {
+          set((state) => ({ motoboys: state.motoboys.filter((item) => item.id !== motoboy.id) }));
+          console.error(error);
+          throw error;
+        }
+      },
+
+      updateMotoboy: async (id, updatedData) => {
+        const previousMotoboys = get().motoboys;
+        const dataWithTimestamp: Partial<Motoboy> = { ...updatedData, updated_at: new Date().toISOString() };
+        set((state) => ({
+          motoboys: state.motoboys.map((m) => m.id === id ? { ...m, ...dataWithTimestamp } as Motoboy : m)
+        }));
+        try {
+          const safeData = sanitizeForFirebase(dataWithTimestamp);
+          await updateDoc(doc(db, 'motoboys', id), safeData);
+        } catch (error) {
+          set({ motoboys: previousMotoboys });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      deleteMotoboy: async (id) => {
+        if (get().routes.some((route) => route.motoboy_id === id)) {
+          throw new Error('Não é possível excluir um motoboy que possui rotas. Desative o cadastro para preservar o histórico.');
+        }
+        const previousMotoboys = get().motoboys;
+        set((state) => ({ motoboys: state.motoboys.filter((m) => m.id !== id) }));
+        try {
+          await deleteDoc(doc(db, 'motoboys', id));
+        } catch (error) {
+          set({ motoboys: previousMotoboys });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      addFueling: async (fueling) => {
+        const now = new Date().toISOString();
+        const dataWithTimestamp: Fueling = {
+          ...fueling,
+          occurred_at: fueling.occurred_at || now,
+          created_at: fueling.created_at || now,
+          updated_at: now,
+        };
+        set((state) => ({ fuelings: [dataWithTimestamp, ...state.fuelings] }));
+        try {
+          await setDoc(doc(db, 'fuelings', fueling.id), sanitizeForFirebase(dataWithTimestamp));
+        } catch (error) {
+          set((state) => ({ fuelings: state.fuelings.filter((item) => item.id !== fueling.id) }));
+          console.error('Erro ao adicionar abastecimento:', error);
+          throw error;
+        }
+      },
+
+      updateFueling: async (id, updatedData) => {
+        const previousFuelings = get().fuelings;
+        const dataWithTimestamp: Partial<Fueling> = {
+          ...updatedData,
+          updated_at: new Date().toISOString(),
+        };
+        set((state) => ({
+          fuelings: state.fuelings.map((item) =>
+            item.id === id ? { ...item, ...dataWithTimestamp } as Fueling : item
+          ),
+        }));
+        try {
+          await updateDoc(doc(db, 'fuelings', id), sanitizeForFirebase(dataWithTimestamp));
+        } catch (error) {
+          set({ fuelings: previousFuelings });
+          console.error('Erro ao atualizar abastecimento:', error);
+          throw error;
+        }
+      },
+
+      deleteFueling: async (id) => {
+        const previousFuelings = get().fuelings;
+        set((state) => ({ fuelings: state.fuelings.filter((item) => item.id !== id) }));
+        try {
+          await deleteDoc(doc(db, 'fuelings', id));
+        } catch (error) {
+          set({ fuelings: previousFuelings });
+          console.error('Erro ao excluir abastecimento:', error);
+          throw error;
+        }
+      },
+
+      addStockSupply: async (supply) => {
+        const now = new Date().toISOString();
+        const next: StockSupply = { ...supply, created_at: supply.created_at || now, updated_at: now };
+        set((state) => ({ stockSupplies: [next, ...state.stockSupplies] }));
+        try {
+          await setDoc(doc(db, 'stock_supplies', next.id), sanitizeForFirebase(next));
+        } catch (error) {
+          set((state) => ({ stockSupplies: state.stockSupplies.filter((item) => item.id !== next.id) }));
+          throw error;
+        }
+      },
+
+      updateStockSupply: async (id, updatedData) => {
+        const previous = get().stockSupplies;
+        const next: Partial<StockSupply> = { ...updatedData, updated_at: new Date().toISOString() };
+        set((state) => ({ stockSupplies: state.stockSupplies.map((item) => item.id === id ? { ...item, ...next } : item) }));
+        try {
+          await updateDoc(doc(db, 'stock_supplies', id), sanitizeForFirebase(next));
+        } catch (error) {
+          set({ stockSupplies: previous });
+          throw error;
+        }
+      },
+
+      deleteStockSupply: async (id) => {
+        const previous = get().stockSupplies;
+        set((state) => ({ stockSupplies: state.stockSupplies.filter((item) => item.id !== id) }));
+        try {
+          await deleteDoc(doc(db, 'stock_supplies', id));
+        } catch (error) {
+          set({ stockSupplies: previous });
+          throw error;
+        }
+      },
+
+      addDelivery: async (delivery) => {
+        const now = new Date().toISOString();
+        const deliveryWithTimestamp = { 
+          ...delivery, 
+          createdAt: delivery.createdAt || delivery.created_at || now,
+          created_at: delivery.created_at || delivery.createdAt || now,
+          updated_at: now 
+        } as Delivery;
+        
+        set((state) => ({ deliveries: [deliveryWithTimestamp, ...state.deliveries] }));
+        
+        try {
+          const safeData = sanitizeForFirebase(deliveryWithTimestamp);
+          await setDoc(doc(db, 'deliveries', delivery.id), safeData);
+        } catch (error) { 
+          set((state) => ({ deliveries: state.deliveries.filter((item) => item.id !== delivery.id) }));
+          console.error(error); 
+          throw error;
+        }
+      },
+
+      updateDelivery: async (id, updatedData) => {
+        const state = get();
+        const deliveryToUpdate = state.deliveries.find((d) => d.id === id);
+        if (!deliveryToUpdate) throw new Error('Entrega não encontrada.');
+
+        const nextRouteId =
+          updatedData.route_id !== undefined
+            ? updatedData.route_id
+            : deliveryToUpdate.route_id;
+        const routeChanged = nextRouteId !== deliveryToUpdate.route_id;
+
+        if (routeChanged && deliveryToUpdate.completed === true) {
+          throw new Error(
+            'Desfaça a baixa antes de mover uma entrega concluída para outra rota.',
+          );
+        }
+
+        if (routeChanged && updatedData.completed === true) {
+          throw new Error(
+            'Mova a entrega primeiro e dê baixa somente depois, já na rota correta.',
+          );
+        }
+
+        if (routeChanged && nextRouteId) {
+          const targetRoute = state.routes.find((route) => route.id === nextRouteId);
+          if (!targetRoute) {
+            throw new Error('A rota de destino não existe.');
+          }
+          if (targetRoute.status !== 'aberta') {
+            throw new Error('A rota de destino precisa estar aberta.');
+          }
+
+          const deliveryKey = deliveryDate(deliveryToUpdate);
+          const targetRouteKey = routeDate(targetRoute);
+          if (
+            !deliveryKey ||
+            !targetRouteKey ||
+            dateKey(deliveryKey) !== dateKey(targetRouteKey)
+          ) {
+            throw new Error(
+              'A rota de destino precisa ser do mesmo dia operacional da entrega.',
+            );
+          }
+        }
+
+        const previousRouteId = deliveryToUpdate.route_id;
+
+        const now = new Date().toISOString();
+        const isCompleting = updatedData.completed === true && deliveryToUpdate.completed !== true;
+        const isReopening = updatedData.completed === false && deliveryToUpdate.completed === true;
+        const dataWithTimestamp: Partial<Delivery> = {
+          ...updatedData,
+          ...(isCompleting ? { completed_at: now } : {}),
+          updated_at: now,
+        };
+        const previousDeliveries = state.deliveries;
+        const previousCustomers = state.customers;
+        const customer = deliveryToUpdate.customer_id
+          ? state.customers.find((item) => item.id === deliveryToUpdate.customer_id)
+          : undefined;
+
+        const nextDelivery = { ...deliveryToUpdate, ...dataWithTimestamp } as Delivery;
+        if (isReopening) delete nextDelivery.completed_at;
+
+        let updatedCustomerData: Partial<Customer> | undefined;
+        if ((isCompleting || isReopening) && customer) {
+          const completedForCustomer = state.deliveries
+            .map((item) => item.id === id ? nextDelivery : item)
+            .filter((item) => item.customer_id === customer.id && item.completed === true);
+          updatedCustomerData = {
+            orderCount: completedForCustomer.length,
+            totalSpent: completedForCustomer.reduce((total, item) => total + (item.value || 0), 0),
+            updated_at: now,
+          };
+        }
+        if (customer && updatedData.confirmation_code) {
+          updatedCustomerData = {
+            ...updatedCustomerData,
+            last_confirmation_code: updatedData.confirmation_code,
+            updated_at: now,
+          };
+        }
+        
+        set((current) => ({
+          deliveries: current.deliveries.map((d) => d.id === id ? nextDelivery : d),
+          customers: updatedCustomerData && customer
+            ? current.customers.map((item) => item.id === customer.id ? { ...item, ...updatedCustomerData } : item)
+            : current.customers,
+        }));
+        
+        let deliveryCommitCompleted = false;
+        try {
+          const batch = writeBatch(db);
+          const safeData: Record<string, unknown> = sanitizeForFirebase(dataWithTimestamp);
+          if (isReopening) safeData.completed_at = deleteField();
+          batch.update(doc(db, 'deliveries', id), safeData);
+          if (updatedCustomerData && customer) {
+            batch.update(doc(db, 'customers', customer.id), sanitizeForFirebase(updatedCustomerData));
+          }
+          await batch.commit();
+          deliveryCommitCompleted = true;
+
+          if (routeChanged && previousRouteId) {
+            const currentState = get();
+            const previousRoute = currentState.routes.find(
+              (route) => route.id === previousRouteId,
+            );
+            const remainingPreviousRouteDeliveries =
+              currentState.deliveries.filter(
+                (delivery) => delivery.route_id === previousRouteId,
+              );
+            const previousRouteReadyToClose =
+              previousRoute?.status === 'aberta' &&
+              Boolean(routeStartedAt(previousRoute)) &&
+              remainingPreviousRouteDeliveries.every(
+                (delivery) => delivery.completed === true,
+              );
+
+            if (previousRouteReadyToClose && previousRoute) {
+              await currentState.closeRoute(previousRoute.id);
+            }
+          }
+
+          if (
+            updatedData.completed === true &&
+            isDeliveryFulfillment(nextDelivery) &&
+            nextDelivery.route_id
+          ) {
+            const currentState = get();
+            const routeDeliveries = currentState.deliveries.filter(
+              (delivery) => delivery.route_id === nextDelivery.route_id,
+            );
+            const allDone =
+              routeDeliveries.length > 0 &&
+              routeDeliveries.every((delivery) => delivery.completed === true);
+
+            if (allDone) {
+              const route = currentState.routes.find(
+                (item) => item.id === nextDelivery.route_id,
+              );
+              if (
+                route &&
+                route.status === 'aberta' &&
+                Boolean(routeStartedAt(route))
+              ) {
+                await currentState.closeRoute(route.id);
+              }
+            }
+          }
+        } catch (error) {
+          if (deliveryCommitCompleted) {
+            set({ syncError: true });
+            console.error('Entrega salva, mas não foi possível fechar a rota automaticamente:', error);
+            return;
+          }
+          set({ deliveries: previousDeliveries, customers: previousCustomers, syncError: true });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      deleteDelivery: async (id) => {
+        const state = get();
+        const deliveryToDelete = state.deliveries.find((delivery) => delivery.id === id);
+        if (!deliveryToDelete) throw new Error('Entrega não encontrada.');
+
+        if (deliveryToDelete.completed === true) {
+          throw new Error(
+            'Desfaça a baixa antes de excluir uma entrega concluída.',
+          );
+        }
+
+        const previousDeliveries = state.deliveries;
+        const linkedRouteId = deliveryToDelete.route_id;
+
+        set((current) => ({
+          deliveries: current.deliveries.filter((delivery) => delivery.id !== id),
+        }));
+
+        let deletionCommitted = false;
+        try {
+          await deleteDoc(doc(db, 'deliveries', id));
+          deletionCommitted = true;
+
+          if (linkedRouteId) {
+            const currentState = get();
+            const linkedRoute = currentState.routes.find(
+              (route) => route.id === linkedRouteId,
+            );
+            const remainingDeliveries = currentState.deliveries.filter(
+              (delivery) => delivery.route_id === linkedRouteId,
+            );
+            const routeReadyToClose =
+              linkedRoute?.status === 'aberta' &&
+              Boolean(routeStartedAt(linkedRoute)) &&
+              remainingDeliveries.every(
+                (delivery) => delivery.completed === true,
+              );
+
+            if (routeReadyToClose && linkedRoute) {
+              await currentState.closeRoute(linkedRoute.id);
+            }
+          }
+        } catch (error) {
+          if (deletionCommitted) {
+            set({ syncError: true });
+            console.error(
+              'Entrega excluída, mas não foi possível reconciliar a rota:',
+              error,
+            );
+            return;
+          }
+
+          set({ deliveries: previousDeliveries, syncError: true });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      closeRoute: async (routeId) => {
+        const previousRoutes = get().routes;
+        const routeBeforeClose = previousRoutes.find((route) => route.id === routeId);
+        if (!routeBeforeClose) throw new Error('Rota não encontrada.');
+        if (routeBeforeClose.status === 'fechada') return;
+        if (!routeStartedAt(routeBeforeClose)) throw new Error('Inicie a rota antes de finalizá-la.');
+        if (get().deliveries.some((delivery) => delivery.route_id === routeId && !delivery.completed)) {
+          throw new Error('Conclua todas as entregas antes de finalizar a rota.');
+        }
+        const endTime = new Date().toISOString();
+        set((state) => ({
+          routes: state.routes.map((r) => 
+            // O segredo está aqui: r.end_time || endTime
+            r.id === routeId ? { ...r, status: 'fechada', end_time: r.end_time || endTime, updated_at: endTime } : r
+          ),
+        }));
+        try {
+          const route = get().routes.find(r => r.id === routeId);
+          const finalEndTime = route?.end_time || endTime;
+          await updateDoc(doc(db, 'routes', routeId), { status: 'fechada', end_time: finalEndTime, updated_at: endTime });
+        } catch (error) {
+          set({ routes: previousRoutes });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      reopenRoute: async (routeId) => {
+        const previousRoutes = get().routes;
+        const current = previousRoutes.find((route) => route.id === routeId);
+        if (!current) throw new Error('Rota não encontrada.');
+        if (current.status !== 'fechada') return;
+
+        const now = new Date().toISOString();
+
+        // end_time é o primeiro encerramento operacional real da rota.
+        // Reabrir serve para correções posteriores e não pode distorcer a duração histórica.
+        set((state) => ({
+          routes: state.routes.map((r) =>
+            r.id === routeId
+              ? { ...r, status: 'aberta', reopened_at: now, updated_at: now }
+              : r
+          ),
+        }));
+
+        try {
+          await updateDoc(doc(db, 'routes', routeId), {
+            status: 'aberta',
+            reopened_at: now,
+            updated_at: now,
+          });
+        } catch (error) {
+          set({ routes: previousRoutes });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      reorderDelivery: async (routeId, deliveryId, direction) => {
+        const state = get();
+
+        const routeDeliveries = state.deliveries
+          .filter((delivery) => delivery.route_id === routeId)
+          .map((delivery) => ({ ...delivery }))
+          .sort((a, b) => {
+            if (a.completed !== b.completed) return a.completed ? 1 : -1;
+
+            const aOrder = a.order_index;
+            const bOrder = b.order_index;
+
+            if (aOrder !== undefined && bOrder !== undefined && aOrder !== bOrder) {
+              return aOrder - bOrder;
+            }
+            if (aOrder !== undefined && bOrder === undefined) return -1;
+            if (aOrder === undefined && bOrder !== undefined) return 1;
+
+            const timeA = new Date(a.created_at || a.createdAt || a.updated_at || 0).getTime();
+            const timeB = new Date(b.created_at || b.createdAt || b.updated_at || 0).getTime();
+            if (timeA !== timeB) return timeA - timeB;
+
+            return a.id.localeCompare(b.id);
+          });
+
+        const pending = routeDeliveries.filter((delivery) => !delivery.completed);
+        const completed = routeDeliveries.filter((delivery) => delivery.completed);
+
+        const currentIndex = pending.findIndex((delivery) => delivery.id === deliveryId);
+        if (currentIndex === -1) return;
+
+        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+        if (targetIndex < 0 || targetIndex >= pending.length) return;
+
+        [pending[currentIndex], pending[targetIndex]] = [pending[targetIndex], pending[currentIndex]];
+
+        const normalized = [...pending, ...completed].map((delivery, index) => ({
+          ...delivery,
+          order_index: index,
+        }));
+
+        const now = new Date().toISOString();
+        const nextIndexById = new Map(
+          normalized.map((delivery) => [delivery.id, delivery.order_index] as const)
+        );
+
+        set((prev) => ({
+          deliveries: prev.deliveries.map((delivery) => {
+            const nextIndex = nextIndexById.get(delivery.id);
+            return nextIndex === undefined
+              ? delivery
+              : { ...delivery, order_index: nextIndex, updated_at: now };
+          }),
+        }));
+
+        try {
+          const batch = writeBatch(db);
+
+          normalized.forEach((delivery) => {
+            batch.update(doc(db, 'deliveries', delivery.id), {
+              order_index: delivery.order_index,
+              updated_at: now,
+            });
+          });
+
+          await batch.commit();
+        } catch (error) {
+          set({ deliveries: state.deliveries });
+          console.error('Erro ao salvar reordenação:', error);
+          throw error;
+        }
+      },
+
+      moveDeliveryToIndex: async (routeId, deliveryId, targetIndex) => {
+        const state = get();
+
+        const routeDeliveries = state.deliveries
+          .filter((delivery) => delivery.route_id === routeId)
+          .map((delivery) => ({ ...delivery }))
+          .sort((a, b) => {
+            if (a.completed !== b.completed) return a.completed ? 1 : -1;
+
+            const aOrder = a.order_index;
+            const bOrder = b.order_index;
+
+            if (aOrder !== undefined && bOrder !== undefined && aOrder !== bOrder) {
+              return aOrder - bOrder;
+            }
+            if (aOrder !== undefined && bOrder === undefined) return -1;
+            if (aOrder === undefined && bOrder !== undefined) return 1;
+
+            const timeA = new Date(a.created_at || a.createdAt || a.updated_at || 0).getTime();
+            const timeB = new Date(b.created_at || b.createdAt || b.updated_at || 0).getTime();
+            if (timeA !== timeB) return timeA - timeB;
+
+            return a.id.localeCompare(b.id);
+          });
+
+        const pending = routeDeliveries.filter((delivery) => !delivery.completed);
+        const completed = routeDeliveries.filter((delivery) => delivery.completed);
+        const currentIndex = pending.findIndex((delivery) => delivery.id === deliveryId);
+
+        if (currentIndex === -1 || pending.length < 2) return;
+
+        const safeTarget = Math.max(0, Math.min(targetIndex, pending.length - 1));
+        if (safeTarget === currentIndex) return;
+
+        const [moved] = pending.splice(currentIndex, 1);
+        pending.splice(safeTarget, 0, moved);
+
+        const normalized = [...pending, ...completed].map((delivery, index) => ({
+          ...delivery,
+          order_index: index,
+        }));
+
+        const now = new Date().toISOString();
+        const nextIndexById = new Map(
+          normalized.map((delivery) => [delivery.id, delivery.order_index] as const)
+        );
+
+        set((prev) => ({
+          deliveries: prev.deliveries.map((delivery) => {
+            const nextIndex = nextIndexById.get(delivery.id);
+            return nextIndex === undefined
+              ? delivery
+              : { ...delivery, order_index: nextIndex, updated_at: now };
+          }),
+        }));
+
+        try {
+          const batch = writeBatch(db);
+          normalized.forEach((delivery) => {
+            batch.update(doc(db, 'deliveries', delivery.id), {
+              order_index: delivery.order_index,
+              updated_at: now,
+            });
+          });
+          await batch.commit();
+        } catch (error) {
+          set({ deliveries: state.deliveries });
+          console.error('Erro ao mover entrega para posição:', error);
+          throw error;
+        }
+      },
+
+      setDeliveryOrder: async (routeId, orderedPendingIds) => {
+        const state = get();
+        const routeDeliveries = state.deliveries
+          .filter((delivery) => delivery.route_id === routeId)
+          .map((delivery) => ({ ...delivery }));
+
+        const pending = routeDeliveries.filter((delivery) => !delivery.completed);
+        const completed = routeDeliveries.filter((delivery) => delivery.completed);
+        const pendingById = new Map(pending.map((delivery) => [delivery.id, delivery]));
+
+        const uniqueIds = Array.from(new Set(orderedPendingIds));
+        const validIds = uniqueIds.filter((id) => pendingById.has(id));
+        const missingIds = pending.map((delivery) => delivery.id).filter((id) => !validIds.includes(id));
+        const finalPendingIds = [...validIds, ...missingIds];
+
+        if (finalPendingIds.length !== pending.length) {
+          throw new Error('A ordem recebida não corresponde às entregas pendentes da rota.');
+        }
+
+        const orderedPending = finalPendingIds.map((id) => pendingById.get(id)!);
+        const completedSorted = [...completed].sort((a, b) => {
+          const aOrder = a.order_index ?? Number.MAX_SAFE_INTEGER;
+          const bOrder = b.order_index ?? Number.MAX_SAFE_INTEGER;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return a.id.localeCompare(b.id);
+        });
+
+        const normalized = [...orderedPending, ...completedSorted].map((delivery, index) => ({
+          ...delivery,
+          order_index: index,
+        }));
+
+        const now = new Date().toISOString();
+        const indexById = new Map(normalized.map((delivery) => [delivery.id, delivery.order_index] as const));
+
+        set((prev) => ({
+          deliveries: prev.deliveries.map((delivery) => {
+            const nextIndex = indexById.get(delivery.id);
+            return nextIndex === undefined ? delivery : { ...delivery, order_index: nextIndex, updated_at: now };
+          }),
+        }));
+
+        try {
+          const batch = writeBatch(db);
+          normalized.forEach((delivery) => {
+            batch.update(doc(db, 'deliveries', delivery.id), {
+              order_index: delivery.order_index,
+              updated_at: now,
+            });
+          });
+          await batch.commit();
+        } catch (error) {
+          set({ deliveries: state.deliveries });
+          console.error('Erro ao aplicar ordem da rota:', error);
+          throw error;
+        }
+      },
+
+
+      toggleDeliveryExpansion: (id, isExpanded) => {
+        set((state) => ({
+          deliveries: state.deliveries.map(d => d.id === id ? { ...d, is_expanded: isExpanded } : d)
+        }));
+      },
+
+      addIfoodPendingConfirmations: async (items) => {
+        if (!items.length) return;
+
+        const previous = get().ifoodPendingConfirmations;
+        set((state) => ({
+          ifoodPendingConfirmations: [...items, ...state.ifoodPendingConfirmations],
+        }));
+
+        try {
+          const batch = writeBatch(db);
+          items.forEach((item) => {
+            batch.set(
+              doc(db, 'ifood_pending_confirmations', item.id),
+              sanitizeForFirebase(item),
+            );
+          });
+          await batch.commit();
+        } catch (error) {
+          set({ ifoodPendingConfirmations: previous });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      updateIfoodPendingConfirmation: async (id, data) => {
+        const previous = get().ifoodPendingConfirmations;
+        const updated = {
+          ...data,
+          updated_at: new Date().toISOString(),
+        };
+
+        set((state) => ({
+          ifoodPendingConfirmations: state.ifoodPendingConfirmations.map((item) =>
+            item.id === id ? { ...item, ...updated } : item,
+          ),
+        }));
+
+        try {
+          await updateDoc(
+            doc(db, 'ifood_pending_confirmations', id),
+            sanitizeForFirebase(updated),
+          );
+        } catch (error) {
+          set({ ifoodPendingConfirmations: previous });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      deleteIfoodPendingConfirmation: async (id) => {
+        const previous = get().ifoodPendingConfirmations;
+        set((state) => ({
+          ifoodPendingConfirmations: state.ifoodPendingConfirmations.filter(
+            (item) => item.id !== id,
+          ),
+        }));
+
+        try {
+          await deleteDoc(doc(db, 'ifood_pending_confirmations', id));
+        } catch (error) {
+          set({ ifoodPendingConfirmations: previous });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      addCustomer: async (customer) => {
+        const customerWithTimestamp: Customer = { ...customer, updated_at: new Date().toISOString() };
+        set((state) => ({ customers: [customerWithTimestamp, ...state.customers] }));
+        try {
+          const safeData = sanitizeForFirebase(customerWithTimestamp);
+          await setDoc(doc(db, 'customers', customer.id), safeData);
+        } catch (error) {
+          set((state) => ({ customers: state.customers.filter((item) => item.id !== customer.id) }));
+          console.error(error);
+          throw error;
+        }
+      },
+
+      updateCustomer: async (id, updatedData) => {
+        const previousCustomers = get().customers;
+        const dataWithTimestamp: Partial<Customer> = { ...updatedData, updated_at: new Date().toISOString() };
+        set((state) => ({
+          customers: state.customers.map((c) => c.id === id ? { ...c, ...dataWithTimestamp } as Customer : c)
+        }));
+        try {
+          const safeData = sanitizeForFirebase(dataWithTimestamp);
+          await updateDoc(doc(db, 'customers', id), safeData);
+        } catch (error) {
+          set({ customers: previousCustomers });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      findOrCreateCustomer: async (name, details) => {
+        const trimmed = name.trim();
+        if (!trimmed) return '';
+
+        const extractNeighborhood = (address?: string): string | undefined => {
+          if (!address) return undefined;
+          if (address.includes('-')) {
+            const parts = address.split('-');
+            const potentialHood = parts[parts.length - 1].trim();
+            return potentialHood.replace(/[0-9]/g, '').trim() || undefined;
+          }
+          const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
+          if (parts.length < 2) return undefined;
+          return parts[parts.length - 1].replace(/[0-9]/g, '').trim() || undefined;
+        };
+
+        const existing = get().customers.find((c) => c.name.trim().toLowerCase() === trimmed.toLowerCase());
+        const derivedNeighborhood = extractNeighborhood(details?.address);
+        const now = new Date().toISOString();
+
+        if (existing) {
+          const updatedFields: Partial<Customer> = { updated_at: now };
+          if (details?.address) updatedFields.address = details.address;
+          if (details?.mapsLink) updatedFields.maps_link = details.mapsLink;
+          if (details?.confirmationCode) updatedFields.last_confirmation_code = details.confirmationCode;
+          if (details?.observation) updatedFields.observation = details.observation;
+          if (derivedNeighborhood) updatedFields.neighborhood = derivedNeighborhood;
+          if (details?.origin) updatedFields.origin = details.origin;
+          if (details?.phone) updatedFields.phone = details.phone;
+
+          set((state) => ({
+            customers: state.customers.map((c) => c.id === existing.id ? { ...c, ...updatedFields } : c),
+          }));
+
+          try {
+            const safeData = sanitizeForFirebase(updatedFields);
+            await updateDoc(doc(db, 'customers', existing.id), safeData);
+          } catch (error) {
+            set((state) => ({
+              customers: state.customers.map((item) => item.id === existing.id ? existing : item),
+            }));
+            console.error(error);
+            throw error;
+          }
+
+          return existing.id;
+        }
+
+        const newCustomer: Customer = {
+          id: Date.now().toString(),
+          name: trimmed,
+          origin: details?.origin || 'loja',
+          neighborhood: derivedNeighborhood,
+          address: details?.address || undefined,
+          maps_link: details?.mapsLink || undefined,
+          last_confirmation_code: details?.confirmationCode || undefined,
+          observation: details?.observation || undefined,
+          phone: details?.phone || undefined,
+          createdAt: now,
+          updated_at: now,
+        };
+
+        set((state) => ({ customers: [newCustomer, ...state.customers] }));
+
+        try {
+          const safeData = sanitizeForFirebase(newCustomer);
+          await setDoc(doc(db, 'customers', newCustomer.id), safeData);
+        } catch (error) {
+          set((state) => ({ customers: state.customers.filter((item) => item.id !== newCustomer.id) }));
+          console.error(error);
+          throw error;
+        }
+
+        return newCustomer.id;
+      },
+    }),
+    {
+      name: 'dfl-entregas-cofre-offline',
+      partialize: (state) => ({ 
+        routes: state.routes, 
+        deliveries: state.deliveries, 
+        customers: state.customers,
+        motoboys: state.motoboys,
+        fuelings: state.fuelings,
+        stockSupplies: state.stockSupplies,
+        ifoodPendingConfirmations: state.ifoodPendingConfirmations,
+        isPrivacyMode: state.isPrivacyMode,
+        routeAlertsEnabled: state.routeAlertsEnabled,
+        theme: state.theme,
+        storeSettings: state.storeSettings
+      }),
+      onRehydrateStorage: () => (state) => { 
+        state?.setHasHydrated(true); 
+      },
+    }
+  )
+);
+=== LOJA ===
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { 
+  Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus,
+  AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { useAppStore } from '@/store/useAppStore';
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
+import { useStoreDashboard } from '@/hooks/useStoreDashboard';
+import { PerformanceModals } from '@/components/store/PerformanceModals';
+import { OperationalCalendar } from '@/components/store/OperationalCalendar';
+import { StoreTimePicker } from '@/components/store/StoreTimePicker';
+import { OperationalIntelligencePanel } from '@/components/store/OperationalIntelligencePanel';
+import { validateSchedule } from '@/lib/operational-time';
+import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
+
+const DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+const formatMoney = (val: number) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+export default function LojaPage() {
+  const router = useRouter();
+  const [isMounted, setIsMounted] = useState(false);
+  
+  const motoboys = useAppStore((state) => state.motoboys);
+  const updateMotoboy = useAppStore((state) => state.updateMotoboy);
+  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
+  const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode); 
+
+  const hasHydrated = useAppStore((state) => state.hasHydrated);
+  const storeSettings = useAppStore((state) => state.storeSettings) || {};
+  const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
+  const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
+  const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
+
+  const [isStoreOpen, setIsStoreOpen] = useState(false);
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
+  const [storeAddress, setStoreAddress] = useState('Patos de Minas, MG');
+
+  // Dashboard Hook
+  const dashboardData = useStoreDashboard();
+  const [isLogisticsModalOpen, setIsLogisticsModalOpen] = useState(false);
+  const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Expediente Avançado
+  const [activeTab, setActiveTab] = useState<'horarios' | 'pausas' | 'feriados'>('horarios');
+  const [schedule, setSchedule] = useState<Record<number, DaySchedule>>({});
+  const activeMotoboys = motoboys.filter((motoboy) => motoboy.active);
+  const activeScheduleDays = DAYS_OF_WEEK.map((name, index) => ({ name, index, data: schedule[index] || { active: false, shifts: [] } })).filter((item) => item.data.active && item.data.shifts.length > 0);
+  const [pauses, setPauses] = useState<StorePause[]>([]);
+  const [holidaysOverrides, setHolidaysOverrides] = useState<Record<string, HolidayOverride>>({});
+  const [apiHolidays, setApiHolidays] = useState<any[]>([]);
+
+  // Editores
+  const [editingDay, setEditingDay] = useState<number | null>(null);
+  const [tempDaySchedule, setTempDaySchedule] = useState<DaySchedule>({ active: false, shifts: [] });
+  const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
+  const [tempPause, setTempPause] = useState<StorePause>({ id: '', start_date: '', end_date: '', reason: '' });
+
+  const hourScrollRef = useRef<HTMLDivElement>(null);
+  const minScrollRef = useRef<HTMLDivElement>(null);
+  const [timePicker, setTimePicker] = useState<{ isOpen: boolean; shiftIndex: number; field: 'start' | 'end'; hour: string; minute: string; } | null>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+    if (hasHydrated && storeSettings) {
+      setIsStoreOpen(storeSettings.isOpen ?? false);
+      setAlertsEnabled(storeSettings.alertsEnabled ?? false);
+      setStoreAddress(storeSettings.storeAddress || 'Patos de Minas, MG');
+      setSchedule(storeSettings.schedule || {});
+      setPauses(storeSettings.pauses || []);
+      setHolidaysOverrides(storeSettings.holidaysOverrides || {});
+      
+      fetch(`https://brasilapi.com.br/api/feriados/v1/${new Date().getFullYear()}`)
+        .then(res => res.json())
+        .then(data => { if (Array.isArray(data)) setApiHolidays(data.filter((h: any) => new Date(h.date).getTime() >= new Date().getTime() - 86400000)); })
+        .catch(() => {});
+    }
+  }, [storeSettings, hasHydrated]);
+
+  useEffect(() => {
+    if (timePicker?.isOpen) {
+      setTimeout(() => {
+        if (hourScrollRef.current) { const hEl = hourScrollRef.current.querySelector(`[data-val="${timePicker.hour}"]`); if (hEl) hEl.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        if (minScrollRef.current) { const mEl = minScrollRef.current.querySelector(`[data-val="${timePicker.minute}"]`); if (mEl) mEl.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      }, 50);
+    }
+  }, [timePicker?.isOpen]);
+
+  const toggleStore = async () => {
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+    const newState = !isStoreOpen;
+    setIsStoreOpen(newState);
+    await updateStoreSettings({ isOpen: newState });
+    toast.success(newState ? 'Operação Aberta!' : 'Operação Fechada!');
+  };
+
+  const handleSaveAllSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+    await updateStoreSettings({ ...storeSettings, isOpen: isStoreOpen, storeAddress: storeAddress.trim(), alertsEnabled, schedule, pauses, holidaysOverrides });
+    toast.success('Expediente salvo com sucesso!');
+  };
+
+  const handleToggleMotoboyScale = async (id: string, active: boolean) => {
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+    await updateMotoboy(id, { active: !active } as any);
+  };
+
+  const openDayEditor = (dayIndex: number) => {
+    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light });
+    setEditingDay(dayIndex);
+    setTempDaySchedule(schedule[dayIndex] || { active: true, shifts: [{ start: '18:00', end: '23:00' }] });
+  };
+
+  const saveDayEditor = () => {
+    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium });
+    const error = validateSchedule(tempDaySchedule);
+    if (error) { toast.error('Confira os horários', { description: error }); return; }
+    if (editingDay !== null) { setSchedule(prev => ({ ...prev, [editingDay]: { ...tempDaySchedule, shifts: tempDaySchedule.shifts.map(shift => ({...shift})) } })); setEditingDay(null); }
+  };
+
+  const applyQuickAdjustment = (type: '24h' | 'almoco' | 'janta' | 'ambos') => {
+    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light });
+    let s: Shift[] = [];
+    if (type === '24h') s = [{ start: '00:00', end: '23:59' }];
+    if (type === 'almoco') s = [{ start: '11:00', end: '15:00' }];
+    if (type === 'janta') s = [{ start: '18:00', end: '23:00' }];
+    if (type === 'ambos') s = [{ start: '11:00', end: '15:00' }, { start: '18:00', end: '23:00' }];
+    setTempDaySchedule(p => ({ ...p, active: true, shifts: s }));
+  };
+
+  const confirmTimePicker = () => {
+    if (!timePicker) return;
+    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium });
+    if (editingDay !== null) {
+      setTempDaySchedule(prev => {
+        const ns = prev.shifts.map(shift => ({ ...shift }));
+        const t = `${timePicker.hour}:${timePicker.minute}`;
+        if (timePicker.field === 'start') ns[timePicker.shiftIndex].start = t; else ns[timePicker.shiftIndex].end = t;
+        return { ...prev, shifts: ns };
+      });
+    }
+    setTimePicker(null);
+  };
+
+  if (!isMounted || !hasHydrated) return null;
+
+  return (
+    <div className="flex flex-col gap-6 pb-32 animate-in fade-in duration-300 relative">
+      <PageHeader title="Minha Loja" subtitle="Central de operação da Da Família Lanches" to="/" />
+
+      <section className={`overflow-hidden rounded-[30px] border ${isStoreOpen ? 'border-emerald-500/25 bg-emerald-500/[.07]' : 'border-zinc-800 bg-zinc-900/65'}`}>
+        <button
+          onClick={toggleStore}
+          className="flex w-full items-center justify-between gap-4 p-5 text-left active:scale-[0.99]"
+        >
+          <div className="flex min-w-0 items-center gap-4">
+            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${isStoreOpen ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-500'}`}>
+              <Power size={24} strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0">
+              <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${isStoreOpen ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                {isStoreOpen ? 'Operação em andamento' : 'Operação encerrada'}
+              </p>
+              <h2 className="mt-1 font-heading text-xl font-black text-zinc-50">
+                {isStoreOpen ? 'Loja aberta' : 'Loja fechada'}
+              </h2>
+              <p className="mt-1 text-[11px] font-medium text-zinc-500">
+                {isStoreOpen
+                  ? `${activeMotoboys.length} motoboy${activeMotoboys.length === 1 ? '' : 's'} ativo${activeMotoboys.length === 1 ? '' : 's'} agora`
+                  : 'Toque para iniciar a operação manualmente'}
+              </p>
+            </div>
+          </div>
+          <div className={`h-3 w-3 shrink-0 rounded-full ${isStoreOpen ? 'bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,.75)]' : 'bg-zinc-700'}`} />
+        </button>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Agora</p>
+            <h2 className="font-heading text-base font-black text-zinc-100">Central de operação</h2>
+          </div>
+          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] font-bold text-zinc-500">
+            {dashboardData.formattedDateLabel}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[26px] border border-amber-500/25 bg-gradient-to-br from-amber-500/[.09] to-zinc-900/40 p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Entregas</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.totalEntregas} registradas no período</p>
+          </button>
+
+          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[26px] border border-sky-500/25 bg-gradient-to-br from-sky-500/[.09] to-zinc-900/40 p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Rotas</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'} no período</p>
+          </button>
+
+          <button onClick={() => router.push('/motoboys')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-400"><Users size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Equipe</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{activeMotoboys.length} ativo{activeMotoboys.length === 1 ? '' : 's'} na escala</p>
+          </button>
+
+          <button onClick={() => router.push('/clientes')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400"><Users size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Clientes</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Base, endereços e histórico</p>
+          </button>
+
+          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[26px] border border-amber-500/20 bg-amber-500/[.045] p-4 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700" />
+            </div>
+            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Abastecimentos</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Compras, reposições, transporte e conferência</p>
+          </button>
+        </div>
+      </section>
+
+      <OperationalIntelligencePanel />
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Leitura do período</p>
+            <h2 className="font-heading text-base font-black text-zinc-100">Resumo operacional</h2>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToPreviousDay(); }}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-500 active:scale-95"
+              aria-label="Dia anterior"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              onClick={() => setIsCalendarOpen(true)}
+              className="min-w-[82px] rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-[10px] font-black text-zinc-300 active:scale-95"
+            >
+              {dashboardData.formattedDateLabel}
+            </button>
+            <button
+              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToNextDay(); }}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-500 active:scale-95"
+              aria-label="Próximo dia"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-900/45">
+          <button
+            onClick={() => setIsLogisticsModalOpen(true)}
+            className="flex w-full items-center justify-between gap-4 border-b border-zinc-800/80 p-4 text-left active:bg-zinc-900"
+          >
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wide text-sky-500">Operação</p>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-heading text-2xl font-black text-zinc-50">{dashboardData.totalEntregas}</span>
+                <span className="text-[11px] font-bold text-zinc-500">entregas</span>
+              </div>
+              <p className="mt-1 text-[10px] text-zinc-600">
+                {dashboardData.completedDeliveries} concluída{dashboardData.completedDeliveries === 1 ? '' : 's'} · {dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'}
+              </p>
+            </div>
+            <ChevronRight size={18} className="text-zinc-700" />
+          </button>
+
+          <button
+            onClick={() => setIsRevenueModalOpen(true)}
+            className="flex w-full items-center justify-between gap-4 p-4 text-left active:bg-zinc-900"
+          >
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wide text-emerald-500">Financeiro</p>
+              <p className="mt-1 font-heading text-xl font-black text-emerald-400">
+                {isPrivacyMode ? 'R$ •••••' : `R$ ${formatMoney(dashboardData.faturamentoTotal)}`}
+              </p>
+              <p className="mt-1 text-[10px] text-zinc-600">Conferência do movimento registrado</p>
+            </div>
+            <ChevronRight size={18} className="text-zinc-700" />
+          </button>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Equipe</p>
+            <h2 className="font-heading text-base font-black text-zinc-100">Motoboys ativos</h2>
+          </div>
+          <button onClick={() => router.push('/motoboys')} className="text-[10px] font-black text-sky-400">Gerenciar</button>
+        </div>
+
+        <div className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4">
+          {activeMotoboys.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {activeMotoboys.map((motoboy) => (
+                <button
+                  key={motoboy.id}
+                  onClick={() => handleToggleMotoboyScale(motoboy.id, motoboy.active)}
+                  title="Toque para retirar da escala"
+                  className="flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs font-black text-amber-400 active:scale-95"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  {motoboy.name}
+                  <Check size={12} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-zinc-400">Nenhum motoboy ativo</p>
+                <p className="mt-1 text-[10px] text-zinc-600">Ative a equipe que está trabalhando hoje.</p>
+              </div>
+              <button onClick={() => router.push('/motoboys')} className="rounded-xl bg-zinc-800 px-3 py-2 text-[10px] font-black text-zinc-300 active:scale-95">Selecionar</button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Automação</p>
+            <h2 className="font-heading text-base font-black text-zinc-100">Expediente</h2>
+          </div>
+          <button
+            onClick={() => { setActiveTab('horarios'); setIsScheduleEditorOpen((value) => !value); }}
+            className="text-[10px] font-black text-indigo-400"
+          >
+            {isScheduleEditorOpen ? 'Fechar editor' : 'Editar semana'}
+          </button>
+        </div>
+
+        {!isScheduleEditorOpen && (
+          <div className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-black text-zinc-200">{activeScheduleDays.length} dia{activeScheduleDays.length === 1 ? '' : 's'} programado{activeScheduleDays.length === 1 ? '' : 's'}</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-zinc-600">
+                  Horários aparecem resumidos aqui. Abra o editor somente quando precisar alterar.
+                </p>
+              </div>
+              <Clock size={18} className="shrink-0 text-indigo-400" />
+            </div>
+
+            <div className="mt-4 grid grid-cols-7 gap-1.5">
+              {DAYS_OF_WEEK.map((dayName, index) => {
+                const dayData = schedule[index] || { active: false, shifts: [] };
+                const active = dayData.active && dayData.shifts.length > 0;
+                const shortNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+                return (
+                  <button
+                    key={dayName}
+                    onClick={() => openDayEditor(index)}
+                    className={`rounded-xl border px-1 py-2 text-center active:scale-95 ${active ? 'border-emerald-500/20 bg-emerald-500/[.07]' : 'border-zinc-800 bg-zinc-950/50'}`}
+                  >
+                    <span className={`block text-[8px] font-black uppercase ${active ? 'text-emerald-400' : 'text-zinc-600'}`}>{shortNames[index]}</span>
+                    <span className="mt-1 block truncate text-[8px] font-bold text-zinc-500">{active ? dayData.shifts[0].start : '—'}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 text-[9px] font-bold text-zinc-600">
+              <span>{pauses.length} pausa{pauses.length === 1 ? '' : 's'}</span>
+              <span>•</span>
+              <span>{Object.keys(holidaysOverrides).length} feriado especial</span>
+            </div>
+          </div>
+        )}
+
+        {isScheduleEditorOpen && (
+          <div className="flex flex-col overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-900/45">
+            <div className="flex items-center justify-between border-b border-zinc-800 px-4">
+              <button onClick={() => setActiveTab('horarios')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-wide text-center border-b-2 ${activeTab === 'horarios' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-zinc-500'}`}>Horários</button>
+              <button onClick={() => setActiveTab('pausas')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-wide text-center border-b-2 ${activeTab === 'pausas' ? 'border-amber-500 text-amber-400' : 'border-transparent text-zinc-500'}`}>Pausas</button>
+              <button onClick={() => setActiveTab('feriados')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-wide text-center border-b-2 ${activeTab === 'feriados' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500'}`}>Feriados</button>
+            </div>
+
+            <div className="flex flex-col gap-4 p-4">
+              {activeTab === 'horarios' && (
+                <div className="flex flex-col gap-2">
+                  {DAYS_OF_WEEK.map((dayName, index) => {
+                    const dayData = schedule[index] || { active: false, shifts: [] };
+                    return (
+                      <button key={index} onClick={() => openDayEditor(index)} className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/45 p-4 text-left active:scale-[0.99]">
+                        <div>
+                          <p className="text-sm font-black text-zinc-200">{dayName}</p>
+                          <p className="mt-1 text-[10px] font-medium text-zinc-600">
+                            {dayData.active && dayData.shifts.length > 0 ? dayData.shifts.map((shift) => `${shift.start} às ${shift.end}`).join(' · ') : 'Fechada'}
+                          </p>
+                        </div>
+                        <ChevronRight size={16} className="text-zinc-700" />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {activeTab === 'pausas' && (
+                <div className="flex flex-col gap-3">
+                  {pauses.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-zinc-800 py-8 text-center">
+                      <p className="text-xs font-bold text-zinc-500">Nenhuma pausa programada</p>
+                    </div>
+                  ) : (
+                    pauses.map((pause) => (
+                      <div key={pause.id} className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/45 p-4">
+                        <div>
+                          <p className="text-xs font-black text-zinc-300">{pause.reason || 'Pausa programada'}</p>
+                          <p className="mt-1 text-[10px] text-zinc-600">{pause.start_date.split('T')[0]} até {pause.end_date.split('T')[0]}</p>
+                        </div>
+                        <button onClick={() => setPauses(pauses.filter((item) => item.id !== pause.id))} className="rounded-full p-2 text-red-500 active:bg-red-500/10"><Trash2 size={16} /></button>
+                      </div>
+                    ))
+                  )}
+                  <button onClick={() => setIsPauseModalOpen(true)} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-zinc-800 text-xs font-black text-zinc-200 active:scale-95"><Plus size={15} /> Criar pausa</button>
+                </div>
+              )}
+
+              {activeTab === 'feriados' && (
+                <div className="flex flex-col gap-2">
+                  <div className="rounded-2xl border border-sky-500/15 bg-sky-500/[.06] p-3 text-[10px] leading-relaxed text-sky-400">
+                    Feriados podem alterar a operação. Os próximos feriados nacionais aparecem abaixo.
+                  </div>
+                  {apiHolidays.length === 0 ? (
+                    <p className="py-6 text-center text-xs font-bold text-zinc-600">Nenhum feriado próximo encontrado.</p>
+                  ) : (
+                    apiHolidays.map((holiday, idx) => {
+                      const override = holidaysOverrides[holiday.date];
+                      return (
+                        <button key={idx} onClick={() => toast.info('Em breve: Edição de Feriado', { description: holiday.name })} className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/45 p-4 text-left active:scale-[0.99]">
+                          <div>
+                            <p className="text-xs font-black text-zinc-300">{holiday.name}</p>
+                            <p className="mt-1 text-[10px] text-zinc-600">{holiday.date.split('-').reverse().join('/')} · {override ? 'Horário especial' : 'Horário normal'}</p>
+                          </div>
+                          <ChevronRight size={16} className="text-zinc-700" />
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <button
+          onClick={() => setIsSettingsOpen((value) => !value)}
+          className="flex items-center justify-between rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4 text-left active:scale-[0.99]"
+        >
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Configurações</p>
+            <p className="mt-1 text-sm font-black text-zinc-200">Origem, alertas e automação</p>
+          </div>
+          <ChevronDown size={18} className={`text-zinc-600 transition-transform ${isSettingsOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {isSettingsOpen && (
+          <div className="flex flex-col gap-4 rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-4">
+            <div className="flex flex-col gap-2">
+              <AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" />
+              <p className="px-1 text-[10px] font-medium text-zinc-600">Usado como ponto de partida das rotas.</p>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-500"><AlertTriangle size={18} /></div>
+                <div>
+                  <p className="text-sm font-black text-zinc-200">Alerta de retorno</p>
+                  <p className="text-[10px] text-zinc-600">Avisa quando o motoboy volta</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setRouteAlertsEnabled(!routeAlertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full ${routeAlertsEnabled ? 'bg-amber-500' : 'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${routeAlertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/10 text-sky-400"><BellRing size={18} /></div>
+                <div>
+                  <p className="text-sm font-black text-zinc-200">Automação da loja</p>
+                  <p className="text-[10px] text-zinc-600">Abre e fecha pelos horários</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setAlertsEnabled(!alertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full ${alertsEnabled ? 'bg-sky-500' : 'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${alertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
+            </div>
+
+            <button onClick={handleSaveAllSettings} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white active:scale-95"><Check size={16} /> Salvar configurações</button>
+          </div>
+        )}
+      </section>
+
+      {editingDay !== null && (
+        <div className="fixed inset-0 z-[80] flex flex-col bg-zinc-950 animate-in slide-in-from-bottom duration-300">
+           <div className="flex items-center justify-between p-4 border-b border-zinc-800/80 bg-zinc-950 shrink-0"><button onClick={() => setEditingDay(null)} className="p-2 text-zinc-400 active:scale-90 bg-zinc-900 rounded-full"><ChevronLeft size={24}/></button><span className="font-bold text-zinc-50">Editar horários</span><div className="w-10"></div></div>
+           <div className="flex-1 overflow-y-auto pb-32">
+             <div className="p-6 flex items-center justify-between"><span className="text-2xl font-bold text-zinc-100">{DAYS_OF_WEEK[editingDay]}</span><button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTempDaySchedule(prev => ({ ...prev, active: !prev.active })); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 ${tempDaySchedule.active ? 'bg-indigo-500' : 'bg-zinc-800 border border-zinc-700'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${tempDaySchedule.active ? 'translate-x-7' : 'translate-x-1'}`} /></button></div>
+             {tempDaySchedule.active && (
+               <div className="px-6 flex flex-col gap-4">
+                 {tempDaySchedule.shifts.map((shift, sIdx) => (
+                   <div key={sIdx} className="flex items-center gap-3">
+                     <button onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker({ isOpen: true, shiftIndex: sIdx, field: 'start', hour: shift.start.split(':')[0], minute: shift.start.split(':')[1] }); }} className="flex-1 h-14 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 flex items-center justify-between text-zinc-200 font-bold active:bg-zinc-800 transition-colors shadow-sm">{shift.start}<ChevronDown size={18} className="text-zinc-500" /></button>
+                     <span className="text-zinc-600 font-black">-</span>
+                     <button onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker({ isOpen: true, shiftIndex: sIdx, field: 'end', hour: shift.end.split(':')[0], minute: shift.end.split(':')[1] }); }} className="flex-1 h-14 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 flex items-center justify-between text-zinc-200 font-bold active:bg-zinc-800 transition-colors shadow-sm">{shift.end}<ChevronDown size={18} className="text-zinc-500" /></button>
+                     {tempDaySchedule.shifts.length > 1 && <button onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium }); setTempDaySchedule(p => ({...p, shifts: p.shifts.filter((_, idx) => idx !== sIdx)})); }} className="p-4 text-zinc-500 hover:text-red-500 bg-zinc-900 border border-zinc-800 rounded-2xl transition-colors"><Trash2 size={20}/></button>}
+                   </div>
+                 ))}
+                 <button onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTempDaySchedule(p => ({...p, shifts: [...p.shifts, { start: '00:00', end: '00:00' }]})); }} className="self-end p-3 bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 active:scale-90 transition-all mt-2 shadow-sm"><Plus size={20}/></button>
+               </div>
+             )}
+             <div className="flex flex-col px-6 mt-10">
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Ajustes Rápidos</span>
+                <button onClick={() => applyQuickAdjustment('24h')} className="text-left py-5 border-b border-zinc-800/80 text-zinc-300 text-sm font-semibold active:bg-zinc-900/50 transition-colors">Aberto 24 horas | 00:00 às 23:59h</button>
+                <button onClick={() => applyQuickAdjustment('almoco')} className="text-left py-5 border-b border-zinc-800/80 text-zinc-300 text-sm font-semibold active:bg-zinc-900/50 transition-colors">Almoço | 11:00 às 15:00h</button>
+                <button onClick={() => applyQuickAdjustment('janta')} className="text-left py-5 border-b border-zinc-800/80 text-zinc-300 text-sm font-semibold active:bg-zinc-900/50 transition-colors">Janta | 18:00 às 23:00h</button>
+             </div>
+           </div>
+           <div className="fixed bottom-0 w-full p-4 bg-zinc-950 border-t border-zinc-800 pb-8 shrink-0"><button onClick={saveDayEditor} className="w-full h-14 bg-zinc-100 hover:bg-white text-zinc-950 font-black rounded-xl text-lg active:scale-95 transition-all shadow-xl">Confirmar</button></div>
+        </div>
+      )}
+
+      {timePicker && <StoreTimePicker field={timePicker.field} hour={timePicker.hour} minute={timePicker.minute} onClose={() => setTimePicker(null)} onConfirm={confirmTimePicker} onChange={(value) => setTimePicker(current => current ? {...current,...value} : null)} />}
+      {false && timePicker && (
+        <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-black/80 animate-in fade-in">
+          <div className="bg-[#1a1a1a] rounded-t-[32px] p-6 pb-10 flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-300 relative">
+             <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-zinc-700" />
+             <div className="flex items-center justify-between mb-8"><h3 className="font-bold text-xl text-zinc-50">Horário de {timePicker?.field === 'start' ? 'início' : 'término'}</h3><button onClick={() => setTimePicker(null)} className="p-2.5 bg-zinc-800 rounded-full text-zinc-400 active:scale-90"><X size={20}/></button></div>
+             <div className="flex justify-center gap-4 h-56 relative mb-8">
+               <div className="absolute top-1/2 left-4 right-4 h-14 -translate-y-1/2 bg-[#2d2d2d] rounded-2xl pointer-events-none z-0" />
+               <div className="absolute top-0 w-full h-16 bg-gradient-to-b from-[#1a1a1a] to-transparent pointer-events-none z-10"/>
+               <div className="absolute bottom-0 w-full h-16 bg-gradient-to-t from-[#1a1a1a] to-transparent pointer-events-none z-10"/>
+               <div ref={hourScrollRef} className="flex-1 flex flex-col overflow-y-auto items-center z-20 pb-[96px] pt-[96px] hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                  {Array.from({length: 24}).map((_, i) => {
+                    const h = String(i).padStart(2, '0');
+                    return (<div key={h} data-val={h} onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker(p => ({...p!, hour: h})); }} className="shrink-0 h-14 w-20 flex items-center justify-center cursor-pointer"><span className={`text-2xl transition-all ${timePicker?.hour === h ? 'font-black text-zinc-50 scale-110' : 'font-semibold text-zinc-500'}`}>{h}</span></div>)
+                  })}
+               </div>
+               <div className="flex items-center justify-center text-3xl font-black text-zinc-600 z-20 pb-2">:</div>
+               <div ref={minScrollRef} className="flex-1 flex flex-col overflow-y-auto items-center z-20 pb-[96px] pt-[96px] hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                  {Array.from({length: 60}).map((_, i) => {
+                    const m = String(i).padStart(2, '0');
+                    return (<div key={m} data-val={m} onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker(p => ({...p!, minute: m})); }} className="shrink-0 h-14 w-20 flex items-center justify-center cursor-pointer"><span className={`text-2xl transition-all ${timePicker?.minute === m ? 'font-black text-zinc-50 scale-110' : 'font-semibold text-zinc-500'}`}>{m}</span></div>)
+                  })}
+               </div>
+             </div>
+             <button onClick={confirmTimePicker} className="w-full h-14 bg-zinc-100 hover:bg-white text-zinc-950 font-black rounded-xl text-lg active:scale-95 transition-all shadow-lg">Confirmar</button>
+          </div>
+        </div>
+      )}
+
+      {isPauseModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 px-4 animate-in fade-in">
+           <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 p-6 rounded-3xl flex flex-col gap-5 shadow-2xl">
+             <div className="flex items-center justify-between"><h3 className="font-bold text-zinc-50 text-lg">Criar Nova Pausa</h3><button onClick={() => setIsPauseModalOpen(false)} className="text-zinc-500 bg-zinc-800 p-2 rounded-full active:scale-90"><X size={18}/></button></div>
+             <div className="flex flex-col gap-4">
+                <input type="text" placeholder="Motivo (Ex: Férias, Reforma...)" onChange={e => setTempPause({...tempPause, reason: e.target.value})} className="h-14 bg-zinc-950 border border-zinc-800 rounded-xl px-4 text-sm text-zinc-200 outline-none focus:border-amber-500 transition-colors" />
+                <div className="flex gap-3">
+                  <div className="flex flex-col gap-1.5 flex-1"><span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider px-1">Início</span><input type="date" onChange={e => setTempPause({...tempPause, start_date: e.target.value})} className="h-14 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-sm text-zinc-200 focus:border-amber-500 outline-none transition-colors" /></div>
+                  <div className="flex flex-col gap-1.5 flex-1"><span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider px-1">Fim</span><input type="date" onChange={e => setTempPause({...tempPause, end_date: e.target.value})} className="h-14 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-sm text-zinc-200 focus:border-amber-500 outline-none transition-colors" /></div>
+                </div>
+             </div>
+             <button onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium }); setPauses(prev => [...prev, { ...tempPause, id: Date.now().toString() }]); setIsPauseModalOpen(false); }} className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black rounded-xl mt-2 active:scale-95 transition-all text-lg shadow-lg shadow-amber-500/20">Salvar Pausa</button>
+           </div>
+        </div>
+      )}
+
+      <PerformanceModals 
+        isLogisticsOpen={isLogisticsModalOpen} closeLogistics={() => setIsLogisticsModalOpen(false)}
+        isRevenueOpen={isRevenueModalOpen} closeRevenue={() => setIsRevenueModalOpen(false)}
+        isPrivacyMode={isPrivacyMode} 
+        togglePrivacyMode={togglePrivacyMode}
+        dashboardData={dashboardData}
+      />
+      {isCalendarOpen && <OperationalCalendar selected={dashboardData.selectedDateKey} markedDates={dashboardData.datesWithOperation} onClose={() => setIsCalendarOpen(false)} onSelect={(key) => { dashboardData.setSelectedDateKey(key); setIsCalendarOpen(false); }} />}
+    </div>
+  );
+}
+=== MAIS ===
+// app/mais/page.tsx
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  CheckSquare,
+  ChevronRight,
+  LockKeyhole,
+  LogOut,
+  Moon,
+  RefreshCw,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { useAppStore } from '@/store/useAppStore';
+
+export default function MaisPage() {
+  const router = useRouter();
+
+  const user = useAppStore((state) => state.user);
+  const logout = useAppStore((state) => state.logout);
+  const initData = useAppStore((state) => state.initData);
+  const isSyncing = useAppStore((state) => state.isSyncing);
+  const syncError = useAppStore((state) => state.syncError);
+
+  const [syncChecking, setSyncChecking] = useState(false);
+
+  const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Álefe';
+  const fullName = user?.displayName || 'Álefe Jôhsefe';
+
+  const handleSync = async () => {
+    if (isSyncing || syncChecking) return;
+
+    setSyncChecking(true);
+    toast.loading('Sincronizando com a nuvem...', { id: 'sync-toast' });
+
+    try {
+      await initData();
+
+      window.setTimeout(() => {
+        const currentState = useAppStore.getState();
+
+        if (currentState.syncError) {
+          toast.error('Falha na sincronização', {
+            id: 'sync-toast',
+            description:
+              'Não foi possível conectar. Confira sua internet e tente novamente.',
+            duration: 4000,
+          });
+        } else {
+          toast.success('Sincronização concluída', {
+            id: 'sync-toast',
+            description:
+              'Rotas, clientes e entregas estão atualizados com a nuvem.',
+            duration: 3000,
+          });
+        }
+
+        setSyncChecking(false);
+      }, 500);
+    } catch {
+      setSyncChecking(false);
+      toast.error('Não foi possível sincronizar', {
+        id: 'sync-toast',
+        description: 'Tente novamente quando a conexão estiver estável.',
+      });
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success('Sessão encerrada.');
+    } catch {
+      toast.error('Não foi possível sair da conta.');
+    }
+  };
+
+  const syncing = isSyncing || syncChecking;
+
+  return (
+    <div className="relative flex flex-col gap-6 pb-24 animate-in fade-in duration-300">
+      <header>
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-500">
+          Sistema
+        </p>
+        <h1 className="mt-1 font-heading text-2xl font-black text-zinc-50">
+          Configurações e Mais
+        </h1>
+        <p className="mt-1 text-xs text-zinc-500">
+          Conta, ferramentas operacionais e estado da sincronização.
+        </p>
+      </header>
+
+      <section className="flex flex-col items-center justify-center gap-3 rounded-[28px] border border-zinc-800 bg-zinc-900/40 p-6 shadow-sm">
+        <div className="relative h-20 w-20 overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 ring-4 ring-zinc-800">
+          {user?.photoURL ? (
+            <img
+              src={user.photoURL}
+              alt="Perfil"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center font-heading text-2xl font-bold text-white">
+              {firstName.charAt(0)}
+            </div>
+          )}
+        </div>
+
+        <div className="text-center">
+          <h2 className="font-heading text-lg font-bold text-zinc-50">
+            {fullName}
+          </h2>
+          <p className="text-sm text-zinc-500">
+            {user?.email || 'Administrador Operacional'}
+          </p>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
+          Ferramentas
+        </h2>
+
+        <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
+          <button
+            type="button"
+            onClick={() => router.push('/confirmacoes')}
+            className="flex w-full items-center gap-4 p-4 text-left transition-colors active:bg-zinc-800/50"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
+              <CheckSquare size={20} />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-zinc-100">
+                Central de Confirmações
+              </p>
+              <p className="text-xs text-zinc-500">
+                Pendências do iFood e acesso ao portal
+              </p>
+            </div>
+
+            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
+          </button>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
+          Sistema e dados
+        </h2>
+
+        <div className="flex flex-col overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
+          <div className="flex items-center gap-4 border-b border-zinc-800/80 p-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
+              <Moon size={20} />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="font-semibold text-zinc-100">Tema escuro</p>
+              <p className="text-xs text-zinc-500">
+                Padrão visual ativo no aplicativo
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 text-left transition-colors active:bg-zinc-800/50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                syncError
+                  ? 'bg-red-500/10 text-red-500'
+                  : 'bg-emerald-500/10 text-emerald-500'
+              }`}
+            >
+              <RefreshCw size={20} className={syncing ? 'animate-spin' : ''} />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p
+                className={`font-semibold ${
+                  syncError ? 'text-red-400' : 'text-zinc-100'
+                }`}
+              >
+                {syncing
+                  ? 'Buscando dados...'
+                  : syncError
+                    ? 'Falha na última sincronização'
+                    : 'Sincronizar agora'}
+              </p>
+              <p className="text-xs text-zinc-500">
+                {syncing
+                  ? 'Aguarde a atualização terminar'
+                  : 'Forçar atualização dos dados na nuvem'}
+              </p>
+            </div>
+          </button>
+
+          <div className="flex items-center gap-4 p-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-500">
+              <LockKeyhole size={19} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-zinc-300">
+                Limpeza local protegida
+              </p>
+              <p className="text-xs leading-relaxed text-zinc-600">
+                A exclusão em massa permanece indisponível para evitar perda
+                acidental de dados.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="mx-auto mb-4 mt-4 flex items-center gap-2 text-sm font-bold text-red-500 transition active:scale-95"
+      >
+        <LogOut size={16} />
+        Sair da conta
+      </button>
+    </div>
+  );
+}

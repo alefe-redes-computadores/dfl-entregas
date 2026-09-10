@@ -1,0 +1,106 @@
+905-                </button>
+906-              </div>
+907-            </article>
+908-          );
+909-        })}
+910-
+911-        {queue.length === 0 && (
+912-          <div className="rounded-[28px] border border-dashed border-zinc-800 px-5 py-14 text-center">
+913-            <CheckCircle2 size={34} className="mx-auto text-emerald-500/70" />
+914-            <h3 className="mt-4 font-heading text-base font-black text-zinc-200">
+915-              Nenhuma pendência neste filtro
+916-            </h3>
+917-            <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-zinc-600">
+918-              Não há pedidos iFood pendentes para esta data e filtro.
+919-            </p>
+920-          </div>
+921-        )}
+922-      </div>
+923-
+924-      {isBatchOpen && (
+925-        <div className="fixed inset-0 z-[120] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center">
+926-          <div className="w-full max-w-lg rounded-[28px] border border-zinc-800 bg-zinc-950 p-5 shadow-2xl">
+927-            <div className="flex items-start justify-between gap-3">
+928-              <div>
+929-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">
+930:                  Cadastro em lote
+931-                </p>
+932-                <h2 className="mt-1 font-heading text-lg font-black text-zinc-100">
+933:                  Adicionar pendências iFood
+934-                </h2>
+935-              </div>
+936-
+937-              <button
+938-                onClick={() => setIsBatchOpen(false)}
+939-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-zinc-500 active:scale-95"
+940-                aria-label="Fechar cadastro em lote"
+941-              >
+942-                <X size={16} />
+943-              </button>
+944-            </div>
+945-
+946-            <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3">
+947-              <p className="text-[11px] leading-relaxed text-zinc-500">
+948-                Uma pendência por linha. Separe os campos por ponto e vírgula,
+949-                barra vertical ou tabulação. Ex.:
+950-                <span className="ml-1 font-mono text-zinc-300">
+951-                  5463 ; 60873228 ; 1234 ; João
+952-                </span>
+953-              </p>
+954-            </div>
+955-
+956-            <textarea
+957-              rows={8}
+958-              value={batchText}
+--
+964-            <div className="mt-4 grid grid-cols-2 gap-2">
+965-              <button
+966-                onClick={async () => {
+967-                  try {
+968-                    const text = await navigator.clipboard.readText();
+969-                    setBatchText(text);
+970-                    toast.success('Texto colado.');
+971-                  } catch {
+972-                    toast.error(
+973-                      'Não foi possível acessar a área de transferência.',
+974-                    );
+975-                  }
+976-                }}
+977-                className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 text-xs font-black text-zinc-300 active:scale-95"
+978-              >
+979-                <ClipboardPaste size={15} />
+980-                Colar
+981-              </button>
+982-
+983-              <button
+984-                onClick={savePendingBatch}
+985-                disabled={isBatchSaving}
+986-                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500 text-xs font-black text-white active:scale-95 disabled:opacity-50"
+987-              >
+988-                <Plus size={15} />
+989:                {isBatchSaving ? 'Salvando...' : 'Salvar pendências'}
+990-              </button>
+991-            </div>
+992-          </div>
+993-        </div>
+994-      )}
+995-    </div>
+996-  );
+997-}
+998-
+999-function Metric({
+1000-  icon: Icon,
+1001-  label,
+1002-  value,
+1003-  tone,
+1004-}: {
+1005-  icon: typeof TimerReset;
+1006-  label: string;
+1007-  value: number;
+1008-  tone: string;
+1009-}) {
+1010-  return (
+1011-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3">
+1012-      <Icon size={15} className={tone} />
+1013-      <p className="mt-2 text-xl font-black text-zinc-100">{value}</p>
+1014-      <p className="mt-0.5 text-[9px] font-bold leading-tight text-zinc-600">{label}</p>
