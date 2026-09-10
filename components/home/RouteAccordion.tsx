@@ -58,7 +58,7 @@ import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 import { requestDeviceLocation } from '@/lib/device-location';
-import { geocodeStoreAddress } from '@/lib/store-geocoding';
+import { geocodeAddress, geocodeStoreAddress } from '@/lib/store-geocoding';
 
 interface RouteAccordionProps {
   route: Route;
@@ -83,6 +83,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [optimizerOrder, setOptimizerOrder] = useState<string[]>([]);
   const [optimizerPreviousOrder, setOptimizerPreviousOrder] = useState<string[]>([]);
   const [optimizerApproximateIds, setOptimizerApproximateIds] = useState<string[]>([]);
+  const [optimizerResolvedPoints, setOptimizerResolvedPoints] = useState<Record<string, LatLngPoint>>({});
   const [lastAppliedOrder, setLastAppliedOrder] = useState<string[] | null>(null);
 
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
@@ -133,7 +134,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       .filter(Boolean)
       .map((delivery) => {
         const customer = getCustomerById(delivery!.customer_id);
-        const point =
+        const point = optimizerResolvedPoints[delivery!.id] ||
           extractLatLngFromMapsUrl(delivery!.maps_link) ||
           extractLatLngFromMapsUrl(customer?.maps_link);
 
@@ -148,6 +149,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     getCustomerById,
     optimizerApproximateIds,
     optimizerOrder,
+    optimizerResolvedPoints,
     pendingDeliveries,
   ]);
 
@@ -327,28 +329,38 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     try {
       const previousIds = pendingDeliveries.map((delivery) => delivery.id);
 
-      const precise = pendingDeliveries
-        .map((delivery) => {
+      const resolvedStops = await Promise.all(
+        pendingDeliveries.map(async (delivery) => {
           const customer = getCustomerById(delivery.customer_id);
-          const point =
+          const savedPoint =
             extractLatLngFromMapsUrl(delivery.maps_link) ||
             extractLatLngFromMapsUrl(customer?.maps_link);
+          if (savedPoint) return { delivery, customer, point: savedPoint };
 
-          return point ? { delivery, point } : null;
-        })
-        .filter(Boolean) as Array<{
-          delivery: typeof pendingDeliveries[number];
-          point: LatLngPoint;
-        }>;
+          const address = (delivery.address_string || customer?.address || '').trim();
+          if (!address) return { delivery, customer, point: null };
 
-      const approximate = pendingDeliveries.filter(
-        (delivery) => !precise.some((item) => item.delivery.id === delivery.id),
+          try {
+            const point = await geocodeAddress(address);
+            return { delivery, customer, point };
+          } catch (error) {
+            console.warn(`Endereço não localizado para a entrega ${delivery.id}:`, error);
+            return { delivery, customer, point: null };
+          }
+        }),
       );
+      const resolvedPoints = Object.fromEntries(
+        resolvedStops
+          .filter((item): item is typeof item & { point: LatLngPoint } => Boolean(item.point))
+          .map((item) => [item.delivery.id, item.point]),
+      );
+      const approximate = resolvedStops.filter((item) => !item.point);
 
       const current = await getCurrentOrigin();
 
       setOptimizerPreviousOrder(previousIds);
-      setOptimizerApproximateIds(approximate.map((delivery) => delivery.id));
+      setOptimizerResolvedPoints(resolvedPoints);
+      setOptimizerApproximateIds(approximate.map((item) => item.delivery.id));
       setOptimizerOrigin(current.point);
       setOptimizerOriginLabel(current.label);
 
@@ -361,10 +373,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         return;
       }
 
-      const smartStops = pendingDeliveries.map((delivery) => {
-        const customer = getCustomerById(delivery.customer_id);
-        return { delivery, customer, point: deliveryPoint(delivery, customer) };
-      });
+      const smartStops = resolvedStops.map(({ delivery, customer, point }) => ({ delivery, customer, point }));
       const nextIds = buildSmartRouteOrder(current.point, smartStops).map((item) => item.delivery.id);
 
       setOptimizerOrder(nextIds);
@@ -678,10 +687,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 <div className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/[.06] p-3">
                   <p className="flex items-center gap-2 text-[10px] font-black text-amber-300">
                     <AlertTriangle size={13} />
-                    {optimizerApproximateIds.length} parada{optimizerApproximateIds.length !== 1 ? 's' : ''} sem coordenadas
+                    {optimizerApproximateIds.length} parada{optimizerApproximateIds.length !== 1 ? 's' : ''} não localizada{optimizerApproximateIds.length !== 1 ? 's' : ''}
                   </p>
                   <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
-                    Elas não entram no cálculo de distância e mantêm a ordem relativa atual.
+                    O endereço foi consultado automaticamente, mas não retornou coordenadas. A ordem relativa é preservada.
                   </p>
                 </div>
               )}
