@@ -16,6 +16,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { StockSupplierIcon } from '@/components/stock-supplies/StockSupplierIcon';
 import {
   buildStockSupplyMetrics,
   money,
@@ -65,6 +66,7 @@ const dayLabel = (key: string) => {
 export default function StockSuppliesPage() {
   const router = useRouter();
   const supplies = useAppStore((state) => state.stockSupplies);
+  const suppliers = useAppStore((state) => state.stockSuppliers);
 
   const [month, setMonth] = useState(() => new Date());
   const [query, setQuery] = useState('');
@@ -330,9 +332,7 @@ export default function StockSuppliesPage() {
                       }
                       className="flex w-full items-center gap-3 border-b border-zinc-800/70 p-4 text-left last:border-0 active:bg-zinc-800/50"
                     >
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-400">
-                        <PackageOpen size={18} />
-                      </span>
+                      <StockSupplierIcon supplier={suppliers.find((supplier)=>supplier.id===item.supplier_id)} />
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

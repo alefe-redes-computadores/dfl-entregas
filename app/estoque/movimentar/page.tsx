@@ -203,8 +203,8 @@ function Content() {
 
         {type === 'entrada' && (
           <label className="block text-xs font-bold text-zinc-400">
-            Custo por unidade{' '}
-            <span className="font-normal text-zinc-600">(opcional)</span>
+            Custo por {product.unit==='kg'?'quilo':product.unit==='l'?'litro':product.unit==='un'?'unidade':product.unit}{' '}
+            <span className="font-normal text-zinc-600">(opcional)</span><span className="mt-1 block text-[9px] font-normal leading-relaxed text-amber-400">Use o custo da unidade controlada no estoque, não o preço da caixa/pacote.</span>
             <input
               inputMode="numeric"
               value={cost}
