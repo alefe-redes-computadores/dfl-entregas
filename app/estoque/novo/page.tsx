@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { SUPPLY_UNIT_LABELS } from '@/lib/stock-supply';
 import { formatBRLCents, moneyToNumber } from '@/lib/money-input';
+import { toBaseQuantity } from '@/lib/stock-quantity';
 import type { StockProduct, StockSupplyUnit } from '@/types';
 
 const numberValue = (value: string) => Number(value.replace(',', '.')) || 0;
@@ -17,9 +18,9 @@ export default function NewStockProductPage() {
   const router = useRouter(); const add = useAppStore(s => s.addStockProduct);
   const [name,setName]=useState(''); const [category,setCategory]=useState(''); const [unit,setUnit]=useState<StockSupplyUnit>('un');
   const [current,setCurrent]=useState('0'); const [minimum,setMinimum]=useState('0'); const [ideal,setIdeal]=useState(''); const [cost,setCost]=useState('R$ 0,00'); const [busy,setBusy]=useState(false);
-  const minimumNumber=numberValue(minimum); const target=Math.max(minimumNumber,numberValue(ideal)); const suggestion=Math.max(0,target-numberValue(current));
+  const inputUnit=unit==='kg'?'g':unit==='l'?'ml':unit;const base=(value:string)=>toBaseQuantity(numberValue(value),inputUnit,unit);const minimumNumber=base(minimum); const target=Math.max(minimumNumber,base(ideal)); const suggestion=Math.max(0,target-base(current));
   const invalidIdeal=ideal!==''&&numberValue(ideal)<minimumNumber;
-  const submit=async(e:React.FormEvent)=>{e.preventDefault();if(!name.trim())return;if(invalidIdeal)return toast.error('O nível de reposição não pode ser menor que o nível de alerta.');setBusy(true);try{const now=new Date().toISOString();const product:StockProduct={id:`stock-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,name:name.trim(),category:category.trim()||undefined,unit,current_quantity:numberValue(current),minimum_quantity:minimumNumber,ideal_quantity:target,average_cost:moneyToNumber(cost)||undefined,active:true,created_at:now,updated_at:now};await add(product);toast.success('Produto adicionado ao estoque.');router.replace('/estoque')}catch{toast.error('Não foi possível cadastrar o produto.');setBusy(false)}};
+  const submit=async(e:React.FormEvent)=>{e.preventDefault();if(!name.trim())return;if(invalidIdeal)return toast.error('O nível de reposição não pode ser menor que o nível de alerta.');setBusy(true);try{const now=new Date().toISOString();const product:StockProduct={id:`stock-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,name:name.trim(),category:category.trim()||undefined,unit,current_quantity:base(current),minimum_quantity:minimumNumber,ideal_quantity:target,average_cost:moneyToNumber(cost)||undefined,active:true,created_at:now,updated_at:now};await add(product);toast.success('Produto adicionado ao estoque.');router.replace('/estoque')}catch{toast.error('Não foi possível cadastrar o produto.');setBusy(false)}};
   return <div><PageHeader title="Novo produto" subtitle="Saldo, alerta e reposição" to="/estoque"/><form onSubmit={submit} className="space-y-5 pb-10">
     <TextField label="Produto*" value={name} set={setName} placeholder="Ex.: Coca-Cola 2L" required/><TextField label="Categoria" value={category} set={setCategory} placeholder="Bebidas, embalagens, ingredientes..."/>
     <div><p className="mb-2 text-xs font-bold text-zinc-400">Unidade de controle</p><div className="flex flex-wrap gap-2">{Object.entries(SUPPLY_UNIT_LABELS).map(([key,label])=><button type="button" key={key} onClick={()=>setUnit(key as StockSupplyUnit)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${unit===key?'border-emerald-500/50 bg-emerald-500/10 text-emerald-400':'border-zinc-800 bg-zinc-900 text-zinc-500'}`}>{label}</button>)}</div></div>

@@ -82,6 +82,8 @@ export interface StockSupply {
   observation?: string;
   received_at?: string;
   checked_at?: string;
+  shopping_started_at?: string;
+  shopping_completed_at?: string;
   stock_integrated_at?: string;
   stock_reversed_at?: string;
   created_at: string;
