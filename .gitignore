@@ -16,3 +16,5 @@ next-env.d.ts
 .dfl-backups/
 dfl-entregas-cirurgia-*.sh
 auditoria-*.txt
+
+.env.local
