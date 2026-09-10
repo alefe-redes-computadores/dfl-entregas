@@ -69,7 +69,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [fuzzyModalOpen, setFuzzyModalOpen] = useState(false);
-  const [isReopenModalOpen, setIsReopenModalOpen] = useState(false); 
+  const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
   const [isCopyMenuOpen, setIsCopyMenuOpen] = useState(false);
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [currentFuzzyList, setCurrentFuzzyList] = useState<any[]>([]);
@@ -81,6 +81,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [optimizerOriginLabel, setOptimizerOriginLabel] = useState('Localização atual');
   const [optimizerLocationError, setOptimizerLocationError] = useState('');
   const [optimizerOrder, setOptimizerOrder] = useState<string[]>([]);
+  const [optimizerEdited, setOptimizerEdited] = useState(false);
   const [optimizerPreviousOrder, setOptimizerPreviousOrder] = useState<string[]>([]);
   const [optimizerApproximateIds, setOptimizerApproximateIds] = useState<string[]>([]);
   const [optimizerResolvedPoints, setOptimizerResolvedPoints] = useState<Record<string, LatLngPoint>>({});
@@ -90,13 +91,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const closeRoute = useAppStore((state) => state.closeRoute);
   const reopenRoute = useAppStore((state) => state.reopenRoute);
-  const startRoute = useAppStore((state) => state.startRoute); 
-  const deleteRoute = useAppStore((state) => state.deleteRoute); 
+  const startRoute = useAppStore((state) => state.startRoute);
+  const deleteRoute = useAppStore((state) => state.deleteRoute);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const allRoutes = useAppStore((state) => state.routes);
   const setDeliveryOrder = useAppStore((state) => state.setDeliveryOrder);
   const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
-  
+
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const storeSettings = useAppStore((state) => state.storeSettings);
   const motoboys = useAppStore((state) => state.motoboys);
@@ -106,7 +107,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const totalDeliveries = deliveries.length;
   const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
   const progressPercent = totalDeliveries > 0 ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
-  
+
   const routeTotalValue = deliveries.reduce((acc, curr) => acc + (curr.value || 0), 0);
   const operationalRouteDate = routeDate(route);
   const operationalRouteDateKey = operationalRouteDate ? dateKey(operationalRouteDate) : '';
@@ -190,7 +191,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         const timeB = firstValidTimestamp(routeDate(b))?.getTime() ?? Number.POSITIVE_INFINITY;
         return timeA - timeB;
       });
-    
+
     const currentIndex = motoboyRoutes.findIndex((r) => r.id === route.id);
     return currentIndex > 0 ? motoboyRoutes[currentIndex - 1] : null;
   };
@@ -221,8 +222,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         notifications: [{
           title: 'Rota finalizada',
           body: `O motoboy ${route.motoboy_name} encerrou a rota.`,
-          id: Math.floor(Math.random() * 100000), 
-          schedule: { at: new Date(Date.now() + 1000) }, 
+          id: Math.floor(Math.random() * 100000),
+          schedule: { at: new Date(Date.now() + 1000) },
         }]
       });
       }
@@ -272,9 +273,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
     const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
     const previousRoute = getPreviousRoute();
-    
+
     const result = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, previousRoute);
-    
+
     if (result.hasFuzzyAddresses && result.fuzzyList.length > 0 && msgType === 1) {
       setCurrentFuzzyList(result.fuzzyList);
       setPendingActionType(msgType === 1 ? 'copy1' : 'copy2');
@@ -289,7 +290,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     setFuzzyModalOpen(false);
     const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
     const previousRoute = getPreviousRoute();
-    
+
     const msgsToCopy = messages || (await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, previousRoute)).messages;
 
     if (msgType === 1) {
@@ -358,6 +359,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
       const current = await getCurrentOrigin();
 
+      setOptimizerEdited(false);
       setOptimizerPreviousOrder(previousIds);
       setOptimizerResolvedPoints(resolvedPoints);
       setOptimizerApproximateIds(approximate.map((item) => item.delivery.id));
@@ -387,6 +389,17 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     }
   };
 
+  const moveOptimizerItem = (index: number, direction: -1 | 1) => {
+    setOptimizerOrder((current) => {
+      const next = [...current];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return current;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setOptimizerEdited(true);
+  };
+
   const applyOptimizerOrder = async () => {
     if (optimizerOrder.length < 2 || !optimizerOrigin) return;
     setOptimizerBusy(true);
@@ -394,7 +407,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     try {
       await setDeliveryOrder(route.id, optimizerOrder);
       const now = new Date().toISOString();
-      await Promise.all(optimizerOrder.map((id) => useAppStore.getState().updateDelivery(id, { order_locked: true, order_source: 'smart', order_updated_at: now })));
+      await Promise.all(optimizerOrder.map((id) => useAppStore.getState().updateDelivery(id, { order_locked: true, order_source: optimizerEdited ? 'manual' : 'smart', order_updated_at: now })));
       setLastAppliedOrder(optimizerPreviousOrder);
       setOptimizerOpen(false);
 
@@ -431,7 +444,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   const handleOpenMaps = async () => {
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-    
+
     const stops = pendingDeliveries.map((d) => {
       const cust = getCustomerById(d.customer_id);
       return resolveStopLocation(d, cust?.maps_link);
@@ -506,7 +519,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             )}
 
             {!isRecoveryRoute && clientsWithPhone.length > 0 && (
-              <button 
+              <button
                 onClick={() => setIsDispatchModalOpen(true)}
                 className="flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition-all shadow-sm"
               >
@@ -549,7 +562,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               );
             })
           )}
-          
+
           <div className="mt-2 flex flex-col gap-2">
             {sortedDeliveries.length === 0 && isNotStarted && !isRecoveryRoute && (
               <button onClick={handleDeleteEmptyRoute} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-red-500/10 border border-red-500/20 py-3.5 text-sm font-bold text-red-500 hover:bg-red-500/20 active:scale-95 transition-all">
@@ -744,7 +757,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                             {row.delivery.address_string || 'Endereço não informado'}
                           </p>
                         </div>
-                        <div className="shrink-0 text-right">
+                        <div className="flex shrink-0 items-center gap-2">
+                          <div className="text-right">
                           {row.approximate ? (
                             <span className="text-[9px] font-black text-amber-400">Aproximado</span>
                           ) : (
@@ -753,6 +767,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                           {changed && (
                             <p className="mt-1 text-[9px] font-bold text-zinc-600">era {previousIndex + 1}º</p>
                           )}
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <button type="button" disabled={index === 0} onClick={() => moveOptimizerItem(index, -1)}
+                              className="h-7 w-8 rounded-lg border border-zinc-700 bg-zinc-900 text-xs font-black disabled:opacity-20">↑</button>
+                            <button type="button" disabled={index === optimizerRows.length - 1} onClick={() => moveOptimizerItem(index, 1)}
+                              className="h-7 w-8 rounded-lg border border-zinc-700 bg-zinc-900 text-xs font-black disabled:opacity-20">↓</button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -768,7 +789,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-500 py-3.5 text-sm font-black text-white disabled:opacity-40"
               >
                 <Navigation size={17} />
-                Aplicar ordem sugerida
+                {optimizerEdited ? 'Aplicar ordem corrigida' : 'Aplicar ordem sugerida'}
               </button>
               <button onClick={() => setOptimizerOpen(false)} className="mt-2 flex h-11 w-full items-center justify-center text-xs font-bold text-zinc-500">
                 Manter ordem atual
@@ -780,8 +801,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
       {/* MODAL BOTTOM SHEET DE CÓPIA DO WHATSAPP */}
       {isCopyMenuOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col justify-end bg-black/80 animate-in fade-in">
-          <div className="bg-[#1a1a1a] rounded-t-[32px] p-6 pb-10 flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-300 relative">
+        <div className="fixed inset-0 z-[100] flex flex-col justify-end bg-black/80 animate-in fade-in" onClick={() => setIsCopyMenuOpen(false)}>
+          <div className="bg-[#1a1a1a] rounded-t-[32px] p-6 pb-10 flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-300 relative" onClick={(event) => event.stopPropagation()}>
              <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-zinc-700" />
              <div className="flex items-center justify-between mb-6">
                <h3 className="font-bold text-xl text-zinc-50 flex items-center gap-2"><Copy size={20} className="text-emerald-500"/> Enviar para WhatsApp</h3>
@@ -796,7 +817,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                     <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Copia os endereços, IDs, botão de chamar no portão e o link do Mapa otimizado.</span>
                   </div>
                 </button>
-                
+
                 <button onClick={() => handleCopyMessage(2)} className="flex items-center gap-4 bg-zinc-900 border border-zinc-800 p-5 rounded-3xl active:scale-95 transition-all text-left">
                   <div className="h-14 w-14 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0"><Receipt size={24}/></div>
                   <div className="flex flex-col">
@@ -821,7 +842,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               <button onClick={() => setIsDispatchModalOpen(false)} className="text-zinc-500 hover:text-zinc-300"><X size={20}/></button>
             </div>
             <p className="text-xs text-zinc-400 leading-relaxed">Toque no cliente para abrir a conversa no WhatsApp avisando que o motoboy <strong className="text-zinc-200">{route.motoboy_name}</strong> saiu com a entrega:</p>
-            
+
             <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
               {clientsWithPhone.map((c) => (
                 <a

@@ -1,14 +1,14 @@
 // app/estoque/fornecedores/page.tsx
 'use client';
 import { useMemo, useState } from 'react';
-import { Beef, Edit3, Flame, Leaf, Package, Plus, Save, Search, ShoppingCart, Store, Truck, X } from 'lucide-react';
+import { Beef, Edit3, Flame, Leaf, Package, Plus, Save, Search, ShoppingCart, Store, Truck, X, Bike, Wheat } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { STOCK_SUPPLIER_STYLE, STOCK_SUPPLIER_TYPE_LABELS } from '@/lib/stock-suppliers';
 import type { StockSupplier, StockSupplierType } from '@/types';
 
-const icons = { 'shopping-cart': ShoppingCart, package: Package, beef: Beef, flame: Flame, leaf: Leaf, truck: Truck, store: Store };
+const icons = { 'shopping-cart': ShoppingCart, package: Package, beef: Beef, flame: Flame, leaf: Leaf, truck: Truck, bread: Wheat, bike: Bike, store: Store };
 const blank = { name: '', type: 'supermercado' as StockSupplierType, phone: '', address: '', observation: '' };
 
 export default function SuppliersPage(){

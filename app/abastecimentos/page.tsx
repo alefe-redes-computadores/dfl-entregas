@@ -10,7 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   PackageOpen,
-  Plus,
+
   Search,
   UserRound,
   Wallet,
@@ -165,13 +165,7 @@ export default function StockSuppliesPage() {
           </div>
         </div>
 
-        <button
-          onClick={() => router.push('/abastecimentos/novo')}
-          className="flex h-12 items-center gap-2 rounded-2xl bg-amber-500 px-4 font-black text-zinc-950"
-        >
-          <Plus size={18} />
-          Nova
-        </button>
+
       </header>
 
       <section className="flex items-center justify-between rounded-[26px] border border-zinc-800 bg-zinc-900/50 p-3">

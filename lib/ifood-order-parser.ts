@@ -57,21 +57,14 @@ function cleanAddress(source:string, observations:string[]) {
 }
 
 function parsePayment(line:string,result:ParsedIfoodOrder){
-  const negative=/\b(?:n[aã]o\s+pago|n[aã]o\s+foi\s+pago|pagamento\s+pendente|pix\s+pendente)\b/i.test(line);
-  const paidSignal=
-    /\b(?:pago\s+(?:no\s+app|online)|pedido\s+pago|j[aá]\s+pago|pagamento\s+(?:pago|confirmado|aprovado|ok)|pix\s+(?:pago|confirmado|aprovado|ok))\b/i.test(line) ||
-    /^\s*(?:pago|confirmado)\s*[!✅.]*\s*$/i.test(line);
-
-  if(paidSignal&&!negative){
-    result.isPaid=true;
-    if(/\bpix\b/i.test(line)||!result.paymentMethod)result.paymentMethod='pix';
-    result.changeFor='';
-    return;
-  }
-
-  if(/\b(?:cart[aã]o|cr[eé]dito|d[eé]bito)\b/i.test(line)){result.paymentMethod='cartao';result.isPaid=false;result.changeFor='';}
-  else if(/\b(?:dinheiro|troco|voltar)\b/i.test(line)){result.paymentMethod='dinheiro';result.isPaid=false;}
-  else if(/\bpix\b/i.test(line)){result.paymentMethod='pix';if(negative)result.isPaid=false;}
+  const negative=/\b(?:n[aã]o\s+pago|n[aã]o\s+foi\s+pago|pagamento\s+pendente|pix\s+pendente|pagar\s+na\s+entrega)\b/i.test(line);
+  const cash=/\b(?:dinheiro|troco|voltar)\b/i.test(line);
+  const card=/\b(?:cart[aã]o|cr[eé]dito|d[eé]bito|maquininha)\b/i.test(line);
+  const paidSignal=!negative&&!cash&&!card&&(/\b(?:pago|paga|pagamento\s+(?:online|pago|confirmado|aprovado|ok)|pedido\s+pago|j[aá]\s+pago|pago\s+(?:no\s+app|online)|pix\s+(?:pago|confirmado|aprovado|ok))\b/i.test(line)||/^\s*(?:pago|confirmado)\s*[!✅.]*\s*$/i.test(line));
+  if(card){result.paymentMethod='cartao';result.isPaid=false;result.changeFor='';return;}
+  if(cash){result.paymentMethod='dinheiro';result.isPaid=false;return;}
+  if(paidSignal){result.paymentMethod='pix';result.isPaid=true;result.changeFor='';return;}
+  if(/\bpix\b/i.test(line)){result.paymentMethod='pix';result.isPaid=!negative&&/\b(?:pago|confirmado|aprovado|ok|online)\b/i.test(line);if(result.isPaid)result.changeFor='';}
 }
 
 function parseRouteHint(line:string,result:ParsedIfoodOrder){

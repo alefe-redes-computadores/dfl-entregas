@@ -12,6 +12,8 @@ export default function NovaRotaPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnDate = searchParams.get('date') || '';
+  const requestedReturn = searchParams.get('returnTo') || '';
+  const safeReturnTo = requestedReturn.startsWith('/') && !requestedReturn.startsWith('//') ? requestedReturn : '';
   const todayDateKey = dateKey(new Date());
   const historicalContext = Boolean(returnDate && returnDate !== todayDateKey);
   const routesReturn = historicalContext
@@ -22,7 +24,7 @@ export default function NovaRotaPage() {
   const addRoute = useAppStore((state) => state.addRoute);
   const motoboys = useAppStore((state) => state.motoboys);
   const addMotoboy = useAppStore((state) => state.addMotoboy);
-  
+
   const [name, setName] = useState('');
   const [motoboySelection, setMotoboySelection] = useState<string>('');
   const [changeMoney, setChangeMoney] = useState('');
@@ -56,7 +58,7 @@ export default function NovaRotaPage() {
         active: true,
         createdAt: new Date().toISOString()
       };
-      
+
       await addMotoboy(novoMotoboy);
       setMotoboySelection(novoMotoboy.id);
       toast.success(`${trimmed} cadastrado com sucesso!`);
@@ -110,7 +112,7 @@ export default function NovaRotaPage() {
     <div className="relative flex flex-col gap-5 pb-28 animate-in fade-in duration-300">
       <header className="flex items-center gap-3">
         <button
-          onClick={() => router.replace(routesReturn)}
+          onClick={() => router.replace(safeReturnTo || routesReturn)}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400 active:scale-95"
           aria-label="Voltar às rotas"
         >

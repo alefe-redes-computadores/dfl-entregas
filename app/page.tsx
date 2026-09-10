@@ -229,7 +229,7 @@ export default function HomePage() {
       <div className="grid grid-cols-2 gap-3">
         <a
           href={`/entregas?date=${encodeURIComponent(selectedDateKey)}`}
-          className="flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4 active:scale-[0.99]"
+          className="grid min-h-[136px] grid-rows-[auto_1fr_auto] gap-2 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4 active:scale-[0.99]"
         >
           <div className="flex items-center justify-between gap-2 text-zinc-400">
             <div className="flex items-center gap-2">
@@ -242,13 +242,13 @@ export default function HomePage() {
               </span>
             )}
           </div>
-          <p className="font-heading text-2xl font-bold text-zinc-50">{totalEntregas}</p>
+          <p className="self-end font-heading text-3xl font-black leading-none text-zinc-50">{totalEntregas}</p>
           <p className="text-[10px] text-zinc-600">{completedDeliveries} concluída{completedDeliveries === 1 ? '' : 's'}</p>
         </a>
 
         <a
           href={`/rotas?date=${encodeURIComponent(selectedDateKey)}`}
-          className={`flex flex-col gap-1.5 rounded-[20px] border p-4 active:scale-[0.99] ${
+          className={`grid min-h-[136px] grid-rows-[auto_1fr_auto] gap-2 rounded-[20px] border p-4 active:scale-[0.99] ${
             readyRoutes.length > 0
               ? 'border-emerald-500/25 bg-emerald-500/[.055]'
               : 'border-zinc-800 bg-zinc-900/40'
@@ -265,16 +265,16 @@ export default function HomePage() {
               </span>
             )}
           </div>
-          <p className="font-heading text-2xl font-bold text-zinc-50">{openRoutes.length}</p>
+          <p className="self-end font-heading text-3xl font-black leading-none text-zinc-50">{openRoutes.length}</p>
           <p className="text-[10px] text-zinc-600">{closedRoutes.length} finalizada{closedRoutes.length === 1 ? '' : 's'}</p>
         </a>
 
-        <div className="col-span-2 flex flex-col gap-1.5 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
+        <div className="col-span-2 grid min-h-[104px] grid-rows-[auto_1fr] gap-2 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
           <div className="flex items-center justify-between text-zinc-400">
             <div className="flex items-center gap-2"><TrendingUp size={16} className="text-emerald-500" /><span className="text-xs font-semibold uppercase tracking-wider">Faturamento da loja</span></div>
             <button onClick={togglePrivacyMode} className="text-zinc-500 hover:text-zinc-300 transition-colors active:scale-90">{isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}</button>
           </div>
-          <p className="font-heading text-2xl font-bold text-zinc-50">{isPrivacyMode ? 'R$ •••••' : `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p>
+          <p className="self-end font-heading text-2xl font-black leading-none text-zinc-50">{isPrivacyMode ? 'R$ •••••' : `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p>
         </div>
       </div>
 

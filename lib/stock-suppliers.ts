@@ -3,7 +3,7 @@ import type { StockSupplierType } from '@/types';
 
 export const STOCK_SUPPLIER_TYPE_LABELS: Record<StockSupplierType, string> = {
   supermercado: 'Supermercado / atacadista', embalagens: 'Embalagens', acougue: 'Açougue',
-  gas: 'Gás', hortifruti: 'Hortifrúti', distribuidor: 'Distribuidor', outro: 'Outro',
+  gas: 'Gás', hortifruti: 'Hortifrúti', distribuidor: 'Distribuidor', padaria: 'Padaria / panificação', motoboy: 'Motoboy / entrega', outro: 'Outro',
 };
 
 export const STOCK_SUPPLIER_STYLE: Record<StockSupplierType, { icon: string; className: string }> = {
@@ -13,5 +13,7 @@ export const STOCK_SUPPLIER_STYLE: Record<StockSupplierType, { icon: string; cla
   gas: { icon: 'flame', className: 'text-sky-400 bg-sky-500/10 border-sky-500/20' },
   hortifruti: { icon: 'leaf', className: 'text-lime-400 bg-lime-500/10 border-lime-500/20' },
   distribuidor: { icon: 'truck', className: 'text-violet-400 bg-violet-500/10 border-violet-500/20' },
+  padaria: { icon: 'bread', className: 'text-amber-300 bg-amber-500/10 border-amber-500/20' },
+  motoboy: { icon: 'bike', className: 'text-sky-400 bg-sky-500/10 border-sky-500/20' },
   outro: { icon: 'store', className: 'text-zinc-400 bg-zinc-800 border-zinc-700' },
 };

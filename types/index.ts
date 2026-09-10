@@ -26,7 +26,7 @@ export interface Fueling {
 export type StockSupplyStatus = 'solicitado' | 'em_compra' | 'recebido' | 'conferido';
 export type StockSupplyUnit = 'un' | 'kg' | 'g' | 'l' | 'ml' | 'cx' | 'pct' | 'fardo';
 
-export type StockSupplierType = 'supermercado' | 'embalagens' | 'acougue' | 'gas' | 'hortifruti' | 'distribuidor' | 'outro';
+export type StockSupplierType = 'supermercado' | 'embalagens' | 'acougue' | 'gas' | 'hortifruti' | 'distribuidor' | 'padaria' | 'motoboy' | 'outro';
 
 export interface StockSupplier {
   id: string;

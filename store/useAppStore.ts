@@ -30,7 +30,7 @@ interface AppState {
   selectedDate: Date;
   isSyncing: boolean;
   syncError: boolean;
-  isPrivacyMode: boolean; 
+  isPrivacyMode: boolean;
   routeAlertsEnabled: boolean;
   theme: 'dark' | 'light' | 'system';
   storeSettings: {
@@ -51,8 +51,8 @@ interface AppState {
     holidaysOverrides?: Record<string, HolidayOverride>;
   };
   setHasHydrated: (value: boolean) => void;
-  togglePrivacyMode: () => void; 
-  setRouteAlertsEnabled: (enabled: boolean) => void; 
+  togglePrivacyMode: () => void;
+  setRouteAlertsEnabled: (enabled: boolean) => void;
   setTheme: (theme: 'dark' | 'light' | 'system') => void;
   updateStoreSettings: (settings: Partial<AppState['storeSettings']>) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
@@ -64,7 +64,7 @@ interface AppState {
   getCustomerById: (customerId?: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
   updateRoute: (routeId: string, data: Partial<Route>) => Promise<void>;
-  startRoute: (routeId: string) => Promise<void>; 
+  startRoute: (routeId: string) => Promise<void>;
   deleteRoute: (routeId: string) => Promise<void>;
   addDelivery: (delivery: Delivery) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
@@ -136,7 +136,7 @@ const sanitizeForFirebase = (value: any): any => {
 // Gerador do schedule padrão caso o usuário seja novo
 const defaultSchedule = Object.fromEntries(
   [0, 1, 2, 3, 4, 5, 6].map(day => [
-    day, 
+    day,
     { active: day !== 1, shifts: [{ start: '18:00', end: '23:59' }] }
   ])
 );
@@ -179,14 +179,14 @@ export const useAppStore = create<AppState>()(
       },
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
-      togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })), 
-      setRouteAlertsEnabled: (enabled) => set({ routeAlertsEnabled: enabled }), 
+      togglePrivacyMode: () => set((state) => ({ isPrivacyMode: !state.isPrivacyMode })),
+      setRouteAlertsEnabled: (enabled) => set({ routeAlertsEnabled: enabled }),
       setTheme: (theme) => set({ theme }),
-      
+
       updateStoreSettings: async (settings) => {
         const currentSettings = get().storeSettings;
         const newSettings = { ...currentSettings, ...settings };
-        
+
         set({ storeSettings: newSettings });
 
         try {
@@ -225,7 +225,7 @@ export const useAppStore = create<AppState>()(
 
       initData: async () => {
         if (!get().hasHydrated) return;
-        set({ isSyncing: true, syncError: false }); 
+        set({ isSyncing: true, syncError: false });
         try {
           const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, stockSuppliersSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
@@ -255,7 +255,7 @@ export const useAppStore = create<AppState>()(
           const fbPendingConfirmations = pendingConfirmationsSnap.docs.map(
             d => d.data() as IfoodPendingConfirmation,
           );
-          
+
           const cloudStoreSettings = storeSnap.exists() ? storeSnap.data() : null;
 
           const mergedRoutes = [...fbRoutes];
@@ -274,7 +274,7 @@ export const useAppStore = create<AppState>()(
           get().deliveries.forEach(local => {
             if (!mergedDeliveries.some(m => m.id === local.id)) mergedDeliveries.push(local);
           });
-          
+
           mergedDeliveries.sort((a, b) => {
              const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
              const orderB = b.order_index !== undefined ? b.order_index : new Date(b.updated_at || 0).getTime();
@@ -329,11 +329,11 @@ export const useAppStore = create<AppState>()(
           );
 
           const defaultSettings = get().storeSettings;
-          
+
           // Tratamento para puxar dados novos e velhos sem quebrar
-          const finalStoreSettings = cloudStoreSettings 
-            ? { 
-                ...defaultSettings, 
+          const finalStoreSettings = cloudStoreSettings
+            ? {
+                ...defaultSettings,
                 ...cloudStoreSettings,
                 schedule: (cloudStoreSettings as any).schedule || defaultSettings.schedule,
                 pauses: (cloudStoreSettings as any).pauses || defaultSettings.pauses,
@@ -359,7 +359,7 @@ export const useAppStore = create<AppState>()(
           });
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
-          set({ isSyncing: false, syncError: true }); 
+          set({ isSyncing: false, syncError: true });
         }
       },
 
@@ -787,21 +787,21 @@ export const useAppStore = create<AppState>()(
 
       addDelivery: async (delivery) => {
         const now = new Date().toISOString();
-        const deliveryWithTimestamp = { 
-          ...delivery, 
+        const deliveryWithTimestamp = {
+          ...delivery,
           createdAt: delivery.createdAt || delivery.created_at || now,
           created_at: delivery.created_at || delivery.createdAt || now,
-          updated_at: now 
+          updated_at: now
         } as Delivery;
-        
+
         set((state) => ({ deliveries: [deliveryWithTimestamp, ...state.deliveries] }));
-        
+
         try {
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
           await setDoc(doc(db, 'deliveries', delivery.id), safeData);
-        } catch (error) { 
+        } catch (error) {
           set((state) => ({ deliveries: state.deliveries.filter((item) => item.id !== delivery.id) }));
-          console.error(error); 
+          console.error(error);
           throw error;
         }
       },
@@ -888,14 +888,14 @@ export const useAppStore = create<AppState>()(
             updated_at: now,
           };
         }
-        
+
         set((current) => ({
           deliveries: current.deliveries.map((d) => d.id === id ? nextDelivery : d),
           customers: updatedCustomerData && customer
             ? current.customers.map((item) => item.id === customer.id ? { ...item, ...updatedCustomerData } : item)
             : current.customers,
         }));
-        
+
         let deliveryCommitCompleted = false;
         try {
           const batch = writeBatch(db);
@@ -1036,7 +1036,7 @@ export const useAppStore = create<AppState>()(
         }
         const endTime = new Date().toISOString();
         set((state) => ({
-          routes: state.routes.map((r) => 
+          routes: state.routes.map((r) =>
             // O segredo está aqui: r.end_time || endTime
             r.id === routeId ? { ...r, status: 'fechada', end_time: r.end_time || endTime, updated_at: endTime } : r
           ),
@@ -1391,22 +1391,37 @@ export const useAppStore = create<AppState>()(
       },
 
       findOrCreateCustomer: async (name, details) => {
-        const trimmed = name.trim();
-        if (!trimmed) return '';
+        const rawName = name.trim();
+        if (!rawName) return '';
+
+        const norm = (value?: string) =>
+          String(value || '')
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .toLocaleLowerCase('pt-BR')
+            .replace(/\b(?:patos de minas|minas gerais|brasil|mg)\b/g, ' ')
+            .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+        const baseName = (value: string) => value.replace(/\s*\(\d+\)\s*$/, '').trim();
+        const wantedBase = norm(baseName(rawName));
+        const wantedAddress = norm(details?.address);
+        const wantedPhone = String(details?.phone || '').replace(/\D/g, '');
+        const candidates = get().customers.filter((c) => norm(baseName(c.name)) === wantedBase);
+
+        const byAddress = wantedAddress
+          ? candidates.find((c) => norm(c.address) === wantedAddress)
+          : undefined;
+        const byPhone = wantedPhone
+          ? candidates.find((c) => String(c.phone || '').replace(/\D/g, '') === wantedPhone)
+          : undefined;
+
+        // Endereço é a identidade principal. Telefone resolve quando não veio endereço.
+        const existing = byAddress || (!wantedAddress ? byPhone : undefined);
 
         const extractNeighborhood = (address?: string): string | undefined => {
           if (!address) return undefined;
-          if (address.includes('-')) {
-            const parts = address.split('-');
-            const potentialHood = parts[parts.length - 1].trim();
-            return potentialHood.replace(/[0-9]/g, '').trim() || undefined;
-          }
-          const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
+          const parts = address.split(/\s[-–—]\s|,/).map((p) => p.trim()).filter(Boolean);
           if (parts.length < 2) return undefined;
           return parts[parts.length - 1].replace(/[0-9]/g, '').trim() || undefined;
         };
-
-        const existing = get().customers.find((c) => c.name.trim().toLowerCase() === trimmed.toLowerCase());
         const derivedNeighborhood = extractNeighborhood(details?.address);
         const now = new Date().toISOString();
 
@@ -1420,27 +1435,25 @@ export const useAppStore = create<AppState>()(
           if (details?.origin) updatedFields.origin = details.origin;
           if (details?.phone) updatedFields.phone = details.phone;
 
-          set((state) => ({
-            customers: state.customers.map((c) => c.id === existing.id ? { ...c, ...updatedFields } : c),
-          }));
-
+          set((state) => ({ customers: state.customers.map((c) => c.id === existing.id ? { ...c, ...updatedFields } : c) }));
           try {
-            const safeData = sanitizeForFirebase(updatedFields);
-            await updateDoc(doc(db, 'customers', existing.id), safeData);
+            await updateDoc(doc(db, 'customers', existing.id), sanitizeForFirebase(updatedFields));
           } catch (error) {
-            set((state) => ({
-              customers: state.customers.map((item) => item.id === existing.id ? existing : item),
-            }));
-            console.error(error);
-            throw error;
+            set((state) => ({ customers: state.customers.map((c) => c.id === existing.id ? existing : c) }));
+            console.error(error); throw error;
           }
-
           return existing.id;
         }
 
+        const used = new Set(candidates.map((c) => {
+          const m=c.name.match(/\((\d+)\)\s*$/); return m ? Number(m[1]) : 1;
+        }));
+        let suffix=1; while(used.has(suffix)) suffix++;
+        const resolvedName = candidates.length ? `${baseName(rawName)} (${suffix})` : rawName;
+
         const newCustomer: Customer = {
           id: Date.now().toString(),
-          name: trimmed,
+          name: resolvedName,
           origin: details?.origin || 'loja',
           neighborhood: derivedNeighborhood,
           address: details?.address || undefined,
@@ -1451,26 +1464,21 @@ export const useAppStore = create<AppState>()(
           createdAt: now,
           updated_at: now,
         };
-
         set((state) => ({ customers: [newCustomer, ...state.customers] }));
-
         try {
-          const safeData = sanitizeForFirebase(newCustomer);
-          await setDoc(doc(db, 'customers', newCustomer.id), safeData);
+          await setDoc(doc(db, 'customers', newCustomer.id), sanitizeForFirebase(newCustomer));
         } catch (error) {
-          set((state) => ({ customers: state.customers.filter((item) => item.id !== newCustomer.id) }));
-          console.error(error);
-          throw error;
+          set((state) => ({ customers: state.customers.filter((c) => c.id !== newCustomer.id) }));
+          console.error(error); throw error;
         }
-
         return newCustomer.id;
       },
     }),
     {
       name: 'dfl-entregas-cofre-offline',
-      partialize: (state) => ({ 
-        routes: state.routes, 
-        deliveries: state.deliveries, 
+      partialize: (state) => ({
+        routes: state.routes,
+        deliveries: state.deliveries,
         customers: state.customers,
         motoboys: state.motoboys,
         fuelings: state.fuelings,
@@ -1485,8 +1493,8 @@ export const useAppStore = create<AppState>()(
         theme: state.theme,
         storeSettings: state.storeSettings
       }),
-      onRehydrateStorage: () => (state) => { 
-        state?.setHasHydrated(true); 
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
       },
     }
   )

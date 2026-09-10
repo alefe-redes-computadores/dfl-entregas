@@ -10,10 +10,11 @@ import {
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
-import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete'; 
+import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import { extractCoordinatesFromUrl } from '@/lib/maps';
 import { normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
+import { geocodeAddress } from '@/lib/store-geocoding';
 import { getFulfillmentMode } from '@/lib/delivery-mode';
 import { dateKey, deliveryDate, routeDate } from '@/lib/operational-time';
 import { Capacitor } from '@capacitor/core';
@@ -69,7 +70,7 @@ const [routeId, setRouteId] = useState('');
   const [isUrgent, setIsUrgent] = useState(false);
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
-  
+
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -164,7 +165,7 @@ const [routeId, setRouteId] = useState('');
       // Linha de Números/IDs
       const tokens = line.replace(/\D+/g, ' ').trim().split(' ').filter(Boolean);
       const isHeaderLine = tokens.length > 0 && !lower.includes('r.') && !lower.includes('rua') && !lower.includes('av') && !lower.includes('pago') && !lower.includes('total');
-      
+
       if (isHeaderLine && tokens.some(t => t.length === 8)) {
         idLineIndex = idx;
         tokens.forEach(tok => {
@@ -274,7 +275,7 @@ const [routeId, setRouteId] = useState('');
         if (parts.length > 2) {
           const possibleObs = parts[parts.length - 1].trim();
           const lowerObs = possibleObs.toLowerCase();
-          
+
           if (!lowerObs.includes('bairro') && !lowerObs.includes('vila') && !lowerObs.includes('jardim')) {
             if (lowerObs === 'casa') {
               parts.pop();
@@ -440,11 +441,11 @@ const [routeId, setRouteId] = useState('');
       setValue(delivery.value ? delivery.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
       setStreetAddress(delivery.address_string || '');
       setMapsLink(delivery.maps_link || '');
-      
+
       let method = delivery.payment_method as string;
       if (method && method.includes('cartao')) method = 'cartao';
       setPaymentMethod(method as any);
-      
+
       setIsPaid(delivery.is_paid);
       setIsUrgent(delivery.is_urgent || false);
       setChangeFor(delivery.change_for ? delivery.change_for.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
@@ -455,7 +456,7 @@ const [routeId, setRouteId] = useState('');
 
       const existingCustomer = getCustomerById(delivery.customer_id);
       setCustomerName(existingCustomer?.name || (delivery as any).customer_name || '');
-      
+
       const rawP = delivery.phone || existingCustomer?.phone || '';
       if (rawP) setPhone(formatPhoneInput(rawP));
     } else {
@@ -525,14 +526,24 @@ const [routeId, setRouteId] = useState('');
       const cleanStreet = fulfillmentMode === 'delivery' ? normalizeAddressText(streetAddress) : '';
       const rawPhone = phone.replace(/\D/g, '');
 
+      let resolvedMapsLink = mapsLink.trim();
+      if (fulfillmentMode === 'delivery' && cleanStreet && !resolvedMapsLink) {
+        try {
+          const point = await geocodeAddress(cleanStreet);
+          if (point) resolvedMapsLink = `https://www.google.com/maps?q=${point.lat},${point.lng}`;
+        } catch (error) {
+          console.warn('Não foi possível resolver coordenadas automaticamente:', error);
+        }
+      }
+
       let customerId: string | undefined = undefined;
       if (customerName.trim()) {
         customerId = await findOrCreateCustomer(customerName, {
           address: fulfillmentMode === 'delivery' ? cleanStreet : undefined,
           phone: rawPhone || undefined,
-          mapsLink: fulfillmentMode === 'delivery' ? mapsLink : undefined,
-          confirmationCode: origin === 'ifood' ? confirmationCode : undefined, 
-          observation, 
+          mapsLink: fulfillmentMode === 'delivery' ? resolvedMapsLink : undefined,
+          confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
+          observation,
           origin
         });
       }
@@ -552,7 +563,7 @@ const [routeId, setRouteId] = useState('');
         payment_method: paymentMethod,
         change_for: cleanChangeFor,
         address_string: fulfillmentMode === 'delivery' ? cleanStreet : '',
-        maps_link: fulfillmentMode === 'delivery' ? mapsLink : '',
+        maps_link: fulfillmentMode === 'delivery' ? resolvedMapsLink : '',
         phone: rawPhone || undefined,
         notify_whatsapp: notifyWhatsapp,
         observation,
@@ -668,22 +679,22 @@ const [routeId, setRouteId] = useState('');
 
       {/* SELETOR DE ORIGEM */}
       <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/40 p-3"><div className="mb-3 px-1"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">02 · Origem</p><p className="mt-1 text-sm font-black text-zinc-200">Canal do pedido</p></div><div className="flex gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/45 p-1">
-        <button 
-          type="button" 
-          onClick={() => setOrigin('ifood')} 
+        <button
+          type="button"
+          onClick={() => setOrigin('ifood')}
           className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
           <Smartphone size={18} /> iFood
         </button>
-        <button 
-          type="button" 
-          onClick={() => { 
-            setOrigin('loja'); 
-            setOrderId(''); 
-            setIfoodId(''); 
-            setConfirmationCode(''); 
+        <button
+          type="button"
+          onClick={() => {
+            setOrigin('loja');
+            setOrderId('');
+            setIfoodId('');
+            setConfirmationCode('');
             setMagicText('');
-          }} 
+          }}
           className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'loja' ? 'bg-emerald-500 text-zinc-950 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
           <Store size={18} /> Loja Própria
@@ -697,15 +708,15 @@ const [routeId, setRouteId] = useState('');
             <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">
               <Sparkles size={14} className="text-amber-400" /> Leitor inteligente do iFood
             </span>
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={handlePasteFromClipboard}
               className="flex items-center gap-1 text-[11px] font-bold text-zinc-300 bg-zinc-800/90 hover:bg-zinc-700 px-3 py-1 rounded-full active:scale-95 transition-all shadow-sm"
             >
               <ClipboardPaste size={12} className="text-red-400" /> Colar do Celular
             </button>
           </div>
-          
+
           <textarea
             rows={3}
             placeholder="Cole aqui o texto do iFood..."
@@ -725,7 +736,7 @@ const [routeId, setRouteId] = useState('');
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        
+
         {fulfillmentMode === 'delivery' && (
           <>
         {/* SELEÇÃO DE ROTA */}
@@ -827,18 +838,18 @@ const [routeId, setRouteId] = useState('');
         {origin === 'ifood' && (
           <section className="rounded-[24px] border border-red-500/15 bg-red-500/[.035] p-4 animate-in fade-in">
             <div className="mb-3"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">04 · Identificadores iFood</p><p className="mt-1 text-[11px] text-zinc-600">Revise os códigos vinculados ao pedido.</p></div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-emerald-400">Nº Pedido*</label>
-              <input 
-                type="text" 
-                inputMode="numeric" 
-                placeholder="Ex: 5463" 
-                maxLength={5} 
-                value={orderId} 
-                onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ''))} 
-                className="h-12 rounded-xl border-2 border-emerald-500/50 bg-zinc-900/80 px-3 text-base font-bold text-zinc-50 focus:border-emerald-500 focus:outline-none" 
-                required 
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Ex: 5463"
+                maxLength={5}
+                value={orderId}
+                onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ''))}
+                className="h-12 rounded-xl border-2 border-emerald-500/50 bg-zinc-900/80 px-3 text-base font-bold text-zinc-50 focus:border-emerald-500 focus:outline-none"
+                required
               />
             </div>
             <div className="flex flex-col gap-1.5 relative">
@@ -846,29 +857,29 @@ const [routeId, setRouteId] = useState('');
                 <label className="text-[11px] font-semibold text-zinc-400">ID Pedido</label>
                 <button type="button" onClick={() => toast.info('ID do Pedido: 8 dígitos do iFood')} className="text-zinc-500 hover:text-sky-400"><Info size={12} /></button>
               </div>
-              <input 
-                type="text" 
-                inputMode="numeric" 
-                placeholder="Ex: 60873228" 
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Ex: 60873228"
                 maxLength={8}
-                value={ifoodId} 
-                onChange={(e) => setIfoodId(e.target.value.replace(/\D/g, ''))} 
-                className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 focus:outline-none ${ifoodId.length > 0 && ifoodId.length < 8 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`} 
+                value={ifoodId}
+                onChange={(e) => setIfoodId(e.target.value.replace(/\D/g, ''))}
+                className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 focus:outline-none ${ifoodId.length > 0 && ifoodId.length < 8 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`}
               />
             </div>
-            <div className="flex flex-col gap-1.5 relative">
+            <div className="col-span-2 flex flex-col gap-1.5 relative">
               <div className="flex items-center justify-between px-1">
-                <label className="text-[11px] font-semibold text-zinc-400">Cód. Confirmação</label>
+                <label className="text-[11px] font-semibold text-zinc-400">Código de confirmação</label>
                 <button type="button" onClick={() => toast.info('Código: 4 dígitos informados pelo cliente')} className="text-zinc-500 hover:text-sky-400"><Info size={12} /></button>
               </div>
-              <input 
-                type="text" 
-                inputMode="numeric" 
-                placeholder="Ex: 1234" 
-                maxLength={4} 
-                value={confirmationCode} 
-                onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, ''))} 
-                className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 font-mono font-bold tracking-widest focus:outline-none ${confirmationCode.length > 0 && confirmationCode.length < 4 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`} 
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Ex: 1234"
+                maxLength={4}
+                value={confirmationCode}
+                onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, ''))}
+                className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 font-mono font-bold tracking-widest focus:outline-none ${confirmationCode.length > 0 && confirmationCode.length < 4 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`}
               />
             </div>
           </div></section>
@@ -878,16 +889,16 @@ const [routeId, setRouteId] = useState('');
         <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">05 · Cliente</p><p className="mt-1 text-sm font-black text-zinc-200">Contato e identificação</p></div>
           <CustomerAutocomplete value={customerName} onChange={setCustomerName} onSelect={handleCustomerSelect} customers={customers} />
-          
+
           <div className="grid grid-cols-1 gap-2">
             <div className="flex items-center gap-2">
               <div className="flex-1">
-                <input 
-                  type="text" 
-                  inputMode="tel" 
-                  placeholder="WhatsApp: (34) 99999-9999" 
-                  value={phone} 
-                  onChange={(e) => setPhone(formatPhoneInput(e.target.value))} 
+                <input
+                  type="text"
+                  inputMode="tel"
+                  placeholder="WhatsApp: (34) 99999-9999"
+                  value={phone}
+                  onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
                   className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
                 />
               </div>
@@ -899,8 +910,8 @@ const [routeId, setRouteId] = useState('');
                   setNotifyWhatsapp(!notifyWhatsapp);
                 }}
                 className={`flex items-center gap-1.5 h-12 px-4 rounded-xl border text-xs font-bold transition-all active:scale-95 shrink-0 ${
-                  notifyWhatsapp 
-                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-sm' 
+                  notifyWhatsapp
+                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-sm'
                     : 'bg-zinc-900 border-zinc-800 text-zinc-400'
                 }`}
               >
@@ -915,17 +926,17 @@ const [routeId, setRouteId] = useState('');
         {/* ENDEREÇO E LINK MAPS */}
         <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">06 · Destino</p><p className="mt-1 text-sm font-black text-zinc-200">Endereço da entrega</p></div>
-          <AddressAutocomplete 
-            value={streetAddress} 
-            onChange={setStreetAddress} 
+          <AddressAutocomplete
+            value={streetAddress}
+            onChange={setStreetAddress}
             placeholder="Ex: Rua Major Gote, 100, Bairro"
             label="Endereço da Entrega*"
           />
 
           {addressAudit && (
             <div className={`p-3 rounded-xl border transition-all flex items-start gap-2.5 ${
-              addressAudit.status === 'precise' 
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+              addressAudit.status === 'precise'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                 : addressAudit.status === 'good'
                 ? 'bg-sky-500/10 border-sky-500/30 text-sky-400'
                 : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
@@ -950,12 +961,12 @@ const [routeId, setRouteId] = useState('');
             <label className="text-xs font-semibold text-zinc-400 flex items-center gap-1">
               <Link2 size={13} className="text-sky-400" /> Link Manual / Coordenadas (Opcional)
             </label>
-            <input 
-              type="text" 
-              placeholder="Cole o link do Maps ou coordenadas @lat,lng" 
-              value={mapsLink} 
-              onChange={(e) => handleMapsLinkChange(e.target.value)} 
-              className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" 
+            <input
+              type="text"
+              placeholder="Cole o link do Maps ou coordenadas @lat,lng"
+              value={mapsLink}
+              onChange={(e) => handleMapsLinkChange(e.target.value)}
+              className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
             />
           </div>
         </section>
@@ -968,25 +979,25 @@ const [routeId, setRouteId] = useState('');
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-zinc-300">Valor (R$)*</label>
-              <input 
-                type="text" 
-                inputMode="numeric" 
-                placeholder="0,00" 
-                value={value} 
-                onChange={(e) => setValue(formatCurrencyInput(e.target.value))} 
-                className="h-14 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xl font-bold text-zinc-50 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" 
-                required 
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="0,00"
+                value={value}
+                onChange={(e) => setValue(formatCurrencyInput(e.target.value))}
+                className="h-14 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xl font-bold text-zinc-50 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+                required
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-zinc-400">Bebidas</label>
-              <input 
-                type="text" 
-                placeholder="Ex: 1 Coca 2L" 
-                value={drinks} 
-                onChange={(e) => setDrinks(e.target.value)} 
-                className="h-14 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" 
+              <input
+                type="text"
+                placeholder="Ex: 1 Coca 2L"
+                value={drinks}
+                onChange={(e) => setDrinks(e.target.value)}
+                className="h-14 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
               />
             </div>
           </div>
@@ -1050,7 +1061,7 @@ const [routeId, setRouteId] = useState('');
           <button type="submit" disabled={isSaving || isDeleting} className="h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-amber-500/20 transition-all">
             {isSaving ? 'Salvando...' : 'Salvar alterações'}
           </button>
-          
+
           <button type="button" onClick={handleDelete} disabled={isSaving || isDeleting} className="flex items-center justify-center gap-2 h-14 w-full rounded-2xl border border-red-500/50 text-red-500 font-bold hover:bg-red-500/10 active:scale-[0.98] disabled:opacity-60 transition-colors">
             <Trash2 size={18} />
             {isDeleting ? 'Excluindo...' : 'Excluir pedido'}

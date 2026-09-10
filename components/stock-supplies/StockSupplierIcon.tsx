@@ -1,10 +1,10 @@
 // components/stock-supplies/StockSupplierIcon.tsx
 'use client';
-import { Beef,Flame,Leaf,Package,ShoppingCart,Store,Truck } from 'lucide-react';
+import { Beef, Flame, Leaf, Package, ShoppingCart, Store, Truck, Bike, Wheat } from 'lucide-react';
 import { STOCK_SUPPLIER_STYLE } from '@/lib/stock-suppliers';
 import type { StockSupplier,StockSupplierType } from '@/types';
 
-const icons={'shopping-cart':ShoppingCart,package:Package,beef:Beef,flame:Flame,leaf:Leaf,truck:Truck,store:Store};
+const icons={'shopping-cart':ShoppingCart,package:Package,beef:Beef,flame:Flame,leaf:Leaf,truck:Truck,bread:Wheat,bike:Bike,store:Store};
 
 export function StockSupplierIcon({supplier,fallbackType='outro'}:{supplier?:Pick<StockSupplier,'type'>;fallbackType?:StockSupplierType}){
  const style=STOCK_SUPPLIER_STYLE[supplier?.type||fallbackType];
