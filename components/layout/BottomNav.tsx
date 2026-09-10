@@ -19,7 +19,7 @@ export function BottomNav() {
   const [showAddSheet, setShowAddSheet] = useState(false);
 
   // Oculta a barra inferior se estiver em páginas de formulários profundos ou sub-rotas específicas se necessário
-  if (pathname.includes('/nova') || pathname.includes('/editar')) {
+  if (pathname.includes('/nova') || pathname.includes('/novo') || pathname.includes('/editar') || pathname.includes('/movimentar') || pathname.includes('/contagem')) {
     return null;
   }
 
@@ -27,7 +27,7 @@ export function BottomNav() {
     <>
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-md items-center justify-between px-2 py-2">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => !(pathname === '/estoque' && item.href === '__fab__')).map((item) => {
             const Icon = item.icon;
             const isFab = item.href === '__fab__';
             const isActive = !isFab && pathname === item.href;
