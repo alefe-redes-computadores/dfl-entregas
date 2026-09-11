@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Package, Eye, EyeOff, Filter, Users, UserRound, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, Package, Eye, EyeOff, Filter, Users, UserRound, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
 import type { Route } from '@/types';
@@ -9,6 +9,8 @@ import { getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { firstValidTimestamp, saoPauloDateKey } from '@/lib/reports/time';
 import { OperationalRadar } from '@/components/home/OperationalRadar';
 import { ShiftBriefing } from '@/components/home/ShiftBriefing';
+import { OperationalCommandCenter } from '@/components/home/OperationalCommandCenter';
+import { OperationalDatePicker } from '@/components/home/OperationalDatePicker';
 
 function formatDateLabel(date: Date): string {
   const todayKey = saoPauloDateKey(new Date());
@@ -31,19 +33,30 @@ function operationalKey(...values: Parameters<typeof firstValidTimestamp>): stri
 
 export default function HomePage() {
   const routes = useAppStore((state) => state.routes);
-  const deliveries = useAppStore((state) => state.deliveries); 
+  const deliveries = useAppStore((state) => state.deliveries);
   const motoboys = useAppStore((state) => state.motoboys);
   const selectedDate = useAppStore((state) => state.selectedDate);
   const goToPreviousDay = useAppStore((state) => state.goToPreviousDay);
   const goToNextDay = useAppStore((state) => state.goToNextDay);
-  
+  const setSelectedDate = useAppStore((state) => state.setSelectedDate);
+
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
 
   const [globalMotoboy, setGlobalMotoboy] = useState<string | null>(null);
 
   const selectedDateKey = saoPauloDateKey(selectedDate);
-  
+
+  const datesWithOperation = new Set<string>();
+  routes.forEach((route) => {
+    const key = operationalKey(route.created_at, route.started_at, route.departure_time);
+    if (key) datesWithOperation.add(key);
+  });
+  deliveries.forEach((delivery) => {
+    const key = operationalKey(delivery.created_at, delivery.createdAt);
+    if (key) datesWithOperation.add(key);
+  });
+
   let routesDoDia = routes.filter((r) => {
     const routeKey = operationalKey(
       r.created_at,
@@ -194,14 +207,45 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-5 pb-32">
-      
-      <div className="flex items-center justify-between rounded-[20px] border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
-        <button onClick={goToPreviousDay} className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 active:scale-90"><ChevronLeft size={18} /></button>
-        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200"><CalendarDays size={15} className="text-emerald-500" />{formatDateLabel(selectedDate)}</div>
-        <button onClick={goToNextDay} className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 active:scale-90"><ChevronRight size={18} /></button>
-      </div>
 
+      <OperationalDatePicker
+        selectedDate={selectedDate}
+        selectedDateKey={selectedDateKey}
+        datesWithOperation={datesWithOperation}
+        onPrevious={goToPreviousDay}
+        onNext={goToNextDay}
+        onSelect={setSelectedDate}
+      />
+
+      <OperationalCommandCenter routes={routesDoDia} deliveries={deliveriesDoDia} />
       <ShiftBriefing />
+
+      <section className="space-y-3">
+        <div className="flex items-end justify-between gap-3 px-1">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Operação de hoje</p>
+            <h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">Visão rápida</h2>
+          </div>
+          <p className="text-[10px] font-bold text-zinc-600">{completedDeliveries}/{totalEntregas} entregas</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <a href={`/entregas?date=${encodeURIComponent(selectedDateKey)}`} className="min-w-0 rounded-[20px] border border-zinc-800 bg-zinc-900/45 p-3 active:scale-[0.98]">
+            <div className="flex items-center justify-between gap-1"><Package size={14} className="shrink-0 text-sky-400" />{pendingDeliveries > 0 && <span className="truncate text-[8px] font-black text-amber-400">{pendingDeliveries} pend.</span>}</div>
+            <p className="mt-3 font-heading text-2xl font-black leading-none text-zinc-50">{totalEntregas}</p>
+            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Entregas</p>
+          </a>
+          <a href={`/rotas?date=${encodeURIComponent(selectedDateKey)}`} className={`min-w-0 rounded-[20px] border p-3 active:scale-[0.98] ${readyRoutes.length > 0 ? 'border-emerald-500/25 bg-emerald-500/[.055]' : 'border-zinc-800 bg-zinc-900/45'}`}>
+            <div className="flex items-center justify-between gap-1"><Bike size={14} className="shrink-0 text-emerald-400" />{readyRoutes.length > 0 && <span className="truncate text-[8px] font-black text-emerald-400">{readyRoutes.length} pronta</span>}</div>
+            <p className="mt-3 font-heading text-2xl font-black leading-none text-zinc-50">{openRoutes.length}</p>
+            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Rotas abertas</p>
+          </a>
+          <div className="min-w-0 rounded-[20px] border border-zinc-800 bg-zinc-900/45 p-3">
+            <div className="flex items-center justify-between gap-1"><TrendingUp size={14} className="shrink-0 text-emerald-400" /><button type="button" onClick={togglePrivacyMode} aria-label={isPrivacyMode ? 'Mostrar faturamento' : 'Ocultar faturamento'} className="shrink-0 text-zinc-600 active:scale-90">{isPrivacyMode ? <EyeOff size={13} /> : <Eye size={13} />}</button></div>
+            <p className="mt-3 truncate font-heading text-[15px] font-black leading-none text-zinc-50">{isPrivacyMode ? 'R$ •••' : `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p>
+            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Faturamento</p>
+          </div>
+        </div>
+      </section>
 
       {activeMotoboysToday.length > 0 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
@@ -211,7 +255,7 @@ export default function HomePage() {
           >
             <Filter size={14} /> Equipe Toda
           </button>
-          
+
           {activeMotoboysToday.map(m => (
             <button
               key={m.id}
@@ -224,59 +268,13 @@ export default function HomePage() {
         </div>
       )}
 
-      <OperationalRadar />
-
-      <div className="grid grid-cols-2 gap-3">
-        <a
-          href={`/entregas?date=${encodeURIComponent(selectedDateKey)}`}
-          className="grid min-h-[136px] grid-rows-[auto_1fr_auto] gap-2 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4 active:scale-[0.99]"
-        >
-          <div className="flex items-center justify-between gap-2 text-zinc-400">
-            <div className="flex items-center gap-2">
-              <Package size={16} className="text-sky-400" />
-              <span className="text-xs font-semibold uppercase tracking-wider">Entregas</span>
-            </div>
-            {pendingDeliveries > 0 && (
-              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-black text-amber-400">
-                {pendingDeliveries} pendente{pendingDeliveries === 1 ? '' : 's'}
-              </span>
-            )}
-          </div>
-          <p className="self-end font-heading text-3xl font-black leading-none text-zinc-50">{totalEntregas}</p>
-          <p className="text-[10px] text-zinc-600">{completedDeliveries} concluída{completedDeliveries === 1 ? '' : 's'}</p>
-        </a>
-
-        <a
-          href={`/rotas?date=${encodeURIComponent(selectedDateKey)}`}
-          className={`grid min-h-[136px] grid-rows-[auto_1fr_auto] gap-2 rounded-[20px] border p-4 active:scale-[0.99] ${
-            readyRoutes.length > 0
-              ? 'border-emerald-500/25 bg-emerald-500/[.055]'
-              : 'border-zinc-800 bg-zinc-900/40'
-          }`}
-        >
-          <div className="flex items-center justify-between gap-2 text-zinc-400">
-            <div className="flex items-center gap-2">
-              <Bike size={16} className="text-emerald-400" />
-              <span className="text-xs font-semibold uppercase tracking-wider">Rotas abertas</span>
-            </div>
-            {readyRoutes.length > 0 && (
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-black text-emerald-400">
-                {readyRoutes.length} pronta{readyRoutes.length === 1 ? '' : 's'}
-              </span>
-            )}
-          </div>
-          <p className="self-end font-heading text-3xl font-black leading-none text-zinc-50">{openRoutes.length}</p>
-          <p className="text-[10px] text-zinc-600">{closedRoutes.length} finalizada{closedRoutes.length === 1 ? '' : 's'}</p>
-        </a>
-
-        <div className="col-span-2 grid min-h-[104px] grid-rows-[auto_1fr] gap-2 rounded-[20px] border border-zinc-800 bg-zinc-900/40 p-4">
-          <div className="flex items-center justify-between text-zinc-400">
-            <div className="flex items-center gap-2"><TrendingUp size={16} className="text-emerald-500" /><span className="text-xs font-semibold uppercase tracking-wider">Faturamento da loja</span></div>
-            <button onClick={togglePrivacyMode} className="text-zinc-500 hover:text-zinc-300 transition-colors active:scale-90">{isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}</button>
-          </div>
-          <p className="self-end font-heading text-2xl font-black leading-none text-zinc-50">{isPrivacyMode ? 'R$ •••••' : `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p>
+      <section className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Inteligência</p><h2 className="mt-0.5 font-heading text-sm font-black text-zinc-300">Leitura operacional</h2></div>
+          <a href="/relatorios" className="text-[9px] font-black uppercase tracking-wide text-indigo-400">Ver análises</a>
         </div>
-      </div>
+        <OperationalRadar />
+      </section>
 
       {storeOrdersDoDia.length > 0 && !globalMotoboy && (
         <section className="flex flex-col gap-3">
@@ -330,14 +328,15 @@ export default function HomePage() {
       )}
 
       {openRoutes.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <h2 className="px-1 font-heading text-sm font-bold uppercase tracking-wide text-zinc-500">
-            Em andamento {globalMotoboy && `(${globalMotoboy})`}
-          </h2>
+        <section className="flex flex-col gap-3">
+          <div className="flex items-end justify-between gap-3 px-1">
+            <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Execução</p><h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">Rotas em andamento {globalMotoboy && `· ${globalMotoboy}`}</h2></div>
+            <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[9px] font-black text-emerald-400">{openRoutes.length} {openRoutes.length === 1 ? 'aberta' : 'abertas'}</span>
+          </div>
           {openRoutes.map((route, index) => (
             <RouteAccordion key={route.id} route={route} defaultOpen={index === 0} />
           ))}
-        </div>
+        </section>
       )}
 
       {closedRoutes.length > 0 && (
@@ -345,7 +344,7 @@ export default function HomePage() {
           <h2 className="px-1 font-heading text-sm font-bold uppercase tracking-wide text-zinc-500">
             Finalizadas {globalMotoboy && `(${globalMotoboy})`}
           </h2>
-          
+
           {globalMotoboy ? (
             // Se tem filtro global, mostra a lista plana
             closedRoutes.map((route) => (

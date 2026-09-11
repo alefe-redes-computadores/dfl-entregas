@@ -16,6 +16,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { dateKey, deliveryDate, routeStartedAt } from '@/lib/operational-time';
+import { compactAddressForCard, hasHouseNumber } from "@/lib/operational-address";
 
 interface DeliveryCardProps {
   delivery: Delivery & { is_expanded?: boolean };
@@ -60,7 +61,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [confirmRedirectModal, setConfirmRedirectModal] = useState<{isOpen: boolean, copiedText: string}>({ isOpen: false, copiedText: '' });
-  const [isDrinkCheckOpen, setIsDrinkCheckOpen] = useState(false);
 
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
@@ -68,9 +68,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isUrgent = delivery.is_urgent;
   const isVIP = (customer?.orderCount || 0) >= 5;
 
-  const shortAddress = delivery.address_string.split('-')[0].trim();
+  const shortAddress = compactAddressForCard(delivery.address_string, customer?.address, customer?.neighborhood);
   const hasCoordinatesOrLink = !!(customer?.maps_link || delivery.maps_link);
-  const hasStreetNumber = /\d/.test(delivery.address_string);
+  const hasStreetNumber = hasHouseNumber(shortAddress);
   const activePhone = delivery.phone || customer?.phone;
   const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
   const operationalDate = deliveryDate(delivery);
@@ -142,7 +142,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
       toggleDeliveryExpansion(delivery.id, false);
       setIsIfoodModalOpen(false);
-      setIsDrinkCheckOpen(false);
       setInputCode('');
 
       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
@@ -196,12 +195,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           console.error('Erro ao desfazer baixa:', error);
           toast.error('Não foi possível desfazer a baixa.');
         }
-        return;
-      }
-
-      // Trava de segurança para bebidas não conferidas
-      if (delivery.drinks && !delivery.completed && !isDrinkCheckOpen) {
-        setIsDrinkCheckOpen(true);
         return;
       }
 
@@ -480,8 +473,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800/40">
-                      <div className="flex items-center gap-1.5">
+                    <div className="grid grid-cols-1 gap-2 pt-2 border-t border-zinc-800/40 min-[390px]:grid-cols-[minmax(0,1fr)_auto] min-[390px]:items-center">
+                      <div className="flex min-w-0 items-center gap-1.5">
                         <button
                           type="button"
                           onClick={async (e) => {
@@ -490,7 +483,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code);
                             toast.success('Entrega copiada com sucesso!');
                           }}
-                          className="flex items-center gap-1.5 h-8 px-3 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/40 active:scale-95 text-xs font-bold transition-all shadow-sm"
+                          className="flex min-w-0 items-center gap-1.5 h-8 px-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/40 active:scale-95 text-[11px] font-bold transition-all shadow-sm"
                         >
                           <Copy size={13} className="text-emerald-500" /> Copiar Dados
                         </button>
@@ -509,7 +502,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       </div>
 
                       {!delivery.completed && route.status === 'aberta' && (
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex min-w-0 items-center justify-end gap-1.5">
                           <button type="button" onClick={async(e)=>{e.stopPropagation();try{await updateDelivery(delivery.id,{order_locked:!orderLocked,order_source:'manual',order_updated_at:new Date().toISOString()});toast.success(orderLocked?'Parada destravada.':'Parada travada na sequência.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{orderLocked?'Destravar':'Travar'}</button>
                           <div className="hidden sm:flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
                             <button
@@ -719,46 +712,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         </div>
       )}
 
-      {/* Trava de Conferência de Bebidas antes de Dar Baixa */}
-      {isDrinkCheckOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-sm rounded-[32px] border border-sky-500/30 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-4">
-            <div className="flex flex-col items-center justify-center text-center gap-2">
-              <div className="h-14 w-14 bg-sky-500/10 text-sky-400 rounded-full flex items-center justify-center border border-sky-500/20 mb-1">
-                <CupSoda size={26} />
-              </div>
-              <h3 className="font-bold text-lg text-zinc-50">Conferência de Bebida</h3>
-              <p className="text-xs text-zinc-400">Esta entrega inclui itens de geladeira:</p>
-              <div className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-xl font-bold text-sm text-sky-400">
-                {delivery.drinks}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 mt-2">
-              <button
-                onClick={async () => {
-                  if (isIfood && !delivery.confirmation_code && !customer?.last_confirmation_code) {
-                    setIsDrinkCheckOpen(false);
-                    setIsIfoodModalOpen(true);
-                  } else {
-                    const code = delivery.confirmation_code || customer?.last_confirmation_code;
-                    await executeCompletion(code);
-                  }
-                }}
-                className="w-full h-12 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black rounded-xl active:scale-95 transition-all shadow-lg"
-              >
-                Bebida Entregue / Conferida
-              </button>
-              <button
-                onClick={() => setIsDrinkCheckOpen(false)}
-                className="w-full h-11 bg-zinc-800 text-zinc-400 font-semibold rounded-xl active:scale-95 transition-all text-xs"
-              >
-                Voltar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal Digitar Código Manual iFood na Baixa */}
       {isIfoodModalOpen && (

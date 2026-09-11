@@ -70,7 +70,6 @@ function DeliveryDetailsContent() {
   );
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const [isCompleting, setIsCompleting] = useState(false);
-  const [isDrinkCheckOpen, setIsDrinkCheckOpen] = useState(false);
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
 
@@ -188,7 +187,6 @@ function DeliveryDetailsContent() {
     try {
       await updateDelivery(delivery.id, payload);
       await vibrate(ImpactStyle.Medium);
-      setIsDrinkCheckOpen(false);
       setIsIfoodModalOpen(false);
       setInputCode('');
       toast.success(
@@ -247,23 +245,7 @@ function DeliveryDetailsContent() {
       }
     }
 
-    if (delivery.drinks) {
-      setIsDrinkCheckOpen(true);
-      return;
-    }
-
     if (isIfood && !savedConfirmationCode) {
-      setInputCode('');
-      setIsIfoodModalOpen(true);
-      return;
-    }
-
-    await executeCompletion(savedConfirmationCode);
-  };
-
-  const continueAfterDrinkCheck = async () => {
-    if (isIfood && !savedConfirmationCode) {
-      setIsDrinkCheckOpen(false);
       setInputCode('');
       setIsIfoodModalOpen(true);
       return;
@@ -583,45 +565,6 @@ function DeliveryDetailsContent() {
           />
         )}
       </section>
-
-      {isDrinkCheckOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
-          <div className="w-full max-w-sm rounded-[32px] border border-sky-500/30 bg-zinc-900 p-6 shadow-2xl">
-            <div className="text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400">
-                <CupSoda size={26} />
-              </div>
-              <h3 className="mt-3 font-heading text-lg font-black text-zinc-50">
-                Conferir bebidas
-              </h3>
-              <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                Confirme os itens de geladeira antes de concluir o atendimento.
-              </p>
-              <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-3 text-sm font-black text-sky-400">
-                {delivery.drinks}
-              </div>
-            </div>
-
-            <div className="mt-5 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={continueAfterDrinkCheck}
-                disabled={isCompleting}
-                className="rounded-2xl bg-emerald-500 px-4 py-3.5 font-black text-zinc-950 active:scale-95 disabled:opacity-60"
-              >
-                Bebidas conferidas
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsDrinkCheckOpen(false)}
-                className="h-12 rounded-2xl bg-zinc-800 font-bold text-zinc-400 active:scale-95"
-              >
-                Voltar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {isIfoodModalOpen && (
         <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">

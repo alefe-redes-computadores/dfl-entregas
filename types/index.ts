@@ -90,6 +90,23 @@ export interface StockSupply {
   updated_at: string;
 }
 
+export type OperationalExpenseType = 'motoboy' | 'frete' | 'manutencao' | 'taxa' | 'outro';
+
+export interface OperationalExpense {
+  id: string;
+  occurred_at: string;
+  type: OperationalExpenseType;
+  description: string;
+  amount: number;
+  motoboy_id?: string;
+  motoboy_name?: string;
+  source_kind?: 'motoboy_settlement' | 'manual';
+  source_id?: string;
+  observation?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type TeamMemberRole = 'administracao' | 'compras' | 'cozinha' | 'atendimento' | 'entrega' | 'outro';
 
 export interface TeamMember {
@@ -143,10 +160,10 @@ export interface StockMovement {
 
 export interface MotoboyPaymentRule {
   type: PaymentRuleType;
-  fixed_amount?: number;    
-  delivery_fee?: number;    
-  threshold?: number;       
-  extra_fee?: number;       
+  fixed_amount?: number;
+  delivery_fee?: number;
+  threshold?: number;
+  extra_fee?: number;
 }
 
 export interface Route {
@@ -171,9 +188,9 @@ export interface Delivery {
   route_id: string;
   fulfillment_mode?: FulfillmentMode; // legado sem campo = delivery
   order_id?: string;
-  ifood_id?: string; 
+  ifood_id?: string;
   origin: OrderOrigin;
-  confirmation_code?: string; 
+  confirmation_code?: string;
   customer_id: string;
   value: number;
   is_paid: boolean;
@@ -184,7 +201,7 @@ export interface Delivery {
   observation?: string;
   drinks?: string;
   completed?: boolean;
-  order_index?: number; 
+  order_index?: number;
   order_locked?: boolean;
   order_source?: 'manual' | 'smart';
   order_updated_at?: string;
@@ -208,20 +225,20 @@ export interface Customer {
   maps_link?: string;
   observation?: string;
   last_confirmation_code?: string;
-  avatar?: string; 
+  avatar?: string;
   createdAt?: string;
   updated_at?: string;
-  orderCount?: number; 
-  totalSpent?: number; 
+  orderCount?: number;
+  totalSpent?: number;
 }
 
 export interface Motoboy {
   id: string;
   name: string;
-  active: boolean; 
-  type?: MotoboyType; 
-  avatar?: string; 
-  payment_rule?: MotoboyPaymentRule; 
+  active: boolean;
+  type?: MotoboyType;
+  avatar?: string;
+  payment_rule?: MotoboyPaymentRule;
   createdAt?: string;
   updated_at?: string;
 }

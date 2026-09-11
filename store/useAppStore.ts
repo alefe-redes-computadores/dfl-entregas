@@ -6,7 +6,7 @@ import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, StockSupplier, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation } from '@/types';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, StockSupplier, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation, OperationalExpense } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { fuelingDate } from '@/lib/fueling-analytics';
@@ -27,6 +27,7 @@ interface AppState {
   stockProducts: StockProduct[];
   stockMovements: StockMovement[];
   ifoodPendingConfirmations: IfoodPendingConfirmation[];
+  operationalExpenses: OperationalExpense[];
   selectedDate: Date;
   isSyncing: boolean;
   syncError: boolean;
@@ -58,6 +59,7 @@ interface AppState {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   initData: () => Promise<void>;
+  setSelectedDate: (date: Date) => void;
   goToPreviousDay: () => void;
   goToNextDay: () => void;
   getDeliveriesByRoute: (routeId: string) => Delivery[];
@@ -97,6 +99,8 @@ interface AppState {
   integrateStockSupply: (id: string) => Promise<void>;
   reverseStockSupply: (id: string) => Promise<void>;
   countStockProducts: (counts: Array<{ product_id: string; quantity: number }>, responsible?: { id?: string; name?: string }) => Promise<void>;
+  addOperationalExpense: (expense: OperationalExpense) => Promise<void>;
+  deleteOperationalExpense: (id: string) => Promise<void>;
   addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
   updateIfoodPendingConfirmation: (id: string, data: Partial<IfoodPendingConfirmation>) => Promise<void>;
   deleteIfoodPendingConfirmation: (id: string) => Promise<void>;
@@ -158,6 +162,7 @@ export const useAppStore = create<AppState>()(
       stockProducts: [],
       stockMovements: [],
       ifoodPendingConfirmations: [],
+      operationalExpenses: [],
       selectedDate: new Date(),
       isSyncing: false,
       syncError: false,
@@ -227,7 +232,7 @@ export const useAppStore = create<AppState>()(
         if (!get().hasHydrated) return;
         set({ isSyncing: true, syncError: false });
         try {
-          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, stockSuppliersSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, storeSnap] = await Promise.all([
+          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, stockSuppliersSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, operationalExpensesSnap, storeSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
             getDocs(collection(db, 'deliveries')),
             getDocs(collection(db, 'customers')),
@@ -239,6 +244,7 @@ export const useAppStore = create<AppState>()(
             getDocs(collection(db, 'stock_products')),
             getDocs(collection(db, 'stock_movements')),
             getDocs(collection(db, 'ifood_pending_confirmations')),
+            getDocs(collection(db, 'operational_expenses')),
             getDoc(doc(db, 'store', 'store_settings'))
           ]);
 
@@ -252,6 +258,7 @@ export const useAppStore = create<AppState>()(
           const fbTeamMembers = teamMembersSnap.docs.map(d => d.data() as TeamMember);
           const fbStockProducts = stockProductsSnap.docs.map(d => d.data() as StockProduct);
           const fbStockMovements = stockMovementsSnap.docs.map(d => d.data() as StockMovement);
+          const fbOperationalExpenses = operationalExpensesSnap.docs.map(d => d.data() as OperationalExpense);
           const fbPendingConfirmations = pendingConfirmationsSnap.docs.map(
             d => d.data() as IfoodPendingConfirmation,
           );
@@ -353,6 +360,8 @@ export const useAppStore = create<AppState>()(
             stockProducts: mergedStockProducts,
             stockMovements: mergedStockMovements,
             ifoodPendingConfirmations: mergedPendingConfirmations,
+            operationalExpenses: mergeById(fbOperationalExpenses, get().operationalExpenses)
+              .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime()),
             storeSettings: finalStoreSettings as any,
             isSyncing: false,
             syncError: false
@@ -362,6 +371,8 @@ export const useAppStore = create<AppState>()(
           set({ isSyncing: false, syncError: true });
         }
       },
+
+      setSelectedDate: (date) => set({ selectedDate: new Date(date) }),
 
       goToPreviousDay: () => set((state) => {
         const prev = new Date(state.selectedDate);
@@ -1293,6 +1304,32 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           deliveries: state.deliveries.map(d => d.id === id ? { ...d, is_expanded: isExpanded } : d)
         }));
+      },
+
+      addOperationalExpense: async (expense) => {
+        const previous = get().operationalExpenses;
+        if (expense.source_id && previous.some((item) => item.source_id === expense.source_id)) {
+          throw new Error('Esta despesa já foi lançada.');
+        }
+        set((state) => ({ operationalExpenses: [expense, ...state.operationalExpenses] }));
+        try {
+          await setDoc(doc(db, 'operational_expenses', expense.id), sanitizeForFirebase(expense));
+        } catch (error) {
+          set({ operationalExpenses: previous });
+          console.error(error);
+          throw error;
+        }
+      },
+
+      deleteOperationalExpense: async (id) => {
+        const previous = get().operationalExpenses;
+        set((state) => ({ operationalExpenses: state.operationalExpenses.filter((item) => item.id !== id) }));
+        try {
+          await deleteDoc(doc(db, 'operational_expenses', id));
+        } catch (error) {
+          set({ operationalExpenses: previous });
+          throw error;
+        }
       },
 
       addIfoodPendingConfirmations: async (items) => {

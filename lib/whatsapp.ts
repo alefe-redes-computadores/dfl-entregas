@@ -3,6 +3,7 @@ import type { Delivery, Route, Customer } from '@/types';
 import { resolveStopLocation, buildGoogleMapsRouteUrl, cleanAddressForMaps } from '@/lib/maps';
 import { routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
+import { bestOperationalAddress, hasHouseNumber } from "@/lib/operational-address";
 
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -101,7 +102,7 @@ export async function copyDeliveryToClipboard(
     }
 
     if (delivery.drinks) parts.push(`🥤 *Bebida:* ${delivery.drinks.trim()}`);
-    parts.push(''); 
+    parts.push('');
 
     if (delivery.maps_link) {
       parts.push(`🗺️ *Mapa:* ${delivery.maps_link}`);
@@ -155,7 +156,7 @@ export async function generateRouteMessages(
   try {
     let hasFuzzyAddresses = false;
     const fuzzyDeliveries: any[] = [];
-    
+
     const msg1: string[] = [];
     const msg2: string[] = [];
 
@@ -168,7 +169,7 @@ export async function generateRouteMessages(
     msg1.push(`━━━━━━━━━━━━━━━━━━━━━━`);
     const matchRouteNumber = route.name.match(/\d+/);
     const routeNumber = matchRouteNumber ? parseInt(matchRouteNumber[0], 10) : 1;
-    
+
     msg1.push(`🏍️ *ROTA ${getNumberEmoji(routeNumber)} - ${route.motoboy_name.toUpperCase()}* *(${totalDeliveries} Entregas)*`);
     msg1.push('');
     msg1.push(`📦 *RESUMO DAS PARADAS:*`);
@@ -186,7 +187,7 @@ export async function generateRouteMessages(
     }
     msg1.push('');
 
-    const routeMapAddresses: string[] = []; 
+    const routeMapAddresses: string[] = [];
 
     const neighborhoodCounts = deliveries.reduce((acc: Record<string, number>, d) => {
       const cust = getCustomerById(d.customer_id);
@@ -200,7 +201,7 @@ export async function generateRouteMessages(
       const emojiNum = getNumberEmoji(num);
       const customer = getCustomerById(delivery.customer_id);
       const neighborhood = customer?.neighborhood || delivery.address_string.split('-').pop()?.trim() || 'Bairro não inf.';
-      const street = delivery.address_string.split(',')[0].trim();
+      const street = bestOperationalAddress(delivery.address_string, customer?.address) || "Endereço não informado";
       const shortId = delivery.order_id ? `#${delivery.order_id}` : '';
       const isIfood = delivery.origin === 'ifood';
       const originLabel = getOriginLabel(delivery);
@@ -211,10 +212,10 @@ export async function generateRouteMessages(
           : `ORIGEM NÃO REGISTRADA${shortId ? ` ${shortId}` : ''}`;
       const existingCode = delivery.confirmation_code || customer?.last_confirmation_code;
       const clientPhone = (delivery.phone || customer?.phone || '').replace(/\D/g, '');
-      
-      const hasNumber = /\d/.test(delivery.address_string);
+
+      const hasNumber = hasHouseNumber(street);
       const isFuzzy = !hasNumber && !customer?.maps_link;
-      
+
       if (isFuzzy) {
         hasFuzzyAddresses = true;
         fuzzyDeliveries.push({ id: delivery.id, index: num, name: customer?.name || 'Cliente', address: delivery.address_string, neighborhood });
@@ -225,7 +226,7 @@ export async function generateRouteMessages(
 
       const clientName = customer?.name || 'Cliente';
       msg1.push(`*${emojiNum} ${clientName}* *(${stopOriginLabel})*`);
-      
+
       if (delivery.ifood_id) {
         msg1.push(`*ID: [${delivery.ifood_id}]*`);
       }
@@ -244,7 +245,7 @@ export async function generateRouteMessages(
 
       msg1.push(`🏠 Endereço: ${street}`);
       msg1.push(`- Bairro: \`${neighborhood}\``);
-      
+
       if (delivery.observation) {
         msg1.push(`⚠️ *OBS:* ${delivery.observation}`);
       }
@@ -293,14 +294,14 @@ export async function generateRouteMessages(
           drinksSummary[key].qty += qty;
         });
       }
-      
+
       msg1.push(`━━━━━━━━━━━━━━━━━━━━━━`);
     });
 
     msg1.push(`🗺️ *ROTA OTIMIZADA:*`);
     msg1.push(`⚠️ *Sequência pronta com as paradas. Clique no link e inicie a rota:*`);
     msg1.push('');
-    
+
     if (routeMapAddresses.length > 0) {
       const mapUrl = buildGoogleMapsRouteUrl(storeAddress, routeMapAddresses);
       msg1.push(mapUrl);
@@ -341,20 +342,20 @@ export async function generateRouteMessages(
       const num = index + 1;
       const customer = getCustomerById(delivery.customer_id);
       const neighborhood = customer?.neighborhood || delivery.address_string.split('-').pop()?.trim() || 'Bairro';
-      const street = delivery.address_string.split(',')[0].trim();
+      const street = bestOperationalAddress(delivery.address_string, customer?.address) || "Endereço não informado";
       const isDuplicate = neighborhoodCounts[neighborhood] > 1;
       const clientPhone = delivery.phone || customer?.phone;
-      
+
       const streetLabel = isDuplicate ? ` (${street})` : '';
       const drinkInfo = delivery.drinks?.trim() ? ` — 🥤 *(${delivery.drinks.trim()})*` : '';
       const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` 📲 *[ZAP]*` : '';
-      
+
       // Removemos o aviso sujo de [CÓDIGO] daqui para deixar a lista limpa
       msg2.push(`${num}. ${neighborhood}${streetLabel}${drinkInfo}${zapWarning}`);
     });
 
     msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
-    
+
     const drinkKeys = Object.keys(drinksSummary);
     if (drinkKeys.length > 0) {
       msg2.push(`🥤 *RESUMO DE BEBIDAS (BAG):*`);
@@ -402,7 +403,7 @@ export async function generateRouteMessages(
         const pedidoVal = d.value || 0;
         const dinheiroEmMaos = d.change_for ? d.change_for : pedidoVal;
         totalDinheiroAReceber += dinheiroEmMaos;
-        
+
         if (d.change_for) {
           const troco = d.change_for - pedidoVal;
           msg2.push(`- Parada ${num}: \`R$ ${formatMoney(dinheiroEmMaos)}\` *(Pedido R$ ${formatMoney(pedidoVal)} | Levou R$ ${formatMoney(troco)} de troco)*`);
@@ -416,11 +417,11 @@ export async function generateRouteMessages(
       msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
     }
 
-    return { 
-      success: true, 
-      hasFuzzyAddresses, 
-      fuzzyList: fuzzyDeliveries, 
-      messages: [msg1.join('\n'), msg2.join('\n')] 
+    return {
+      success: true,
+      hasFuzzyAddresses,
+      fuzzyList: fuzzyDeliveries,
+      messages: [msg1.join('\n'), msg2.join('\n')]
     };
   } catch (error) {
     console.error('Falha ao gerar mensagens da rota:', error);

@@ -75,6 +75,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [currentFuzzyList, setCurrentFuzzyList] = useState<any[]>([]);
   const [pendingActionType, setPendingActionType] = useState<'copy1' | 'copy2' | 'maps' | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [departureChecklistOpen, setDepartureChecklistOpen] = useState(false);
   const [optimizerOpen, setOptimizerOpen] = useState(false);
   const [optimizerBusy, setOptimizerBusy] = useState(false);
   const [optimizerOrigin, setOptimizerOrigin] = useState<LatLngPoint | null>(null);
@@ -155,6 +156,27 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   ]);
 
   // Clientes com telefone para disparo de aviso de saída
+  const departureChecklist = deliveries.map((delivery) => {
+    const customer = getCustomerById(delivery.customer_id);
+    return {
+      id: delivery.id,
+      name: customer?.name || delivery.customer_name || 'Cliente',
+      drinks: delivery.drinks?.trim() || '',
+      change: delivery.change_for && delivery.change_for > 0 ? delivery.change_for : 0,
+      missingAddress: !delivery.address_string?.trim(),
+      missingConfirmation:
+        delivery.origin === 'ifood' &&
+        !delivery.confirmation_code &&
+        !customer?.last_confirmation_code,
+    };
+  });
+
+  const departureDrinks = departureChecklist.filter((item) => item.drinks);
+  const departureChange = departureChecklist.filter((item) => item.change > 0);
+  const departureWarnings = departureChecklist.filter(
+    (item) => item.missingAddress || item.missingConfirmation,
+  );
+
   const clientsWithPhone = deliveries
     .map((d) => {
       const cust = getCustomerById(d.customer_id);
@@ -196,16 +218,23 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     return currentIndex > 0 ? motoboyRoutes[currentIndex - 1] : null;
   };
 
-  const handleStartRoute = async () => {
+  const confirmStartRoute = async () => {
     if (actionBusy) return;
     setActionBusy(true);
     try {
       await startRoute(route.id);
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-      toast.success('Rota iniciada.', { description: 'O horário real de saída foi registrado.' });
+      setDepartureChecklistOpen(false);
+      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+      toast.success('Rota iniciada.', { description: 'Checklist conferido e horário real de saída registrado.' });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar a rota.');
     } finally { setActionBusy(false); }
+  };
+
+  const handleStartRoute = async () => {
+    if (actionBusy) return;
+    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+    setDepartureChecklistOpen(true);
   };
 
   const handleCloseRoute = async () => {
@@ -465,26 +494,26 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
         </div>
       )}
-      <button onClick={() => setIsOpen((prev) => !prev)} className="flex w-full items-center justify-between gap-3 p-4 pt-5 active:scale-[0.99] transition-transform">
-        <div className="flex items-center gap-3">
+      <button onClick={() => setIsOpen((prev) => !prev)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-4 pt-5 text-left active:scale-[0.99] transition-transform">
+        <div className="flex min-w-0 items-center gap-3">
           <div className={clsx('flex h-12 w-12 items-center justify-center rounded-full transition-colors shrink-0', isNotStarted ? 'bg-zinc-800 text-zinc-400' : isInProgress ? 'bg-sky-500/20 text-sky-400' : 'bg-emerald-500/20 text-emerald-500')}>
             <Bike size={22} />
           </div>
-          <div className="text-left flex flex-col">
-            <div className="flex items-center gap-2">
-              <p className={clsx("font-heading text-lg font-bold truncate max-w-[130px]", isCompleted ? "text-emerald-400" : "text-zinc-50")}>{route.name}</p>
+          <div className="flex min-w-0 flex-col text-left">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <p className={clsx("min-w-0 truncate font-heading text-base font-bold min-[390px]:text-lg", isCompleted ? "text-emerald-400" : "text-zinc-50")}>{route.name}</p>
               {isNotStarted && <span className="rounded-full bg-zinc-700 px-2 py-0.5 text-[9px] font-bold uppercase text-zinc-300">Montando</span>}
               {isInProgress && <span className="rounded-full bg-sky-500 px-2 py-0.5 text-[9px] font-bold uppercase text-white shadow-sm shadow-sky-500/30">Na Rua</span>}
             </div>
             <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-zinc-400">
               <MotoIcon size={12} className={isInProgress ? 'text-sky-400' : isCompleted ? 'text-emerald-500' : 'text-zinc-500'} />
-              <span className="truncate max-w-[120px]">{route.motoboy_name}</span>
+              <span className="min-w-0 truncate">{route.motoboy_name}</span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-1.5">
           {!isCompleted ? (
-            <span className={clsx("rounded-full px-2.5 py-1 text-xs font-bold", pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white" : isInProgress ? "bg-sky-500/20 text-sky-400" : "bg-zinc-800 text-zinc-400")}>
+            <span className={clsx("max-w-[104px] whitespace-normal rounded-xl px-2 py-1 text-center text-[10px] font-black leading-tight min-[390px]:max-w-none min-[390px]:whitespace-nowrap min-[390px]:rounded-full min-[390px]:px-2.5 min-[390px]:text-xs", pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white" : isInProgress ? "bg-sky-500/20 text-sky-400" : "bg-zinc-800 text-zinc-400")}>
               {pendingDeliveriesCount === 0 && totalDeliveries > 0
                 ? 'Pronta para finalizar'
                 : `${pendingDeliveriesCount} pendente${pendingDeliveriesCount !== 1 ? 's' : ''}`}
@@ -655,6 +684,121 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 Ver detalhes da rota
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {departureChecklistOpen && (
+        <div
+          className="fixed inset-0 z-[120] flex items-end bg-black/80 backdrop-blur-sm"
+          onClick={() => !actionBusy && setDepartureChecklistOpen(false)}
+        >
+          <div
+            className="max-h-[88vh] w-full overflow-y-auto rounded-t-[32px] border-t border-zinc-700 bg-[#151515] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-700" />
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-sky-400">Expedição</p>
+                <h3 className="mt-1 font-heading text-xl font-black text-zinc-50">Checklist de saída</h3>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                  Confira o que precisa sair da loja antes de colocar {route.name} na rua.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={actionBusy}
+                onClick={() => setDepartureChecklistOpen(false)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-zinc-400"
+                aria-label="Fechar checklist"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-lg font-black text-zinc-100">{totalDeliveries}</p>
+                <p className="text-[9px] font-bold uppercase text-zinc-500">Entregas</p>
+              </div>
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-lg font-black text-sky-300">{departureDrinks.length}</p>
+                <p className="text-[9px] font-bold uppercase text-zinc-500">Bebidas</p>
+              </div>
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-lg font-black text-amber-300">{departureChange.length}</p>
+                <p className="text-[9px] font-bold uppercase text-zinc-500">Trocos</p>
+              </div>
+            </div>
+
+            {departureDrinks.length > 0 && (
+              <section className="mt-4 rounded-2xl border border-sky-500/20 bg-sky-500/[.06] p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-400">Bebidas para pegar</p>
+                <div className="mt-3 space-y-2">
+                  {departureDrinks.map((item) => (
+                    <div key={item.id} className="flex items-start gap-3 rounded-xl bg-zinc-950/50 px-3 py-2.5">
+                      <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-sky-400" />
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-black text-zinc-200">{item.name}</p>
+                        <p className="mt-0.5 text-xs text-zinc-400">{item.drinks}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {departureChange.length > 0 && (
+              <section className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/[.06] p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-400">Troco para levar</p>
+                <div className="mt-3 space-y-2">
+                  {departureChange.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                      <span className="min-w-0 truncate font-bold text-zinc-300">{item.name}</span>
+                      <span className="shrink-0 font-black text-amber-300">
+                        {isPrivacyMode ? 'R$ •••••' : `R$ ${item.change.toFixed(2).replace('.', ',')}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {departureWarnings.length > 0 && (
+              <section className="mt-3 rounded-2xl border border-red-500/20 bg-red-500/[.05] p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-red-400">Atenção antes da saída</p>
+                <div className="mt-3 space-y-2">
+                  {departureWarnings.map((item) => (
+                    <div key={item.id} className="rounded-xl bg-zinc-950/50 px-3 py-2.5 text-xs">
+                      <p className="font-black text-zinc-200">{item.name}</p>
+                      <p className="mt-1 text-zinc-500">
+                        {[item.missingAddress ? 'endereço ausente' : '', item.missingConfirmation ? 'código iFood pendente' : '']
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {departureDrinks.length === 0 && departureChange.length === 0 && departureWarnings.length === 0 && (
+              <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[.06] p-4">
+                <p className="text-sm font-black text-emerald-300">Saída sem pendências especiais</p>
+                <p className="mt-1 text-xs text-zinc-500">Nenhuma bebida, troco ou alerta crítico registrado nesta rota.</p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              disabled={actionBusy}
+              onClick={confirmStartRoute}
+              className="mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 text-sm font-black text-zinc-950 active:scale-[0.98] disabled:opacity-50"
+            >
+              <CheckCircle2 size={18} />
+              {actionBusy ? 'Iniciando rota...' : 'Tudo conferido · Iniciar rota'}
+            </button>
           </div>
         </div>
       )}
