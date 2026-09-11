@@ -340,6 +340,13 @@ export default function StockSuppliesPage() {
                           )}{' '}
                           · {item.items.length}{' '}
                           {item.items.length === 1 ? 'item' : 'itens'}
+                          {item.status === 'em_compra'
+                            ? ' · compra em andamento'
+                            : item.status === 'recebido'
+                              ? ' · aguardando conferência'
+                              : item.stock_integrated_at
+                                ? ' · estoque atualizado'
+                                : ''}
                         </p>
                       </div>
 

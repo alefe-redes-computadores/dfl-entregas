@@ -27,14 +27,14 @@ export default function StockPage() {
       <CompactMetric label="Valor estimado" value={money(stockValue(active))} />
       <CompactMetric label="Movimentações" value={String(movements.length)} />
     </section>
-    <section className="grid grid-cols-4 gap-2"><Shortcut icon={ClipboardCheck} label="Contagem" color="text-sky-400" onClick={()=>router.push('/estoque/contagem')}/><Shortcut icon={ListChecks} label="Lista" color="text-amber-400" onClick={()=>router.push('/estoque/compras')}/><Shortcut icon={BarChart3} label="Relatórios" color="text-emerald-400" onClick={()=>router.push('/estoque/relatorios')}/><Shortcut icon={Archive} label="Arquivados" color="text-zinc-400" onClick={()=>router.push('/estoque/arquivados')}/><Shortcut icon={Store} label="Fornecedores" color="text-orange-400" onClick={()=>router.push('/estoque/fornecedores')}/><Shortcut icon={BadgeDollarSign} label="Preços" color="text-lime-400" onClick={()=>router.push('/estoque/precos')}/><Shortcut icon={WandSparkles} label="Catálogo" color="text-violet-400" onClick={()=>router.push('/estoque/catalogo')}/></section>
+    <section className="grid grid-cols-4 gap-2"><Shortcut icon={ClipboardCheck} label="Contagem" color="text-sky-400" onClick={()=>router.push('/estoque/contagem')}/><Shortcut icon={ListChecks} label="Comprar" color="text-amber-400" onClick={()=>router.push('/estoque/compras')}/><Shortcut icon={BarChart3} label="Relatórios" color="text-emerald-400" onClick={()=>router.push('/estoque/relatorios')}/><Shortcut icon={Archive} label="Arquivados" color="text-zinc-400" onClick={()=>router.push('/estoque/arquivados')}/><Shortcut icon={Store} label="Fornecedores" color="text-orange-400" onClick={()=>router.push('/estoque/fornecedores')}/><Shortcut icon={BadgeDollarSign} label="Preços" color="text-lime-400" onClick={()=>router.push('/estoque/precos')}/><Shortcut icon={WandSparkles} label="Catálogo" color="text-violet-400" onClick={()=>router.push('/estoque/catalogo')}/></section>
     {suggested.length>0&&<section className="rounded-[22px] border border-amber-500/25 bg-amber-500/[.055] p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-black text-amber-400">Reposição inteligente</p>
           <p className="mt-1 text-[10px] text-zinc-500">{suggested.length} {suggested.length===1?'produto pede':'produtos pedem'} reposição · {stockBrain.historyBacked} com histórico suficiente</p>
         </div>
-        <button onClick={()=>router.push('/estoque/compras')} className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-[10px] font-black text-zinc-950">Abrir lista</button>
+        <button onClick={()=>router.push('/estoque/compras')} className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-[10px] font-black text-zinc-950">Montar compra</button>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         {suggested.slice(0,4).map(p=>{const rec=recommendationMap.get(p.id)!;return <div key={p.id} className="rounded-xl bg-zinc-950/50 px-3 py-2">

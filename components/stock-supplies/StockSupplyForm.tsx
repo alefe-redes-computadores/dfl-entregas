@@ -26,6 +26,9 @@ import { PurchaseDateTimePicker } from './PurchaseDateTimePicker';
 import { StockSupplierPicker } from './StockSupplierPicker';
 import { StockProductPicker } from './StockProductPicker';
 import { useAppStore } from '@/store/useAppStore';
+import { buildStockRecommendation } from '@/lib/stock-intelligence';
+import { stockProductValue } from '@/lib/stock';
+import { formatStockQuantity } from '@/lib/stock-quantity';
 
 export type StockSupplyFormValue = Omit<
   StockSupply,
@@ -105,6 +108,7 @@ export function StockSupplyForm({
   const products = useAppStore((state) =>
     state.stockProducts.filter((product) => product.active),
   );
+  const movements = useAppStore((state) => state.stockMovements);
 
   const [occurredAt, setOccurredAt] = useState(local(initial?.occurred_at));
   const [status, setStatus] = useState<StockSupplyStatus>(
@@ -558,6 +562,69 @@ export function StockSupplyForm({
                     </button>
                   </div>
                 </>
+              )}
+
+              {product && (
+                <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-950/45 p-3">
+                  {(() => {
+                    const recommendation =
+                      buildStockRecommendation(
+                        product,
+                        movements,
+                      );
+
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 gap-2 text-[9px]">
+                          <span className="text-zinc-600">
+                            Estoque atual
+                            <b className="block text-zinc-300">
+                              {formatStockQuantity(
+                                product.current_quantity,
+                                product.unit,
+                              )}
+                            </b>
+                          </span>
+                          <span className="text-zinc-600">
+                            Valor em estoque
+                            <b className="block text-emerald-400">
+                              {brl(
+                                stockProductValue(product),
+                              )}
+                            </b>
+                          </span>
+                          <span className="text-zinc-600">
+                            Mínimo / meta
+                            <b className="block text-zinc-300">
+                              {formatStockQuantity(
+                                product.minimum_quantity,
+                                product.unit,
+                              )}{' '}
+                              /{' '}
+                              {formatStockQuantity(
+                                recommendation.targetQuantity,
+                                product.unit,
+                              )}
+                            </b>
+                          </span>
+                          <span className="text-zinc-600">
+                            Sugestão agora
+                            <b className="block text-amber-400">
+                              {formatStockQuantity(
+                                recommendation.recommendedQuantity,
+                                product.unit,
+                              )}
+                            </b>
+                          </span>
+                        </div>
+
+                        <p className="mt-2 text-[9px] leading-relaxed text-zinc-600">
+                          {recommendation.explanation}
+                        </p>
+                      </>
+                    );
+                  })()}
+                </div>
               )}
 
               {product && Boolean(product.presentations?.length) && (
