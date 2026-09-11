@@ -1,11 +1,10 @@
 // lib/address-autocomplete.ts
-import { loadGoogleMaps } from '@/lib/store-geocoding';
 import { normalizeAddressText } from '@/lib/maps';
 
 export interface AddressSuggestion {
   id: string;
   label: string;
-  prediction: unknown;
+  prediction: GeoapifyFeature;
 }
 
 export interface ResolvedAddressSuggestion {
@@ -19,93 +18,178 @@ export interface ResolvedAddressSuggestion {
   placeId?: string;
 }
 
-const PATOS_BOUNDS = {
-  west: -46.75,
-  north: -18.35,
-  east: -46.30,
-  south: -18.82,
+interface GeoapifyFeature {
+  type: 'Feature';
+  properties?: {
+    place_id?: string;
+    formatted?: string;
+    address_line1?: string;
+    address_line2?: string;
+    street?: string;
+    housenumber?: string;
+    postcode?: string;
+    suburb?: string;
+    district?: string;
+    neighbourhood?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    country_code?: string;
+    lat?: number;
+    lon?: number;
+    rank?: {
+      confidence?: number;
+      confidence_city_level?: number;
+      confidence_street_level?: number;
+      confidence_building_level?: number;
+    };
+  };
+  geometry?: {
+    type?: string;
+    coordinates?: [number, number];
+  };
+}
+
+interface GeoapifyResponse {
+  type?: string;
+  features?: GeoapifyFeature[];
+}
+
+const GEOAPIFY_ENDPOINT =
+  'https://api.geoapify.com/v1/geocode/autocomplete';
+
+// Centro aproximado de Patos de Minas.
+// O bias melhora ranking; o filtro rectangular impede sugestões distantes.
+const PATOS_CENTER = {
+  latitude: -18.5789,
+  longitude: -46.5186,
 };
 
-let autocompleteSessionToken: unknown | null = null;
+const PATOS_BOUNDS = {
+  lon1: -46.72,
+  lat1: -18.80,
+  lon2: -46.30,
+  lat2: -18.35,
+};
 
-function googleApi() {
-  if (typeof window === 'undefined') {
-    throw new Error('Busca de endereço indisponível neste ambiente.');
-  }
+let activeController: AbortController | null = null;
 
-  const api = (window as typeof window & { google?: any }).google;
-  if (!api?.maps?.importLibrary) {
-    throw new Error('Google Maps ainda não está disponível.');
-  }
+function getApiKey(): string {
+  const key = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY?.trim();
 
-  return api;
-}
-
-async function placesLibrary() {
-  await loadGoogleMaps();
-  const api = googleApi();
-  return api.maps.importLibrary('places');
-}
-
-function componentValue(
-  components: any[] | undefined,
-  wantedTypes: string[],
-): string | undefined {
-  if (!components?.length) return undefined;
-
-  for (const type of wantedTypes) {
-    const component = components.find((item) =>
-      Array.isArray(item.types) && item.types.includes(type),
+  if (!key) {
+    throw new Error(
+      'Chave Geoapify não configurada. Defina NEXT_PUBLIC_GEOAPIFY_API_KEY.',
     );
-
-    const value =
-      component?.longText ||
-      component?.long_name ||
-      component?.shortText ||
-      component?.short_name;
-
-    if (value) return String(value);
   }
 
-  return undefined;
+  return key;
 }
 
-function buildOperationalAddress(place: any): {
+function featureCoordinates(
+  feature: GeoapifyFeature,
+): { latitude?: number; longitude?: number } {
+  const props = feature.properties;
+
+  if (
+    Number.isFinite(props?.lat) &&
+    Number.isFinite(props?.lon)
+  ) {
+    return {
+      latitude: props?.lat,
+      longitude: props?.lon,
+    };
+  }
+
+  const coordinates = feature.geometry?.coordinates;
+
+  if (
+    Array.isArray(coordinates) &&
+    Number.isFinite(coordinates[0]) &&
+    Number.isFinite(coordinates[1])
+  ) {
+    return {
+      longitude: coordinates[0],
+      latitude: coordinates[1],
+    };
+  }
+
+  return {};
+}
+
+function buildOperationalAddress(feature: GeoapifyFeature): {
   address: string;
   neighborhood?: string;
   postalCode?: string;
 } {
-  const components = place.addressComponents as any[] | undefined;
+  const props = feature.properties || {};
 
-  const route = componentValue(components, ['route']);
-  const number = componentValue(components, ['street_number']);
-  const neighborhood = componentValue(components, [
-    'sublocality_level_1',
-    'sublocality',
-    'neighborhood',
-  ]);
-  const postalCode = componentValue(components, ['postal_code']);
+  const route =
+    props.street ||
+    props.address_line1 ||
+    '';
+
+  const number = props.housenumber || '';
+
+  const neighborhood =
+    props.neighbourhood ||
+    props.suburb ||
+    props.district ||
+    undefined;
+
+  const postalCode = props.postcode || undefined;
 
   if (route) {
-    const street = number ? `${route}, ${number}` : route;
+    const street =
+      number && !String(route).includes(String(number))
+        ? `${route}, ${number}`
+        : route;
+
     return {
       address: normalizeAddressText(
-        neighborhood ? `${street} - ${neighborhood}` : street,
+        neighborhood
+          ? `${street} - ${neighborhood}`
+          : street,
       ),
       neighborhood,
       postalCode,
     };
   }
 
-  const formatted = normalizeAddressText(
-    String(place.formattedAddress || place.displayName || ''),
-  );
-
   return {
-    address: formatted,
+    address: normalizeAddressText(
+      props.formatted ||
+      props.address_line1 ||
+      '',
+    ),
     neighborhood,
     postalCode,
   };
+}
+
+function suggestionLabel(feature: GeoapifyFeature): string {
+  const props = feature.properties || {};
+
+  return String(
+    props.formatted ||
+    [props.address_line1, props.address_line2]
+      .filter(Boolean)
+      .join(', ') ||
+    '',
+  ).trim();
+}
+
+function featureId(
+  feature: GeoapifyFeature,
+  index: number,
+): string {
+  const props = feature.properties || {};
+  const coords = feature.geometry?.coordinates;
+
+  return String(
+    props.place_id ||
+    `${coords?.[1] ?? ''}:${coords?.[0] ?? ''}:${index}`,
+  );
 }
 
 export async function fetchAddressSuggestions(
@@ -115,98 +199,100 @@ export async function fetchAddressSuggestions(
 
   if (query.length < 3) return [];
 
-  const lib: any = await placesLibrary();
+  activeController?.abort();
+  activeController = new AbortController();
 
-  if (!lib?.AutocompleteSuggestion || !lib?.AutocompleteSessionToken) {
-    throw new Error('Places API (New) não está disponível para esta chave.');
+  const params = new URLSearchParams({
+    text: query,
+    apiKey: getApiKey(),
+    format: 'geojson',
+    lang: 'pt',
+    limit: '6',
+    filter: `rect:${PATOS_BOUNDS.lon1},${PATOS_BOUNDS.lat1},${PATOS_BOUNDS.lon2},${PATOS_BOUNDS.lat2}`,
+    bias: `proximity:${PATOS_CENTER.longitude},${PATOS_CENTER.latitude}`,
+  });
+
+  const response = await fetch(
+    `${GEOAPIFY_ENDPOINT}?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      signal: activeController.signal,
+      cache: 'no-store',
+    },
+  );
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        'Geoapify recusou a chave. Confira a API Key e suas restrições.',
+      );
+    }
+
+    if (response.status === 429) {
+      throw new Error(
+        'Limite de buscas de endereço atingido temporariamente.',
+      );
+    }
+
+    throw new Error(
+      `Falha ao buscar endereços (${response.status}).`,
+    );
   }
 
-  if (!autocompleteSessionToken) {
-    autocompleteSessionToken = new lib.AutocompleteSessionToken();
-  }
+  const data =
+    (await response.json()) as GeoapifyResponse;
 
-  const request: any = {
-    input: query,
-    locationRestriction: PATOS_BOUNDS,
-    includedRegionCodes: ['br'],
-    language: 'pt-BR',
-    region: 'br',
-    sessionToken: autocompleteSessionToken,
-  };
+  return (data.features || [])
+    .filter((feature) => {
+      const props = feature.properties || {};
+      const countryCode =
+        props.country_code?.toLowerCase();
 
-  const response =
-    await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
-
-  return (response?.suggestions || [])
-    .map((suggestion: any) => suggestion?.placePrediction)
-    .filter(Boolean)
-    .slice(0, 6)
-    .map((prediction: any) => ({
-      id: String(
-        prediction.placeId ||
-        prediction.id ||
-        prediction.text?.toString?.() ||
-        Math.random(),
-      ),
-      label: String(prediction.text?.toString?.() || ''),
-      prediction,
+      return !countryCode || countryCode === 'br';
+    })
+    .map((feature, index) => ({
+      id: featureId(feature, index),
+      label: suggestionLabel(feature),
+      prediction: feature,
     }))
-    .filter((item: AddressSuggestion) => item.label);
+    .filter((item) => item.label)
+    .slice(0, 6);
 }
 
 export async function resolveAddressSuggestion(
   suggestion: AddressSuggestion,
 ): Promise<ResolvedAddressSuggestion> {
-  const prediction = suggestion.prediction as any;
+  const feature = suggestion.prediction;
 
-  if (!prediction?.toPlace) {
+  if (!feature) {
     throw new Error('Sugestão de endereço inválida.');
   }
 
-  const place = prediction.toPlace();
-
-  await place.fetchFields({
-    fields: [
-      'id',
-      'displayName',
-      'formattedAddress',
-      'location',
-      'addressComponents',
-    ],
-  });
-
+  const props = feature.properties || {};
   const { address, neighborhood, postalCode } =
-    buildOperationalAddress(place);
+    buildOperationalAddress(feature);
 
-  const latitude =
-    typeof place.location?.lat === 'function'
-      ? place.location.lat()
-      : place.location?.lat;
+  const { latitude, longitude } =
+    featureCoordinates(feature);
 
-  const longitude =
-    typeof place.location?.lng === 'function'
-      ? place.location.lng()
-      : place.location?.lng;
-
-  const placeId = String(
-    place.id ||
-    prediction.placeId ||
-    '',
-  ).trim() || undefined;
+  const placeId =
+    props.place_id?.trim() || undefined;
 
   const mapsLink =
     Number.isFinite(latitude) && Number.isFinite(longitude)
-      ? `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}${
-          placeId ? `&query_place_id=${encodeURIComponent(placeId)}` : ''
-        }`
+      ? `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
       : undefined;
 
-  // A seleção encerra a sessão atual de autocomplete.
-  autocompleteSessionToken = null;
-
   return {
-    address,
-    formattedAddress: String(place.formattedAddress || suggestion.label),
+    address:
+      address ||
+      normalizeAddressText(suggestion.label),
+    formattedAddress:
+      props.formatted ||
+      suggestion.label,
     neighborhood,
     postalCode,
     latitude,
@@ -217,5 +303,6 @@ export async function resolveAddressSuggestion(
 }
 
 export function cancelAddressAutocompleteSession() {
-  autocompleteSessionToken = null;
+  activeController?.abort();
+  activeController = null;
 }

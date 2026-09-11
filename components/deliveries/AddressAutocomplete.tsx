@@ -310,7 +310,7 @@ export function AddressAutocomplete({
           </div>
 
           <div className="border-t border-zinc-900 px-3 py-2 text-center text-[9px] text-zinc-700">
-            Google Maps · seleção gera localização da entrega
+            Geoapify · seleção gera localização da entrega
           </div>
         </div>
       )}
