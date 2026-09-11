@@ -117,7 +117,7 @@ export default function ConfirmacoesPage() {
 
   const [filter, setFilter] = useState<QueueFilter>('all');
   const [query, setQuery] = useState('');
-  const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [isBatchOpen, setIsBatchOpen] = useState(() => searchParams.get('add') === '1');
   const [batchText, setBatchText] = useState('');
   const [isBatchSaving, setIsBatchSaving] = useState(false);
   const [manualView, setManualView] = useState<'pending' | 'resolved'>('pending');
@@ -464,13 +464,6 @@ export default function ConfirmacoesPage() {
         >
           <ExternalLink size={14} />
           Portal
-        </button>
-        <button
-          onClick={() => setIsBatchOpen(true)}
-          className="flex h-10 items-center gap-2 rounded-xl bg-red-500 px-3 text-[11px] font-black text-white active:scale-95"
-        >
-          <Plus size={14} />
-          Pendências
         </button>
       </header>
 

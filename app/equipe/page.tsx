@@ -1,13 +1,12 @@
 // app/equipe/page.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Bike,
   ChevronRight,
   Edit3,
-  Plus,
   Save,
   Search,
   UserCheck,
@@ -44,6 +43,7 @@ const normalize = (value: string) =>
 
 export default function TeamPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const members = useAppStore((state) => state.teamMembers);
   const motoboys = useAppStore((state) => state.motoboys);
   const add = useAppStore((state) => state.addTeamMember);
@@ -54,6 +54,13 @@ export default function TeamPage() {
   const [form, setForm] = useState(empty);
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    if (searchParams.get('add') === 'interno') {
+      setForm(empty);
+      setEditing(null);
+    }
+  }, [searchParams]);
 
   const filteredMembers = useMemo(() => {
     const term = normalize(query.trim());
@@ -193,14 +200,7 @@ export default function TeamPage() {
               Equipe interna
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={openNew}
-            className="flex h-9 items-center gap-1.5 rounded-xl bg-violet-500/10 px-3 text-[10px] font-black text-violet-400"
-          >
-            <Plus size={14} />
-            Integrante
-          </button>
+
         </div>
 
         <div className="space-y-2">
@@ -267,14 +267,7 @@ export default function TeamPage() {
               Entregadores / motoboys
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={() => router.push('/motoboys/novo')}
-            className="flex h-9 items-center gap-1.5 rounded-xl bg-sky-500/10 px-3 text-[10px] font-black text-sky-400"
-          >
-            <Plus size={14} />
-            Entregador
-          </button>
+
         </div>
 
         <div className="space-y-2">

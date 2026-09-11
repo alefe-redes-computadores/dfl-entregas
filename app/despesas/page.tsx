@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import {
   Bike,
   ChevronRight,
-  Plus,
   ReceiptText,
   Trash2,
   Wallet,
@@ -86,14 +85,6 @@ export default function ExpensesPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => router.push('/despesas/novo')}
-            className="flex h-12 shrink-0 items-center gap-2 rounded-2xl bg-amber-500 px-4 text-xs font-black text-zinc-950 active:scale-95"
-          >
-            <Plus size={16} />
-            Adicionar
-          </button>
         </div>
       </section>
 

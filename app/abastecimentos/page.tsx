@@ -168,10 +168,10 @@ export default function StockSuppliesPage() {
 
       </header>
 
-      <section className="flex items-center justify-between rounded-[26px] border border-zinc-800 bg-zinc-900/50 p-3">
+      <section className="flex items-center justify-between rounded-[20px] border border-zinc-800 bg-zinc-900/50 px-3 py-2">
         <button
           onClick={() => moveMonth(-1)}
-          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400"
+          className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400"
         >
           <ChevronLeft size={18} />
         </button>
@@ -189,35 +189,17 @@ export default function StockSuppliesPage() {
         </div>
         <button
           onClick={() => moveMonth(1)}
-          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400"
+          className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400"
         >
           <ChevronRight size={18} />
         </button>
       </section>
 
-      <section className="grid grid-cols-2 gap-3">
-        <Metric
-          icon={Wallet}
-          label="Gasto no mês"
-          value={money(metrics.totalAmount)}
-        />
-        <Metric
-          icon={PackageOpen}
-          label="Itens registrados"
-          value={String(metrics.itemCount)}
-        />
-        <Metric
-          icon={UserRound}
-          label="Compras"
-          value={String(metrics.count)}
-        />
-        <Metric
-          icon={CheckCircle2}
-          label="Aguardando ação"
-          value={String(
-            metrics.pendingCount + metrics.uncheckedCount,
-          )}
-        />
+      <section className="grid grid-cols-2 gap-2">
+        <CompactMetric label="Gasto no mês" value={money(metrics.totalAmount)} />
+        <CompactMetric label="Compras" value={String(metrics.count)} />
+        <CompactMetric label="Itens" value={String(metrics.itemCount)} />
+        <CompactMetric label="Aguardando ação" value={String(metrics.pendingCount + metrics.uncheckedCount)} alert={metrics.pendingCount + metrics.uncheckedCount > 0} />
       </section>
 
       <div className="relative">
@@ -229,11 +211,11 @@ export default function StockSuppliesPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar produto, fornecedor ou comprador"
-          className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-12 pr-4 text-sm text-zinc-100 outline-none focus:border-amber-500"
+          className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-11 pr-4 text-sm text-zinc-100 outline-none focus:border-amber-500"
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {(
           [
             'todos',
@@ -246,11 +228,11 @@ export default function StockSuppliesPage() {
           <button
             key={key}
             onClick={() => setStatus(key)}
-            className={`min-h-11 rounded-xl border px-2 py-2 text-[11px] font-bold ${
+            className={`shrink-0 rounded-full border px-4 py-2 text-[10px] font-black ${
               status === key
                 ? 'border-amber-500/40 bg-amber-500/10 text-amber-400'
                 : 'border-zinc-800 bg-zinc-900 text-zinc-500'
-            } ${key === 'todos' ? 'col-span-2 sm:col-span-1' : ''}`}
+            }`}
           >
             {key === 'todos'
               ? 'Todos'
@@ -388,6 +370,7 @@ export default function StockSuppliesPage() {
   );
 }
 
+function CompactMetric({label,value,alert=false}:{label:string;value:string;alert?:boolean}){return <div className={`rounded-2xl border px-3.5 py-3 ${alert?'border-amber-500/25 bg-amber-500/[.055]':'border-zinc-800 bg-zinc-900/45'}`}><p className={`text-[9px] font-bold ${alert?'text-amber-400':'text-zinc-600'}`}>{label}</p><p className="mt-1 truncate text-base font-black text-zinc-100">{value}</p></div>}
 function Metric({
   label,
   value,

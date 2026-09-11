@@ -1,6 +1,16 @@
+// components/layout/BottomNav.tsx
 'use client';
 
-import { Home, Store, Plus, BarChart3, MoreHorizontal } from 'lucide-react';
+import {
+  BarChart3,
+  Bike,
+  Home,
+  PackagePlus,
+  Plus,
+  Store,
+  UserPlus,
+  MoreHorizontal,
+} from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import clsx from 'clsx';
@@ -13,28 +23,89 @@ const NAV_ITEMS = [
   { href: '/mais', label: 'Mais', icon: MoreHorizontal },
 ] as const;
 
+type AddMode =
+  | { kind: 'direct'; href: string; label: string }
+  | { kind: 'sheet'; label: string; options: Array<{ href: string; label: string; description: string; icon: typeof Plus }> }
+  | null;
+
 export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [showAddSheet, setShowAddSheet] = useState(false);
 
-  const contextualAdd =
-    pathname === '/estoque' ? { href: '/estoque/novo', label: 'Novo produto' } :
-    pathname === '/abastecimentos' ? { href: '/abastecimentos/novo', label: 'Nova compra' } :
-    pathname === '/entregas' ? { href: '/entregas/nova', label: 'Nova entrega' } :
-    pathname === '/rotas' ? { href: '/rotas/nova', label: 'Nova rota' } :
-    pathname === '/clientes' ? { href: '/clientes/novo', label: 'Novo cliente' } :
-    pathname === '/motoboys' ? { href: '/motoboys/novo', label: 'Novo motoboy' } :
-    pathname === '/despesas' ? { href: '/despesas/novo', label: 'Nova despesa' } :
-    null;
+  const addMode: AddMode =
+    pathname === '/estoque'
+      ? { kind: 'direct', href: '/estoque/novo', label: 'Novo produto' }
+      : pathname === '/abastecimentos'
+        ? { kind: 'direct', href: '/abastecimentos/novo', label: 'Nova compra' }
+        : pathname === '/entregas'
+          ? { kind: 'direct', href: '/entregas/nova', label: 'Nova entrega' }
+          : pathname === '/rotas'
+            ? { kind: 'direct', href: '/rotas/nova', label: 'Nova rota' }
+            : pathname === '/clientes'
+              ? { kind: 'direct', href: '/clientes/novo', label: 'Novo cliente' }
+              : pathname === '/motoboys'
+                ? { kind: 'direct', href: '/motoboys/novo', label: 'Novo entregador' }
+                : pathname === '/despesas'
+                  ? { kind: 'direct', href: '/despesas/novo', label: 'Nova despesa' }
+                  : pathname === '/confirmacoes'
+                    ? { kind: 'direct', href: '/confirmacoes?add=1', label: 'Nova pendência iFood' }
+                    : pathname === '/equipe'
+                      ? {
+                          kind: 'sheet',
+                          label: 'Adicionar pessoa',
+                          options: [
+                            {
+                              href: '/equipe?add=interno',
+                              label: 'Integrante da loja',
+                              description: 'Administração, cozinha, atendimento ou compras',
+                              icon: UserPlus,
+                            },
+                            {
+                              href: '/motoboys/novo',
+                              label: 'Entregador / motoboy',
+                              description: 'Cadastro, regra de pagamento e acerto',
+                              icon: Bike,
+                            },
+                          ],
+                        }
+                      : pathname === '/' || pathname === '/loja'
+                        ? {
+                            kind: 'sheet',
+                            label: 'Adicionar',
+                            options: [
+                              {
+                                href: '/rotas/nova',
+                                label: 'Adicionar rota',
+                                description: 'Abrir uma nova rota de entrega',
+                                icon: Bike,
+                              },
+                              {
+                                href: '/entregas/nova',
+                                label: 'Adicionar entrega',
+                                description: 'Lançar um pedido em uma rota aberta',
+                                icon: PackagePlus,
+                              },
+                            ],
+                          }
+                        : null;
 
   const handleAdd = () => {
-    if (contextualAdd) return router.push(contextualAdd.href);
+    if (!addMode) return;
+    if (addMode.kind === 'direct') {
+      router.push(addMode.href);
+      return;
+    }
     setShowAddSheet(true);
   };
 
-  // Oculta a barra inferior se estiver em páginas de formulários profundos ou sub-rotas específicas se necessário
-  if (pathname.includes('/nova') || pathname.includes('/novo') || pathname.includes('/editar') || pathname.includes('/movimentar') || pathname.includes('/contagem')) {
+  if (
+    pathname.includes('/nova') ||
+    pathname.includes('/novo') ||
+    pathname.includes('/editar') ||
+    pathname.includes('/movimentar') ||
+    pathname.includes('/contagem')
+  ) {
     return null;
   }
 
@@ -42,7 +113,7 @@ export function BottomNav() {
     <>
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-md items-center justify-between px-2 py-2">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => item.href !== '__fab__' || Boolean(addMode)).map((item) => {
             const Icon = item.icon;
             const isFab = item.href === '__fab__';
             const isActive = !isFab && pathname === item.href;
@@ -52,7 +123,7 @@ export function BottomNav() {
                 <div key={item.label} className="flex flex-1 justify-center">
                   <button
                     onClick={handleAdd}
-                    aria-label={contextualAdd?.label || 'Adicionar'}
+                    aria-label={addMode?.label || 'Adicionar'}
                     className="-mt-7 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-zinc-950 shadow-lg shadow-amber-500/30 transition-transform active:scale-90"
                   >
                     <Icon size={26} strokeWidth={2.5} />
@@ -63,88 +134,64 @@ export function BottomNav() {
 
             return (
               <button
-                key={item.href}
+                key={item.label}
                 onClick={() => router.push(item.href)}
-                className="flex flex-1 flex-col items-center gap-1 px-1 py-1.5 transition-colors active:scale-95"
+                className={clsx(
+                  'flex min-w-0 flex-1 flex-col items-center gap-1 py-1 text-[10px] font-bold',
+                  isActive ? 'text-emerald-400' : 'text-zinc-600',
+                )}
               >
-                <Icon
-                  size={22}
-                  strokeWidth={2}
-                  className={clsx(isActive ? 'text-emerald-500' : 'text-zinc-500')}
-                />
-                <span
-                  className={clsx(
-                    'text-[11px] font-medium truncate w-full text-center',
-                    isActive ? 'text-emerald-500' : 'text-zinc-500'
-                  )}
-                >
-                  {item.label}
-                </span>
+                <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+                <span>{item.label}</span>
               </button>
             );
           })}
         </div>
       </nav>
 
-      {showAddSheet && (
-        <AddActionSheet onClose={() => setShowAddSheet(false)} />
+      {showAddSheet && addMode?.kind === 'sheet' && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end bg-black/75 backdrop-blur-sm"
+          onClick={() => setShowAddSheet(false)}
+        >
+          <div
+            className="safe-bottom w-full rounded-t-[30px] border-t border-zinc-800 bg-zinc-950 p-5 pb-7"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-700" />
+            <h2 className="font-heading text-lg font-black text-zinc-100">
+              {addMode.label}
+            </h2>
+
+            <div className="mt-4 space-y-2">
+              {addMode.options.map((option) => {
+                const OptionIcon = option.icon;
+                return (
+                  <button
+                    key={option.href}
+                    type="button"
+                    onClick={() => {
+                      setShowAddSheet(false);
+                      router.push(option.href);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 text-left active:scale-[.99]"
+                  >
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-400">
+                      <OptionIcon size={19} />
+                    </span>
+                    <span className="min-w-0">
+                      <strong className="block text-sm text-zinc-100">{option.label}</strong>
+                      <span className="mt-0.5 block text-[10px] text-zinc-600">
+                        {option.description}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
     </>
-  );
-}
-
-function AddActionSheet({ onClose }: { onClose: () => void }) {
-  const router = useRouter();
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <button
-        aria-label="Fechar"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-      />
-
-      <div className="safe-bottom relative w-full max-w-md rounded-t-[28px] border-t border-zinc-800 bg-zinc-900 p-5 pb-8">
-        <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-700" />
-
-        <h2 className="mb-4 font-heading text-lg font-bold text-zinc-50">
-          O que deseja adicionar?
-        </h2>
-
-        <div className="flex flex-col gap-3">
-          <button
-            onClick={() => {
-              onClose();
-              router.push('/rotas/nova?returnTo=%2F');
-            }}
-            className="flex items-center gap-3 rounded-[20px] border border-zinc-800 bg-zinc-800/50 p-4 text-left transition-transform active:scale-[0.97]"
-          >
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
-              <Home size={20} />
-            </div>
-            <div>
-              <p className="font-semibold text-zinc-100">Adicionar Rota</p>
-              <p className="text-xs text-zinc-500">Abrir uma nova rota de entrega</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => {
-              onClose();
-              router.push('/entregas/nova?returnTo=%2F');
-            }}
-            className="flex items-center gap-3 rounded-[20px] border border-zinc-800 bg-zinc-800/50 p-4 text-left transition-transform active:scale-[0.97]"
-          >
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
-              <Plus size={20} />
-            </div>
-            <div>
-              <p className="font-semibold text-zinc-100">Adicionar Entrega</p>
-              <p className="text-xs text-zinc-500">Lançar um pedido em uma rota aberta</p>
-            </div>
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
