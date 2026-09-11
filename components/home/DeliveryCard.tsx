@@ -408,7 +408,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                 <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 truncate w-full">
                   <MapPin size={12} className="shrink-0 text-zinc-500" />
-                  <span className="truncate">{shortAddress} {customer?.neighborhood ? `- ${customer.neighborhood}` : ''}</span>
+                  <span className="truncate">{shortAddress}</span>
                   {isUrgent && <span className="ml-1 rounded bg-red-500/20 text-red-400 text-[9px] px-1 font-bold uppercase">Urgente</span>}
                 </div>
 

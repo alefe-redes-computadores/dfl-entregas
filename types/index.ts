@@ -255,6 +255,13 @@ export interface IfoodPendingConfirmation {
   note?: string;
   status?: IfoodPendingConfirmationStatus;
   resolved_at?: string;
+
+  // Vínculo operacional. Pendências antigas continuam válidas sem estes campos.
+  delivery_id?: string;
+  route_id?: string;
+  route_name?: string;
+  source_kind?: 'route' | 'manual';
+
   created_at: string;
   updated_at: string;
 }

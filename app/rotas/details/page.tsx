@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
 import { RouteOperationalMemory } from '@/components/intelligence/EntityOperationalMemory';
+import { RouteDepartureChecklist } from '@/components/routes/RouteDepartureChecklist';
 
 const fmt = (...values: TimestampLike[]) => {
   const date = firstValidTimestamp(...values);
@@ -54,8 +55,11 @@ export default function RouteDetailsPage() {
   const startRoute = useAppStore((state) => state.startRoute);
   const closeRoute = useAppStore((state) => state.closeRoute);
   const reopenRoute = useAppStore((state) => state.reopenRoute);
+  const getCustomerById = useAppStore((state) => state.getCustomerById);
+  const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
 
   const [busy, setBusy] = useState(false);
+  const [departureChecklistOpen, setDepartureChecklistOpen] = useState(false);
 
   if (!route) {
     return (
@@ -101,24 +105,48 @@ export default function RouteDetailsPage() {
   const action = async (kind: 'start' | 'close' | 'reopen') => {
     if (busy) return;
 
+    if (kind === 'start') {
+      setDepartureChecklistOpen(true);
+      return;
+    }
+
     setBusy(true);
     try {
-      if (kind === 'start') await startRoute(route.id);
-      else if (kind === 'close') await closeRoute(route.id);
+      if (kind === 'close') await closeRoute(route.id);
       else await reopenRoute(route.id);
 
       toast.success(
-        kind === 'start'
-          ? 'Rota iniciada.'
-          : kind === 'close'
-            ? 'Rota finalizada.'
-            : 'Rota reaberta.',
+        kind === 'close' ? 'Rota finalizada.' : 'Rota reaberta.',
       );
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
           : 'Não foi possível atualizar a rota.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmStartRoute = async () => {
+    if (busy) return;
+
+    setBusy(true);
+
+    try {
+      await startRoute(route.id);
+      setDepartureChecklistOpen(false);
+
+      toast.success('Rota iniciada.', {
+        description:
+          'Checklist conferido e horário real de saída registrado.',
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível iniciar a rota.',
       );
     } finally {
       setBusy(false);
@@ -372,6 +400,18 @@ export default function RouteDetailsPage() {
               : 'Finalizar rota'}
         </button>
       )}
+      {departureChecklistOpen && (
+        <RouteDepartureChecklist
+          route={route}
+          deliveries={deliveries}
+          getCustomerById={getCustomerById}
+          isPrivacyMode={isPrivacyMode}
+          busy={busy}
+          onClose={() => setDepartureChecklistOpen(false)}
+          onConfirm={confirmStartRoute}
+        />
+      )}
+
     </div>
   );
 }

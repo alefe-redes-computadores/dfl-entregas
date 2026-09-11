@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { useAppStore } from '@/store/useAppStore';
 
 const onlyDigits = (value: string, max: number) =>
   value.replace(/\D/g, '').slice(0, max);
@@ -38,6 +39,11 @@ function ConfirmarContent() {
     [searchParams]
   );
   const returnTo = safeInternalReturnTo(searchParams.get('returnTo'));
+  const pendingId = searchParams.get('pendingId') || '';
+
+  const updatePendingConfirmation = useAppStore(
+    (state) => state.updateIfoodPendingConfirmation,
+  );
 
   const [orderId, setOrderId] = useState(initialOrderId);
   const [code, setCode] = useState(initialCode);
@@ -88,6 +94,27 @@ function ConfirmarContent() {
   const leaveConfirmation = async () => {
     await vibrate(ImpactStyle.Light);
     router.replace(returnTo);
+  };
+
+  const confirmExternalAndLeave = async () => {
+    if (!pendingId) {
+      await leaveConfirmation();
+      return;
+    }
+
+    try {
+      await vibrate(ImpactStyle.Medium);
+
+      await updatePendingConfirmation(pendingId, {
+        status: 'resolved',
+        resolved_at: new Date().toISOString(),
+      });
+
+      toast.success('Pedido marcado como confirmado no iFood.');
+      router.replace(returnTo);
+    } catch {
+      toast.error('Não foi possível concluir a pendência.');
+    }
   };
 
   return (
@@ -181,7 +208,20 @@ function ConfirmarContent() {
       </div>
 
       <div className="relative flex-1 bg-white">
-        <iframe
+        {pendingId && (
+        <div className="border-b border-zinc-800 bg-zinc-950 px-4 py-3">
+          <button
+            type="button"
+            onClick={confirmExternalAndLeave}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-xs font-black text-zinc-950 active:scale-[0.98]"
+          >
+            <CheckCircle2 size={15} />
+            Já confirmei no iFood
+          </button>
+        </div>
+      )}
+
+      <iframe
           src={IFOOD_CONFIRMATION_URL}
           className="absolute inset-0 h-full w-full border-none"
           title="Confirmação iFood"

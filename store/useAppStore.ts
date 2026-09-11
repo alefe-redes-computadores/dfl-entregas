@@ -11,6 +11,11 @@ import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { fuelingDate } from '@/lib/fueling-analytics';
 import { INITIAL_STOCK_PRODUCTS, INITIAL_STOCK_SUPPLIERS, STOCK_CATALOG_VERSION } from '@/lib/stock-catalog';
+import {
+  extractCustomerNeighborhood,
+  findExistingCustomer,
+  nextCustomerName,
+} from '@/lib/customer-identity';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -539,7 +544,7 @@ export const useAppStore = create<AppState>()(
           await setDoc(doc(db, 'fuelings', fueling.id), sanitizeForFirebase(dataWithTimestamp));
         } catch (error) {
           set((state) => ({ fuelings: state.fuelings.filter((item) => item.id !== fueling.id) }));
-          console.error('Erro ao adicionar abastecimento:', error);
+          console.error('Erro ao adicionar compra de estoque:', error);
           throw error;
         }
       },
@@ -559,7 +564,7 @@ export const useAppStore = create<AppState>()(
           await updateDoc(doc(db, 'fuelings', id), sanitizeForFirebase(dataWithTimestamp));
         } catch (error) {
           set({ fuelings: previousFuelings });
-          console.error('Erro ao atualizar abastecimento:', error);
+          console.error('Erro ao atualizar compra de estoque:', error);
           throw error;
         }
       },
@@ -571,7 +576,7 @@ export const useAppStore = create<AppState>()(
           await deleteDoc(doc(db, 'fuelings', id));
         } catch (error) {
           set({ fuelings: previousFuelings });
-          console.error('Erro ao excluir abastecimento:', error);
+          console.error('Erro ao excluir compra de estoque:', error);
           throw error;
         }
       },
@@ -1039,27 +1044,101 @@ export const useAppStore = create<AppState>()(
       closeRoute: async (routeId) => {
         const previousRoutes = get().routes;
         const routeBeforeClose = previousRoutes.find((route) => route.id === routeId);
+
         if (!routeBeforeClose) throw new Error('Rota não encontrada.');
         if (routeBeforeClose.status === 'fechada') return;
-        if (!routeStartedAt(routeBeforeClose)) throw new Error('Inicie a rota antes de finalizá-la.');
-        if (get().deliveries.some((delivery) => delivery.route_id === routeId && !delivery.completed)) {
+        if (!routeStartedAt(routeBeforeClose)) {
+          throw new Error('Inicie a rota antes de finalizá-la.');
+        }
+
+        const routeDeliveries = get().deliveries.filter(
+          (delivery) => delivery.route_id === routeId,
+        );
+
+        if (routeDeliveries.some((delivery) => !delivery.completed)) {
           throw new Error('Conclua todas as entregas antes de finalizar a rota.');
         }
+
         const endTime = new Date().toISOString();
+
         set((state) => ({
-          routes: state.routes.map((r) =>
-            // O segredo está aqui: r.end_time || endTime
-            r.id === routeId ? { ...r, status: 'fechada', end_time: r.end_time || endTime, updated_at: endTime } : r
+          routes: state.routes.map((route) =>
+            route.id === routeId
+              ? {
+                  ...route,
+                  status: 'fechada',
+                  end_time: route.end_time || endTime,
+                  updated_at: endTime,
+                }
+              : route,
           ),
         }));
+
         try {
-          const route = get().routes.find(r => r.id === routeId);
+          const route = get().routes.find((item) => item.id === routeId);
           const finalEndTime = route?.end_time || endTime;
-          await updateDoc(doc(db, 'routes', routeId), { status: 'fechada', end_time: finalEndTime, updated_at: endTime });
+
+          await updateDoc(doc(db, 'routes', routeId), {
+            status: 'fechada',
+            end_time: finalEndTime,
+            updated_at: endTime,
+          });
         } catch (error) {
           set({ routes: previousRoutes });
           console.error(error);
           throw error;
+        }
+
+        // Encerrar a rota não significa que os pedidos já foram confirmados
+        // no portal do iFood. Criamos uma fila externa, idempotente.
+        try {
+          const current = get();
+          const now = new Date().toISOString();
+
+          const confirmationItems: IfoodPendingConfirmation[] = routeDeliveries
+            .filter((delivery) => delivery.origin === 'ifood')
+            .map((delivery) => {
+              const customer = current.customers.find(
+                (item) => item.id === delivery.customer_id,
+              );
+
+              const code =
+                (delivery.confirmation_code || customer?.last_confirmation_code || '')
+                  .replace(/\D/g, '')
+                  .slice(0, 4);
+
+              const ifoodId = (delivery.ifood_id || '')
+                .replace(/\D/g, '')
+                .slice(0, 8);
+
+              return {
+                id: `ifood-route-${delivery.id}`,
+                delivery_id: delivery.id,
+                route_id: routeId,
+                route_name: routeBeforeClose.name,
+                source_kind: 'route',
+                order_id: delivery.order_id || undefined,
+                ifood_id: ifoodId || undefined,
+                confirmation_code: code || undefined,
+                customer_name:
+                  delivery.customer_name || customer?.name || 'Cliente',
+                value: delivery.value,
+                note: 'Entrega concluída; confirmação externa do iFood ainda pendente.',
+                status: 'pending',
+                created_at: now,
+                updated_at: now,
+              } satisfies IfoodPendingConfirmation;
+            });
+
+          await current.addIfoodPendingConfirmations(confirmationItems);
+        } catch (error) {
+          // A rota já foi encerrada com sucesso. Falha da fila não deve
+          // reabrir a operação nem corromper a duração da rota.
+          set({ syncError: true });
+          console.error(
+            'Rota finalizada, mas houve falha ao preparar confirmações do iFood:',
+            error,
+          );
         }
       },
 
@@ -1336,13 +1415,37 @@ export const useAppStore = create<AppState>()(
         if (!items.length) return;
 
         const previous = get().ifoodPendingConfirmations;
+        const normalizeDigits = (value?: string) => (value || '').replace(/\D/g, '');
+
+        const incoming = items.filter((item, index, source) => {
+          const deliveryKey = item.delivery_id?.trim();
+          const ifoodKey = normalizeDigits(item.ifood_id);
+          const orderKey = normalizeDigits(item.order_id);
+
+          const duplicatedBefore = source.slice(0, index).some((other) =>
+            Boolean(deliveryKey && other.delivery_id === deliveryKey) ||
+            Boolean(ifoodKey && normalizeDigits(other.ifood_id) === ifoodKey) ||
+            Boolean(!ifoodKey && orderKey && normalizeDigits(other.order_id) === orderKey),
+          );
+
+          if (duplicatedBefore) return false;
+
+          return !previous.some((other) =>
+            Boolean(deliveryKey && other.delivery_id === deliveryKey) ||
+            Boolean(ifoodKey && normalizeDigits(other.ifood_id) === ifoodKey) ||
+            Boolean(!ifoodKey && orderKey && normalizeDigits(other.order_id) === orderKey),
+          );
+        });
+
+        if (!incoming.length) return;
+
         set((state) => ({
-          ifoodPendingConfirmations: [...items, ...state.ifoodPendingConfirmations],
+          ifoodPendingConfirmations: [...incoming, ...state.ifoodPendingConfirmations],
         }));
 
         try {
           const batch = writeBatch(db);
-          items.forEach((item) => {
+          incoming.forEach((item) => {
             batch.set(
               doc(db, 'ifood_pending_confirmations', item.id),
               sanitizeForFirebase(item),
@@ -1431,84 +1534,101 @@ export const useAppStore = create<AppState>()(
         const rawName = name.trim();
         if (!rawName) return '';
 
-        const norm = (value?: string) =>
-          String(value || '')
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .toLocaleLowerCase('pt-BR')
-            .replace(/\b(?:patos de minas|minas gerais|brasil|mg)\b/g, ' ')
-            .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-        const baseName = (value: string) => value.replace(/\s*\(\d+\)\s*$/, '').trim();
-        const wantedBase = norm(baseName(rawName));
-        const wantedAddress = norm(details?.address);
-        const wantedPhone = String(details?.phone || '').replace(/\D/g, '');
-        const candidates = get().customers.filter((c) => norm(baseName(c.name)) === wantedBase);
-
-        const byAddress = wantedAddress
-          ? candidates.find((c) => norm(c.address) === wantedAddress)
-          : undefined;
-        const byPhone = wantedPhone
-          ? candidates.find((c) => String(c.phone || '').replace(/\D/g, '') === wantedPhone)
-          : undefined;
-
-        // Endereço é a identidade principal. Telefone resolve quando não veio endereço.
-        const existing = byAddress || (!wantedAddress ? byPhone : undefined);
-
-        const extractNeighborhood = (address?: string): string | undefined => {
-          if (!address) return undefined;
-          const parts = address.split(/\s[-–—]\s|,/).map((p) => p.trim()).filter(Boolean);
-          if (parts.length < 2) return undefined;
-          return parts[parts.length - 1].replace(/[0-9]/g, '').trim() || undefined;
-        };
-        const derivedNeighborhood = extractNeighborhood(details?.address);
+        const previousCustomers = get().customers;
         const now = new Date().toISOString();
 
+        const existing = findExistingCustomer(
+          previousCustomers,
+          rawName,
+          {
+            address: details?.address,
+            phone: details?.phone,
+          },
+        );
+
+        const derivedNeighborhood = extractCustomerNeighborhood(details?.address);
+
         if (existing) {
-          const updatedFields: Partial<Customer> = { updated_at: now };
-          if (details?.address) updatedFields.address = details.address;
-          if (details?.mapsLink) updatedFields.maps_link = details.mapsLink;
-          if (details?.confirmationCode) updatedFields.last_confirmation_code = details.confirmationCode;
-          if (details?.observation) updatedFields.observation = details.observation;
+          const updatedFields: Partial<Customer> = {
+            updated_at: now,
+          };
+
+          // Enriquece o cadastro, mas não destrói dado bom com valor vazio.
+          if (details?.address?.trim()) updatedFields.address = details.address.trim();
+          if (details?.mapsLink?.trim()) updatedFields.maps_link = details.mapsLink.trim();
+          if (details?.confirmationCode?.trim()) {
+            updatedFields.last_confirmation_code = details.confirmationCode.trim();
+          }
+          if (details?.observation?.trim()) updatedFields.observation = details.observation.trim();
           if (derivedNeighborhood) updatedFields.neighborhood = derivedNeighborhood;
           if (details?.origin) updatedFields.origin = details.origin;
-          if (details?.phone) updatedFields.phone = details.phone;
+          if (details?.phone?.trim()) updatedFields.phone = details.phone.trim();
 
-          set((state) => ({ customers: state.customers.map((c) => c.id === existing.id ? { ...c, ...updatedFields } : c) }));
+          set((state) => ({
+            customers: state.customers.map((customer) =>
+              customer.id === existing.id
+                ? { ...customer, ...updatedFields }
+                : customer,
+            ),
+          }));
+
           try {
-            await updateDoc(doc(db, 'customers', existing.id), sanitizeForFirebase(updatedFields));
+            await updateDoc(
+              doc(db, 'customers', existing.id),
+              sanitizeForFirebase(updatedFields),
+            );
           } catch (error) {
-            set((state) => ({ customers: state.customers.map((c) => c.id === existing.id ? existing : c) }));
-            console.error(error); throw error;
+            set({ customers: previousCustomers });
+            console.error('Erro ao atualizar cliente existente:', error);
+            throw error;
           }
+
           return existing.id;
         }
 
-        const used = new Set(candidates.map((c) => {
-          const m=c.name.match(/\((\d+)\)\s*$/); return m ? Number(m[1]) : 1;
-        }));
-        let suffix=1; while(used.has(suffix)) suffix++;
-        const resolvedName = candidates.length ? `${baseName(rawName)} (${suffix})` : rawName;
-
+        // Mesmo nome com identidade diferente = cadastro separado e explícito.
+        const customerName = nextCustomerName(previousCustomers, rawName);
         const newCustomer: Customer = {
-          id: Date.now().toString(),
-          name: resolvedName,
+          id: `customer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: customerName,
           origin: details?.origin || 'loja',
           neighborhood: derivedNeighborhood,
-          address: details?.address || undefined,
-          maps_link: details?.mapsLink || undefined,
-          last_confirmation_code: details?.confirmationCode || undefined,
-          observation: details?.observation || undefined,
-          phone: details?.phone || undefined,
+          address: details?.address?.trim() || undefined,
+          maps_link: details?.mapsLink?.trim() || undefined,
+          last_confirmation_code: details?.confirmationCode?.trim() || undefined,
+          observation: details?.observation?.trim() || undefined,
+          phone: details?.phone?.trim() || undefined,
           createdAt: now,
           updated_at: now,
         };
-        set((state) => ({ customers: [newCustomer, ...state.customers] }));
+
+        // Segunda checagem síncrona evita duplicata em chamadas encadeadas.
+        const rechecked = findExistingCustomer(
+          get().customers,
+          rawName,
+          {
+            address: details?.address,
+            phone: details?.phone,
+          },
+        );
+
+        if (rechecked) return rechecked.id;
+
+        set((state) => ({
+          customers: [newCustomer, ...state.customers],
+        }));
+
         try {
-          await setDoc(doc(db, 'customers', newCustomer.id), sanitizeForFirebase(newCustomer));
+          await setDoc(
+            doc(db, 'customers', newCustomer.id),
+            sanitizeForFirebase(newCustomer),
+          );
+          return newCustomer.id;
         } catch (error) {
-          set((state) => ({ customers: state.customers.filter((c) => c.id !== newCustomer.id) }));
-          console.error(error); throw error;
+          set({ customers: previousCustomers });
+          console.error('Erro ao criar cliente:', error);
+          throw error;
         }
-        return newCustomer.id;
       },
     }),
     {

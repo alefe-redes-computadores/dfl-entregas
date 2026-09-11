@@ -94,6 +94,8 @@ export default function ConfirmacoesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedDate = searchParams.get('date');
+  const requestedRouteId = searchParams.get('route');
+  const requestedRouteName = searchParams.get('routeName');
   const initialDateKey =
     requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
       ? requestedDate
@@ -220,24 +222,26 @@ export default function ConfirmacoesPage() {
     () =>
       ifoodPendingConfirmations
         .filter((item) => (item.status || 'pending') === 'pending')
+        .filter((item) => !requestedRouteId || item.route_id === requestedRouteId)
         .sort(
           (a, b) =>
             new Date(b.updated_at || b.created_at).getTime() -
             new Date(a.updated_at || a.created_at).getTime(),
         ),
-    [ifoodPendingConfirmations],
+    [ifoodPendingConfirmations, requestedRouteId],
   );
 
   const resolvedManualConfirmations = useMemo(
     () =>
       ifoodPendingConfirmations
         .filter((item) => item.status === 'resolved')
+        .filter((item) => !requestedRouteId || item.route_id === requestedRouteId)
         .sort(
           (a, b) =>
             new Date(b.resolved_at || b.updated_at || b.created_at).getTime() -
             new Date(a.resolved_at || a.updated_at || a.created_at).getTime(),
         ),
-    [ifoodPendingConfirmations],
+    [ifoodPendingConfirmations, requestedRouteId],
   );
 
   const visibleManualConfirmations =
@@ -252,7 +256,7 @@ export default function ConfirmacoesPage() {
         status: 'resolved',
         resolved_at: new Date().toISOString(),
       });
-      toast.success('Pendência marcada como resolvida.');
+      toast.success('Pedido marcado como confirmado no iFood.');
     } catch {
       toast.error('Não foi possível concluir a pendência.');
     }
@@ -323,6 +327,7 @@ export default function ConfirmacoesPage() {
           confirmation_code: confirmationCode || undefined,
           customer_name: customerName || undefined,
           status: 'pending',
+          source_kind: 'manual',
           created_at: now,
           updated_at: now,
         } satisfies IfoodPendingConfirmation;
@@ -540,6 +545,31 @@ export default function ConfirmacoesPage() {
         />
       </div>
 
+      {requestedRouteId && (
+        <div className="rounded-[24px] border border-sky-500/20 bg-sky-500/[.055] p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">
+            Pós-rota
+          </p>
+          <div className="mt-1 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black text-zinc-100">
+                ${requestedRouteName || 'Rota finalizada'}
+              </p>
+              <p className="mt-1 text-[11px] text-zinc-500">
+                ${pendingManualConfirmations.length} pedido${pendingManualConfirmations.length === 1 ? '' : 's'} aguardando confirmação no iFood
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.replace(`/confirmacoes?date=${encodeURIComponent(selectedDateKey)}`)}
+              className="shrink-0 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-[10px] font-black text-zinc-400"
+            >
+              Ver todas
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="relative">
         <Search
           size={16}
@@ -581,13 +611,13 @@ export default function ConfirmacoesPage() {
           <div className="flex items-end justify-between gap-3 px-1">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-red-400">
-                Backlog manual
+                Confirmação externa
               </p>
               <h2 className="mt-1 text-sm font-black text-zinc-100">
-                Confirmações fora dos pedidos
+                Pendências do portal iFood
               </h2>
               <p className="mt-1 text-[10px] leading-relaxed text-zinc-600">
-                Não entra em rotas, entregas ou faturamento.
+                Código coletado não significa pedido confirmado no portal.
               </p>
             </div>
             <span className="shrink-0 rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] font-black text-zinc-400">
@@ -626,10 +656,10 @@ export default function ConfirmacoesPage() {
                 <>
                   <CheckCircle2 size={28} className="mx-auto text-emerald-500/70" />
                   <p className="mt-3 text-sm font-black text-zinc-300">
-                    Nenhuma pendência manual
+                    Nenhuma confirmação pendente
                   </p>
                   <p className="mt-1 text-[11px] text-zinc-600">
-                    Tudo que foi cadastrado manualmente já foi resolvido.
+                    Não há pedidos aguardando confirmação externa neste filtro.
                   </p>
                 </>
               ) : (
@@ -730,6 +760,8 @@ export default function ConfirmacoesPage() {
                               item.ifood_id || '',
                             )}&code=${encodeURIComponent(
                               item.confirmation_code || '',
+                            )}&pendingId=${encodeURIComponent(
+                              item.id,
                             )}&returnTo=${encodeURIComponent(confirmationReturn)}`,
                           )
                         }
@@ -747,8 +779,8 @@ export default function ConfirmacoesPage() {
                         type="button"
                         onClick={() => markManualResolved(item)}
                         className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 active:scale-95"
-                        aria-label="Marcar como resolvida"
-                        title="Marcar como resolvida"
+                        aria-label="Marcar como confirmado no iFood"
+                        title="Marcar como confirmado no iFood"
                       >
                         <CheckCircle2 size={17} />
                       </button>

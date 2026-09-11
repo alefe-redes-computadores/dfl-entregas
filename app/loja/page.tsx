@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
+import {
   Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
   AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft, Crosshair
 } from 'lucide-react';
@@ -29,11 +29,11 @@ const formatMoney = (val: number) => val.toLocaleString('pt-BR', { minimumFracti
 export default function LojaPage() {
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
-  
+
   const motoboys = useAppStore((state) => state.motoboys);
   const updateMotoboy = useAppStore((state) => state.updateMotoboy);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
-  const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode); 
+  const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
 
   const hasHydrated = useAppStore((state) => state.hasHydrated);
   const storeSettings = useAppStore((state) => state.storeSettings) || {};
@@ -86,7 +86,7 @@ export default function LojaPage() {
       setSchedule(storeSettings.schedule || {});
       setPauses(storeSettings.pauses || []);
       setHolidaysOverrides(storeSettings.holidaysOverrides || {});
-      
+
       fetch(`https://brasilapi.com.br/api/feriados/v1/${new Date().getFullYear()}`)
         .then(res => res.json())
         .then(data => { if (Array.isArray(data)) setApiHolidays(data.filter((h: any) => new Date(h.date).getTime() >= new Date().getTime() - 86400000)); })
@@ -330,7 +330,12 @@ export default function LojaPage() {
         <div className="flex items-center justify-between px-1">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Equipe</p>
-            <h2 className="font-heading text-base font-black text-zinc-100">Motoboys ativos</h2>
+            <div>
+                <h2 className="font-heading text-base font-black text-zinc-100">Equipe em operação</h2>
+                <p className="mt-0.5 text-[10px] text-zinc-600">
+                  Apenas entregadores ativos aparecem aqui
+                </p>
+              </div>
           </div>
           <button onClick={() => router.push('/motoboys')} className="text-[10px] font-black text-sky-400">Gerenciar</button>
         </div>
@@ -354,7 +359,7 @@ export default function LojaPage() {
           ) : (
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-bold text-zinc-400">Nenhum motoboy ativo</p>
+                <p className="text-xs font-bold text-zinc-400">Nenhum entregador ativo agora</p>
                 <p className="mt-1 text-[10px] text-zinc-600">Ative a equipe que está trabalhando hoje.</p>
               </div>
               <button onClick={() => router.push('/motoboys')} className="rounded-xl bg-zinc-800 px-3 py-2 text-[10px] font-black text-zinc-300 active:scale-95">Selecionar</button>
@@ -620,10 +625,10 @@ export default function LojaPage() {
         </div>
       )}
 
-      <PerformanceModals 
+      <PerformanceModals
         isLogisticsOpen={isLogisticsModalOpen} closeLogistics={() => setIsLogisticsModalOpen(false)}
         isRevenueOpen={isRevenueModalOpen} closeRevenue={() => setIsRevenueModalOpen(false)}
-        isPrivacyMode={isPrivacyMode} 
+        isPrivacyMode={isPrivacyMode}
         togglePrivacyMode={togglePrivacyMode}
         dashboardData={dashboardData}
       />

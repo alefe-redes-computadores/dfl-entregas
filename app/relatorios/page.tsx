@@ -40,7 +40,7 @@ const PERIODS: Array<{ value: ReportPeriodKey; label: string }> = [
   { value: '7d', label: 'Últimos 7 dias' },
   { value: '14d', label: 'Últimos 14 dias' },
   { value: '30d', label: 'Últimos 30 dias' },
-  { value: 'all', label: 'Todo período' },
+  { value: 'all', label: 'Todo o período' },
 ];
 
 const money = (value: number) =>
@@ -208,7 +208,7 @@ export default function RelatoriosPage() {
             {model.metrics.ignoredDateCount}{' '}
             {model.metrics.ignoredDateCount === 1 ? 'entrega não possui' : 'entregas não possuem'}{' '}
             timestamp de criação confiável. Elas continuam no volume e financeiro de
-            “Todo período”, mas não entram em gráficos temporais.
+            “Todo o período”, mas não entram em gráficos temporais.
           </div>
         )}
 
@@ -405,7 +405,7 @@ export default function RelatoriosPage() {
                     Custos operacionais
                   </p>
                   <h2 className="mt-1 font-heading text-base font-black text-zinc-100">
-                    Abastecimento de estoque
+                    Compras de estoque
                   </h2>
                 </div>
                 <button
@@ -462,7 +462,7 @@ export default function RelatoriosPage() {
               valueLabel="Reposição"
               valueFormatter={money}
               onExplore={() => router.push('/abastecimentos')}
-              footer="Abrir histórico de abastecimentos"
+              footer="Abrir histórico de compras"
             />
 
             <ReportChartCard
@@ -493,7 +493,7 @@ export default function RelatoriosPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-violet-400">
-                    Cobertura do abastecimento
+                    Cobertura das compras
                   </p>
                   <h2 className="mt-1 font-black text-zinc-100">
                     Dados prontos para inteligência
@@ -518,7 +518,7 @@ export default function RelatoriosPage() {
               </div>
 
               <p className="mt-3 text-[10px] leading-relaxed text-zinc-600">
-                O relatório usa apenas os abastecimentos de estoque registrados no novo módulo. Registros antigos de combustível permanecem preservados, mas não são misturados nestas métricas.
+                O relatório usa apenas os compras de estoque registradas no novo módulo. Registros antigos de combustível permanecem preservados, mas não são misturados nestas métricas.
               </p>
             </section>
           </>

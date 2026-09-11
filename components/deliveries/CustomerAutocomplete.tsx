@@ -64,7 +64,7 @@ export function CustomerAutocomplete({ value, onChange, onSelect, customers }: C
       </div>
 
       {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/95 backdrop-blur-xl shadow-2xl divide-y divide-zinc-800/60">
+        <div className="absolute top-full z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/95 backdrop-blur-xl shadow-2xl divide-y divide-zinc-800/60">
           {suggestions.map((c) => (
             <button
               key={c.id}
