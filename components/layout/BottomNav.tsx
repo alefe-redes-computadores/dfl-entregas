@@ -25,6 +25,7 @@ export function BottomNav() {
     pathname === '/rotas' ? { href: '/rotas/nova', label: 'Nova rota' } :
     pathname === '/clientes' ? { href: '/clientes/novo', label: 'Novo cliente' } :
     pathname === '/motoboys' ? { href: '/motoboys/novo', label: 'Novo motoboy' } :
+    pathname === '/despesas' ? { href: '/despesas/novo', label: 'Nova despesa' } :
     null;
 
   const handleAdd = () => {

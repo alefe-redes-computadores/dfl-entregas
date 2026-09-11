@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
-  AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft, Crosshair
+  AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft, Crosshair,
+  ReceiptText, ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
@@ -208,53 +209,63 @@ export default function LojaPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[26px] border border-amber-500/25 bg-gradient-to-br from-amber-500/[.09] to-zinc-900/40 p-4 text-left active:scale-[0.97]">
+          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[22px] border border-amber-500/25 bg-gradient-to-br from-amber-500/[.09] to-zinc-900/40 p-3.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
             </div>
-            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Entregas</p>
+            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Entregas</p>
             <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.totalEntregas} registradas no período</p>
           </button>
 
-          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[26px] border border-sky-500/25 bg-gradient-to-br from-sky-500/[.09] to-zinc-900/40 p-4 text-left active:scale-[0.97]">
+          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[22px] border border-sky-500/25 bg-gradient-to-br from-sky-500/[.09] to-zinc-900/40 p-3.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
             </div>
-            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Rotas</p>
+            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Rotas</p>
             <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'} no período</p>
           </button>
 
-          <button onClick={() => router.push('/equipe')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/equipe')} className="group rounded-[22px] border border-violet-500/15 bg-violet-500/[.035] p-3.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-400"><Users size={18} /></div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400"><Users size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
-            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Equipe</p>
-            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Compras, cozinha, atendimento e operação</p>
+            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Equipe</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Equipe interna e entregadores</p>
           </button>
 
-          <button onClick={() => router.push('/clientes')} className="group rounded-[26px] border border-zinc-800 bg-zinc-900/55 p-4 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/clientes')} className="group rounded-[22px] border border-zinc-800 bg-zinc-900/55 p-3.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400"><Users size={18} /></div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400"><Users size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
-            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Clientes</p>
+            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Clientes</p>
             <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Base, endereços e histórico</p>
           </button>
 
-          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[26px] border border-amber-500/20 bg-amber-500/[.045] p-4 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[22px] border border-amber-500/20 bg-amber-500/[.045] p-3.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
-            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Compras e reposições</p>
+            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Compras e reposições</p>
             <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Compras, reposições, transporte e conferência</p>
           </button>
-          <button onClick={() => router.push('/estoque')} className="group rounded-[26px] border border-emerald-500/20 bg-emerald-500/[.045] p-4 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400"><Boxes size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-4 font-heading text-sm font-black text-zinc-100">Estoque atual</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Saldos, contagens, perdas e lista de compra</p>
+          <button onClick={() => router.push('/estoque')} className="group rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.045] p-3.5 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400"><Boxes size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
+            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Estoque atual</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Saldos, contagens, perdas e lista de compra</p>
+          </button>
+
+          <button onClick={() => router.push('/despesas')} className="group rounded-[22px] border border-amber-500/15 bg-amber-500/[.03] p-3.5 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><ReceiptText size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
+            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Despesas</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Taxas, manutenção, fretes e diárias</p>
+          </button>
+
+          <button onClick={() => router.push('/confirmacoes')} className="group rounded-[22px] border border-red-500/15 bg-red-500/[.03] p-3.5 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500/10 text-red-400"><ShieldCheck size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
+            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Confirmações iFood</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Pendências externas e portal</p>
           </button>
         </div>
       </section>
@@ -337,7 +348,7 @@ export default function LojaPage() {
                 </p>
               </div>
           </div>
-          <button onClick={() => router.push('/motoboys')} className="text-[10px] font-black text-sky-400">Gerenciar</button>
+          <button onClick={() => router.push('/equipe')} className="text-[10px] font-black text-sky-400">Ver equipe</button>
         </div>
 
         <div className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4">
@@ -362,7 +373,7 @@ export default function LojaPage() {
                 <p className="text-xs font-bold text-zinc-400">Nenhum entregador ativo agora</p>
                 <p className="mt-1 text-[10px] text-zinc-600">Ative a equipe que está trabalhando hoje.</p>
               </div>
-              <button onClick={() => router.push('/motoboys')} className="rounded-xl bg-zinc-800 px-3 py-2 text-[10px] font-black text-zinc-300 active:scale-95">Selecionar</button>
+              <button onClick={() => router.push('/equipe')} className="rounded-xl bg-zinc-800 px-3 py-2 text-[10px] font-black text-zinc-300 active:scale-95">Selecionar</button>
             </div>
           )}
         </div>
@@ -383,7 +394,7 @@ export default function LojaPage() {
         </div>
 
         {!isScheduleEditorOpen && (
-          <div className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">
+          <div className="rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-4">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-black text-zinc-200">{activeScheduleDays.length} dia{activeScheduleDays.length === 1 ? '' : 's'} programado{activeScheduleDays.length === 1 ? '' : 's'}</p>

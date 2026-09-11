@@ -27,27 +27,34 @@ export default function CustomerDuplicatesPage() {
   const deliveries = useAppStore((state) => state.deliveries);
   const mergeCustomers = useAppStore((state) => state.mergeCustomers);
   const [busy, setBusy] = useState<string | null>(null);
+  const [pendingMerge, setPendingMerge] = useState<{
+    source: Customer;
+    target: Customer;
+    key: string;
+  } | null>(null);
 
   const candidates = useMemo(
     () => customerDuplicateCandidates(customers, deliveries),
     [customers, deliveries],
   );
 
-  const merge = async (
+  const requestMerge = (
     source: Customer,
     target: Customer,
     key: string,
   ) => {
-    const ok = window.confirm(
-      `Unificar "${source.name}" em "${target.name}"?\n\n` +
-      'Todas as entregas serão transferidas para o cadastro principal. ' +
-      'O cadastro duplicado só será removido no mesmo lote após as referências serem atualizadas.',
-    );
-    if (!ok) return;
+    setPendingMerge({ source, target, key });
+  };
 
+  const confirmMerge = async () => {
+    if (!pendingMerge) return;
+
+    const { source, target, key } = pendingMerge;
     setBusy(key);
+
     try {
       const result = await mergeCustomers(source.id, target.id);
+      setPendingMerge(null);
       toast.success('Clientes unificados com segurança.', {
         description: `${result.deliveriesMoved} entrega(s) transferida(s).`,
       });
@@ -158,7 +165,7 @@ export default function CustomerDuplicatesPage() {
                 <button
                   type="button"
                   disabled={busy === key}
-                  onClick={() => merge(candidate.right, candidate.left, key)}
+                  onClick={() => requestMerge(candidate.right, candidate.left, key)}
                   className="flex min-h-11 items-center justify-center gap-1 rounded-xl bg-zinc-100 px-2 text-[10px] font-black text-zinc-950 disabled:opacity-50"
                 >
                   Manter {candidate.left.name}
@@ -167,7 +174,7 @@ export default function CustomerDuplicatesPage() {
                 <button
                   type="button"
                   disabled={busy === key}
-                  onClick={() => merge(candidate.left, candidate.right, key)}
+                  onClick={() => requestMerge(candidate.left, candidate.right, key)}
                   className="flex min-h-11 items-center justify-center gap-1 rounded-xl border border-zinc-700 bg-zinc-900 px-2 text-[10px] font-black text-zinc-200 disabled:opacity-50"
                 >
                   Manter {candidate.right.name}
@@ -190,6 +197,93 @@ export default function CustomerDuplicatesPage() {
           </div>
         )}
       </div>
+
+      {pendingMerge && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 px-3 pb-4 backdrop-blur-sm sm:items-center"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !busy) {
+              setPendingMerge(null);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="merge-customer-title"
+            className="w-full max-w-md rounded-[30px] border border-zinc-800 bg-zinc-950 p-5 shadow-2xl"
+          >
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-zinc-800 sm:hidden" />
+
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400">
+                <GitMerge size={20} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[.18em] text-amber-400">
+                  Confirmar consolidação
+                </p>
+                <h2
+                  id="merge-customer-title"
+                  className="mt-1 text-lg font-black text-zinc-50"
+                >
+                  Manter {pendingMerge.target.name}?
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                  O cadastro {pendingMerge.source.name} será incorporado ao principal.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-zinc-600">
+                    Sai
+                  </p>
+                  <p className="mt-1 truncate text-sm font-bold text-zinc-400">
+                    {pendingMerge.source.name}
+                  </p>
+                </div>
+                <ArrowRight size={16} className="text-amber-400" />
+                <div className="min-w-0 text-right">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-emerald-500/70">
+                    Fica
+                  </p>
+                  <p className="mt-1 truncate text-sm font-black text-zinc-100">
+                    {pendingMerge.target.name}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2 text-xs leading-relaxed text-zinc-500">
+              <p>• Todas as entregas serão transferidas para o cadastro mantido.</p>
+              <p>• Histórico e totais serão recalculados.</p>
+              <p>• O duplicado só será removido no mesmo lote após atualizar as referências.</p>
+            </div>
+
+            <div className="mt-6 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() => setPendingMerge(null)}
+                className="h-12 rounded-2xl border border-zinc-800 bg-zinc-900 text-sm font-black text-zinc-300 disabled:opacity-40"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={confirmMerge}
+                className="h-12 rounded-2xl bg-amber-500 text-sm font-black text-zinc-950 disabled:opacity-50"
+              >
+                {busy ? 'Unificando...' : 'Unificar clientes'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
