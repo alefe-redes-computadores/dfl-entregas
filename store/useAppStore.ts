@@ -6,9 +6,14 @@ import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import {
+  cancelStockSupplyCheckReminder,
+  DEFAULT_NOTIFICATION_PREFERENCES,
   notifyIfoodRoutePending,
   notifyRouteFinished,
+  notifyStockThresholdChanges,
   notifySyncFailure,
+  scheduleStockSupplyCheckReminder,
+  type NotificationPreferences,
 } from '@/lib/native/notifications';
 import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, StockSupplier, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation, OperationalExpense } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
@@ -55,6 +60,7 @@ interface AppState {
     storeMapsLink?: string;
     routeReminderEnabled?: boolean;
     autoCloseCompletedRoutes?: boolean;
+    notificationPreferences?: NotificationPreferences;
     // 🔥 NOVOS CAMPOS DE EXPEDIENTE AVANÇADO
     schedule?: Record<number, DaySchedule>;
     pauses?: StorePause[];
@@ -191,6 +197,7 @@ export const useAppStore = create<AppState>()(
         holidaysOverrides: {},
         routeReminderEnabled: true,
         autoCloseCompletedRoutes: true,
+        notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
       },
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
@@ -355,6 +362,10 @@ export const useAppStore = create<AppState>()(
                 schedule: (cloudStoreSettings as any).schedule || defaultSettings.schedule,
                 pauses: (cloudStoreSettings as any).pauses || defaultSettings.pauses,
                 holidaysOverrides: (cloudStoreSettings as any).holidaysOverrides || defaultSettings.holidaysOverrides,
+                notificationPreferences: {
+                  ...DEFAULT_NOTIFICATION_PREFERENCES,
+                  ...((cloudStoreSettings as any).notificationPreferences || {}),
+                },
               }
             : defaultSettings;
 
@@ -379,7 +390,9 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false, syncError: true });
-          void notifySyncFailure();
+          void notifySyncFailure(
+            get().storeSettings.notificationPreferences,
+          );
         }
       },
 
@@ -607,6 +620,16 @@ export const useAppStore = create<AppState>()(
         set((state) => ({ stockSupplies: state.stockSupplies.map((item) => item.id === id ? { ...item, ...next } : item) }));
         try {
           await updateDoc(doc(db, 'stock_supplies', id), sanitizeForFirebase(next));
+          if (updatedData.status === 'recebido' && current?.status !== 'recebido') {
+            void scheduleStockSupplyCheckReminder(
+              id,
+              current?.supplier,
+              current?.items?.length,
+              get().storeSettings.notificationPreferences,
+            );
+          } else if (updatedData.status === 'conferido') {
+            void cancelStockSupplyCheckReminder(id);
+          }
         } catch (error) {
           set({ stockSupplies: previous });
           throw error;
@@ -723,6 +746,15 @@ export const useAppStore = create<AppState>()(
           batch.update(doc(db, 'stock_products', product.id), sanitizeForFirebase(productPatch));
           batch.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record));
           await batch.commit();
+          void notifyStockThresholdChanges(
+            [
+              {
+                before: product,
+                after: { ...product, ...productPatch },
+              },
+            ],
+            get().storeSettings.notificationPreferences,
+          );
         } catch (error) {
           set({ stockProducts: previousProducts, stockMovements: previousMovements });
           throw error;
@@ -767,6 +799,7 @@ export const useAppStore = create<AppState>()(
           if (!result) return;
           const changedMap = new Map(result.changed.map((item) => [item.id, item]));
           set({ stockProducts: previousProducts.map((item) => changedMap.get(item.id) || item), stockMovements: [...result.records, ...previousMovements.filter((item) => !result.records.some((record) => record.id === item.id))], stockSupplies: previousSupplies.map((item) => item.id === id ? { ...item, ...result.supplyPatch } : item) });
+          void cancelStockSupplyCheckReminder(id);
         } catch (error) {
           set({ stockProducts: previousProducts, stockMovements: previousMovements, stockSupplies: previousSupplies });
           throw error;
@@ -784,6 +817,15 @@ export const useAppStore = create<AppState>()(
             const supplyPatch:Partial<StockSupply>={stock_reversed_at:now,updated_at:now};transaction.update(supplyRef,sanitizeForFirebase(supplyPatch));return{changed,records,supplyPatch};
           });
           if(!result)return;const changedMap=new Map(result.changed.map(item=>[item.id,item]));set({stockProducts:previousProducts.map(item=>changedMap.get(item.id)||item),stockMovements:[...result.records,...previousMovements.filter(item=>!result.records.some(record=>record.id===item.id))],stockSupplies:previousSupplies.map(item=>item.id===id?{...item,...result.supplyPatch}:item)});
+          void notifyStockThresholdChanges(
+            result.changed.map((after) => ({
+              before:
+                previousProducts.find((item) => item.id === after.id) ||
+                after,
+              after,
+            })),
+            get().storeSettings.notificationPreferences,
+          );
         } catch(error){set({stockProducts:previousProducts,stockMovements:previousMovements,stockSupplies:previousSupplies});throw error;}
       },
 
@@ -803,7 +845,38 @@ export const useAppStore = create<AppState>()(
           records.push({ id: `count-${stamp}-${position}-${product.id}`, product_id: product.id, product_name: product.name, type: 'contagem', quantity: count.quantity, balance_before: product.current_quantity, balance_after: count.quantity, reason: 'Contagem física em lote', team_member_id: responsible?.id, team_member_name: responsible?.name, occurred_at: now, created_at: now });
         });
         set({ stockProducts: nextProducts, stockMovements: [...records, ...previousMovements] });
-        try { const batch = writeBatch(db); nextProducts.forEach((product) => { const before = previousProducts.find((item) => item.id === product.id); if (before !== product) batch.update(doc(db, 'stock_products', product.id), sanitizeForFirebase(product)); }); records.forEach((record) => batch.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record))); await batch.commit(); }
+        try {
+          const batch = writeBatch(db);
+          nextProducts.forEach((product) => {
+            const before = previousProducts.find((item) => item.id === product.id);
+            if (before !== product) {
+              batch.update(
+                doc(db, 'stock_products', product.id),
+                sanitizeForFirebase(product),
+              );
+            }
+          });
+          records.forEach((record) =>
+            batch.set(
+              doc(db, 'stock_movements', record.id),
+              sanitizeForFirebase(record),
+            ),
+          );
+          await batch.commit();
+          void notifyStockThresholdChanges(
+            nextProducts
+              .filter((after) =>
+                records.some((record) => record.product_id === after.id),
+              )
+              .map((after) => ({
+                before:
+                  previousProducts.find((item) => item.id === after.id) ||
+                  after,
+                after,
+              })),
+            get().storeSettings.notificationPreferences,
+          );
+        }
         catch (error) { set({ stockProducts: previousProducts, stockMovements: previousMovements }); throw error; }
       },
 

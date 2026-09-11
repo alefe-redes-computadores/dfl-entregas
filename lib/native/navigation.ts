@@ -129,6 +129,8 @@ export function nativeBackTarget(pathname: string, search = ''): string | null {
   // Central hoje possui retorno canônico para Mais.
   if (path === '/confirmacoes') return '/mais';
 
+  if (path === '/mais/notificacoes') return '/mais';
+
   // Relatórios e Mais retornam ao comando principal.
   if (path === '/relatorios' || path === '/mais') return '/';
 

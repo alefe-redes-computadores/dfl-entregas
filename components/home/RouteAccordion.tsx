@@ -36,7 +36,6 @@ import { RouteDepartureChecklist } from '@/components/routes/RouteDepartureCheck
 import { useOptimizedDeliveries } from '@/hooks/useOptimizedDeliveries';
 
 import { Capacitor } from '@capacitor/core';
-import { LocalNotifications } from '@capacitor/local-notifications';
 import {
   Haptics,
   ImpactStyle,
@@ -100,7 +99,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const setDeliveryOrder = useAppStore((state) => state.setDeliveryOrder);
   const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
 
-  const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const storeSettings = useAppStore((state) => state.storeSettings);
   const motoboys = useAppStore((state) => state.motoboys);
 
@@ -247,16 +245,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       toast.success('Rota finalizada!', { description: 'Enviada para as rotas concluídas.' });
       setIsOpen(false);
 
-      if (routeAlertsEnabled && Capacitor.isNativePlatform()) {
-      LocalNotifications.schedule({
-        notifications: [{
-          title: 'Rota finalizada',
-          body: `O motoboy ${route.motoboy_name} encerrou a rota.`,
-          id: Math.floor(Math.random() * 100000),
-          schedule: { at: new Date(Date.now() + 1000) },
-        }]
-      });
-      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível finalizar a rota.');
     } finally { setActionBusy(false); }

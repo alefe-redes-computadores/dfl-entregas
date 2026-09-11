@@ -18,7 +18,8 @@
       "style": "LIGHT"
     },
     "LocalNotifications": {
-      "iconColor": "#18181b"
+      "iconColor": "#18181b",
+      "smallIcon": "ic_stat_dfl"
     }
   }
 }

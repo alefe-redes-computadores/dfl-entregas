@@ -3,7 +3,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {  ChevronRight,
+import { BellRing,
+  ChevronRight,
   ReceiptText,
   LockKeyhole,
   LogOut,
@@ -134,6 +135,23 @@ export default function MaisPage() {
         </h2>
 
         <div className="flex flex-col overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
+          <button
+            type="button"
+            onClick={() => router.push('/mais/notificacoes')}
+            className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 text-left transition-colors active:bg-zinc-800/50"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+              <BellRing size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-zinc-100">Notificações</p>
+              <p className="text-xs text-zinc-500">
+                Expediente, rotas, iFood, estoque e sistema
+              </p>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
+          </button>
+
           <div className="flex items-center gap-4 border-b border-zinc-800/80 p-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
               <Moon size={20} />
