@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import ClientInit from '@/components/ClientInit';
 import { StoreAutomation } from '@/components/StoreAutomation';
 import { RouteOperations } from '@/components/RouteOperations';
+import { NativeRuntime } from '@/components/NativeRuntime';
 import './globals.css';
 
 const poppins = Poppins({
@@ -47,6 +48,7 @@ export default function RootLayout({
     <html lang="pt-BR" className={`${poppins.variable} ${inter.variable} dark`} suppressHydrationWarning>
       <body>
         <ClientInit />
+        <NativeRuntime />
         <StoreAutomation />
         <RouteOperations />
         <ErrorBoundary>

@@ -5,7 +5,11 @@ import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, Use
 import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
-import { LocalNotifications } from '@capacitor/local-notifications';
+import {
+  notifyIfoodRoutePending,
+  notifyRouteFinished,
+  notifySyncFailure,
+} from '@/lib/native/notifications';
 import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, StockSupplier, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation, OperationalExpense } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
@@ -375,6 +379,7 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false, syncError: true });
+          void notifySyncFailure();
         }
       },
 
@@ -1131,7 +1136,25 @@ export const useAppStore = create<AppState>()(
               } satisfies IfoodPendingConfirmation;
             });
 
+          const pendingBefore = current.ifoodPendingConfirmations.length;
           await current.addIfoodPendingConfirmations(confirmationItems);
+          const pendingAfter = get().ifoodPendingConfirmations;
+          const routePendingCount = pendingAfter.filter(
+            (item) => item.route_id === routeId && item.status === 'pending',
+          ).length;
+
+          if (routePendingCount > 0) {
+            void notifyIfoodRoutePending(
+              routeId,
+              routeBeforeClose.name || 'a rota',
+              routePendingCount,
+            );
+          } else if (pendingAfter.length >= pendingBefore) {
+            void notifyRouteFinished(
+              routeId,
+              routeBeforeClose.name || 'Rota',
+            );
+          }
         } catch (error) {
           // A rota já foi encerrada com sucesso. Falha da fila não deve
           // reabrir a operação nem corromper a duração da rota.

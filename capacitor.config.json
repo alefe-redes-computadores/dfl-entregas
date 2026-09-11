@@ -5,9 +5,20 @@
   "bundledWebRuntime": false,
   "plugins": {
     "GoogleAuth": {
-      "scopes": ["profile", "email"],
+      "scopes": [
+        "profile",
+        "email"
+      ],
       "serverClientId": "773967662232-pjodqa7f4c4drrhl80439amdp27u31ha.apps.googleusercontent.com",
       "forceCodeForRefreshToken": true
+    },
+    "StatusBar": {
+      "overlaysWebView": false,
+      "backgroundColor": "#09090b",
+      "style": "LIGHT"
+    },
+    "LocalNotifications": {
+      "iconColor": "#18181b"
     }
   }
 }
