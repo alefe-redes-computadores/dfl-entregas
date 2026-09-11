@@ -3,9 +3,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  CheckSquare,
-  ChevronRight,
+import {  ChevronRight,
   ReceiptText,
   LockKeyhole,
   LogOut,
@@ -124,47 +122,9 @@ export default function MaisPage() {
         </h2>
 
         <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
-          <button
-            type="button"
-            onClick={() => router.push('/confirmacoes')}
-            className="flex w-full items-center gap-4 p-4 text-left transition-colors active:bg-zinc-800/50"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
-              <CheckSquare size={20} />
-            </div>
 
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-zinc-100">
-                Central de Confirmações
-              </p>
-              <p className="text-xs text-zinc-500">
-                Pendências do iFood e acesso ao portal
-              </p>
-            </div>
 
-            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
-          </button>
 
-          <button
-            type="button"
-            onClick={() => router.push('/despesas')}
-            className="flex w-full items-center gap-4 border-t border-zinc-800/80 p-4 text-left transition-colors active:bg-zinc-800/50"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-500/15 text-rose-400">
-              <ReceiptText size={20} />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-zinc-100">
-                Despesas operacionais
-              </p>
-              <p className="text-xs text-zinc-500">
-                Diárias, fretes, taxas e outros custos fora do estoque
-              </p>
-            </div>
-
-            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
-          </button>
         </div>
       </section>
 

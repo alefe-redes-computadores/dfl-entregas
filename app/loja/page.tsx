@@ -17,7 +17,7 @@ import { useStoreDashboard } from '@/hooks/useStoreDashboard';
 import { PerformanceModals } from '@/components/store/PerformanceModals';
 import { OperationalCalendar } from '@/components/store/OperationalCalendar';
 import { StoreTimePicker } from '@/components/store/StoreTimePicker';
-import { OperationalIntelligencePanel } from '@/components/store/OperationalIntelligencePanel';
+import { useDeliveryIntelligence } from '@/hooks/useDeliveryIntelligence';
 import { validateSchedule } from '@/lib/operational-time';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
 import { requestDeviceLocation } from '@/lib/device-location';
@@ -32,7 +32,6 @@ export default function LojaPage() {
   const [isMounted, setIsMounted] = useState(false);
 
   const motoboys = useAppStore((state) => state.motoboys);
-  const updateMotoboy = useAppStore((state) => state.updateMotoboy);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
 
@@ -51,6 +50,11 @@ export default function LojaPage() {
 
   // Dashboard Hook
   const dashboardData = useStoreDashboard();
+  const intelligence = useDeliveryIntelligence({
+    lookbackDays: 30,
+    minimumSample: 3,
+    highlightLimit: 3,
+  });
   const [isLogisticsModalOpen, setIsLogisticsModalOpen] = useState(false);
   const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -122,11 +126,6 @@ export default function LojaPage() {
   const captureStoreLocation=async()=>{try{setStorePoint(await requestDeviceLocation());toast.success('Localização da loja capturada. Salve as configurações.')}catch(error){toast.error('Não foi possível capturar a localização.',{description:error instanceof Error?error.message:'Confira a permissão do navegador.'})}};
   const applyStoreReference=()=>{const point=parseCoordinateString(storeLocationReference)||extractLatLngFromMapsUrl(storeLocationReference);if(!point)return toast.error('Cole coordenadas ou um link completo do Maps com latitude e longitude.');setStorePoint(point);toast.success('Origem da loja reconhecida. Salve as configurações.')};
 
-  const handleToggleMotoboyScale = async (id: string, active: boolean) => {
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-    await updateMotoboy(id, { active: !active } as any);
-  };
-
   const openDayEditor = (dayIndex: number) => {
     if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light });
     setEditingDay(dayIndex);
@@ -170,30 +169,30 @@ export default function LojaPage() {
     <div className="flex flex-col gap-6 pb-32 animate-in fade-in duration-300 relative">
       <PageHeader title="Minha Loja" subtitle="Central de operação da Da Família Lanches" to="/" />
 
-      <section className={`overflow-hidden rounded-[30px] border ${isStoreOpen ? 'border-emerald-500/25 bg-emerald-500/[.07]' : 'border-zinc-800 bg-zinc-900/65'}`}>
+      <section className={`rounded-[22px] border ${isStoreOpen ? 'border-emerald-500/25 bg-emerald-500/[.055]' : 'border-zinc-800 bg-zinc-900/55'}`}>
         <button
           onClick={toggleStore}
-          className="flex w-full items-center justify-between gap-4 p-5 text-left active:scale-[0.99]"
+          className="flex w-full items-center gap-3 px-4 py-3 text-left active:scale-[0.99]"
         >
-          <div className="flex min-w-0 items-center gap-4">
-            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${isStoreOpen ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-500'}`}>
-              <Power size={24} strokeWidth={2.5} />
-            </div>
-            <div className="min-w-0">
-              <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${isStoreOpen ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                {isStoreOpen ? 'Operação em andamento' : 'Operação encerrada'}
-              </p>
-              <h2 className="mt-1 font-heading text-xl font-black text-zinc-50">
-                {isStoreOpen ? 'Loja aberta' : 'Loja fechada'}
-              </h2>
-              <p className="mt-1 text-[11px] font-medium text-zinc-500">
-                {isStoreOpen
-                  ? `${activeMotoboys.length} motoboy${activeMotoboys.length === 1 ? '' : 's'} ativo${activeMotoboys.length === 1 ? '' : 's'} agora`
-                  : 'Toque para iniciar a operação manualmente'}
-              </p>
-            </div>
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isStoreOpen ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-500'}`}>
+            <Power size={18} strokeWidth={2.5} />
           </div>
-          <div className={`h-3 w-3 shrink-0 rounded-full ${isStoreOpen ? 'bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,.75)]' : 'bg-zinc-700'}`} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className={`truncate text-sm font-black ${isStoreOpen ? 'text-emerald-300' : 'text-zinc-200'}`}>
+                {isStoreOpen ? 'Loja aberta' : 'Loja fechada'}
+              </p>
+              <span className={`h-2 w-2 shrink-0 rounded-full ${isStoreOpen ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
+            </div>
+            <p className="mt-0.5 truncate text-[10px] text-zinc-600">
+              {isStoreOpen
+                ? `${activeMotoboys.length} entregador${activeMotoboys.length === 1 ? '' : 'es'} ativo${activeMotoboys.length === 1 ? '' : 's'} agora`
+                : 'Toque para iniciar a operação manualmente'}
+            </p>
+          </div>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-wide text-zinc-600">
+            {isStoreOpen ? 'Encerrar' : 'Abrir'}
+          </span>
         </button>
       </section>
 
@@ -209,69 +208,66 @@ export default function LojaPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[22px] border border-amber-500/25 bg-gradient-to-br from-amber-500/[.09] to-zinc-900/40 p-3.5 text-left active:scale-[0.97]">
+          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[22px] border border-amber-500/25 bg-gradient-to-br from-amber-500/[.09] to-zinc-900/40 p-3 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
             </div>
-            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Entregas</p>
-            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.totalEntregas} registradas no período</p>
+            <p className="mt-2.5 font-heading text-sm font-black text-zinc-100">Entregas</p>
+            <p className="mt-1 truncate text-[9px] leading-relaxed text-zinc-500">{dashboardData.totalEntregas} registradas no período</p>
           </button>
 
-          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[22px] border border-sky-500/25 bg-gradient-to-br from-sky-500/[.09] to-zinc-900/40 p-3.5 text-left active:scale-[0.97]">
+          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[22px] border border-sky-500/25 bg-gradient-to-br from-sky-500/[.09] to-zinc-900/40 p-3 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
             </div>
-            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Rotas</p>
-            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'} no período</p>
+            <p className="mt-2.5 font-heading text-sm font-black text-zinc-100">Rotas</p>
+            <p className="mt-1 truncate text-[9px] leading-relaxed text-zinc-500">{dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'} no período</p>
           </button>
 
-          <button onClick={() => router.push('/equipe')} className="group rounded-[22px] border border-violet-500/15 bg-violet-500/[.035] p-3.5 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/equipe')} className="group rounded-[22px] border border-violet-500/15 bg-violet-500/[.035] p-3 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400"><Users size={18} /></div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400"><Users size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
-            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Equipe</p>
-            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Equipe interna e entregadores</p>
+            <p className="mt-2.5 font-heading text-sm font-black text-zinc-100">Equipe</p>
+            <p className="mt-1 truncate text-[9px] leading-relaxed text-zinc-500">Equipe interna e entregadores</p>
           </button>
 
-          <button onClick={() => router.push('/clientes')} className="group rounded-[22px] border border-zinc-800 bg-zinc-900/55 p-3.5 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/clientes')} className="group rounded-[22px] border border-zinc-800 bg-zinc-900/55 p-3 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400"><Users size={18} /></div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400"><Users size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
-            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Clientes</p>
-            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Base, endereços e histórico</p>
+            <p className="mt-2.5 font-heading text-sm font-black text-zinc-100">Clientes</p>
+            <p className="mt-1 truncate text-[9px] leading-relaxed text-zinc-500">Base, endereços e histórico</p>
           </button>
 
-          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[22px] border border-amber-500/20 bg-amber-500/[.045] p-3.5 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[22px] border border-amber-500/20 bg-amber-500/[.045] p-3 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
-            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Compras e reposições</p>
-            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Compras, reposições, transporte e conferência</p>
+            <p className="mt-2.5 font-heading text-sm font-black text-zinc-100">Compras e reposições</p>
+            <p className="mt-1 truncate text-[9px] leading-relaxed text-zinc-500">Compras, reposições, transporte e conferência</p>
           </button>
-          <button onClick={() => router.push('/estoque')} className="group rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.045] p-3.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400"><Boxes size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Estoque atual</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Saldos, contagens, perdas e lista de compra</p>
-          </button>
-
-          <button onClick={() => router.push('/despesas')} className="group rounded-[22px] border border-amber-500/15 bg-amber-500/[.03] p-3.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><ReceiptText size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Despesas</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Taxas, manutenção, fretes e diárias</p>
+          <button onClick={() => router.push('/estoque')} className="group rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.045] p-3 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400"><Boxes size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
+            <p className="mt-2.5 font-heading text-sm font-black text-zinc-100">Estoque atual</p><p className="mt-1 truncate text-[9px] leading-relaxed text-zinc-500">Saldos, contagens, perdas e lista de compra</p>
           </button>
 
-          <button onClick={() => router.push('/confirmacoes')} className="group rounded-[22px] border border-red-500/15 bg-red-500/[.03] p-3.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500/10 text-red-400"><ShieldCheck size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-3 font-heading text-sm font-black text-zinc-100">Confirmações iFood</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Pendências externas e portal</p>
+          <button onClick={() => router.push('/despesas')} className="group rounded-[22px] border border-amber-500/15 bg-amber-500/[.03] p-3 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><ReceiptText size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
+            <p className="mt-2.5 font-heading text-sm font-black text-zinc-100">Despesas</p><p className="mt-1 truncate text-[9px] leading-relaxed text-zinc-500">Taxas, manutenção, fretes e diárias</p>
+          </button>
+
+          <button onClick={() => router.push('/confirmacoes')} className="group rounded-[22px] border border-red-500/15 bg-red-500/[.03] p-3 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-400"><ShieldCheck size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
+            <p className="mt-2.5 font-heading text-sm font-black text-zinc-100">Confirmações iFood</p><p className="mt-1 truncate text-[9px] leading-relaxed text-zinc-500">Pendências externas e portal</p>
           </button>
         </div>
       </section>
-
-      <OperationalIntelligencePanel />
-
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
           <div>
@@ -340,43 +336,55 @@ export default function LojaPage() {
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Equipe</p>
-            <div>
-                <h2 className="font-heading text-base font-black text-zinc-100">Equipe em operação</h2>
-                <p className="mt-0.5 text-[10px] text-zinc-600">
-                  Apenas entregadores ativos aparecem aqui
-                </p>
-              </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-400">
+              Inteligência operacional
+            </p>
+            <h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">
+              Leitura dos últimos 30 dias
+            </h2>
           </div>
-          <button onClick={() => router.push('/equipe')} className="text-[10px] font-black text-sky-400">Ver equipe</button>
+          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[9px] font-black text-zinc-500">
+            {intelligence.summary.total} sinal{intelligence.summary.total === 1 ? '' : 'is'}
+          </span>
         </div>
 
-        <div className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4">
-          {activeMotoboys.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {activeMotoboys.map((motoboy) => (
-                <button
-                  key={motoboy.id}
-                  onClick={() => handleToggleMotoboyScale(motoboy.id, motoboy.active)}
-                  title="Toque para retirar da escala"
-                  className="flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs font-black text-amber-400 active:scale-95"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                  {motoboy.name}
-                  <Check size={12} />
-                </button>
-              ))}
+        <button
+          type="button"
+          onClick={() => router.push('/relatorios')}
+          className="w-full rounded-[22px] border border-indigo-500/15 bg-indigo-500/[.035] p-4 text-left active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-500/10 text-indigo-400">
+              <TrendingUp size={17} />
             </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold text-zinc-400">Nenhum entregador ativo agora</p>
-                <p className="mt-1 text-[10px] text-zinc-600">Ative a equipe que está trabalhando hoje.</p>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap gap-x-2 gap-y-1 text-[9px] font-black">
+                {intelligence.summary.warning > 0 && (
+                  <span className="text-red-400">{intelligence.summary.warning} alerta{intelligence.summary.warning === 1 ? '' : 's'}</span>
+                )}
+                {intelligence.summary.attention > 0 && (
+                  <span className="text-amber-400">{intelligence.summary.attention} atenção</span>
+                )}
+                {intelligence.summary.positive > 0 && (
+                  <span className="text-emerald-400">{intelligence.summary.positive} positivo{intelligence.summary.positive === 1 ? '' : 's'}</span>
+                )}
+                {intelligence.summary.info > 0 && (
+                  <span className="text-sky-400">{intelligence.summary.info} leitura{intelligence.summary.info === 1 ? '' : 's'}</span>
+                )}
+                {intelligence.summary.total === 0 && (
+                  <span className="text-zinc-500">Ainda sem sinais suficientes</span>
+                )}
               </div>
-              <button onClick={() => router.push('/equipe')} className="rounded-xl bg-zinc-800 px-3 py-2 text-[10px] font-black text-zinc-300 active:scale-95">Selecionar</button>
+              <p className="mt-1.5 truncate text-xs font-black text-zinc-200">
+                {intelligence.highlights[0]?.title || 'O cérebro ainda está formando uma base confiável'}
+              </p>
+              <p className="mt-1 text-[10px] text-zinc-600">
+                Abra Relatórios para ver sinais, evidências e contexto completos.
+              </p>
             </div>
-          )}
-        </div>
+            <ChevronRight size={16} className="shrink-0 text-zinc-700" />
+          </div>
+        </button>
       </section>
 
       <section className="flex flex-col gap-3">
