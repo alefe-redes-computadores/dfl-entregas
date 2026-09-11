@@ -21,11 +21,18 @@ export function calculateMotoboyFee(rule:MotoboyPaymentRule|undefined,deliveryCo
   return {amount:fixed+(extras*extraFee),description:extras?`Base R$ ${fixed.toFixed(2).replace('.',',')} + ${extras} extras × R$ ${extraFee.toFixed(2).replace('.',',')}`:`Base até ${threshold} entregas: R$ ${fixed.toFixed(2).replace('.',',')}`};
 }
 
+export function deliveryCashCollected(delivery:Delivery){
+  if(delivery.payment_method!=='dinheiro'||delivery.is_paid)return 0;
+  const orderValue=Number(delivery.value)||0;
+  const tendered=Number(delivery.change_for)||0;
+  return tendered>0?Math.max(orderValue,tendered):orderValue;
+}
+
 export function getMotoboyDayData(motoboy:Motoboy,date:string,routes:Route[],deliveries:Delivery[],vales:ValeInput[]=[],cashHandedOver=true){
   const dayRoutes=getMotoboyRoutes(motoboy,routes).filter(route=>{const value=routeOperationalDate(route);return value?operationalDateKey(value)===date:false;});
   const routeIds=new Set(dayRoutes.map(route=>route.id));
   const completedDeliveries=deliveries.filter(delivery=>routeIds.has(delivery.route_id)&&delivery.completed===true);
-  const cashCollected=completedDeliveries.filter(delivery=>delivery.payment_method==='dinheiro'&&!delivery.is_paid).reduce((sum,delivery)=>sum+(delivery.value||0),0);
+  const cashCollected=completedDeliveries.reduce((sum,delivery)=>sum+deliveryCashCollected(delivery),0);
   const fee=calculateMotoboyFee(motoboy.payment_rule,completedDeliveries.length);
   const totalVales=vales.reduce((sum,vale)=>sum+vale.amount,0);
   const liquidFee=Math.max(0,fee.amount-totalVales);

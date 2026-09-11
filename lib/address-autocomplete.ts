@@ -4,6 +4,8 @@ import { normalizeAddressText } from '@/lib/maps';
 export interface AddressSuggestion {
   id: string;
   label: string;
+  primary: string;
+  secondary?: string;
   prediction: GeoapifyFeature;
 }
 
@@ -167,6 +169,38 @@ function buildOperationalAddress(feature: GeoapifyFeature): {
   };
 }
 
+function compactSuggestionParts(feature: GeoapifyFeature): {
+  primary: string;
+  secondary?: string;
+} {
+  const props = feature.properties || {};
+  const street = String(props.street || props.address_line1 || '').trim();
+  const number = String(props.housenumber || '').trim();
+
+  const primary =
+    street && number && !street.includes(number)
+      ? `${street}, ${number}`
+      : street || String(props.formatted || '').trim();
+
+  const neighborhood =
+    props.neighbourhood ||
+    props.suburb ||
+    props.district ||
+    '';
+
+  const secondary = [
+    neighborhood,
+    props.postcode ? `CEP ${props.postcode}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return {
+    primary: normalizeAddressText(primary),
+    secondary: secondary || undefined,
+  };
+}
+
 function suggestionLabel(feature: GeoapifyFeature): string {
   const props = feature.properties || {};
 
@@ -253,11 +287,17 @@ export async function fetchAddressSuggestions(
 
       return !countryCode || countryCode === 'br';
     })
-    .map((feature, index) => ({
-      id: featureId(feature, index),
-      label: suggestionLabel(feature),
-      prediction: feature,
-    }))
+    .map((feature, index) => {
+      const compact = compactSuggestionParts(feature);
+
+      return {
+        id: featureId(feature, index),
+        label: suggestionLabel(feature),
+        primary: compact.primary,
+        secondary: compact.secondary,
+        prediction: feature,
+      };
+    })
     .filter((item) => item.label)
     .slice(0, 6);
 }

@@ -302,8 +302,15 @@ export function AddressAutocomplete({
                 <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400">
                   <Navigation size={14} />
                 </span>
-                <span className="min-w-0 flex-1 text-xs font-semibold leading-relaxed text-zinc-300">
-                  {suggestion.label}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-bold leading-relaxed text-zinc-200">
+                    {suggestion.primary || suggestion.label}
+                  </span>
+                  {suggestion.secondary && (
+                    <span className="mt-0.5 block text-[10px] font-medium text-zinc-500">
+                      {suggestion.secondary}
+                    </span>
+                  )}
                 </span>
               </button>
             ))}
