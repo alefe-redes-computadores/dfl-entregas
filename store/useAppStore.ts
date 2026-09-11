@@ -84,6 +84,7 @@ interface AppState {
   toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void;
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
+  mergeCustomers: (sourceId: string, targetId: string) => Promise<{ deliveriesMoved: number }>;
   addMotoboy: (motoboy: Motoboy) => Promise<void>;
   updateMotoboy: (id: string, updatedData: Partial<Motoboy>) => Promise<void>;
   deleteMotoboy: (id: string) => Promise<void>;
@@ -1526,6 +1527,116 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           set({ customers: previousCustomers });
           console.error(error);
+          throw error;
+        }
+      },
+
+      mergeCustomers: async (sourceId, targetId) => {
+        if (!sourceId || !targetId || sourceId === targetId) {
+          throw new Error('Selecione dois clientes diferentes.');
+        }
+
+        const state = get();
+        const source = state.customers.find((item) => item.id === sourceId);
+        const target = state.customers.find((item) => item.id === targetId);
+
+        if (!source || !target) {
+          throw new Error('Um dos clientes não foi encontrado.');
+        }
+
+        const linkedDeliveries = state.deliveries.filter(
+          (delivery) => delivery.customer_id === sourceId,
+        );
+
+        // Firestore limita batches. Deixamos margem para cliente + referências.
+        if (linkedDeliveries.length > 450) {
+          throw new Error(
+            'Este cliente possui entregas demais para consolidação segura em um único lote.',
+          );
+        }
+
+        const now = new Date().toISOString();
+        const allAfterMerge = state.deliveries.map((delivery) =>
+          delivery.customer_id === sourceId
+            ? {
+                ...delivery,
+                customer_id: targetId,
+                customer_name: target.name,
+                updated_at: now,
+              }
+            : delivery,
+        );
+
+        const completed = allAfterMerge.filter(
+          (delivery) =>
+            delivery.customer_id === targetId &&
+            delivery.completed === true,
+        );
+
+        const prefer = (primary?: string, fallback?: string) =>
+          primary?.trim() || fallback?.trim() || undefined;
+
+        const mergedTarget: Customer = {
+          ...target,
+          phone: prefer(target.phone, source.phone),
+          address: prefer(target.address, source.address),
+          neighborhood: prefer(target.neighborhood, source.neighborhood),
+          maps_link: prefer(target.maps_link, source.maps_link),
+          observation: prefer(target.observation, source.observation),
+          last_confirmation_code: prefer(
+            target.last_confirmation_code,
+            source.last_confirmation_code,
+          ),
+          orderCount: completed.length,
+          totalSpent: completed.reduce(
+            (sum, delivery) => sum + (delivery.value || 0),
+            0,
+          ),
+          updated_at: now,
+        };
+
+        const previousCustomers = state.customers;
+        const previousDeliveries = state.deliveries;
+
+        set({
+          customers: state.customers
+            .filter((customer) => customer.id !== sourceId)
+            .map((customer) =>
+              customer.id === targetId ? mergedTarget : customer,
+            ),
+          deliveries: allAfterMerge,
+        });
+
+        try {
+          const batch = writeBatch(db);
+
+          linkedDeliveries.forEach((delivery) => {
+            batch.update(
+              doc(db, 'deliveries', delivery.id),
+              sanitizeForFirebase({
+                customer_id: targetId,
+                customer_name: target.name,
+                updated_at: now,
+              }),
+            );
+          });
+
+          batch.set(
+            doc(db, 'customers', targetId),
+            sanitizeForFirebase(mergedTarget),
+            { merge: true },
+          );
+          batch.delete(doc(db, 'customers', sourceId));
+
+          await batch.commit();
+          return { deliveriesMoved: linkedDeliveries.length };
+        } catch (error) {
+          set({
+            customers: previousCustomers,
+            deliveries: previousDeliveries,
+            syncError: true,
+          });
+          console.error('Erro ao consolidar clientes:', error);
           throw error;
         }
       },

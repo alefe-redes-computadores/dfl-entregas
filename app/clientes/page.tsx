@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Crown, MapPin, MessageCircle, PackageOpen, Plus, Search, Smartphone, Store, Trophy, UserRound } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Crown, GitMerge, MapPin, MessageCircle, PackageOpen, Plus, Search, Smartphone, Store, Trophy, UserRound } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { getCustomerStats, isOperationalCustomer, normalizeCustomerName } from '@/lib/customer-analytics';
 
@@ -58,6 +58,7 @@ export default function CustomersPage(){
       </button>
     </header>
     <div className="grid grid-cols-3 gap-2"><Metric value={customers.length} label="Clientes"/><Metric value={items.filter(item=>item.stats.orderCount>0).length} label="Com pedidos"/><Metric value={deliveries.length} label="Pedidos ligados"/></div>
+    <button type="button" onClick={()=>router.push('/clientes/duplicados')} className="flex min-h-12 items-center justify-between rounded-2xl border border-amber-500/20 bg-amber-500/[.06] px-4 text-left active:scale-[.99]"><span className="flex items-center gap-2 text-xs font-black text-amber-400"><GitMerge size={16}/>Revisar possíveis duplicados</span><ChevronRight size={16} className="text-amber-500/60"/></button>
 
     {ranked.length>0&&<section className="rounded-[26px] border border-amber-500/20 bg-gradient-to-b from-amber-500/[.07] to-zinc-900/35 p-4"><div className="mb-4 flex items-center justify-between"><div><p className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-400"><Trophy size={15}/>Quem mais pede</p><p className="mt-1 text-[11px] text-zinc-500">Calculado pelas entregas reais</p></div><span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-400">Top 5</span></div><div className="space-y-3">{ranked.slice(0,5).map(({customer,stats},index)=><button key={customer.id} onClick={()=>router.push(`/clientes/details?id=${customer.id}`)} className="block w-full text-left"><div className="flex items-center gap-2"><span className={`flex h-6 w-6 items-center justify-center rounded-lg text-[10px] font-black ${index===0?'bg-amber-500 text-zinc-950':'bg-zinc-800 text-zinc-400'}`}>{index===0?<Crown size={12}/>:index+1}</span><span className="min-w-0 flex-1 truncate text-xs font-bold text-zinc-200">{customer.name}</span><span className="text-xs font-black text-amber-400">{stats.orderCount}</span></div><div className="ml-8 mt-1.5 h-1.5 overflow-hidden rounded-full bg-zinc-800"><div className="h-full rounded-full bg-gradient-to-r from-amber-600 to-amber-400" style={{width:`${Math.max(8,(stats.orderCount/maxOrders)*100)}%`}}/></div></button>)}</div></section>}
 
