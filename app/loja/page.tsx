@@ -82,22 +82,88 @@ export default function LojaPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    if (hasHydrated && storeSettings) {
-      setIsStoreOpen(storeSettings.isOpen ?? false);
-      setAlertsEnabled(storeSettings.alertsEnabled ?? false);
-      setStoreAddress(storeSettings.storeAddress || 'Patos de Minas, MG');
-      setStorePoint(Number.isFinite(storeSettings.storeLatitude)&&Number.isFinite(storeSettings.storeLongitude)?{lat:Number(storeSettings.storeLatitude),lng:Number(storeSettings.storeLongitude)}:null);
-      setStoreLocationReference(storeSettings.storeMapsLink||'');
-      setSchedule(storeSettings.schedule || {});
-      setPauses(storeSettings.pauses || []);
-      setHolidaysOverrides(storeSettings.holidaysOverrides || {});
+  }, []);
 
-      fetch(`https://brasilapi.com.br/api/feriados/v1/${new Date().getFullYear()}`)
-        .then(res => res.json())
-        .then(data => { if (Array.isArray(data)) setApiHolidays(data.filter((h: any) => new Date(h.date).getTime() >= new Date().getTime() - 86400000)); })
-        .catch(() => {});
-    }
-  }, [storeSettings, hasHydrated]);
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    setIsStoreOpen(storeSettings.isOpen ?? false);
+    setAlertsEnabled(storeSettings.alertsEnabled ?? false);
+    setStoreAddress(
+      storeSettings.storeAddress ||
+        'Patos de Minas, MG',
+    );
+
+    setStorePoint(
+      Number.isFinite(storeSettings.storeLatitude) &&
+        Number.isFinite(storeSettings.storeLongitude)
+        ? {
+            lat: Number(storeSettings.storeLatitude),
+            lng: Number(storeSettings.storeLongitude),
+          }
+        : null,
+    );
+
+    setStoreLocationReference(
+      storeSettings.storeMapsLink || '',
+    );
+
+    setSchedule(storeSettings.schedule || {});
+    setPauses(storeSettings.pauses || []);
+    setHolidaysOverrides(
+      storeSettings.holidaysOverrides || {},
+    );
+  }, [hasHydrated, storeSettings]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    const controller = new AbortController();
+    const year = new Date().getFullYear();
+
+    fetch(
+      `https://brasilapi.com.br/api/feriados/v1/${year}`,
+      { signal: controller.signal },
+    )
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(
+            `BrasilAPI respondeu ${response.status}`,
+          );
+        }
+
+        return response.json();
+      })
+      .then((data) => {
+        if (!Array.isArray(data)) return;
+
+        const yesterday =
+          Date.now() - 86_400_000;
+
+        setApiHolidays(
+          data.filter(
+            (holiday: any) =>
+              new Date(holiday.date).getTime() >=
+              yesterday,
+          ),
+        );
+      })
+      .catch((error) => {
+        if (
+          error instanceof DOMException &&
+          error.name === 'AbortError'
+        ) {
+          return;
+        }
+
+        console.warn(
+          'Não foi possível carregar feriados:',
+          error,
+        );
+      });
+
+    return () => controller.abort();
+  }, [hasHydrated]);
 
   useEffect(() => {
     if (timePicker?.isOpen) {
@@ -109,18 +175,78 @@ export default function LojaPage() {
   }, [timePicker?.isOpen]);
 
   const toggleStore = async () => {
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
-    const newState = !isStoreOpen;
+    if (Capacitor.isNativePlatform()) {
+      await Haptics.impact({
+        style: ImpactStyle.Heavy,
+      });
+    }
+
+    const previousState = isStoreOpen;
+    const newState = !previousState;
+
     setIsStoreOpen(newState);
-    await updateStoreSettings({ isOpen: newState });
-    toast.success(newState ? 'Operação Aberta!' : 'Operação Fechada!');
+
+    try {
+      await updateStoreSettings({
+        isOpen: newState,
+      });
+
+      toast.success(
+        newState
+          ? 'Operação aberta!'
+          : 'Operação fechada!',
+      );
+    } catch (error) {
+      setIsStoreOpen(previousState);
+
+      toast.error(
+        'Não foi possível alterar a operação.',
+        {
+          description:
+            'A alteração local foi desfeita.',
+        },
+      );
+    }
   };
 
-  const handleSaveAllSettings = async (e?: React.FormEvent) => {
+  const handleSaveAllSettings = async (
+    e?: React.FormEvent,
+  ) => {
     if (e) e.preventDefault();
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-    await updateStoreSettings({ ...storeSettings, isOpen: isStoreOpen, storeAddress: storeAddress.trim(), storeLatitude:storePoint?.lat, storeLongitude:storePoint?.lng, storeMapsLink:storeLocationReference.trim()||undefined, alertsEnabled, schedule, pauses, holidaysOverrides });
-    toast.success('Expediente salvo com sucesso!');
+
+    if (Capacitor.isNativePlatform()) {
+      await Haptics.impact({
+        style: ImpactStyle.Medium,
+      });
+    }
+
+    try {
+      await updateStoreSettings({
+        isOpen: isStoreOpen,
+        storeAddress: storeAddress.trim(),
+        storeLatitude: storePoint?.lat,
+        storeLongitude: storePoint?.lng,
+        storeMapsLink:
+          storeLocationReference.trim() ||
+          undefined,
+        alertsEnabled,
+        schedule,
+        pauses,
+        holidaysOverrides,
+      });
+
+      toast.success(
+        'Configurações da operação salvas.',
+      );
+    } catch (error) {
+      toast.error(
+        'Não foi possível salvar as configurações.',
+        {
+          description:
+            'Confira sua conexão e tente novamente.',
+        },
+      );
+    }
   };
 
   const captureStoreLocation=async()=>{try{setStorePoint(await requestDeviceLocation());toast.success('Localização da loja capturada. Salve as configurações.')}catch(error){toast.error('Não foi possível capturar a localização.',{description:error instanceof Error?error.message:'Confira a permissão do navegador.'})}};

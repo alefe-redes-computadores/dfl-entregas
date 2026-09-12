@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { TrendingUp, Package, Eye, EyeOff, Filter, Users, UserRound, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
@@ -47,120 +47,306 @@ export default function HomePage() {
 
   const selectedDateKey = saoPauloDateKey(selectedDate);
 
-  const datesWithOperation = new Set<string>();
-  routes.forEach((route) => {
-    const key = operationalKey(route.created_at, route.started_at, route.departure_time);
-    if (key) datesWithOperation.add(key);
-  });
-  deliveries.forEach((delivery) => {
-    const key = operationalKey(delivery.created_at, delivery.createdAt);
-    if (key) datesWithOperation.add(key);
-  });
+  /*
+   * Tomografia operacional da Home.
+   * Antes cada render percorria routes/deliveries muitas vezes,
+   * inclusive ao apenas tocar no filtro ou no modo privacidade.
+   */
+  const homeOperation = useMemo(() => {
+    const datesWithOperation = new Set<string>();
+    const allRouteIds = new Set<string>();
+    const baseRoutesDoDia: Route[] = [];
 
-  let routesDoDia = routes.filter((r) => {
-    const routeKey = operationalKey(
-      r.created_at,
-      r.started_at,
-      r.departure_time,
-    );
+    for (const route of routes) {
+      allRouteIds.add(route.id);
 
-    return routeKey === selectedDateKey;
-  });
+      const key = operationalKey(
+        route.created_at,
+        route.started_at,
+        route.departure_time,
+      );
 
-  if (globalMotoboy) {
-    routesDoDia = routesDoDia.filter(r => r.motoboy_name === globalMotoboy);
-  }
+      if (key) {
+        datesWithOperation.add(key);
 
-  // Ordenação cronológica pelo primeiro timestamp realmente válido.
-  routesDoDia.sort((a, b) => {
-    const aDate = firstValidTimestamp(
-      a.created_at,
-      a.started_at,
-      a.departure_time,
-    );
-    const bDate = firstValidTimestamp(
-      b.created_at,
-      b.started_at,
-      b.departure_time,
-    );
+        if (key === selectedDateKey) {
+          baseRoutesDoDia.push(route);
+        }
+      }
+    }
 
-    return (
-      (aDate?.getTime() ?? Number.MAX_SAFE_INTEGER) -
-      (bDate?.getTime() ?? Number.MAX_SAFE_INTEGER)
-    );
-  });
+    const ordersDoDia = [];
 
-  const routeIdsDoDia = routesDoDia.map(r => r.id);
-  const allRouteIds = new Set(routes.map((route) => route.id));
+    for (const delivery of deliveries) {
+      const key = operationalKey(
+        delivery.created_at,
+        delivery.createdAt,
+      );
 
-  // Movimento comercial da loja: todas as modalidades registradas na data.
-  // O filtro de motoboy é logístico e não altera o faturamento da loja.
-  const ordersDoDia = deliveries.filter((delivery) => {
-    const deliveryKey = operationalKey(
-      delivery.created_at,
-      delivery.createdAt,
-    );
+      if (key) {
+        datesWithOperation.add(key);
 
-    return deliveryKey === selectedDateKey;
-  });
+        if (key === selectedDateKey) {
+          ordersDoDia.push(delivery);
+        }
+      }
+    }
 
-  // Operação logística: somente entregas reais.
-  // Pedidos ligados às rotas da data permanecem no fluxo mesmo se o registro
-  // individual estiver sem timestamp. Órfãos são mostrados na visão geral.
-  const deliveriesDoDia = deliveries.filter((delivery) => {
-    if (!isDeliveryFulfillment(delivery)) return false;
+    let routesDoDia = globalMotoboy
+      ? baseRoutesDoDia.filter(
+          (route) =>
+            route.motoboy_name === globalMotoboy,
+        )
+      : [...baseRoutesDoDia];
 
-    const belongsToRoute = routeIdsDoDia.includes(delivery.route_id);
-    const deliveryKey = operationalKey(
-      delivery.created_at,
-      delivery.createdAt,
-    );
-    const hasValidRoute = Boolean(
-      delivery.route_id && allRouteIds.has(delivery.route_id),
-    );
-    const isSameDayOrphan =
-      !globalMotoboy &&
-      deliveryKey === selectedDateKey &&
-      !hasValidRoute;
+    routesDoDia.sort((a, b) => {
+      const aDate = firstValidTimestamp(
+        a.created_at,
+        a.started_at,
+        a.departure_time,
+      );
 
-    return belongsToRoute || isSameDayOrphan;
-  });
+      const bDate = firstValidTimestamp(
+        b.created_at,
+        b.started_at,
+        b.departure_time,
+      );
 
-  const orphanedDeliveries = deliveriesDoDia.filter(
-    (delivery) =>
-      isDeliveryFulfillment(delivery) &&
-      (!delivery.route_id || !allRouteIds.has(delivery.route_id)),
-  );
-
-  if (orphanedDeliveries.length > 0 && !globalMotoboy) {
-    const rescueRoute: Route = {
-      id: 'rota-resgate-recuperada',
-      name: 'Rota Geral de Recuperação',
-      status: 'aberta',
-      motoboy_name: 'Sistema',
-      departure_time: selectedDate.toISOString(),
-      change_money: 0,
-      drinks_summary: 'Entregas sem rota válida — corrigir vínculo'
-    };
-    routesDoDia.push(rescueRoute);
-  }
-
-  const totalEntregas = deliveriesDoDia.length;
-  const pendingDeliveries = deliveriesDoDia.filter((delivery) => !delivery.completed).length;
-  const completedDeliveries = Math.max(0, totalEntregas - pendingDeliveries);
-  const storeOrdersDoDia = ordersDoDia
-    .filter((order) => !isDeliveryFulfillment(order))
-    .sort((a, b) => {
-      const aDate = firstValidTimestamp(a.created_at, a.createdAt);
-      const bDate = firstValidTimestamp(b.created_at, b.createdAt);
-      return (aDate?.getTime() ?? 0) - (bDate?.getTime() ?? 0);
+      return (
+        (aDate?.getTime() ?? Number.MAX_SAFE_INTEGER) -
+        (bDate?.getTime() ?? Number.MAX_SAFE_INTEGER)
+      );
     });
-  const pickupCount = storeOrdersDoDia.filter((order) => getFulfillmentMode(order) === 'pickup').length;
-  const counterCount = storeOrdersDoDia.filter((order) => getFulfillmentMode(order) === 'counter').length;
-  const faturamentoTotal = ordersDoDia.reduce((acc, order) => acc + (order.value || 0), 0);
 
-  const formatOrderTime = (order: (typeof ordersDoDia)[number]) => {
-    const timestamp = firstValidTimestamp(order.created_at, order.createdAt);
+    const routeIdsDoDia = new Set(
+      routesDoDia.map((route) => route.id),
+    );
+
+    const deliveriesDoDia = deliveries.filter(
+      (delivery) => {
+        if (!isDeliveryFulfillment(delivery)) {
+          return false;
+        }
+
+        if (
+          delivery.route_id &&
+          routeIdsDoDia.has(delivery.route_id)
+        ) {
+          return true;
+        }
+
+        if (globalMotoboy) return false;
+
+        const deliveryKey = operationalKey(
+          delivery.created_at,
+          delivery.createdAt,
+        );
+
+        const hasValidRoute = Boolean(
+          delivery.route_id &&
+            allRouteIds.has(delivery.route_id),
+        );
+
+        return (
+          deliveryKey === selectedDateKey &&
+          !hasValidRoute
+        );
+      },
+    );
+
+    const orphanedDeliveries =
+      deliveriesDoDia.filter(
+        (delivery) =>
+          !delivery.route_id ||
+          !allRouteIds.has(delivery.route_id),
+      );
+
+    if (
+      orphanedDeliveries.length > 0 &&
+      !globalMotoboy
+    ) {
+      routesDoDia.push({
+        id: 'rota-resgate-recuperada',
+        name: 'Rota Geral de Recuperação',
+        status: 'aberta',
+        motoboy_name: 'Sistema',
+        departure_time: selectedDate.toISOString(),
+        change_money: 0,
+        drinks_summary:
+          'Entregas sem rota válida — corrigir vínculo',
+      });
+    }
+
+    const deliveriesByRoute = new Map<string, typeof deliveriesDoDia>();
+
+    for (const delivery of deliveriesDoDia) {
+      if (!delivery.route_id) continue;
+
+      const bucket =
+        deliveriesByRoute.get(delivery.route_id) || [];
+
+      bucket.push(delivery);
+      deliveriesByRoute.set(
+        delivery.route_id,
+        bucket,
+      );
+    }
+
+    const totalEntregas = deliveriesDoDia.length;
+    const pendingDeliveries =
+      deliveriesDoDia.filter(
+        (delivery) => !delivery.completed,
+      ).length;
+
+    const completedDeliveries = Math.max(
+      0,
+      totalEntregas - pendingDeliveries,
+    );
+
+    const storeOrdersDoDia = ordersDoDia
+      .filter(
+        (order) =>
+          !isDeliveryFulfillment(order),
+      )
+      .sort((a, b) => {
+        const aDate = firstValidTimestamp(
+          a.created_at,
+          a.createdAt,
+        );
+
+        const bDate = firstValidTimestamp(
+          b.created_at,
+          b.createdAt,
+        );
+
+        return (
+          (aDate?.getTime() ?? 0) -
+          (bDate?.getTime() ?? 0)
+        );
+      });
+
+    const pickupCount =
+      storeOrdersDoDia.filter(
+        (order) =>
+          getFulfillmentMode(order) === 'pickup',
+      ).length;
+
+    const counterCount =
+      storeOrdersDoDia.filter(
+        (order) =>
+          getFulfillmentMode(order) === 'counter',
+      ).length;
+
+    const faturamentoTotal = ordersDoDia.reduce(
+      (acc, order) => acc + (order.value || 0),
+      0,
+    );
+
+    const openRoutes = routesDoDia.filter(
+      (route) => route.status === 'aberta',
+    );
+
+    const closedRoutes = routesDoDia.filter(
+      (route) => route.status === 'fechada',
+    );
+
+    const readyRoutes = openRoutes.filter((route) => {
+      if (
+        route.id === 'rota-resgate-recuperada'
+      ) {
+        return false;
+      }
+
+      const linked =
+        deliveriesByRoute.get(route.id) || [];
+
+      return (
+        linked.length > 0 &&
+        linked.every(
+          (delivery) =>
+            delivery.completed === true,
+        )
+      );
+    });
+
+    const closedRoutesByMotoboy =
+      closedRoutes.reduce((acc, route) => {
+        if (!acc[route.motoboy_name]) {
+          acc[route.motoboy_name] = [];
+        }
+
+        acc[route.motoboy_name].push(route);
+        return acc;
+      }, {} as Record<string, Route[]>);
+
+    const activeMotoboyNames = new Set(
+      baseRoutesDoDia.flatMap((route) => [
+        route.motoboy_id || '',
+        route.motoboy_name,
+      ]),
+    );
+
+    const activeMotoboysToday =
+      motoboys.filter(
+        (motoboy) =>
+          activeMotoboyNames.has(motoboy.id) ||
+          activeMotoboyNames.has(motoboy.name),
+      );
+
+    return {
+      datesWithOperation,
+      routesDoDia,
+      ordersDoDia,
+      deliveriesDoDia,
+      totalEntregas,
+      pendingDeliveries,
+      completedDeliveries,
+      storeOrdersDoDia,
+      pickupCount,
+      counterCount,
+      faturamentoTotal,
+      openRoutes,
+      closedRoutes,
+      readyRoutes,
+      closedRoutesByMotoboy,
+      activeMotoboysToday,
+    };
+  }, [
+    deliveries,
+    globalMotoboy,
+    motoboys,
+    routes,
+    selectedDate,
+    selectedDateKey,
+  ]);
+
+  const {
+    datesWithOperation,
+    routesDoDia,
+    ordersDoDia,
+    deliveriesDoDia,
+    totalEntregas,
+    pendingDeliveries,
+    completedDeliveries,
+    storeOrdersDoDia,
+    pickupCount,
+    counterCount,
+    faturamentoTotal,
+    openRoutes,
+    closedRoutes,
+    readyRoutes,
+    closedRoutesByMotoboy,
+    activeMotoboysToday,
+  } = homeOperation;
+
+  const formatOrderTime = (
+    order: (typeof ordersDoDia)[number],
+  ) => {
+    const timestamp = firstValidTimestamp(
+      order.created_at,
+      order.createdAt,
+    );
+
     return timestamp
       ? timestamp.toLocaleTimeString('pt-BR', {
           timeZone: 'America/Sao_Paulo',
@@ -169,33 +355,6 @@ export default function HomePage() {
         })
       : '--:--';
   };
-
-  const openRoutes = routesDoDia.filter((r) => r.status === 'aberta');
-  const closedRoutes = routesDoDia.filter((r) => r.status === 'fechada');
-  const readyRoutes = openRoutes.filter((route) => {
-    if (route.id === 'rota-resgate-recuperada') return false;
-    const linked = deliveriesDoDia.filter((delivery) => delivery.route_id === route.id);
-    return linked.length > 0 && linked.every((delivery) => delivery.completed === true);
-  });
-
-  // AGRUPAMENTO DE ROTAS FECHADAS POR MOTOBOY
-  const closedRoutesByMotoboy = closedRoutes.reduce((acc, route) => {
-    if (!acc[route.motoboy_name]) acc[route.motoboy_name] = [];
-    acc[route.motoboy_name].push(route);
-    return acc;
-  }, {} as Record<string, Route[]>);
-
-  const activeMotoboysToday = motoboys.filter((m) =>
-    routes.some(
-      (r) =>
-        (r.motoboy_id === m.id || r.motoboy_name === m.name) &&
-        operationalKey(
-          r.created_at,
-          r.started_at,
-          r.departure_time,
-            ) === selectedDateKey,
-    ),
-  );
 
   // Função para pegar ícone do motoboy para o cabeçalho do grupo
   const getMotoboyIcon = (name: string) => {

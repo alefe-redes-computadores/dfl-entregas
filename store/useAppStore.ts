@@ -239,15 +239,38 @@ export const useAppStore = create<AppState>()(
 
       updateStoreSettings: async (settings) => {
         const currentSettings = get().storeSettings;
-        const newSettings = { ...currentSettings, ...settings };
+        const newSettings = {
+          ...currentSettings,
+          ...settings,
+        };
 
+        // Optimistic UI: a Loja reage imediatamente.
         set({ storeSettings: newSettings });
 
         try {
-          const safeData = sanitizeForFirebase(newSettings);
-          await setDoc(doc(db, 'store', 'store_settings'), safeData, { merge: true });
+          const safeData =
+            sanitizeForFirebase(newSettings);
+
+          await setDoc(
+            doc(db, 'store', 'store_settings'),
+            safeData,
+            { merge: true },
+          );
         } catch (error) {
-          console.error('Erro ao salvar configurações:', error);
+          console.error(
+            'Erro ao salvar configurações:',
+            error,
+          );
+
+          /*
+           * Rollback apenas se ninguém alterou as configurações depois.
+           * Evita uma gravação antiga apagar uma mudança mais recente.
+           */
+          if (get().storeSettings === newSettings) {
+            set({ storeSettings: currentSettings });
+          }
+
+          throw error;
         }
       },
 
