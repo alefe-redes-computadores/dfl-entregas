@@ -239,3 +239,36 @@ export function nextOperationalClosingAt(
   if (!candidates.length) return null;
   return candidates.sort((a, b) => a.getTime() - b.getTime())[0];
 }
+
+/**
+ * Helpers canônicos para telas operacionais.
+ * Evitam cada página reinterpretar YYYY-MM-DD / America/Sao_Paulo.
+ */
+export function operationalDateFromKey(key: string): Date {
+  return new Date(`${key}T12:00:00-03:00`);
+}
+
+export function shiftOperationalDateKey(
+  key: string,
+  amount: number,
+): string {
+  const value = operationalDateFromKey(key);
+  value.setDate(value.getDate() + amount);
+  return dateKey(value);
+}
+
+export function operationalDayLabel(
+  key: string,
+  now = new Date(),
+): string {
+  if (key === dateKey(now)) return 'Hoje';
+
+  return operationalDateFromKey(key)
+    .toLocaleDateString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+    })
+    .replaceAll('.', '');
+}

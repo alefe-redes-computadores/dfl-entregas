@@ -23,34 +23,18 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { fulfillmentLabel, getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
-import { deliveryDate } from '@/lib/operational-time';
+import {
+  dateKey,
+  deliveryDate,
+  operationalDateFromKey,
+  operationalDayLabel,
+  shiftOperationalDateKey,
+} from '@/lib/operational-time';
 import type { FulfillmentMode } from '@/types';
 
 type StatusFilter = 'todas' | 'pendentes' | 'concluidas' | 'incompletas';
 type OriginFilter = 'todas' | 'ifood' | 'loja';
 type FulfillmentFilter = 'todas' | FulfillmentMode;
-
-const dateKey = (value: Date | string) =>
-  new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(value));
-
-const todayKey = () => dateKey(new Date());
-const fromKey = (key: string) => new Date(`${key}T12:00:00-03:00`);
-const shiftDay = (key: string, amount: number) => {
-  const value = fromKey(key);
-  value.setDate(value.getDate() + amount);
-  return dateKey(value);
-};
-const dayLabel = (key: string) =>
-  key === todayKey()
-    ? 'Hoje'
-    : fromKey(key)
-        .toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })
-        .replaceAll('.', '');
 
 const normalize = (value: unknown) =>
   String(value || '')
@@ -86,13 +70,27 @@ export default function DeliveriesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialDate = searchParams.get('date');
-  const initialDateKey = initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : todayKey();
+  const globalSelectedDate = useAppStore((state) => state.selectedDate);
+  const setGlobalSelectedDate = useAppStore((state) => state.setSelectedDate);
+  const today = dateKey(new Date());
+  const initialDateKey =
+    initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)
+      ? initialDate
+      : dateKey(globalSelectedDate);
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
 
-  const [selectedDate, setSelectedDate] = useState(() => initialDateKey);
-  const [calendarMonth, setCalendarMonth] = useState(() => fromKey(initialDateKey));
+  const selectedDate = dateKey(globalSelectedDate);
+  const setSelectedDate = (key: string | ((value: string) => string)) => {
+    const next =
+      typeof key === 'function'
+        ? key(dateKey(useAppStore.getState().selectedDate))
+        : key;
+
+    setGlobalSelectedDate(operationalDateFromKey(next));
+  };
+  const [calendarMonth, setCalendarMonth] = useState(() => operationalDateFromKey(initialDateKey));
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('todas');
@@ -222,7 +220,7 @@ export default function DeliveriesPage() {
 
       <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2">
         <button
-          onClick={() => setSelectedDate((value) => shiftDay(value, -1))}
+          onClick={() => setSelectedDate((value) => shiftOperationalDateKey(value, -1))}
           className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"
         >
           <ChevronLeft size={21} />
@@ -230,19 +228,19 @@ export default function DeliveriesPage() {
 
         <button
           onClick={() => {
-            setCalendarMonth(fromKey(selectedDate));
+            setCalendarMonth(operationalDateFromKey(selectedDate));
             setCalendarOpen(true);
           }}
           className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-800/75 px-3"
         >
           <CalendarDays size={17} className="text-amber-400" />
           <span className="truncate text-sm font-black capitalize text-zinc-100">
-            {dayLabel(selectedDate)}
+            {operationalDayLabel(selectedDate)}
           </span>
         </button>
 
         <button
-          onClick={() => setSelectedDate((value) => shiftDay(value, 1))}
+          onClick={() => setSelectedDate((value) => shiftOperationalDateKey(value, 1))}
           className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"
         >
           <ChevronRight size={21} />
@@ -541,9 +539,9 @@ export default function DeliveriesPage() {
                   Limpar filtros
                 </button>
               )}
-              {selectedDate !== todayKey() && (
+              {selectedDate !== today && (
                 <button
-                  onClick={() => selectDate(todayKey())}
+                  onClick={() => selectDate(today)}
                   className="rounded-xl bg-amber-500/10 px-3 py-2 text-[10px] font-black text-amber-400"
                 >
                   Ir para hoje
@@ -580,7 +578,7 @@ export default function DeliveriesPage() {
                   })}
                 </p>
                 <button
-                  onClick={() => selectDate(todayKey())}
+                  onClick={() => selectDate(today)}
                   className="text-[10px] font-bold uppercase tracking-wider text-amber-400"
                 >
                   Ir para hoje
@@ -617,7 +615,7 @@ export default function DeliveriesPage() {
                     className={`relative flex aspect-square items-center justify-center rounded-xl text-xs font-bold ${
                       active
                         ? 'bg-amber-500 text-zinc-950'
-                        : key === todayKey()
+                        : key === today
                           ? 'bg-amber-500/10 text-amber-400'
                           : current
                             ? 'text-zinc-300'

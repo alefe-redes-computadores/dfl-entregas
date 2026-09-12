@@ -596,9 +596,34 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteMotoboy: async (id) => {
-        if (get().routes.some((route) => route.motoboy_id === id)) {
-          throw new Error('Não é possível excluir um motoboy que possui rotas. Desative o cadastro para preservar o histórico.');
+        const currentMotoboy = get().motoboys.find(
+          (motoboy) => motoboy.id === id,
+        );
+
+        if (!currentMotoboy) {
+          throw new Error('Motoboy não encontrado.');
         }
+
+        const hasHistoricalRoute = get().routes.some(
+          (route) =>
+            route.motoboy_id === id ||
+            (
+              !route.motoboy_id &&
+              route.motoboy_name
+                .trim()
+                .toLocaleLowerCase('pt-BR') ===
+                currentMotoboy.name
+                  .trim()
+                  .toLocaleLowerCase('pt-BR')
+            ),
+        );
+
+        if (hasHistoricalRoute) {
+          throw new Error(
+            'Não é possível excluir um motoboy que possui rotas. Desative o cadastro para preservar o histórico.',
+          );
+        }
+
         const previousMotoboys = get().motoboys;
         set((state) => ({ motoboys: state.motoboys.filter((m) => m.id !== id) }));
         try {

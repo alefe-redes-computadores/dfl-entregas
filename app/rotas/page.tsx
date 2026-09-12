@@ -6,48 +6,67 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Bike, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, Search, User, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp } from '@/lib/reports/time';
+import {
+  dateKey,
+  operationalDateFromKey,
+  operationalDayLabel,
+  routeDate as canonicalRouteDate,
+  routeStartedAt as canonicalRouteStartedAt,
+  shiftOperationalDateKey,
+} from '@/lib/operational-time';
 
 type Filter = 'todas' | 'montando' | 'na-rua' | 'prontas' | 'finalizadas';
-type DatedRoute = { created_at?: string; started_at?: string; departure_time?: string; updated_at?: string };
-const routeDate = (route: DatedRoute) =>
-  firstValidTimestamp(
-    route.created_at,
-    route.started_at,
-    route.departure_time,
-    route.updated_at,
-  );
-
-const routeStartedAt = (route: DatedRoute) =>
-  firstValidTimestamp(route.started_at, route.departure_time);
-const dateKey = (value: Date | string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
-const todayKey = () => dateKey(new Date());
-const fromKey = (key: string) => new Date(`${key}T12:00:00-03:00`);
-const shiftDay = (key: string, amount: number) => { const value = fromKey(key); value.setDate(value.getDate() + amount); return dateKey(value); };
-const dayLabel = (key: string) => key === todayKey() ? 'Hoje' : fromKey(key).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' }).replaceAll('.', '');
-
 export default function RoutesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialDate = searchParams.get('date');
-  const initialDateKey = initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : todayKey();
+  const globalSelectedDate = useAppStore((state) => state.selectedDate);
+  const setGlobalSelectedDate = useAppStore((state) => state.setSelectedDate);
+  const today = dateKey(new Date());
+  const initialDateKey =
+    initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)
+      ? initialDate
+      : dateKey(globalSelectedDate);
   const routes = useAppStore(state => state.routes);
   const deliveries = useAppStore(state => state.deliveries);
-  const [selectedDate, setSelectedDate] = useState(() => initialDateKey);
-  const [calendarMonth, setCalendarMonth] = useState(() => fromKey(initialDateKey));
+  const selectedDate = dateKey(globalSelectedDate);
+  const setSelectedDate = (key: string | ((value: string) => string)) => {
+    const next =
+      typeof key === 'function'
+        ? key(dateKey(useAppStore.getState().selectedDate))
+        : key;
+
+    setGlobalSelectedDate(operationalDateFromKey(next));
+  };
+  const [calendarMonth, setCalendarMonth] = useState(() => operationalDateFromKey(initialDateKey));
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('todas');
   const [query, setQuery] = useState('');
 
+  const deliveriesByRoute = useMemo(() => {
+    const map = new Map<string, typeof deliveries>();
+
+    for (const delivery of deliveries) {
+      if (!delivery.route_id) continue;
+
+      const bucket = map.get(delivery.route_id) || [];
+      bucket.push(delivery);
+      map.set(delivery.route_id, bucket);
+    }
+
+    return map;
+  }, [deliveries]);
+
   const dayRoutes = useMemo(() => routes.filter(route => {
-    const value = routeDate(route);
+    const value = canonicalRouteDate(route);
     return value ? dateKey(value) === selectedDate : false;
   }), [routes, selectedDate]);
 
   const rows = useMemo(() => dayRoutes.map(route => {
-    const linked = deliveries.filter(delivery => delivery.route_id === route.id);
+    const linked = deliveriesByRoute.get(route.id) || [];
     const completed = linked.filter(delivery => delivery.completed).length;
     const amount = linked.reduce((total, delivery) => total + (delivery.value || 0), 0);
-    const startedAt = routeStartedAt(route);
+    const startedAt = canonicalRouteStartedAt(route);
     const ready =
       route.status === 'aberta' &&
       Boolean(startedAt) &&
@@ -65,28 +84,32 @@ export default function RoutesPage() {
   }).filter(({ route, state }) => {
     const term = query.trim().toLocaleLowerCase('pt-BR');
     return (filter === 'todas' || state === filter) && (!term || `${route.name} ${route.motoboy_name}`.toLocaleLowerCase('pt-BR').includes(term));
-  }).sort(
-    (a, b) =>
-      (routeDate(a.route)?.getTime() ?? Number.POSITIVE_INFINITY) -
-      (routeDate(b.route)?.getTime() ?? Number.POSITIVE_INFINITY),
-  ), [dayRoutes, deliveries, filter, query]);
+  }).sort((a, b) => {
+    const aDate = canonicalRouteDate(a.route);
+    const bDate = canonicalRouteDate(b.route);
+
+    return (
+      (aDate ? new Date(aDate).getTime() : Number.POSITIVE_INFINITY) -
+      (bDate ? new Date(bDate).getTime() : Number.POSITIVE_INFINITY)
+    );
+  }), [dayRoutes, deliveriesByRoute, filter, query]);
 
   const counts = useMemo(() => ({
     montando: dayRoutes.filter(
-      route => route.status === 'aberta' && !routeStartedAt(route),
+      route => route.status === 'aberta' && !canonicalRouteStartedAt(route),
     ).length,
     rua: dayRoutes.filter((route) => {
-      if (route.status !== 'aberta' || !routeStartedAt(route)) return false;
-      const linked = deliveries.filter((delivery) => delivery.route_id === route.id);
+      if (route.status !== 'aberta' || !canonicalRouteStartedAt(route)) return false;
+      const linked = deliveriesByRoute.get(route.id) || [];
       return linked.length === 0 || linked.some((delivery) => !delivery.completed);
     }).length,
     prontas: dayRoutes.filter((route) => {
-      if (route.status !== 'aberta' || !routeStartedAt(route)) return false;
-      const linked = deliveries.filter((delivery) => delivery.route_id === route.id);
+      if (route.status !== 'aberta' || !canonicalRouteStartedAt(route)) return false;
+      const linked = deliveriesByRoute.get(route.id) || [];
       return linked.length > 0 && linked.every((delivery) => delivery.completed);
     }).length,
     finalizadas: dayRoutes.filter(route => route.status === 'fechada').length,
-  }), [dayRoutes, deliveries]);
+  }), [dayRoutes, deliveriesByRoute]);
 
   const calendarDays = useMemo(() => {
     const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
@@ -102,8 +125,8 @@ export default function RoutesPage() {
     () =>
       new Set(
         routes
-          .map(routeDate)
-          .filter((value): value is Date => Boolean(value))
+          .map(canonicalRouteDate)
+          .filter((value): value is string => Boolean(value))
           .map(dateKey),
       ),
     [routes],
@@ -116,9 +139,9 @@ export default function RoutesPage() {
     </header>
 
     <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2">
-      <button onClick={() => setSelectedDate(value => shiftDay(value, -1))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"><ChevronLeft size={21}/></button>
-      <button onClick={() => { setCalendarMonth(fromKey(selectedDate)); setCalendarOpen(true); }} className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-800/75 px-3"><CalendarDays size={17} className="text-emerald-400"/><span className="truncate text-sm font-black capitalize text-zinc-100">{dayLabel(selectedDate)}</span></button>
-      <button onClick={() => setSelectedDate(value => shiftDay(value, 1))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"><ChevronRight size={21}/></button>
+      <button onClick={() => setSelectedDate(value => shiftOperationalDateKey(value, -1))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"><ChevronLeft size={21}/></button>
+      <button onClick={() => { setCalendarMonth(operationalDateFromKey(selectedDate)); setCalendarOpen(true); }} className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-800/75 px-3"><CalendarDays size={17} className="text-emerald-400"/><span className="truncate text-sm font-black capitalize text-zinc-100">{operationalDayLabel(selectedDate)}</span></button>
+      <button onClick={() => setSelectedDate(value => shiftOperationalDateKey(value, 1))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"><ChevronRight size={21}/></button>
     </div>
 
     <div className="grid grid-cols-2 gap-2">
@@ -221,7 +244,17 @@ export default function RoutesPage() {
               <div className="text-right">
                 <p className="text-[9px] font-black uppercase tracking-wide text-zinc-600">Criada</p>
                 <p className="mt-1 text-sm font-bold text-zinc-300">
-                  {routeDate(route)?.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}) || 'Sem horário'}
+                  {(() => {
+                    const createdAt = canonicalRouteDate(route);
+
+                    return createdAt
+                      ? new Date(createdAt).toLocaleTimeString('pt-BR', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          timeZone: 'America/Sao_Paulo',
+                        })
+                      : 'Sem horário';
+                  })()}
                 </p>
               </div>
             </div>
@@ -244,8 +277,8 @@ export default function RoutesPage() {
                 Limpar filtro
               </button>
             )}
-            {selectedDate !== todayKey() && (
-              <button onClick={() => selectDate(todayKey())} className="rounded-xl bg-emerald-500/10 px-3 py-2 text-[10px] font-black text-emerald-400">
+            {selectedDate !== today && (
+              <button onClick={() => selectDate(today)} className="rounded-xl bg-emerald-500/10 px-3 py-2 text-[10px] font-black text-emerald-400">
                 Ir para hoje
               </button>
             )}
@@ -255,9 +288,9 @@ export default function RoutesPage() {
     </div>
 
     {calendarOpen && <div className="fixed inset-0 z-50 flex items-end bg-black/75 p-3 backdrop-blur-sm sm:items-center sm:justify-center" onClick={() => setCalendarOpen(false)}><div className="w-full max-w-sm rounded-[30px] border border-zinc-800 bg-zinc-950 p-5 shadow-2xl" onClick={event => event.stopPropagation()}>
-      <div className="mb-5 flex items-center justify-between"><CalendarButton onClick={() => setCalendarMonth(value => new Date(value.getFullYear(), value.getMonth() - 1, 1))} icon={ChevronLeft}/><div className="text-center"><p className="font-heading text-base font-black capitalize text-zinc-100">{calendarMonth.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</p><button onClick={() => selectDate(todayKey())} className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Ir para hoje</button></div><CalendarButton onClick={() => setCalendarMonth(value => new Date(value.getFullYear(), value.getMonth() + 1, 1))} icon={ChevronRight}/></div>
+      <div className="mb-5 flex items-center justify-between"><CalendarButton onClick={() => setCalendarMonth(value => new Date(value.getFullYear(), value.getMonth() - 1, 1))} icon={ChevronLeft}/><div className="text-center"><p className="font-heading text-base font-black capitalize text-zinc-100">{calendarMonth.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</p><button onClick={() => selectDate(today)} className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Ir para hoje</button></div><CalendarButton onClick={() => setCalendarMonth(value => new Date(value.getFullYear(), value.getMonth() + 1, 1))} icon={ChevronRight}/></div>
       <div className="grid grid-cols-7 text-center text-[10px] font-bold text-zinc-600">{['D','S','T','Q','Q','S','S'].map((label,index) => <span key={`${label}-${index}`} className="pb-2">{label}</span>)}</div>
-      <div className="grid grid-cols-7 gap-1">{calendarDays.map(day => { const key=dateKey(day); const active=key===selectedDate; const current=day.getMonth()===calendarMonth.getMonth(); return <button key={key} onClick={() => selectDate(key)} className={`relative flex aspect-square items-center justify-center rounded-xl text-xs font-bold ${active?'bg-emerald-500 text-zinc-950':key===todayKey()?'bg-emerald-500/10 text-emerald-400':current?'text-zinc-300':'text-zinc-700'}`}>{day.getDate()}{datesWithRoutes.has(key)&&<span className={`absolute bottom-1 h-1 w-1 rounded-full ${active?'bg-zinc-950':'bg-emerald-400'}`}/>}</button>})}</div>
+      <div className="grid grid-cols-7 gap-1">{calendarDays.map(day => { const key=dateKey(day); const active=key===selectedDate; const current=day.getMonth()===calendarMonth.getMonth(); return <button key={key} onClick={() => selectDate(key)} className={`relative flex aspect-square items-center justify-center rounded-xl text-xs font-bold ${active?'bg-emerald-500 text-zinc-950':key===today?'bg-emerald-500/10 text-emerald-400':current?'text-zinc-300':'text-zinc-700'}`}>{day.getDate()}{datesWithRoutes.has(key)&&<span className={`absolute bottom-1 h-1 w-1 rounded-full ${active?'bg-zinc-950':'bg-emerald-400'}`}/>}</button>})}</div>
       <button onClick={() => setCalendarOpen(false)} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 text-xs font-bold text-zinc-400"><X size={15}/>Fechar calendário</button>
     </div></div>}
   </div>;

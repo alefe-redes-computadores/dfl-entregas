@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -47,10 +47,18 @@ export default function RouteDetailsPage() {
   const route = useAppStore((state) =>
     state.routes.find((item) => item.id === id),
   );
-  const deliveries = useAppStore((state) =>
-    state.deliveries
-      .filter((item) => item.route_id === id)
-      .sort((a, b) => (a.order_index ?? 9999) - (b.order_index ?? 9999)),
+  const allDeliveries = useAppStore((state) => state.deliveries);
+
+  const deliveries = useMemo(
+    () =>
+      allDeliveries
+        .filter((item) => item.route_id === id)
+        .sort(
+          (a, b) =>
+            (a.order_index ?? 9999) -
+            (b.order_index ?? 9999),
+        ),
+    [allDeliveries, id],
   );
   const startRoute = useAppStore((state) => state.startRoute);
   const closeRoute = useAppStore((state) => state.closeRoute);
