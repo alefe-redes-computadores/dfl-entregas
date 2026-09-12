@@ -240,7 +240,18 @@ export function customerIdentityEvidence(
   const storedNumber = extractHouseNumber(storedAddress);
   const wantedNumber = extractHouseNumber(wantedAddress);
 
-  const addressConflict =
+  /*
+   * Há duas formas diferentes de conflito:
+   *
+   * 1. número explicitamente diferente;
+   * 2. ambos possuem endereço conhecido, mas a comparação
+   *    canônica não reconhece os dois como o mesmo local.
+   *
+   * A segunda é essencial: faltar telefone em um cadastro
+   * NÃO pode autorizar união de duas pessoas com endereços
+   * conhecidos e diferentes.
+   */
+  const addressNumberConflict =
     Boolean(
       storedAddress &&
         wantedAddress &&
@@ -248,6 +259,13 @@ export function customerIdentityEvidence(
         wantedNumber,
     ) &&
     storedNumber !== wantedNumber;
+
+  const knownAddressMismatch =
+    Boolean(storedAddress && wantedAddress) &&
+    !sameAddress;
+
+  const addressConflict =
+    addressNumberConflict || knownAddressMismatch;
 
   let score = 0;
 
@@ -289,25 +307,36 @@ export function customerIdentityEvidence(
     Boolean(wantedPhone && !storedPhone) ||
     Boolean(wantedAddress && !storedAddress);
 
+  /*
+   * Reutilização automática é diferente de sugestão de merge.
+   *
+   * - endereço conhecido e diferente SEMPRE bloqueia reutilização;
+   * - endereço igual + nome compatível é evidência forte;
+   * - telefone igual ajuda, mas não sobrepõe conflito de endereço;
+   * - nome igual permite enriquecer um cadastro realmente
+   *   incompleto, desde que não exista identidade contraditória.
+   */
   const reusable =
+    !addressConflict &&
     (
-      samePhone &&
-      similarity >= 0.5
-    ) ||
-    (
-      sameAddress &&
-      similarity >= 0.65 &&
-      !phoneConflict
-    ) ||
-    (
-      exactName &&
-      !phoneConflict &&
-      !addressConflict &&
       (
-        !incomingHasIdentity ||
-        storedMissingIncomingIdentity ||
-        samePhone ||
-        sameAddress
+        samePhone &&
+        similarity >= 0.5
+      ) ||
+      (
+        sameAddress &&
+        similarity >= 0.65 &&
+        !phoneConflict
+      ) ||
+      (
+        exactName &&
+        !phoneConflict &&
+        (
+          !incomingHasIdentity ||
+          storedMissingIncomingIdentity ||
+          samePhone ||
+          sameAddress
+        )
       )
     );
 

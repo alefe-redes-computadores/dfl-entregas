@@ -3,12 +3,19 @@ import type { Customer, Delivery, Route, StockSupply } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
   compareDateKeys,
-  firstValidTimestamp,
-  parseTimestamp,
   saoPauloDateKey,
   saoPauloHour,
   shiftDateKey,
 } from '@/lib/reports/time';
+
+import {
+  deliveryOperationalTimestamp,
+  inclusiveDateKeyDays,
+  routeOperationalTimestamp,
+  stockSupplyOperationalTimestamp,
+  timestampInDateKeyWindow,
+  trustedRouteDurationMinutes,
+} from '@/lib/analytics/operational-records';
 import {
   confidenceFromSample,
   median,
@@ -26,41 +33,6 @@ import type {
   OperationalIntelligenceSnapshot,
 } from './types';
 
-function deliveryTimestamp(delivery: Delivery): Date | null {
-  return firstValidTimestamp(delivery.created_at, delivery.createdAt);
-}
-
-function routeTimestamp(route: Route): Date | null {
-  return firstValidTimestamp(
-    route.created_at,
-    route.started_at,
-    route.departure_time,
-  );
-}
-
-function supplyTimestamp(supply: StockSupply): Date | null {
-  return firstValidTimestamp(supply.occurred_at, supply.created_at);
-}
-
-function inWindow(date: Date | null, startKey: string, endKey: string): boolean {
-  if (!date) return false;
-  const key = saoPauloDateKey(date);
-  return (
-    compareDateKeys(key, startKey) >= 0 &&
-    compareDateKeys(key, endKey) <= 0
-  );
-}
-
-function inclusiveWindowDays(startKey: string, endKey: string): number {
-  const start = new Date(`${startKey}T12:00:00-03:00`).getTime();
-  const end = new Date(`${endKey}T12:00:00-03:00`).getTime();
-
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
-    return 1;
-  }
-
-  return Math.max(Math.round((end - start) / 86400000) + 1, 1);
-}
 
 function qualityInsights(input: {
   deliveries: Delivery[];
@@ -150,7 +122,7 @@ function demandInsights(
   const dated = deliveries
     .map((delivery) => ({
       delivery,
-      date: deliveryTimestamp(delivery),
+      date: deliveryOperationalTimestamp(delivery),
     }))
     .filter(
       (item): item is { delivery: Delivery; date: Date } => Boolean(item.date),
@@ -254,17 +226,12 @@ function routeInsights(
   minimumSample: number,
 ): OperationalInsight[] {
   const valid = routes
-    .filter((route) => route.status === 'fechada' && (routeTimestamp(route)?.getTime() || 0) >= new Date('2026-09-09T00:00:00-03:00').getTime())
+    .filter((route) => route.status === 'fechada' && (routeOperationalTimestamp(route)?.getTime() || 0) >= new Date('2026-09-09T00:00:00-03:00').getTime())
     .map((route) => {
-      const start = firstValidTimestamp(
-        route.started_at,
-        route.departure_time,
-      );
-      const end = parseTimestamp(route.end_time);
-      if (!start || !end) return null;
+      const duration =
+        trustedRouteDurationMinutes(route);
 
-      const duration = (end.getTime() - start.getTime()) / 60000;
-      if (!Number.isFinite(duration) || duration < 5 || duration > 600) {
+      if (duration == null) {
         return null;
       }
 
@@ -298,7 +265,15 @@ function routeInsights(
     explanation:
       'O limite usa a mediana das rotas confiáveis e uma margem conservadora. Isso sinaliza contexto para investigar — trânsito, espera, distância ou cadastro — e não culpa o motoboy.',
     sampleSize: valid.length,
-    entityIds: anomalous.map((item) => item.route.id),
+    entityIds: anomalous.map(
+      (item) => item.route.id,
+    ),
+    comparison: {
+      label: 'Mediana das rotas confiáveis',
+      baseline,
+      observed: worst.duration,
+      unit: 'min',
+    },
     evidence: [
       { label: 'Rotas confiáveis', value: String(valid.length) },
       { label: 'Mediana', value: `${round(baseline)} min` },
@@ -394,11 +369,11 @@ export function buildOperationalIntelligence(
     mode = 'bounded';
     startKey = requestedWindow.startKey;
     endKey = requestedWindow.endKey;
-    lookbackDays = inclusiveWindowDays(startKey, endKey);
+    lookbackDays = inclusiveDateKeyDays(startKey, endKey);
   }
 
   const undatedDeliveries = input.deliveries.filter(
-    (item) => !deliveryTimestamp(item),
+    (item) => !deliveryOperationalTimestamp(item),
   );
 
   let deliveries: Delivery[];
@@ -409,38 +384,38 @@ export function buildOperationalIntelligence(
     mode = 'all';
 
     deliveries = input.deliveries.filter((item) =>
-      Boolean(deliveryTimestamp(item)),
+      Boolean(deliveryOperationalTimestamp(item)),
     );
-    routes = input.routes.filter((item) => Boolean(routeTimestamp(item)));
-    stockSupplies = input.stockSupplies.filter((item) => Boolean(supplyTimestamp(item)));
+    routes = input.routes.filter((item) => Boolean(routeOperationalTimestamp(item)));
+    stockSupplies = input.stockSupplies.filter((item) => Boolean(stockSupplyOperationalTimestamp(item)));
 
     const observedKeys = [
       ...deliveries
-        .map(deliveryTimestamp)
+        .map(deliveryOperationalTimestamp)
         .filter((item): item is Date => Boolean(item))
         .map(saoPauloDateKey),
       ...routes
-        .map(routeTimestamp)
+        .map(routeOperationalTimestamp)
         .filter((item): item is Date => Boolean(item))
         .map(saoPauloDateKey),
       ...stockSupplies
-        .map(supplyTimestamp)
+        .map(stockSupplyOperationalTimestamp)
         .filter((item): item is Date => Boolean(item))
         .map(saoPauloDateKey),
     ].sort(compareDateKeys);
 
     startKey = observedKeys[0] ?? defaultEndKey;
     endKey = observedKeys[observedKeys.length - 1] ?? defaultEndKey;
-    lookbackDays = inclusiveWindowDays(startKey, endKey);
+    lookbackDays = inclusiveDateKeyDays(startKey, endKey);
   } else {
     deliveries = input.deliveries.filter((item) =>
-      inWindow(deliveryTimestamp(item), startKey, endKey),
+      timestampInDateKeyWindow(deliveryOperationalTimestamp(item), startKey, endKey),
     );
     routes = input.routes.filter((item) =>
-      inWindow(routeTimestamp(item), startKey, endKey),
+      timestampInDateKeyWindow(routeOperationalTimestamp(item), startKey, endKey),
     );
     stockSupplies = input.stockSupplies.filter((item) =>
-      inWindow(supplyTimestamp(item), startKey, endKey),
+      timestampInDateKeyWindow(stockSupplyOperationalTimestamp(item), startKey, endKey),
     );
   }
 
@@ -450,7 +425,7 @@ export function buildOperationalIntelligence(
 
   const logistics = deliveries.filter(isDeliveryFulfillment);
   const datedDeliveries = deliveries.filter((item) =>
-    Boolean(deliveryTimestamp(item)),
+    Boolean(deliveryOperationalTimestamp(item)),
   ).length;
   const structuredNeighborhoods = logistics.filter((item) =>
     Boolean(customerMap.get(item.customer_id)?.neighborhood?.trim()),
@@ -462,7 +437,7 @@ export function buildOperationalIntelligence(
   // A nova régua operacional começa nesta implantação. Rotas históricas continuam
   // nos relatórios, mas não geram alertas de duração na inteligência nova.
   const intelligenceRoutes = routes.filter((route) =>
-    (routeTimestamp(route)?.getTime() || 0) >= new Date('2026-09-09T00:00:00-03:00').getTime(),
+    (routeOperationalTimestamp(route)?.getTime() || 0) >= new Date('2026-09-09T00:00:00-03:00').getTime(),
   );
   const memory = buildOperationalMemory({
     deliveries,
@@ -506,9 +481,27 @@ export function buildOperationalIntelligence(
     info: 3,
   } as const;
 
-  insights.sort((a, b) => {
-    const severity = severityOrder[a.severity] - severityOrder[b.severity];
+  const scopedInsights = insights.map(
+    (insight) => ({
+      ...insight,
+      period: {
+        startKey,
+        endKey,
+        label:
+          mode === 'all'
+            ? 'Todo período observado'
+            : `${startKey} a ${endKey}`,
+      },
+    }),
+  );
+
+  scopedInsights.sort((a, b) => {
+    const severity =
+      severityOrder[a.severity] -
+      severityOrder[b.severity];
+
     if (severity !== 0) return severity;
+
     return b.sampleSize - a.sampleSize;
   });
 
@@ -521,13 +514,21 @@ export function buildOperationalIntelligence(
       lookbackDays,
     },
     memory,
-    insights,
+    insights: scopedInsights,
     summary: {
-      positive: insights.filter((item) => item.severity === 'positive').length,
-      info: insights.filter((item) => item.severity === 'info').length,
-      attention: insights.filter((item) => item.severity === 'attention').length,
-      warning: insights.filter((item) => item.severity === 'warning').length,
-      total: insights.length,
+      positive: scopedInsights.filter(
+        (item) => item.severity === 'positive',
+      ).length,
+      info: scopedInsights.filter(
+        (item) => item.severity === 'info',
+      ).length,
+      attention: scopedInsights.filter(
+        (item) => item.severity === 'attention',
+      ).length,
+      warning: scopedInsights.filter(
+        (item) => item.severity === 'warning',
+      ).length,
+      total: scopedInsights.length,
     },
     coverage: {
       datedDeliveries,

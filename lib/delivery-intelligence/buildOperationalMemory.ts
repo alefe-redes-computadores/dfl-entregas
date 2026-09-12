@@ -3,10 +3,16 @@ import type { Customer, Delivery, Motoboy, Route } from '@/types';
 import { isOperationalCustomer } from '@/lib/customer-analytics';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
-  firstValidTimestamp,
-  parseTimestamp,
+  saoPauloDateKey,
   saoPauloHour,
 } from '@/lib/reports/time';
+
+import {
+  deliveryOperationalTimestamp,
+  routeEndTimestamp,
+  routeStartTimestamp,
+  trustedRouteDurationMinutes,
+} from '@/lib/analytics/operational-records';
 import {
   confidenceFromSample,
   median,
@@ -19,12 +25,9 @@ import type {
   OperationalInsight,
   OperationalMemory,
   RecurringCustomerPattern,
+  RouteGapPattern,
   RouteOperationalContext,
 } from './types';
-
-function deliveryTimestamp(delivery: Delivery): Date | null {
-  return firstValidTimestamp(delivery.created_at, delivery.createdAt);
-}
 
 function normalizeText(value?: string | null): string {
   return (value || '')
@@ -42,20 +45,8 @@ function addressKey(value?: string | null): string {
     .trim();
 }
 
-function routeDuration(route: Route): number | null {
-  if (route.status !== 'fechada') return null;
-
-  const start = firstValidTimestamp(route.started_at, route.departure_time);
-  const end = parseTimestamp(route.end_time);
-  if (!start || !end) return null;
-
-  const minutes = (end.getTime() - start.getTime()) / 60000;
-  if (!Number.isFinite(minutes) || minutes < 5 || minutes > 600) return null;
-  return minutes;
-}
-
 function routeDepartureHour(route: Route): number | null {
-  const date = firstValidTimestamp(route.started_at, route.departure_time);
+  const date = routeStartTimestamp(route);
   return date ? saoPauloHour(date) : null;
 }
 
@@ -80,7 +71,7 @@ function buildNeighborhoodHourPatterns(
   deliveries
     .filter(isDeliveryFulfillment)
     .forEach((delivery) => {
-      const date = deliveryTimestamp(delivery);
+      const date = deliveryOperationalTimestamp(delivery);
       const neighborhood =
         customerMap.get(delivery.customer_id)?.neighborhood?.trim();
 
@@ -142,6 +133,7 @@ function buildRecurringCustomerPatterns(
     {
       deliveries: number;
       addresses: Map<string, { label: string; count: number }>;
+      orderTimes: number[];
     }
   >();
 
@@ -154,8 +146,17 @@ function buildRecurringCustomerPatterns(
       const current = buckets.get(delivery.customer_id) ?? {
         deliveries: 0,
         addresses: new Map<string, { label: string; count: number }>(),
+        orderTimes: [],
       };
+
       current.deliveries += 1;
+
+      const orderDate =
+        deliveryOperationalTimestamp(delivery);
+
+      if (orderDate) {
+        current.orderTimes.push(orderDate.getTime());
+      }
 
       const rawAddress = delivery.address_string?.trim();
       const key = addressKey(rawAddress);
@@ -180,18 +181,57 @@ function buildRecurringCustomerPatterns(
       );
       const dominant = addresses[0];
 
+      const orderedTimes = [...item.orderTimes].sort(
+        (a, b) => a - b,
+      );
+
+      const intervalsDays = orderedTimes
+        .slice(1)
+        .map((value, index) =>
+          (value - orderedTimes[index]) / 86400000,
+        )
+        .filter(
+          (value) =>
+            Number.isFinite(value) &&
+            value >= 0,
+        );
+
+      const lastTimestamp =
+        orderedTimes[orderedTimes.length - 1];
+
       return {
         customerId,
-        customerName: customer?.name?.trim() || 'Cliente sem nome',
+        customerName:
+          customer?.name?.trim() ||
+          'Cliente sem nome',
         deliveries: item.deliveries,
         distinctAddresses: addresses.length,
         dominantAddress: dominant?.label || null,
         dominantAddressCount: dominant?.count || 0,
         addressConsistency: dominant
-          ? percentage(dominant.count, item.deliveries)
+          ? percentage(
+              dominant.count,
+              item.deliveries,
+            )
           : 0,
-        hasStructuredNeighborhood: Boolean(customer?.neighborhood?.trim()),
-        hasMapsLink: Boolean(customer?.maps_link?.trim()),
+        hasStructuredNeighborhood: Boolean(
+          customer?.neighborhood?.trim(),
+        ),
+        hasMapsLink: Boolean(
+          customer?.maps_link?.trim(),
+        ),
+
+        lastOrderDateKey:
+          lastTimestamp != null
+            ? saoPauloDateKey(
+                new Date(lastTimestamp),
+              )
+            : null,
+
+        medianIntervalDays:
+          intervalsDays.length > 0
+            ? median(intervalsDays)
+            : null,
       };
     })
     .sort((a, b) => b.deliveries - a.deliveries);
@@ -215,7 +255,7 @@ function buildRouteContexts(
 
   const base = routes
     .map((route) => {
-      const durationMinutes = routeDuration(route);
+      const durationMinutes = trustedRouteDurationMinutes(route);
       if (durationMinutes == null) return null;
 
       const deliveryCount = deliveryCounts.get(route.id) || 0;
@@ -349,8 +389,196 @@ function buildMotoboyContexts(
       routeCount: item.durations.length,
       deliveryCount: item.deliveries,
       medianRouteDurationMinutes: median(item.durations),
+      averageDeliveriesPerRoute:
+        item.durations.length > 0
+          ? Number(
+              (
+                item.deliveries /
+                item.durations.length
+              ).toFixed(2),
+            )
+          : 0,
     }))
     .sort((a, b) => b.routeCount - a.routeCount);
+}
+
+function buildRouteGapPatterns(
+  routes: Route[],
+  motoboys: Motoboy[],
+): RouteGapPattern[] {
+  const motoboyById = new Map(
+    motoboys.map((item) => [item.id, item]),
+  );
+
+  const normalizedNameToMotoboy =
+    new Map<string, Motoboy | null>();
+
+  motoboys.forEach((motoboy) => {
+    const key = normalizeText(motoboy.name);
+    if (!key) return;
+
+    if (normalizedNameToMotoboy.has(key)) {
+      normalizedNameToMotoboy.set(key, null);
+    } else {
+      normalizedNameToMotoboy.set(
+        key,
+        motoboy,
+      );
+    }
+  });
+
+  const resolved = routes
+    .map((route) => {
+      const start = routeStartTimestamp(route);
+      const end = routeEndTimestamp(route);
+
+      if (!start || !end) return null;
+
+      const byId =
+        route.motoboy_id
+          ? motoboyById.get(route.motoboy_id)
+          : undefined;
+
+      const byName =
+        route.motoboy_name
+          ? normalizedNameToMotoboy.get(
+              normalizeText(route.motoboy_name),
+            )
+          : undefined;
+
+      const canonical = byId || byName || null;
+
+      const motoboyId =
+        canonical?.id ||
+        route.motoboy_id ||
+        null;
+
+      const motoboyName =
+        canonical?.name?.trim() ||
+        route.motoboy_name?.trim() ||
+        'Entregador não informado';
+
+      const key = motoboyId
+        ? `id:${motoboyId}`
+        : `name:${normalizeText(motoboyName)}`;
+
+      return {
+        key,
+        motoboyId,
+        motoboyName,
+        start,
+        end,
+        dateKey: saoPauloDateKey(start),
+      };
+    })
+    .filter(
+      (
+        item,
+      ): item is {
+        key: string;
+        motoboyId: string | null;
+        motoboyName: string;
+        start: Date;
+        end: Date;
+        dateKey: string;
+      } => Boolean(item),
+    );
+
+  const groups = new Map<
+    string,
+    {
+      motoboyId: string | null;
+      motoboyName: string;
+      routes: typeof resolved;
+    }
+  >();
+
+  resolved.forEach((item) => {
+    const group =
+      groups.get(item.key) ?? {
+        motoboyId: item.motoboyId,
+        motoboyName: item.motoboyName,
+        routes: [],
+      };
+
+    group.routes.push(item);
+    groups.set(item.key, group);
+  });
+
+  const result: RouteGapPattern[] = [];
+
+  groups.forEach((group) => {
+    const byDay = new Map<
+      string,
+      typeof resolved
+    >();
+
+    group.routes.forEach((route) => {
+      const current =
+        byDay.get(route.dateKey) ?? [];
+
+      current.push(route);
+      byDay.set(route.dateKey, current);
+    });
+
+    const gaps: number[] = [];
+
+    byDay.forEach((dayRoutes) => {
+      const ordered = [...dayRoutes].sort(
+        (a, b) =>
+          a.start.getTime() -
+          b.start.getTime(),
+      );
+
+      for (
+        let index = 1;
+        index < ordered.length;
+        index += 1
+      ) {
+        const previous = ordered[index - 1];
+        const current = ordered[index];
+
+        const minutes =
+          (
+            current.start.getTime() -
+            previous.end.getTime()
+          ) /
+          60000;
+
+        /*
+         * Negativos = rotas sobrepostas/dado temporal inconsistente.
+         * Acima de 8h deixa de representar intervalo operacional
+         * útil entre rotas do mesmo turno.
+         */
+        if (
+          Number.isFinite(minutes) &&
+          minutes >= 0 &&
+          minutes <= 480
+        ) {
+          gaps.push(minutes);
+        }
+      }
+    });
+
+    if (!gaps.length) return;
+
+    result.push({
+      motoboyId: group.motoboyId,
+      motoboyName: group.motoboyName,
+      sampleSize: gaps.length,
+      medianGapMinutes:
+        median(gaps) || 0,
+      shortestGapMinutes:
+        Math.min(...gaps),
+      longestGapMinutes:
+        Math.max(...gaps),
+    });
+  });
+
+  return result.sort(
+    (a, b) =>
+      b.sampleSize - a.sampleSize,
+  );
 }
 
 export function buildOperationalMemory(input: {
@@ -371,14 +599,27 @@ export function buildOperationalMemory(input: {
     input.minimumSample,
   );
 
-  const routeContexts = buildRouteContexts(input.routes, input.deliveries);
-  const motoboyContexts = buildMotoboyContexts(routeContexts, input.motoboys);
+  const routeContexts = buildRouteContexts(
+    input.routes,
+    input.deliveries,
+  );
+
+  const motoboyContexts = buildMotoboyContexts(
+    routeContexts,
+    input.motoboys,
+  );
+
+  const routeGaps = buildRouteGapPatterns(
+    input.routes,
+    input.motoboys,
+  );
 
   return {
     neighborhoodHourPatterns,
     recurringCustomers,
     routeContexts,
     motoboyContexts,
+    routeGaps,
   };
 }
 
@@ -454,10 +695,31 @@ export function buildOperationalMemoryInsights(
       sampleSize: recurring.deliveries,
       entityIds: [recurring.customerId],
       evidence: [
-        { label: 'Entregas', value: String(recurring.deliveries) },
+        {
+          label: 'Entregas',
+          value: String(recurring.deliveries),
+        },
+        {
+          label: 'Intervalo mediano',
+          value:
+            recurring.medianIntervalDays == null
+              ? 'Amostra insuficiente'
+              : `${round(
+                  recurring.medianIntervalDays,
+                  1,
+                )} dias`,
+        },
+        {
+          label: 'Último pedido',
+          value:
+            recurring.lastOrderDateKey ||
+            'Sem data confiável',
+        },
         {
           label: 'Endereços distintos',
-          value: String(recurring.distinctAddresses),
+          value: String(
+            recurring.distinctAddresses,
+          ),
         },
         {
           label: 'Bairro estruturado',
@@ -498,7 +760,19 @@ export function buildOperationalMemoryInsights(
       explanation:
         'A comparação usa somente rotas confiáveis com quantidade de paradas semelhante. Ainda assim, o sinal não atribui causa ao entregador: trânsito, espera no cliente, distância e composição da rota podem explicar a diferença.',
       sampleSize: worst.comparisonSample,
-      entityIds: contextualAnomalies.map((item) => item.routeId),
+      entityIds: contextualAnomalies.map(
+        (item) => item.routeId,
+      ),
+      comparison:
+        worst.baselineMinutes == null
+          ? undefined
+          : {
+              label:
+                `Mediana de ${worst.sizeBand}`,
+              baseline: worst.baselineMinutes,
+              observed: worst.durationMinutes,
+              unit: 'min',
+            },
       evidence: [
         { label: 'Grupo comparável', value: worst.sizeBand },
         {

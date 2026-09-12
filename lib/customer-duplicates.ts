@@ -1,9 +1,9 @@
 // lib/customer-duplicates.ts
 import type { Customer, Delivery } from '@/types';
+
 import {
-  customerIdentityEvidence,
   customerNameSimilarity,
-  normalizeCustomerPhone,
+  normalizeCustomerName,
   sameCustomerAddress,
 } from '@/lib/customer-identity';
 
@@ -16,6 +16,19 @@ export interface CustomerDuplicateCandidate {
   rightOrders: number;
 }
 
+/**
+ * Revisão manual de duplicados usa uma régua propositalmente
+ * mais conservadora que findExistingCustomer().
+ *
+ * Um nome igual sozinho NÃO é suficiente para sugerir merge.
+ *
+ * Exemplo:
+ *   João / João (2) + mesmo endereço     => candidato
+ *   João / João (2) + endereço diferente => não aparece
+ *
+ * Os sufixos "(2)", "(3)" etc. são removidos pela
+ * normalização canônica de nome.
+ */
 export function customerDuplicateCandidates(
   customers: Customer[],
   deliveries: Delivery[],
@@ -38,74 +51,56 @@ export function customerDuplicateCandidates(
       const left = customers[i];
       const right = customers[j];
 
-      const leftToRight = customerIdentityEvidence(
-        left,
-        right.name,
-        {
-          address: right.address,
-          phone: right.phone,
-        },
+      const leftName = normalizeCustomerName(left.name);
+      const rightName = normalizeCustomerName(right.name);
+
+      if (!leftName || !rightName) continue;
+
+      /*
+       * Nome-base precisa representar a mesma identidade textual.
+       * Isso já trata "Maria" e "Maria (2)" como o mesmo nome-base.
+       */
+      const sameBaseName = leftName === rightName;
+
+      if (!sameBaseName) continue;
+
+      /*
+       * Na tela de possíveis duplicados exigimos endereço dos dois
+       * lados e correspondência canônica do endereço.
+       *
+       * Mesmo nome em endereços diferentes NÃO entra na lista.
+       */
+      if (!left.address?.trim() || !right.address?.trim()) {
+        continue;
+      }
+
+      const sameAddress = sameCustomerAddress(
+        left.address,
+        right.address,
       );
 
-      const rightToLeft = customerIdentityEvidence(
-        right,
-        left.name,
-        {
-          address: left.address,
-          phone: left.phone,
-        },
-      );
+      if (!sameAddress) continue;
 
       const similarity = customerNameSimilarity(
         left.name,
         right.name,
       );
 
-      const leftPhone = normalizeCustomerPhone(left.phone);
-      const rightPhone = normalizeCustomerPhone(right.phone);
+      if (similarity < 0.95) continue;
 
-      const samePhone =
-        Boolean(
-          leftPhone &&
-            rightPhone &&
-            leftPhone.length >= 10 &&
-            rightPhone.length >= 10,
-        ) && leftPhone === rightPhone;
+      const reasons = [
+        'Mesmo nome-base',
+        'Mesmo endereço',
+      ];
 
-      const sameAddress =
-        Boolean(left.address && right.address) &&
-        sameCustomerAddress(
-          left.address,
-          right.address,
-        );
-
-      const probable =
-        leftToRight.reusable ||
-        rightToLeft.reusable ||
-        samePhone ||
-        (sameAddress && similarity >= 0.65);
-
-      if (!probable) continue;
-
-      const reasons = Array.from(
-        new Set([
-          ...leftToRight.reasons,
-          ...rightToLeft.reasons,
-          ...(samePhone ? ['Mesmo telefone'] : []),
-          ...(sameAddress ? ['Mesmo endereço'] : []),
-        ]),
-      );
-
-      const score = Math.max(
-        leftToRight.score,
-        rightToLeft.score,
-        samePhone && sameAddress ? 100 : 0,
-      );
-
+      /*
+       * 95 significa "candidato muito forte", mas a tela continua
+       * exigindo confirmação humana. Nenhum merge é automático.
+       */
       result.push({
         left,
         right,
-        score,
+        score: 95,
         reasons,
         leftOrders: orderCounts.get(left.id) || 0,
         rightOrders: orderCounts.get(right.id) || 0,

@@ -586,6 +586,124 @@ export default function RelatoriosPage() {
               }
             />
 
+            <section className="rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[.18em] text-violet-400">
+                    Memória operacional
+                  </p>
+                  <h2 className="mt-1 font-black text-zinc-100">
+                    Clientes recorrentes
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                    Frequência baseada no customer_id consolidado. Não junta pessoas só porque têm o mesmo nome.
+                  </p>
+                </div>
+                <UserRound size={19} className="text-violet-400" />
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {intelligence.memory.recurringCustomers
+                  .slice(0, 5)
+                  .map((customer) => (
+                    <div
+                      key={customer.customerId}
+                      className="rounded-2xl border border-zinc-800 bg-zinc-950/45 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-black text-zinc-200">
+                            {customer.customerName}
+                          </p>
+                          <p className="mt-1 text-[10px] text-zinc-600">
+                            {customer.deliveries} pedidos · {customer.distinctAddresses}{' '}
+                            {customer.distinctAddresses === 1 ? 'endereço' : 'endereços'}
+                          </p>
+                        </div>
+
+                        <div className="shrink-0 text-right">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-600">
+                            Intervalo típico
+                          </p>
+                          <p className="mt-0.5 text-xs font-black text-violet-300">
+                            {customer.medianIntervalDays == null
+                              ? '—'
+                              : `${customer.medianIntervalDays.toFixed(1)} d`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-bold text-zinc-500">
+                        <span className="rounded-full bg-zinc-900 px-2 py-1">
+                          último {customer.lastOrderDateKey || 'sem data'}
+                        </span>
+                        <span className="rounded-full bg-zinc-900 px-2 py-1">
+                          endereço principal {customer.addressConsistency.toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
+                {intelligence.memory.recurringCustomers.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-zinc-800 px-3 py-8 text-center text-xs text-zinc-600">
+                    Ainda não há clientes com amostra recorrente suficiente neste período.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[.18em] text-sky-400">
+                    Ritmo da operação
+                  </p>
+                  <h2 className="mt-1 font-black text-zinc-100">
+                    Intervalo entre rotas
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                    Mede o tempo entre o fim de uma rota e o início da próxima do mesmo entregador no mesmo dia. Não é ranking.
+                  </p>
+                </div>
+                <Clock3 size={19} className="text-sky-400" />
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {intelligence.memory.routeGaps
+                  .slice(0, 6)
+                  .map((item) => (
+                    <div
+                      key={`${item.motoboyId || item.motoboyName}`}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/45 px-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-black text-zinc-200">
+                          {item.motoboyName}
+                        </p>
+                        <p className="mt-1 text-[10px] text-zinc-600">
+                          {item.sampleSize} intervalo{item.sampleSize === 1 ? '' : 's'} confiável{item.sampleSize === 1 ? '' : 'eis'}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-black text-sky-300">
+                          {item.medianGapMinutes.toFixed(0)} min
+                        </p>
+                        <p className="text-[9px] text-zinc-600">
+                          mediana
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+
+                {intelligence.memory.routeGaps.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-zinc-800 px-3 py-8 text-center text-xs text-zinc-600">
+                    Ainda não há rotas consecutivas suficientes no mesmo dia.
+                  </div>
+                )}
+              </div>
+            </section>
+
             <section className="overflow-hidden rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>

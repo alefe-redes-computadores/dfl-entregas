@@ -16,6 +16,19 @@ export interface IntelligenceEvidence {
   value: string;
 }
 
+export interface IntelligencePeriodContext {
+  startKey: string;
+  endKey: string;
+  label?: string;
+}
+
+export interface IntelligenceComparison {
+  label: string;
+  baseline: number;
+  observed: number;
+  unit?: string;
+}
+
 export interface OperationalInsight {
   id: string;
   category: InsightCategory;
@@ -27,6 +40,18 @@ export interface OperationalInsight {
   sampleSize: number;
   evidence: IntelligenceEvidence[];
   entityIds?: string[];
+
+  /**
+   * Janela que produziu o insight.
+   * Evita mostrar uma conclusão sem dizer a qual período pertence.
+   */
+  period?: IntelligencePeriodContext;
+
+  /**
+   * Comparação quantitativa quando o insight depende
+   * explicitamente de baseline.
+   */
+  comparison?: IntelligenceComparison;
 }
 
 export type OperationalIntelligenceWindowInput =
@@ -77,6 +102,9 @@ export interface RecurringCustomerPattern {
   addressConsistency: number;
   hasStructuredNeighborhood: boolean;
   hasMapsLink: boolean;
+
+  lastOrderDateKey: string | null;
+  medianIntervalDays: number | null;
 }
 
 export interface RouteOperationalContext {
@@ -101,6 +129,16 @@ export interface MotoboyOperationalContext {
   routeCount: number;
   deliveryCount: number;
   medianRouteDurationMinutes: number | null;
+  averageDeliveriesPerRoute: number;
+}
+
+export interface RouteGapPattern {
+  motoboyId: string | null;
+  motoboyName: string;
+  sampleSize: number;
+  medianGapMinutes: number;
+  shortestGapMinutes: number;
+  longestGapMinutes: number;
 }
 
 export interface OperationalMemory {
@@ -108,6 +146,7 @@ export interface OperationalMemory {
   recurringCustomers: RecurringCustomerPattern[];
   routeContexts: RouteOperationalContext[];
   motoboyContexts: MotoboyOperationalContext[];
+  routeGaps: RouteGapPattern[];
 }
 
 export interface OperationalIntelligenceSnapshot {

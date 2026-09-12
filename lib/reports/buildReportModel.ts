@@ -2,12 +2,15 @@ import type { Customer, Delivery, Route, StockSupply } from '@/types';
 import { SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
+  deliveryOperationalTimestamp,
+  trustedRouteDurationMinutes,
+} from '@/lib/analytics/operational-records';
+import {
   compareDateKeys,
   dateFromKey,
   enumerateDateKeys,
   formatReportDate,
   firstValidTimestamp,
-  parseTimestamp,
   saoPauloDateKey,
   saoPauloHour,
   shiftDateKey,
@@ -44,11 +47,6 @@ const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 function money(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function deliveryTimestamp(delivery: Delivery): Date | null {
-  // Regra de auditoria: edição NÃO transforma pedido antigo em pedido recente.
-  return firstValidTimestamp(delivery.created_at, delivery.createdAt);
 }
 
 function normalizeOrigin(delivery: Delivery): ReportDelivery['originLabel'] {
@@ -265,21 +263,10 @@ function buildRouteTimings(
     if (!deliveryRouteIds.has(route.id)) return;
     if (route.status !== 'fechada') return;
 
-    const start = firstValidTimestamp(route.started_at, route.departure_time);
-    const end = parseTimestamp(route.end_time);
+    const durationMinutes =
+      trustedRouteDurationMinutes(route);
 
-    if (!start || !end) {
-      suspicious += 1;
-      return;
-    }
-
-    const durationMinutes = (end.getTime() - start.getTime()) / 60000;
-
-    if (
-      !Number.isFinite(durationMinutes) ||
-      durationMinutes < 5 ||
-      durationMinutes > 600
-    ) {
+    if (durationMinutes == null) {
       suspicious += 1;
       return;
     }
@@ -524,7 +511,7 @@ export function buildReportModel(input: {
   );
 
   const normalized: ReportDelivery[] = input.deliveries.map((delivery) => {
-    const reportDate = deliveryTimestamp(delivery);
+    const reportDate = deliveryOperationalTimestamp(delivery);
     const customer = customerMap.get(delivery.customer_id) ?? null;
 
     return {
