@@ -3,6 +3,7 @@
 
 import { useMemo, useState } from 'react';
 import { AlertCircle, Calculator, PackagePlus, Plus, Save, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import type {
   PaymentMethod,
   StockSupply,
@@ -20,7 +21,7 @@ import {
   moneyToNumber,
   numberToBRLInput,
 } from '@/lib/money-input';
-import { feedbackError } from '@/lib/ui-feedback';
+import { feedbackError, feedbackSuccess } from '@/lib/ui-feedback';
 import { TeamMemberPicker } from '@/components/team/TeamMemberPicker';
 import { PurchaseDateTimePicker } from './PurchaseDateTimePicker';
 import { StockSupplierPicker } from './StockSupplierPicker';
@@ -106,7 +107,10 @@ export function StockSupplyForm({
   onSubmit: (value: StockSupplyFormValue) => Promise<void>;
 }) {
   const products = useAppStore((state) =>
-    state.stockProducts.filter((product) => product.active),
+    state.stockProducts
+      .filter((product) => product.active)
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
   );
   const movements = useAppStore((state) => state.stockMovements);
 
@@ -176,6 +180,25 @@ export function StockSupplyForm({
       purchase_unit:
         presentation?.purchase_unit || product?.unit || 'un',
       conversion: text(presentation?.conversion_quantity ?? 1),
+    });
+
+    if (product) {
+      if (typeof feedbackSuccess === 'function') void feedbackSuccess();
+      toast.success(`${product.name} adicionado à compra.`);
+    }
+  };
+
+  const addItem = () => {
+    const item = fresh();
+    setItems((value) => [item, ...value]);
+    if (typeof feedbackSuccess === 'function') void feedbackSuccess();
+    toast.info('Novo item adicionado no topo.');
+
+    requestAnimationFrame(() => {
+      document.getElementById(`purchase-item-${item.id}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
     });
   };
 
@@ -441,7 +464,7 @@ export function StockSupplyForm({
           </div>
           <button
             type="button"
-            onClick={() => setItems((value) => [...value, fresh()])}
+            onClick={addItem}
             className="flex h-10 items-center gap-1 rounded-xl bg-amber-500/10 px-3 text-xs font-black text-amber-400"
           >
             <Plus size={14} />

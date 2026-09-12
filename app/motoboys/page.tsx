@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bike, ChevronRight, CircleDollarSign, Plus, Search, UserCheck, UserRound, UsersRound } from 'lucide-react';
+import { Bike, ChevronRight, CircleDollarSign, Search, UserCheck, UserRound, UsersRound } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { getMotoboyRoutes, normalizeName } from '@/lib/motoboy-analytics';
@@ -13,7 +13,7 @@ export default function MotoboysPage(){
   const router=useRouter();const motoboys=useAppStore(state=>state.motoboys);const routes=useAppStore(state=>state.routes);const deliveries=useAppStore(state=>state.deliveries);const [filter,setFilter]=useState<Filter>('ativos');const [query,setQuery]=useState('');
   const items=useMemo(()=>motoboys.map(motoboy=>{const linkedRoutes=getMotoboyRoutes(motoboy,routes);const routeIds=new Set(linkedRoutes.map(route=>route.id));const linkedDeliveries=deliveries.filter(delivery=>routeIds.has(delivery.route_id));return {motoboy,routes:linkedRoutes,deliveries:linkedDeliveries,completed:linkedDeliveries.filter(delivery=>delivery.completed).length};}),[deliveries,motoboys,routes]);
   const filtered=useMemo(()=>items.filter(({motoboy})=>(filter==='todos'||(filter==='ativos'&&motoboy.active)||(filter==='inativos'&&!motoboy.active))&&(!query.trim()||normalizeName(motoboy.name).includes(normalizeName(query)))).sort((a,b)=>a.motoboy.name.localeCompare(b.motoboy.name,'pt-BR')),[filter,items,query]);
-  return <div className="flex flex-col gap-5 pb-28"><div className="flex items-start justify-between"><PageHeader title="Equipe de motoboys" subtitle="Histórico, regras e acertos" to="/loja"/><button onClick={()=>router.push('/motoboys/novo')} className="mt-2 flex h-11 items-center gap-2 rounded-2xl bg-sky-500 px-4 text-sm font-black text-zinc-950"><Plus size={18}/>Novo</button></div>
+  return <div className="flex flex-col gap-5 pb-28"><PageHeader title="Equipe de motoboys" subtitle="Histórico, regras e acertos" to="/loja"/>
     <div className="grid grid-cols-3 gap-2"><Metric icon={UsersRound} value={motoboys.length} label="Equipe"/><Metric icon={UserCheck} value={motoboys.filter(item=>item.active).length} label="Ativos"/><Metric icon={Bike} value={routes.length} label="Rotas"/></div>
     <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar entregador" className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900/55 pl-11 pr-4 text-sm outline-none focus:border-sky-500"/></div>
     <div className="grid grid-cols-3 gap-2">{([['ativos','Ativos'],['inativos','Inativos'],['todos','Todos']] as const).map(([value,label])=><button key={value} onClick={()=>setFilter(value)} className={`rounded-xl py-2.5 text-xs font-bold ${filter===value?'bg-zinc-100 text-zinc-950':'border border-zinc-800 bg-zinc-900/50 text-zinc-500'}`}>{label}</button>)}</div>

@@ -199,10 +199,10 @@ export function StockProductPicker({
               setOpen(false);
             }
           }}
-          className="fixed inset-0 z-[120] flex items-end bg-black/80 p-3 backdrop-blur-sm"
+          className="fixed inset-0 z-[120] flex items-end bg-black/85 px-3 pt-3 backdrop-blur-md"
         >
-          <div className="mx-auto max-h-[92vh] w-full max-w-md overflow-y-auto rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-            <div className="flex justify-between">
+          <div className="mx-auto max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[30px] border border-zinc-800 bg-zinc-950 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl">
+            <div className="sticky top-0 z-10 -mx-1 flex justify-between gap-3 bg-zinc-950/95 px-1 pb-3 backdrop-blur">
               <div>
                 <h3 className="font-heading text-lg font-black text-zinc-100">
                   {creating
@@ -244,7 +244,7 @@ export function StockProductPicker({
                     onChange={(event) =>
                       setQuery(event.target.value)
                     }
-                    placeholder="Buscar produto"
+                    placeholder="Buscar produto ativo"
                     className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-11 pr-3 text-sm text-zinc-100 outline-none focus:border-amber-500"
                   />
                 </div>
@@ -263,7 +263,7 @@ export function StockProductPicker({
                   </button>
                 )}
 
-                <div className="mt-3 space-y-4">
+                <p className="mt-2 text-[9px] leading-relaxed text-zinc-600">Produtos arquivados não entram em novas compras. Se não encontrar um item, você pode cadastrá-lo aqui.</p><div className="mt-3 space-y-4">
                   {groups.map(
                     ([categoryName, items]) => (
                       <section key={categoryName}>
@@ -350,7 +350,7 @@ export function StockProductPicker({
                     onChange={(event) =>
                       setName(event.target.value)
                     }
-                    className="mt-2 h-13 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 outline-none"
+                    className="mt-2 h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-base font-semibold text-zinc-100 outline-none focus:border-amber-500"
                   />
                 </label>
 
@@ -361,7 +361,7 @@ export function StockProductPicker({
                     onChange={(event) =>
                       setCategory(event.target.value)
                     }
-                    className="mt-2 h-13 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 outline-none"
+                    className="mt-2 h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-base font-semibold text-zinc-100 outline-none focus:border-amber-500"
                   />
                 </label>
 
@@ -375,7 +375,7 @@ export function StockProductPicker({
                         type="button"
                         key={key}
                         onClick={() => setUnit(key)}
-                        className={`rounded-xl border px-3 py-2 text-xs font-bold ${
+                        className={`min-h-12 rounded-2xl border px-3.5 py-2.5 text-xs font-bold ${
                           unit === key
                             ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
                             : 'border-zinc-800 text-zinc-500'
@@ -391,7 +391,7 @@ export function StockProductPicker({
                   type="button"
                   disabled={busy}
                   onClick={create}
-                  className="h-13 w-full rounded-xl bg-amber-500 font-black text-zinc-950 disabled:opacity-40"
+                  className="h-14 w-full rounded-2xl bg-amber-500 px-4 text-sm font-black text-zinc-950 shadow-lg shadow-amber-500/10 active:scale-[.99] disabled:opacity-40"
                 >
                   {busy
                     ? 'Cadastrando...'

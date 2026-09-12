@@ -59,8 +59,9 @@ export default function TeamPage() {
     if (searchParams.get('add') === 'interno') {
       setForm(empty);
       setEditing(null);
+    router.replace('/equipe', { scroll: false });
     }
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   const filteredMembers = useMemo(() => {
     const term = normalize(query.trim());

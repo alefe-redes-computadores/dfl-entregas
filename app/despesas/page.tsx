@@ -1,7 +1,7 @@
 // app/despesas/page.tsx
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bike,
@@ -36,6 +36,8 @@ export default function ExpensesPage() {
   const router = useRouter();
   const expenses = useAppStore((state) => state.operationalExpenses);
   const remove = useAppStore((state) => state.deleteOperationalExpense);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const sorted = useMemo(
     () =>
@@ -51,12 +53,17 @@ export default function ExpensesPage() {
     [expenses],
   );
 
-  const removeItem = async (id: string) => {
+  const removeItem = async () => {
+    if (!pendingDelete || deleting) return;
+    setDeleting(true);
     try {
-      await remove(id);
+      await remove(pendingDelete);
       toast.success('Despesa removida.');
+      setPendingDelete(null);
     } catch {
       toast.error('Não foi possível remover a despesa.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -134,7 +141,7 @@ export default function ExpensesPage() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => removeItem(item.id)}
+                    onClick={() => setPendingDelete(item.id)}
                     className="ml-auto mt-2 flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-400 active:scale-95"
                     aria-label="Excluir despesa"
                   >
@@ -166,6 +173,34 @@ export default function ExpensesPage() {
           </button>
         )}
       </section>
+
+      {pendingDelete && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end bg-black/75 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+          onClick={() => !deleting && setPendingDelete(null)}
+        >
+          <section
+            className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-950 p-5"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-[10px] font-black uppercase tracking-[.16em] text-red-400">Excluir despesa</p>
+            <h2 className="mt-2 text-lg font-black text-zinc-100">Remover este lançamento?</h2>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+              A despesa será removida do histórico operacional. Esta ação não altera o estoque.
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button type="button" disabled={deleting} onClick={() => setPendingDelete(null)}
+                className="h-12 rounded-xl border border-zinc-800 text-sm font-bold text-zinc-400 disabled:opacity-50">
+                Cancelar
+              </button>
+              <button type="button" disabled={deleting} onClick={removeItem}
+                className="h-12 rounded-xl bg-red-500 text-sm font-black text-white disabled:opacity-50">
+                {deleting ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

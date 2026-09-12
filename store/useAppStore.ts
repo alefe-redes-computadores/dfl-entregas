@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { persist } from 'zustand/middleware';
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField, runTransaction } from 'firebase/firestore';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
@@ -234,7 +235,7 @@ export const useAppStore = create<AppState>()(
             await signInWithPopup(auth, googleProvider);
           }
         } catch (error: any) {
-          alert(`Erro no login: ${error?.message || 'Erro desconhecido'}`);
+          toast.error('Erro no login', { description: error?.message || 'Erro desconhecido' });
         }
       },
 

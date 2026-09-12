@@ -101,6 +101,7 @@ export default function ConfirmacoesPage() {
       ? requestedDate
       : dateKey(new Date());
   const deliveries = useAppStore((state) => state.deliveries);
+  const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
   const ifoodPendingConfirmations = useAppStore(
     (state) => state.ifoodPendingConfirmations,
@@ -121,6 +122,8 @@ export default function ConfirmacoesPage() {
   const [batchText, setBatchText] = useState('');
   const [isBatchSaving, setIsBatchSaving] = useState(false);
   const [manualView, setManualView] = useState<'pending' | 'resolved'>('pending');
+  const [pendingDeleteManual, setPendingDeleteManual] = useState<IfoodPendingConfirmation | null>(null);
+  const [deletingManual, setDeletingManual] = useState(false);
   const [selectedDateKey, setSelectedDateKey] = useState(() => initialDateKey);
   const selectedDate = dateFromKey(selectedDateKey);
   const selectedDateLabel =
@@ -218,18 +221,90 @@ export default function ConfirmacoesPage() {
     };
   }, [customers, selectedIfood]);
 
+  const manualOperationalContext = (item: IfoodPendingConfirmation) => {
+    const route = item.route_id
+      ? routes.find((current) => current.id === item.route_id)
+      : undefined;
+
+    if (!route) {
+      return {
+        key: 'manual' as const,
+        rank: 3,
+        label: 'Avulso',
+        routeName: item.route_name || 'Sem rota',
+        motoboy: '',
+        tone: 'border-zinc-700 bg-zinc-800/60 text-zinc-300',
+      };
+    }
+
+    if (route.status === 'fechada') {
+      return {
+        key: 'post' as const,
+        rank: 2,
+        label: 'Pós-rota',
+        routeName: route.name,
+        motoboy: route.motoboy_name || '',
+        tone: 'border-sky-500/25 bg-sky-500/10 text-sky-300',
+      };
+    }
+
+    if (route.started_at) {
+      return {
+        key: 'street' as const,
+        rank: 0,
+        label: 'Na rua agora',
+        routeName: route.name,
+        motoboy: route.motoboy_name || '',
+        tone: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
+      };
+    }
+
+    return {
+      key: 'prep' as const,
+      rank: 1,
+      label: 'Preparando saída',
+      routeName: route.name,
+      motoboy: route.motoboy_name || '',
+      tone: 'border-amber-500/25 bg-amber-500/10 text-amber-300',
+    };
+  };
+
   const pendingManualConfirmations = useMemo(
     () =>
       ifoodPendingConfirmations
         .filter((item) => (item.status || 'pending') === 'pending')
         .filter((item) => !requestedRouteId || item.route_id === requestedRouteId)
-        .sort(
-          (a, b) =>
+        .sort((a, b) => {
+          const contextA = manualOperationalContext(a);
+          const contextB = manualOperationalContext(b);
+
+          if (contextA.rank !== contextB.rank) {
+            return contextA.rank - contextB.rank;
+          }
+
+          const routeCompare = contextA.routeName.localeCompare(
+            contextB.routeName,
+            'pt-BR',
+          );
+          if (routeCompare !== 0) return routeCompare;
+
+          return (
             new Date(b.updated_at || b.created_at).getTime() -
-            new Date(a.updated_at || a.created_at).getTime(),
-        ),
-    [ifoodPendingConfirmations, requestedRouteId],
+            new Date(a.updated_at || a.created_at).getTime()
+          );
+        }),
+    [ifoodPendingConfirmations, requestedRouteId, routes],
   );
+
+  const pendingOperationalCounts = useMemo(() => {
+    const counts = { street: 0, prep: 0, post: 0, manual: 0 };
+
+    pendingManualConfirmations.forEach((item) => {
+      counts[manualOperationalContext(item).key] += 1;
+    });
+
+    return counts;
+  }, [pendingManualConfirmations, routes]);
 
   const resolvedManualConfirmations = useMemo(
     () =>
@@ -275,18 +350,23 @@ export default function ConfirmacoesPage() {
     }
   };
 
-  const permanentlyDeleteManual = async (item: IfoodPendingConfirmation) => {
-    const confirmed = window.confirm(
-      'Excluir esta pendência definitivamente? Esta ação remove o histórico.',
-    );
-    if (!confirmed) return;
+  const permanentlyDeleteManual = (item: IfoodPendingConfirmation) => {
+    setPendingDeleteManual(item);
+  };
 
+  const confirmPermanentDeleteManual = async () => {
+    if (!pendingDeleteManual || deletingManual) return;
+
+    setDeletingManual(true);
     try {
       await vibrate(ImpactStyle.Medium);
-      await deleteIfoodPendingConfirmation(item.id);
+      await deleteIfoodPendingConfirmation(pendingDeleteManual.id);
       toast.success('Histórico excluído definitivamente.');
+      setPendingDeleteManual(null);
     } catch {
       toast.error('Não foi possível excluir o histórico.');
+    } finally {
+      setDeletingManual(false);
     }
   };
 
@@ -643,6 +723,22 @@ export default function ConfirmacoesPage() {
             </button>
           </div>
 
+          {manualView === 'pending' && (
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                ['Na rua agora', pendingOperationalCounts.street, 'border-emerald-500/20 bg-emerald-500/[.06] text-emerald-300'],
+                ['Preparando', pendingOperationalCounts.prep, 'border-amber-500/20 bg-amber-500/[.06] text-amber-300'],
+                ['Pós-rota', pendingOperationalCounts.post, 'border-sky-500/20 bg-sky-500/[.06] text-sky-300'],
+                ['Avulsos', pendingOperationalCounts.manual, 'border-zinc-800 bg-zinc-900/50 text-zinc-400'],
+              ].map(([label, count, tone]) => (
+                <div key={String(label)} className={`rounded-2xl border px-3 py-2 ${tone}`}>
+                  <p className="text-[9px] font-black uppercase tracking-wide">{label}</p>
+                  <p className="mt-1 text-lg font-black">{count}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
           {visibleManualConfirmations.length === 0 ? (
             <div className="rounded-[24px] border border-dashed border-zinc-800 px-5 py-9 text-center">
               {manualView === 'pending' ? (
@@ -673,6 +769,7 @@ export default function ConfirmacoesPage() {
                 (item.ifood_id || '').replace(/\D/g, '').length === 8 &&
                 (item.confirmation_code || '').replace(/\D/g, '').length === 4;
               const resolved = item.status === 'resolved';
+              const operational = manualOperationalContext(item);
 
               return (
                 <article
@@ -715,6 +812,18 @@ export default function ConfirmacoesPage() {
                           ? `Resolvida ${waitingLabel(item.resolved_at)}`
                           : `Criada ${waitingLabel(item.created_at)}`}
                       </p>
+
+                      {!resolved && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className={`rounded-full border px-2 py-1 text-[9px] font-black ${operational.tone}`}>
+                            {operational.label}
+                          </span>
+                          <span className="max-w-[190px] truncate text-[9px] font-bold text-zinc-500">
+                            {operational.routeName}
+                            {operational.motoboy ? ` · ${operational.motoboy}` : ''}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -945,6 +1054,46 @@ export default function ConfirmacoesPage() {
           </div>
         )}
       </div>
+
+      {pendingDeleteManual && (
+        <div
+          className="fixed inset-0 z-[130] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+          onClick={() => !deletingManual && setPendingDeleteManual(null)}
+        >
+          <section
+            className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-950 p-5"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">
+              Excluir histórico
+            </p>
+            <h2 className="mt-2 text-lg font-black text-zinc-100">
+              Remover esta confirmação?
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+              Essa ação remove a pendência do histórico do iFood e não pode ser desfeita.
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={deletingManual}
+                onClick={() => setPendingDeleteManual(null)}
+                className="h-12 rounded-xl border border-zinc-800 text-sm font-bold text-zinc-400 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={deletingManual}
+                onClick={confirmPermanentDeleteManual}
+                className="h-12 rounded-xl bg-red-500 text-sm font-black text-white disabled:opacity-50"
+              >
+                {deletingManual ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {isBatchOpen && (
         <div

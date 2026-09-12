@@ -73,6 +73,7 @@ const [routeId, setRouteId] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const currentDelivery = useMemo(
     () => deliveries.find((delivery) => delivery.id === deliveryId),
@@ -593,17 +594,6 @@ const [routeId, setRouteId] = useState('');
       return;
     }
 
-    const linkedRoute = routes.find(
-      (route) => route.id === currentDelivery.route_id,
-    );
-    const routeContext = linkedRoute
-      ? ` Ele será removido da rota "${linkedRoute.name}".`
-      : '';
-    const confirm = window.confirm(
-      `Tem certeza que deseja excluir esta entrega permanentemente?${routeContext}`,
-    );
-    if (!confirm) return;
-
     setIsDeleting(true);
     try {
       await deleteDelivery(deliveryId);
@@ -1062,12 +1052,54 @@ const [routeId, setRouteId] = useState('');
             {isSaving ? 'Salvando...' : 'Salvar alterações'}
           </button>
 
-          <button type="button" onClick={handleDelete} disabled={isSaving || isDeleting} className="flex items-center justify-center gap-2 h-14 w-full rounded-2xl border border-red-500/50 text-red-500 font-bold hover:bg-red-500/10 active:scale-[0.98] disabled:opacity-60 transition-colors">
+          <button type="button" onClick={() => setDeleteConfirmOpen(true)} disabled={isSaving || isDeleting} className="flex items-center justify-center gap-2 h-14 w-full rounded-2xl border border-red-500/50 text-red-500 font-bold hover:bg-red-500/10 active:scale-[0.98] disabled:opacity-60 transition-colors">
             <Trash2 size={18} />
             {isDeleting ? 'Excluindo...' : 'Excluir pedido'}
           </button>
         </div>
       </form>
+
+      {deleteConfirmOpen && (
+        <div
+          className="fixed inset-0 z-[130] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+          onClick={() => !isDeleting && setDeleteConfirmOpen(false)}
+        >
+          <section
+            className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-950 p-5"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-[10px] font-black uppercase tracking-[.16em] text-red-400">
+              Excluir pedido
+            </p>
+            <h2 className="mt-2 text-lg font-black text-zinc-100">
+              Remover esta entrega permanentemente?
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+              {currentDelivery?.route_id
+                ? 'O pedido também será removido da rota vinculada.'
+                : 'Este pedido não está vinculado a uma rota.'}
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="h-12 rounded-xl border border-zinc-800 text-sm font-bold text-zinc-400 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDelete}
+                className="h-12 rounded-xl bg-red-500 text-sm font-black text-white disabled:opacity-50"
+              >
+                {isDeleting ? 'Excluindo...' : 'Excluir pedido'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

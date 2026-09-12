@@ -69,7 +69,9 @@ export default function NewExpensePage() {
   const settlementAlreadyExists = useMemo(() => {
     if (!motoboyId || type !== 'motoboy') return false;
     return expenses.some(
-      (item) => item.source_id === `motoboy:${motoboyId}:${occurredAt}`,
+      (item) =>
+        item.source_kind === 'motoboy_settlement' &&
+        item.source_id === `motoboy:${motoboyId}:${occurredAt}`,
     );
   }, [expenses, motoboyId, occurredAt, type]);
 
@@ -200,7 +202,7 @@ export default function NewExpensePage() {
 
           {settlementAlreadyExists && (
             <p className="mt-2 rounded-xl border border-red-500/20 bg-red-500/[.05] px-3 py-2 text-[10px] text-red-300">
-              A diária deste entregador nesta data já foi lançada pelo Acerto. Um segundo lançamento seria duplicado.
+              Já existe um lançamento automático do Acerto para este entregador nesta data. Despesas manuais continuam permitidas quando forem custos diferentes.
             </p>
           )}
         </Field>
