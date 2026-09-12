@@ -162,6 +162,37 @@ const defaultSchedule = Object.fromEntries(
   ])
 );
 
+/**
+ * Compras usam atualização otimista no Zustand.
+ *
+ * Guardamos a Promise de persistência por compra para impedir uma corrida:
+ * o usuário pode sair da tela imediatamente após salvar, mas uma eventual
+ * integração/estorno sempre espera a gravação anterior chegar ao Firestore.
+ */
+const pendingStockSupplyWrites = new Map<string, Promise<void>>();
+
+const trackStockSupplyWrite = (
+  id: string,
+  operation: Promise<void>,
+): Promise<void> => {
+  const tracked = operation.finally(() => {
+    if (pendingStockSupplyWrites.get(id) === tracked) {
+      pendingStockSupplyWrites.delete(id);
+    }
+  });
+
+  pendingStockSupplyWrites.set(id, tracked);
+  return tracked;
+};
+
+const waitForStockSupplyWrite = async (id: string) => {
+  const pending = pendingStockSupplyWrites.get(id);
+
+  if (pending) {
+    await pending;
+  }
+};
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -248,6 +279,11 @@ export const useAppStore = create<AppState>()(
 
       initData: async () => {
         if (!get().hasHydrated) return;
+
+        // Header/AuthGuard ou duas montagens React não podem iniciar
+        // duas tomografias completas do Firestore ao mesmo tempo.
+        if (get().isSyncing) return;
+
         set({ isSyncing: true, syncError: false });
         try {
           const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, stockSuppliersSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, operationalExpensesSnap, storeSnap] = await Promise.all([
@@ -603,38 +639,86 @@ export const useAppStore = create<AppState>()(
 
       addStockSupply: async (supply) => {
         const now = new Date().toISOString();
-        const next: StockSupply = { ...supply, created_at: supply.created_at || now, updated_at: now };
-        set((state) => ({ stockSupplies: [next, ...state.stockSupplies] }));
-        try {
-          await setDoc(doc(db, 'stock_supplies', next.id), sanitizeForFirebase(next));
-        } catch (error) {
-          set((state) => ({ stockSupplies: state.stockSupplies.filter((item) => item.id !== next.id) }));
+        const next: StockSupply = {
+          ...supply,
+          created_at: supply.created_at || now,
+          updated_at: now,
+        };
+
+        set((state) => ({
+          stockSupplies: [next, ...state.stockSupplies],
+        }));
+
+        const operation = setDoc(
+          doc(db, 'stock_supplies', next.id),
+          sanitizeForFirebase(next),
+        ).catch((error) => {
+          set((state) => ({
+            stockSupplies: state.stockSupplies.filter(
+              (item) => item.id !== next.id,
+            ),
+          }));
           throw error;
-        }
+        });
+
+        await trackStockSupplyWrite(next.id, operation);
       },
 
       updateStockSupply: async (id, updatedData) => {
-        const previous = get().stockSupplies;
-        const current = previous.find((item) => item.id === id);
-        if (current?.stock_integrated_at) throw new Error('Compra já integrada ao estoque e não pode ser editada.');
-        const next: Partial<StockSupply> = { ...updatedData, updated_at: new Date().toISOString() };
-        set((state) => ({ stockSupplies: state.stockSupplies.map((item) => item.id === id ? { ...item, ...next } : item) }));
-        try {
-          await updateDoc(doc(db, 'stock_supplies', id), sanitizeForFirebase(next));
-          if (updatedData.status === 'recebido' && current?.status !== 'recebido') {
-            void scheduleStockSupplyCheckReminder(
-              id,
-              current?.supplier,
-              current?.items?.length,
-              get().storeSettings.notificationPreferences,
-            );
-          } else if (updatedData.status === 'conferido') {
-            void cancelStockSupplyCheckReminder(id);
-          }
-        } catch (error) {
-          set({ stockSupplies: previous });
-          throw error;
+        const current = get().stockSupplies.find((item) => item.id === id);
+
+        if (!current) {
+          throw new Error('Compra não encontrada.');
         }
+
+        if (current.stock_integrated_at) {
+          throw new Error(
+            'Compra já integrada ao estoque. Estorne a integração antes de alterar itens ou valores.',
+          );
+        }
+
+        const next: Partial<StockSupply> = {
+          ...updatedData,
+          updated_at: new Date().toISOString(),
+        };
+
+        set((state) => ({
+          stockSupplies: state.stockSupplies.map((item) =>
+            item.id === id ? { ...item, ...next } : item,
+          ),
+        }));
+
+        const operation = updateDoc(
+          doc(db, 'stock_supplies', id),
+          sanitizeForFirebase(next),
+        )
+          .then(() => {
+            if (
+              updatedData.status === 'recebido' &&
+              current.status !== 'recebido'
+            ) {
+              void scheduleStockSupplyCheckReminder(
+                id,
+                updatedData.supplier || current.supplier,
+                updatedData.items?.length || current.items?.length,
+                get().storeSettings.notificationPreferences,
+              );
+            } else if (updatedData.status === 'conferido') {
+              void cancelStockSupplyCheckReminder(id);
+            }
+          })
+          .catch((error) => {
+            // Rollback localizado: não desfaz outra compra que tenha sido
+            // modificada enquanto esta gravação estava em andamento.
+            set((state) => ({
+              stockSupplies: state.stockSupplies.map((item) =>
+                item.id === id ? current : item,
+              ),
+            }));
+            throw error;
+          });
+
+        await trackStockSupplyWrite(id, operation);
       },
 
       deleteStockSupply: async (id) => {
@@ -763,6 +847,10 @@ export const useAppStore = create<AppState>()(
       },
 
       integrateStockSupply: async (id) => {
+        // Se o usuário acabou de editar/criar a compra e já tocou em
+        // "Conferir", a transação deve enxergar a versão mais recente.
+        await waitForStockSupplyWrite(id);
+
         const previousProducts = get().stockProducts;
         const previousMovements = get().stockMovements;
         const previousSupplies = get().stockSupplies;
@@ -808,6 +896,8 @@ export const useAppStore = create<AppState>()(
       },
 
       reverseStockSupply: async (id) => {
+        await waitForStockSupplyWrite(id);
+
         const previousProducts = get().stockProducts; const previousMovements = get().stockMovements; const previousSupplies = get().stockSupplies;
         try {
           const result = await runTransaction(db, async (transaction) => {

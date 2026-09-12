@@ -14,8 +14,7 @@ function getGreeting(): string {
 
 export function Header() {
   const isSyncing = useAppStore((state) => state.isSyncing);
-  const syncError = useAppStore((state) => state.syncError); // <-- IMPORTAMOS O ESTADO DE ERRO
-  const initData = useAppStore((state) => state.initData);
+  const syncError = useAppStore((state) => state.syncError);
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
   
@@ -24,8 +23,7 @@ export function Header() {
 
   useEffect(() => {
     setGreeting(getGreeting());
-    initData();
-  }, [initData]);
+  }, []);
 
   // Pega o primeiro nome do usuário ou usa "Álefe" como fallback
   const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Álefe';

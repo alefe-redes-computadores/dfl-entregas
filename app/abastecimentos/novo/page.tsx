@@ -26,25 +26,51 @@ export default function NewStockSupplyPage() {
 
     setBusy(true);
 
-    try {
-      const now = new Date().toISOString();
-      const supply: StockSupply = {
-        id: `supply-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 7)}`,
-        ...value,
-        created_at: now,
-        updated_at: now,
-      };
+    const now = new Date().toISOString();
+    const supply: StockSupply = {
+      id: `supply-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 7)}`,
+      ...value,
+      created_at: now,
+      updated_at: now,
+    };
 
-      await addStockSupply(supply);
-      await feedbackSuccess();
-      toast.success('Compra registrada com sucesso.');
-      router.replace('/abastecimentos');
+    try {
+      /*
+       * addStockSupply altera o Zustand antes do Firestore.
+       * Podemos abrir os detalhes imediatamente sem fingir
+       * que a persistência já terminou.
+       */
+      const operation = addStockSupply(supply);
+
+      void feedbackSuccess();
+
+      toast.loading('Compra registrada. Sincronizando...', {
+        id: 'purchase-save',
+      });
+
+      router.replace(
+        `/abastecimentos/detalhes?id=${supply.id}`,
+      );
+
+      await operation;
+
+      toast.success('Compra sincronizada.', {
+        id: 'purchase-save',
+      });
     } catch (error) {
-      console.error('Erro ao registrar compra de estoque:', error);
-      await feedbackError();
-      toast.error('Não foi possível registrar a compra. Tente novamente.');
+      console.error(
+        'Erro ao registrar compra de estoque:',
+        error,
+      );
+
+      void feedbackError();
+
+      toast.error(
+        'A compra não pôde ser sincronizada e foi desfeita.',
+        { id: 'purchase-save' },
+      );
     } finally {
       setBusy(false);
     }
@@ -57,6 +83,7 @@ export default function NewStockSupplyPage() {
         subtitle="Reposição de produtos da loja"
         to="/abastecimentos"
       />
+
       <StockSupplyForm
         defaultBuyerName={user?.displayName || 'Álefe'}
         busy={busy}

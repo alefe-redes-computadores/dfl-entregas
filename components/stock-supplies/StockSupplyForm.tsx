@@ -101,12 +101,17 @@ export function StockSupplyForm({
   submitLabel: string;
   onSubmit: (value: StockSupplyFormValue) => Promise<void>;
 }) {
-  const products = useAppStore((state) =>
-    state.stockProducts
-      .filter((product) => product.active)
-      .slice()
-      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+  const stockProducts = useAppStore((state) => state.stockProducts);
+
+  const products = useMemo(
+    () =>
+      stockProducts
+        .filter((product) => product.active)
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+    [stockProducts],
   );
+
   const movements = useAppStore((state) => state.stockMovements);
 
   const [occurredAt, setOccurredAt] = useState(local(initial?.occurred_at));
