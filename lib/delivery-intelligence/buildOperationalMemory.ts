@@ -19,6 +19,10 @@ import {
   percentage,
   round,
 } from './statistics';
+
+import {
+  buildRouteSequenceMemory,
+} from './buildRouteSequenceMemory';
 import type {
   MotoboyOperationalContext,
   NeighborhoodHourPattern,
@@ -614,12 +618,20 @@ export function buildOperationalMemory(input: {
     input.motoboys,
   );
 
+  const routeSequences =
+    buildRouteSequenceMemory({
+      deliveries: input.deliveries,
+      routes: input.routes,
+      customers: input.customers,
+    });
+
   return {
     neighborhoodHourPatterns,
     recurringCustomers,
     routeContexts,
     motoboyContexts,
     routeGaps,
+    routeSequences,
   };
 }
 

@@ -26,6 +26,10 @@ import {
   buildOperationalMemory,
   buildOperationalMemoryInsights,
 } from './buildOperationalMemory';
+
+import {
+  buildRouteSequenceInsights,
+} from './buildRouteSequenceMemory';
 import type {
   IntelligenceWindow,
   OperationalInsight,
@@ -450,6 +454,12 @@ export function buildOperationalIntelligence(
     memory,
     minimumSample,
   );
+
+  const sequenceInsights =
+    buildRouteSequenceInsights(
+      memory.routeSequences,
+      minimumSample,
+    );
   const hasContextualRouteAnomaly = memoryInsights.some(
     (item) => item.id === 'memory-routes-contextual-duration',
   );
@@ -468,6 +478,7 @@ export function buildOperationalIntelligence(
       minimumSample,
     }),
     ...memoryInsights,
+    ...sequenceInsights,
     ...(hasContextualRouteAnomaly
       ? []
       : routeInsights(intelligenceRoutes, minimumSample)),

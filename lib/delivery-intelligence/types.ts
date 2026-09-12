@@ -141,12 +141,83 @@ export interface RouteGapPattern {
   longestGapMinutes: number;
 }
 
+export interface NeighborhoodTransitionPattern {
+  key: string;
+  fromNeighborhood: string;
+  toNeighborhood: string;
+  occurrences: number;
+  timingSample: number;
+  medianCompletionIntervalMinutes: number | null;
+}
+
+export interface TransitionObservationAnomaly {
+  routeId: string;
+  fromDeliveryId: string;
+  toDeliveryId: string;
+
+  fromNeighborhood: string;
+  toNeighborhood: string;
+
+  observedMinutes: number;
+  baselineMinutes: number;
+  comparisonSample: number;
+  deviationRatio: number;
+}
+
+export interface RouteSequenceMemory {
+  patterns: NeighborhoodTransitionPattern[];
+  anomalies: TransitionObservationAnomaly[];
+
+  coverage: {
+    orderedPairs: number;
+    timedPairs: number;
+  };
+}
+
 export interface OperationalMemory {
   neighborhoodHourPatterns: NeighborhoodHourPattern[];
   recurringCustomers: RecurringCustomerPattern[];
   routeContexts: RouteOperationalContext[];
   motoboyContexts: MotoboyOperationalContext[];
   routeGaps: RouteGapPattern[];
+  routeSequences: RouteSequenceMemory;
+}
+
+export interface PreRouteTransitionMatch {
+  fromDeliveryId: string;
+  toDeliveryId: string;
+  fromNeighborhood: string;
+  toNeighborhood: string;
+
+  historicalOccurrences: number;
+  timingSample: number;
+  medianCompletionIntervalMinutes: number | null;
+}
+
+export interface PreRouteContext {
+  routeId: string;
+  routeName: string;
+
+  deliveryCount: number;
+  orderedDeliveryCount: number;
+
+  neighborhoodCount: number;
+  distinctNeighborhoods: number;
+  neighborhoodCoverage: number;
+
+  transitions: PreRouteTransitionMatch[];
+
+  knownTransitionCount: number;
+  timedTransitionCount: number;
+
+  historicalTransitionCoverage: number;
+
+  status:
+    | 'empty'
+    | 'limited-data'
+    | 'forming'
+    | 'partial-history'
+    | 'well-known';
 }
 
 export interface OperationalIntelligenceSnapshot {

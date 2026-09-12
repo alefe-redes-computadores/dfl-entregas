@@ -704,6 +704,95 @@ export default function RelatoriosPage() {
               </div>
             </section>
 
+            <section className="rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[.18em] text-emerald-400">
+                    Sequências aprendidas
+                  </p>
+                  <h2 className="mt-1 font-black text-zinc-100">
+                    Fluxos recorrentes entre bairros
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                    Usa a ordem registrada das paradas. Quando existem horários confiáveis, mede o intervalo entre a conclusão de uma entrega e a próxima.
+                  </p>
+                </div>
+                <RouteIcon size={19} className="text-emerald-400" />
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {intelligence.memory.routeSequences.patterns
+                  .slice(0, 6)
+                  .map((pattern) => (
+                    <div
+                      key={pattern.key}
+                      className="rounded-2xl border border-zinc-800 bg-zinc-950/45 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-black text-zinc-200">
+                            {pattern.fromNeighborhood} → {pattern.toNeighborhood}
+                          </p>
+                          <p className="mt-1 text-[10px] text-zinc-600">
+                            {pattern.occurrences} ocorrência{pattern.occurrences === 1 ? '' : 's'} · {pattern.timingSample} com tempo confiável
+                          </p>
+                        </div>
+
+                        <div className="shrink-0 text-right">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-600">
+                            Mediana
+                          </p>
+                          <p className="mt-0.5 text-xs font-black text-emerald-300">
+                            {pattern.medianCompletionIntervalMinutes == null
+                              ? '—'
+                              : `${pattern.medianCompletionIntervalMinutes.toFixed(1)} min`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                {intelligence.memory.routeSequences.patterns.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-zinc-800 px-3 py-8 text-center text-xs text-zinc-600">
+                    Ainda não há sequências com bairro estruturado suficientes para formar memória.
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <div className="rounded-2xl bg-zinc-950/55 p-3">
+                  <p className="text-[9px] font-bold text-zinc-600">
+                    Pares ordenados
+                  </p>
+                  <p className="mt-1 text-base font-black text-zinc-100">
+                    {intelligence.memory.routeSequences.coverage.orderedPairs}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-zinc-950/55 p-3">
+                  <p className="text-[9px] font-bold text-zinc-600">
+                    Com tempo
+                  </p>
+                  <p className="mt-1 text-base font-black text-zinc-100">
+                    {intelligence.memory.routeSequences.coverage.timedPairs}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-zinc-950/55 p-3">
+                  <p className="text-[9px] font-bold text-zinc-600">
+                    Desvios
+                  </p>
+                  <p className="mt-1 text-base font-black text-amber-300">
+                    {intelligence.memory.routeSequences.anomalies.length}
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-3 text-[10px] leading-relaxed text-zinc-600">
+                O intervalo inclui deslocamento e atendimento. O app não possui telemetria contínua suficiente para separar trânsito, espera ou permanência no cliente.
+              </p>
+            </section>
+
             <section className="overflow-hidden rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>

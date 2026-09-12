@@ -1,5 +1,7 @@
 'use client';
 
+import { PreRouteIntelligence } from '@/components/home/PreRouteIntelligence';
+
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -101,6 +103,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   const storeSettings = useAppStore((state) => state.storeSettings);
   const motoboys = useAppStore((state) => state.motoboys);
+  const customers = useAppStore((state) => state.customers);
 
   const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
   const deliveries = getDeliveriesByRoute(route.id);
@@ -610,6 +613,16 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <ChevronDown size={18} className={clsx('text-zinc-500 transition-transform duration-200 ml-1', isOpen && 'rotate-180')} />
         </div>
       </button>
+
+      {isOpen && (
+        <div className="px-4 pb-3">
+          <PreRouteIntelligence
+            route={route}
+            deliveries={sortedDeliveries}
+            customers={customers}
+          />
+        </div>
+      )}
 
       {isOpen && (
         <div className="flex flex-col gap-3 border-t border-zinc-800/80 p-4 pt-3 pb-6">
