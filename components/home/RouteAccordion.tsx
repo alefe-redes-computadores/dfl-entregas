@@ -204,17 +204,47 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   }
 
   const getPreviousRoute = (): Route | null => {
-    if (!allRoutes || allRoutes.length === 0) return null;
-    const motoboyRoutes = allRoutes
-      .filter((r) => r.motoboy_name === route.motoboy_name)
+    if (!allRoutes?.length || !operationalRouteDateKey) return null;
+
+    const currentStartMs = startedAt
+      ? firstValidTimestamp(startedAt)?.getTime()
+      : null;
+
+    const candidates = allRoutes
+      .filter((candidate) => {
+        if (candidate.id === route.id) return false;
+        if (candidate.motoboy_name !== route.motoboy_name) return false;
+        if (candidate.status !== 'fechada') return false;
+        if (!candidate.end_time) return false;
+
+        const candidateDate = routeDate(candidate);
+        if (!candidateDate || dateKey(candidateDate) !== operationalRouteDateKey) {
+          return false;
+        }
+
+        const candidateEndMs =
+          firstValidTimestamp(candidate.end_time)?.getTime();
+
+        if (!candidateEndMs) return false;
+
+        if (currentStartMs && candidateEndMs > currentStartMs) {
+          return false;
+        }
+
+        return true;
+      })
       .sort((a, b) => {
-        const timeA = firstValidTimestamp(routeDate(a))?.getTime() ?? Number.POSITIVE_INFINITY;
-        const timeB = firstValidTimestamp(routeDate(b))?.getTime() ?? Number.POSITIVE_INFINITY;
-        return timeA - timeB;
+        const endA =
+          firstValidTimestamp(a.end_time)?.getTime() ??
+          Number.NEGATIVE_INFINITY;
+        const endB =
+          firstValidTimestamp(b.end_time)?.getTime() ??
+          Number.NEGATIVE_INFINITY;
+
+        return endB - endA;
       });
 
-    const currentIndex = motoboyRoutes.findIndex((r) => r.id === route.id);
-    return currentIndex > 0 ? motoboyRoutes[currentIndex - 1] : null;
+    return candidates[0] || null;
   };
 
   const confirmStartRoute = async () => {

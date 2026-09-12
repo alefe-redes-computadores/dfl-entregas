@@ -170,9 +170,24 @@ export async function generateRouteMessages(
     const matchRouteNumber = route.name.match(/\d+/);
     const routeNumber = matchRouteNumber ? parseInt(matchRouteNumber[0], 10) : 1;
 
-    msg1.push(`🏍️ *ROTA ${getNumberEmoji(routeNumber)} - ${route.motoboy_name.toUpperCase()}* *(${totalDeliveries} Entregas)*`);
-    msg1.push('');
-    msg1.push(`📦 *RESUMO DAS PARADAS:*`);
+    msg1.push(`🏍️ *ROTA ${routeNumber} · ${route.motoboy_name.toUpperCase()}*`);
+    msg1.push(`📦 *${totalDeliveries} ${totalDeliveries === 1 ? 'entrega' : 'entregas'}*`);
+
+    if (previousRoute) {
+      const prevDuration = formatDuration(
+        routeStartedAt(previousRoute),
+        previousRoute.end_time,
+      );
+
+      if (prevDuration) {
+        const matchPrev = previousRoute.name.match(/\d+/);
+        const prevNum = matchPrev ? matchPrev[0] : 'anterior';
+        msg1.push(`⏱️ *Tempo da rota ${prevNum}:* \`${prevDuration}\``);
+      }
+    }
+
+    msg1.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+    msg1.push(`📍 *PARADAS*`);
     const ifoodCount = deliveries.filter((delivery) => delivery.origin === 'ifood').length;
     const storeCount = deliveries.filter((delivery) => delivery.origin === 'loja').length;
     const unknownOriginCount = deliveries.length - ifoodCount - storeCount;
@@ -319,23 +334,25 @@ export async function generateRouteMessages(
     const timeString = `${String(now.getHours()).padStart(2, '0')}h${String(now.getMinutes()).padStart(2, '0')}m`;
 
     msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
-    msg2.push(`*ROTA ${getNumberEmoji(routeNumber)}:* ${getNumberEmoji(totalDeliveries)} *ENTREGAS*`);
-    msg2.push(`*SAÍDA:* \`${timeString}\``);
+    msg2.push(`🏍️ *ROTA ${routeNumber} · ${route.motoboy_name.toUpperCase()}*`);
+    msg2.push(`📦 *${totalDeliveries} ${totalDeliveries === 1 ? 'entrega' : 'entregas'}*`);
+    msg2.push(`🕒 *Saída:* \`${timeString}\``);
 
     if (previousRoute) {
       const prevDuration = formatDuration(
         routeStartedAt(previousRoute),
         previousRoute.end_time,
       );
+
       if (prevDuration) {
         const matchPrev = previousRoute.name.match(/\d+/);
         const prevNum = matchPrev ? matchPrev[0] : 'anterior';
-        msg2.push(`⏱️ *TEMPO ROTA ${prevNum}:* \`${prevDuration}\``);
+        msg2.push(`⏱️ *Tempo da rota ${prevNum}:* \`${prevDuration}\``);
       }
     }
 
     msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
-    msg2.push(`*CONFERÊNCIA DE SAÍDA:*`);
+    msg2.push(`📋 *CONFERÊNCIA DE SAÍDA*`);
     msg2.push('');
 
     deliveries.forEach((delivery, index) => {
