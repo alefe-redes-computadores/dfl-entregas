@@ -170,14 +170,14 @@ export default function TeamPage() {
   };
 
   return (
-    <div className="flex flex-col gap-5 pb-28">
+    <div className="flex flex-col gap-4 pb-28">
       <PageHeader
         title="Equipe"
         subtitle="Pessoas da loja e entregadores"
         to="/loja"
       />
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-1.5">
         <Metric
           value={members.filter((member) => member.active).length}
           label="Internos ativos"
@@ -470,7 +470,7 @@ export default function TeamPage() {
 
 function Metric({ value, label }: { value: number; label: string }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3">
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
       <p className="text-xl font-black text-zinc-100">{value}</p>
       <p className="mt-0.5 truncate text-[9px] font-bold text-zinc-600">
         {label}

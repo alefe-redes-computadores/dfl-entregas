@@ -588,15 +588,15 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   return (
-    <div className={clsx("overflow-hidden rounded-[28px] border transition-all duration-300 relative", isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : isInProgress ? "bg-sky-900/10 border-sky-500/30" : "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]")}>
+    <div className={clsx("overflow-hidden rounded-[24px] border transition-all duration-200 relative", isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : isInProgress ? "bg-sky-900/10 border-sky-500/30" : "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]")}>
       {totalDeliveries > 0 && !isCompleted && (
         <div className="absolute top-0 left-0 h-1 bg-zinc-800 w-full">
           <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
         </div>
       )}
-      <button onClick={() => setIsOpen((prev) => !prev)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-4 pt-5 text-left active:scale-[0.99] transition-transform">
+      <button onClick={() => setIsOpen((prev) => !prev)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-3.5 pt-4 text-left active:scale-[0.99] transition-transform">
         <div className="flex min-w-0 items-center gap-3">
-          <div className={clsx('flex h-12 w-12 items-center justify-center rounded-full transition-colors shrink-0', isNotStarted ? 'bg-zinc-800 text-zinc-400' : isInProgress ? 'bg-sky-500/20 text-sky-400' : 'bg-emerald-500/20 text-emerald-500')}>
+          <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl transition-colors shrink-0', isNotStarted ? 'bg-zinc-800 text-zinc-400' : isInProgress ? 'bg-sky-500/20 text-sky-400' : 'bg-emerald-500/20 text-emerald-500')}>
             <Bike size={22} />
           </div>
           <div className="flex min-w-0 flex-col text-left">
@@ -649,7 +649,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       )}
 
       {isOpen && (
-        <div className="flex flex-col gap-3 border-t border-zinc-800/80 p-4 pt-3 pb-6">
+        <div className="flex flex-col gap-2.5 border-t border-zinc-800/80 p-3.5 pt-3 pb-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             {route.change_money > 0 && (
               <span className="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-500">
@@ -709,11 +709,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </button>
             )}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && !isRecoveryRoute && (
-              <div className="flex flex-col gap-2 rounded-[22px] border border-zinc-700/80 bg-zinc-950/70 p-2.5">
+              <div className="flex flex-col gap-2 rounded-[18px] border border-zinc-800 bg-zinc-950/55 p-2">
                 <button
                   onClick={buildOptimizerPreview}
                   disabled={optimizerBusy || pendingDeliveries.length < 2}
-                  className="flex w-full items-center justify-between rounded-2xl border border-violet-500/25 bg-gradient-to-r from-violet-500/15 to-sky-500/10 px-4 py-3 text-left active:scale-[0.99] disabled:opacity-40"
+                  className="flex w-full items-center justify-between rounded-xl border border-violet-500/20 bg-violet-500/[.07] px-3 py-2.5 text-left active:scale-[0.99] disabled:opacity-40"
                 >
                   <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300">
@@ -728,11 +728,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 </button>
 
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => setIsCopyMenuOpen(true)} className="flex min-h-16 items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[.07] p-3 text-left active:scale-[.98]">
+                  <button onClick={() => setIsCopyMenuOpen(true)} className="flex min-h-12 items-center gap-2 rounded-xl border border-emerald-500/15 bg-emerald-500/[.05] p-2.5 text-left active:scale-[.98]">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-400"><MessageCircle size={16}/></span>
                     <span><b className="block text-[11px] text-zinc-100">Enviar rota</b><small className="mt-0.5 block text-[9px] text-zinc-500">WhatsApp</small></span>
                   </button>
-                  <button onClick={handleOpenMaps} className="flex min-h-16 items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/[.08] p-3 text-left active:scale-[.98]">
+                  <button onClick={handleOpenMaps} className="flex min-h-12 items-center gap-2 rounded-xl border border-sky-500/15 bg-sky-500/[.05] p-2.5 text-left active:scale-[.98]">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-400"><Navigation size={16}/></span>
                     <span><b className="block text-[11px] text-zinc-100">Abrir trajeto</b><small className="mt-0.5 block text-[9px] text-zinc-500">Google Maps</small></span>
                   </button>
@@ -812,7 +812,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
       {optimizerOpen && (
         <div className="fixed inset-0 z-[110] flex flex-col justify-end bg-black/85 backdrop-blur-sm animate-in fade-in">
-          <div className="max-h-[88vh] overflow-hidden rounded-t-[34px] border-t border-zinc-700 bg-[#151515]">
+          <div className="max-h-[90vh] overflow-hidden rounded-t-[28px] border-t border-zinc-700 bg-[#151515]">
             <div className="flex items-start justify-between gap-3 border-b border-zinc-800 px-5 pb-4 pt-5">
               <div className="flex items-start gap-3">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-300">
@@ -829,7 +829,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </button>
             </div>
 
-            <div className="max-h-[calc(88vh-180px)] overflow-y-auto px-5 py-4">
+            <div className="max-h-[calc(90vh-164px)] overflow-y-auto px-4 py-3">
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-2xl border border-sky-500/20 bg-sky-500/[.07] p-3">
                   <p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-sky-400">

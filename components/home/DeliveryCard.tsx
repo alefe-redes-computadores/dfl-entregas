@@ -55,6 +55,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [isHandleDragging, setIsHandleDragging] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const dragStartY = useRef(0);
   const dragCurrentY = useRef(0);
 
@@ -330,7 +331,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   return (
     <>
       <div className={clsx(
-          "relative overflow-hidden rounded-[26px] transition-all duration-300",
+          "relative overflow-hidden rounded-[22px] transition-all duration-200",
           delivery.completed ? "opacity-65" : "shadow-sm",
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
           isNeighbor && !delivery.completed && "border-sky-500/30",
@@ -360,10 +361,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           style={{ transform: `translateX(${swipeOffset}px)` }}
           className={clsx("relative z-10 flex flex-col bg-zinc-900 h-full w-full", !isSwiping && "transition-transform duration-200")}
         >
-          <div className="flex flex-col p-4">
+          <div className="flex flex-col p-3.5">
             <div className="flex items-start gap-3">
               <div className="relative shrink-0 mt-0.5">
-                <span className={clsx("flex items-center justify-center h-11 w-11 rounded-2xl border", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
+                <span className={clsx("flex items-center justify-center h-10 w-10 rounded-xl border", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
                   {isIfood ? <Smartphone size={19} /> : <Store size={19} />}
                 </span>
                 {position !== undefined && (
@@ -376,20 +377,20 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
               <div className="flex flex-col flex-1 truncate">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-1.5 truncate max-w-[170px]">
-                    <p className="font-heading text-base font-bold tracking-tight text-zinc-50 truncate flex items-center gap-1">
+                    <p className="font-heading text-sm font-black tracking-tight text-zinc-50 truncate flex items-center gap-1">
                       {customer?.name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
                       {isVIP && <Crown size={12} className="text-amber-500 shrink-0" />}
                     </p>
                   </div>
                   <div className="flex flex-col items-end">
-                    <p className="text-[15px] font-black text-emerald-400 tracking-tight shrink-0">
+                    <p className="text-sm font-black text-emerald-400 tracking-tight shrink-0">
                       {isPrivacyMode ? 'R$ •••••' : `R$ ${delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}`}
                     </p>
                   </div>
                 </div>
 
                 {/* Linha dos Identificadores com Press & Hold */}
-                <div className="flex items-center gap-1.5 mt-1 mb-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {isIfood && delivery.order_id && (
                     <span className="bg-red-500/15 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0">
                       #{delivery.order_id}
@@ -425,7 +426,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                 {/* VISUALIZAÇÃO COMPACTA */}
                 {!isExpanded && (
-                  <div className="flex flex-col gap-2.5 mt-2.5 pt-2.5 border-t border-zinc-800/60 w-full">
+                  <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-zinc-800/60 w-full">
 
                     <div className="flex items-center gap-2.5">
                       <a
@@ -594,7 +595,27 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 </div>
 
                 <div className="ml-12 mt-1">
-                  <MiniMap address={delivery.address_string} mapsLink={delivery.maps_link} />
+                  <button
+                    type="button"
+                    data-no-card-swipe="true"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setMapOpen((value) => !value);
+                    }}
+                    className="flex h-9 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/45 px-3 text-[10px] font-black text-zinc-400 active:bg-zinc-800"
+                  >
+                    <MapIcon size={13} className="text-sky-400" />
+                    {mapOpen ? 'Ocultar mapa' : 'Ver mapa'}
+                  </button>
+
+                  {mapOpen && (
+                    <div className="mt-2">
+                      <MiniMap
+                        address={delivery.address_string}
+                        mapsLink={delivery.maps_link}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 

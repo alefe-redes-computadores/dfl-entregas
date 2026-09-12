@@ -1,7 +1,7 @@
 // app/rotas/page.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Bike, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, Search, User, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
@@ -30,6 +30,18 @@ export default function RoutesPage() {
   const routes = useAppStore(state => state.routes);
   const deliveries = useAppStore(state => state.deliveries);
   const selectedDate = dateKey(globalSelectedDate);
+
+  useEffect(() => {
+    if (
+      initialDate &&
+      /^\d{4}-\d{2}-\d{2}$/.test(initialDate) &&
+      dateKey(useAppStore.getState().selectedDate) !== initialDate
+    ) {
+      setGlobalSelectedDate(
+        operationalDateFromKey(initialDate),
+      );
+    }
+  }, [initialDate, setGlobalSelectedDate]);
   const setSelectedDate = (key: string | ((value: string) => string)) => {
     const next =
       typeof key === 'function'
