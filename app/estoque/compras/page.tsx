@@ -20,7 +20,7 @@ import { stockLevel } from '@/lib/stock';
 import {
   buildStockRecommendations,
 } from '@/lib/stock-intelligence';
-import { formatStockQuantity } from '@/lib/stock-quantity';
+import { formatStockQuantity, parseStockQuantityInput } from '@/lib/stock-quantity';
 import type {
   StockProduct,
   StockSupply,
@@ -128,11 +128,8 @@ export default function ShoppingList() {
   const chosen = products.filter(
     (product) =>
       selected[product.id] &&
-      Number(
-        (quantities[product.id] || '0').replace(
-          ',',
-          '.',
-        ),
+      parseStockQuantityInput(
+        quantities[product.id] || '0',
       ) > 0,
   );
 
@@ -151,11 +148,8 @@ export default function ShoppingList() {
         items: chosen.map((product) => ({
           id: `item-${product.id}`,
           name: product.name,
-          quantity: Number(
-            quantities[product.id].replace(
-              ',',
-              '.',
-            ),
+          quantity: parseStockQuantityInput(
+            quantities[product.id],
           ),
           unit: product.unit,
           stock_product_id: product.id,

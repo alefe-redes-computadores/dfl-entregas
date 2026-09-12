@@ -29,7 +29,7 @@ import { StockProductPicker } from './StockProductPicker';
 import { useAppStore } from '@/store/useAppStore';
 import { buildStockRecommendation } from '@/lib/stock-intelligence';
 import { stockProductValue } from '@/lib/stock';
-import { formatStockQuantity } from '@/lib/stock-quantity';
+import { formatStockQuantity, parseStockQuantityInput } from '@/lib/stock-quantity';
 
 export type StockSupplyFormValue = Omit<
   StockSupply,
@@ -49,12 +49,7 @@ type ItemErrors = {
   conversion?: string;
 };
 
-const number = (value: string) => {
-  const parsed = Number(
-    value.trim().replace(/\./g, '').replace(',', '.'),
-  );
-  return Number.isFinite(parsed) ? parsed : 0;
-};
+const number = parseStockQuantityInput;
 
 const text = (value?: number) =>
   value === undefined ? '' : String(value).replace('.', ',');

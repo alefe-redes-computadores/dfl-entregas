@@ -14,6 +14,8 @@ import { useAppStore } from '@/store/useAppStore';
 import { stockLevel } from '@/lib/stock';
 import { formatStockQuantity } from '@/lib/stock-quantity';
 import { SUPPLY_UNIT_LABELS } from '@/lib/stock-supply';
+import { StockCategoryPicker } from '@/components/stock/StockCategoryPicker';
+import { canonicalStockCategory, stockCategoryOrder, suggestStockCategory } from '@/lib/stock-categories';
 import type {
   StockProduct,
   StockSupplyUnit,
@@ -74,14 +76,21 @@ export function StockProductPicker({
       Object.entries(
         filtered.reduce<Record<string, StockProduct[]>>(
           (all, product) => {
-            const key =
-              product.category || 'Sem categoria';
+            const key = canonicalStockCategory(
+              product.category,
+            );
             (all[key] ||= []).push(product);
             return all;
           },
           {},
         ),
-      ).sort(([a], [b]) =>
+      ).map(([categoryName, items]) => [
+        categoryName,
+        [...items].sort((a, b) =>
+          a.name.localeCompare(b.name, 'pt-BR'),
+        ),
+      ] as [string, StockProduct[]]).sort(([a], [b]) =>
+        stockCategoryOrder(a) - stockCategoryOrder(b) ||
         a.localeCompare(b, 'pt-BR'),
       ),
     [filtered],
@@ -254,6 +263,7 @@ export function StockProductPicker({
                     type="button"
                     onClick={() => {
                       setName(query.trim());
+                      setCategory(suggestStockCategory(query.trim()));
                       setCreating(true);
                     }}
                     className="mt-3 flex w-full items-center gap-3 rounded-xl border border-dashed border-amber-500/35 bg-amber-500/[.05] p-3 text-left text-sm font-black text-amber-300"
@@ -356,12 +366,9 @@ export function StockProductPicker({
 
                 <label className="block text-xs font-bold text-zinc-400">
                   Categoria
-                  <input
+                  <StockCategoryPicker
                     value={category}
-                    onChange={(event) =>
-                      setCategory(event.target.value)
-                    }
-                    className="mt-2 h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-base font-semibold text-zinc-100 outline-none focus:border-amber-500"
+                    onChange={setCategory}
                   />
                 </label>
 

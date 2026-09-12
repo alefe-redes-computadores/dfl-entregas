@@ -1,52 +1,129 @@
 // app/estoque/movimentar/page.tsx
 'use client';
 
-import { Suspense, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, Save } from 'lucide-react';
+import {
+  Suspense,
+  useState,
+} from 'react';
+
+import {
+  useRouter,
+  useSearchParams,
+} from 'next/navigation';
+
+import {
+  AlertCircle,
+  Calculator,
+  Save,
+} from 'lucide-react';
+
 import { toast } from 'sonner';
+
 import { PageHeader } from '@/components/layout/PageHeader';
+
 import { TeamMemberPicker } from '@/components/team/TeamMemberPicker';
+
 import {
   formatBRLCents,
   moneyToNumber,
 } from '@/lib/money-input';
+
 import {
   feedbackError,
   feedbackSuccess,
 } from '@/lib/ui-feedback';
+
+import {
+  formatStockQuantity,
+  normalizeStockQuantityInput,
+  parseStockQuantityInput,
+  quantityInputHint,
+} from '@/lib/stock-quantity';
+
 import { useAppStore } from '@/store/useAppStore';
-import type { StockMovementType } from '@/types';
 
-const options: Array<[StockMovementType, string, string]> = [
-  ['entrada', 'Entrada', 'Compra ou reposição'],
-  ['saida', 'Saída', 'Uso normal da operação'],
-  ['perda', 'Perda', 'Descarte, vencimento ou avaria'],
-  ['contagem', 'Contagem', 'Substitui o saldo pela contagem real'],
-  ['ajuste', 'Ajuste', 'Define manualmente um novo saldo'],
+import type {
+  StockMovementType,
+} from '@/types';
+
+const options: Array<
+  [StockMovementType, string, string]
+> = [
+  [
+    'entrada',
+    'Entrada',
+    'Compra ou reposição',
+  ],
+  [
+    'saida',
+    'Saída',
+    'Uso normal da operação',
+  ],
+  [
+    'perda',
+    'Perda',
+    'Descarte, vencimento ou avaria',
+  ],
+  [
+    'contagem',
+    'Contagem',
+    'Substitui o saldo pela contagem real',
+  ],
+  [
+    'ajuste',
+    'Ajuste',
+    'Define manualmente um novo saldo',
+  ],
 ];
-
-const quantityNumber = (value: string) => {
-  const parsed = Number(value.replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : NaN;
-};
 
 function Content() {
   const router = useRouter();
-  const id = useSearchParams().get('id');
-  const product = useAppStore((state) =>
-    state.stockProducts.find((item) => item.id === id),
-  );
-  const add = useAppStore((state) => state.addStockMovement);
 
-  const [type, setType] = useState<StockMovementType>('saida');
-  const [quantity, setQuantity] = useState('');
-  const [cost, setCost] = useState('R$ 0,00');
-  const [reason, setReason] = useState('');
-  const [memberId, setMemberId] = useState('');
-  const [memberName, setMemberName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [attempted, setAttempted] = useState(false);
+  const id =
+    useSearchParams().get('id');
+
+  const product = useAppStore(
+    (state) =>
+      state.stockProducts.find(
+        (item) => item.id === id,
+      ),
+  );
+
+  const add = useAppStore(
+    (state) =>
+      state.addStockMovement,
+  );
+
+  const [type, setType] =
+    useState<StockMovementType>(
+      'saida',
+    );
+
+  const [quantity, setQuantity] =
+    useState('');
+
+  const [mode, setMode] =
+    useState<
+      'moved' | 'remaining'
+    >('moved');
+
+  const [cost, setCost] =
+    useState('R$ 0,00');
+
+  const [reason, setReason] =
+    useState('');
+
+  const [memberId, setMemberId] =
+    useState('');
+
+  const [memberName, setMemberName] =
+    useState('');
+
+  const [busy, setBusy] =
+    useState(false);
+
+  const [attempted, setAttempted] =
+    useState(false);
 
   if (!product) {
     return (
@@ -57,63 +134,173 @@ function Content() {
     );
   }
 
-  const amount = quantityNumber(quantity);
-  const allowsZero = type === 'contagem' || type === 'ajuste';
-  const quantityInvalid =
-    !Number.isFinite(amount) ||
-    amount < 0 ||
-    (!allowsZero && amount === 0) ||
-    (!quantity.trim() && !allowsZero);
+  const typed =
+    parseStockQuantityInput(
+      quantity,
+    );
 
-  const submit = async (event: React.FormEvent) => {
+  const canUseRemaining =
+    type === 'saida' ||
+    type === 'perda';
+
+  const amount =
+    canUseRemaining &&
+    mode === 'remaining'
+      ? Number(
+          Math.max(
+            0,
+            product.current_quantity -
+              typed,
+          ).toFixed(4),
+        )
+      : typed;
+
+  const resultingBalance =
+    type === 'entrada'
+      ? product.current_quantity +
+        amount
+      : type === 'saida' ||
+          type === 'perda'
+        ? product.current_quantity -
+          amount
+        : amount;
+
+  const allowsZero =
+    type === 'contagem' ||
+    type === 'ajuste';
+
+  const remainingInvalid =
+    canUseRemaining &&
+    mode === 'remaining' &&
+    (typed < 0 ||
+      typed >
+        product.current_quantity);
+
+  const quantityInvalid =
+    !quantity.trim() ||
+    !Number.isFinite(typed) ||
+    typed < 0 ||
+    remainingInvalid ||
+    (!allowsZero &&
+      mode === 'moved' &&
+      amount <= 0) ||
+    (canUseRemaining &&
+      mode === 'remaining' &&
+      amount <= 0) ||
+    ((type === 'saida' ||
+      type === 'perda') &&
+      amount >
+        product.current_quantity);
+
+  const submit = async (
+    event: React.FormEvent,
+  ) => {
     event.preventDefault();
+
     setAttempted(true);
 
     if (quantityInvalid) {
-      await feedbackError();
+      void feedbackError();
+
       document
-        .getElementById('stock-movement-quantity')
+        .getElementById(
+          'stock-movement-quantity',
+        )
         ?.scrollIntoView({
           behavior: 'smooth',
           block: 'center',
         });
+
       return;
     }
 
     if (busy) return;
+
     setBusy(true);
 
+    void feedbackSuccess();
+
     try {
-      await add({
+      const operation = add({
         id: `move-${Date.now()}-${Math.random()
           .toString(36)
           .slice(2, 6)}`,
+
         product_id: product.id,
-        product_name: product.name,
+
+        product_name:
+          product.name,
+
         type,
+
         quantity: amount,
+
         unit_cost:
-          type === 'entrada' && moneyToNumber(cost) > 0
+          type === 'entrada' &&
+          moneyToNumber(cost) > 0
             ? moneyToNumber(cost)
             : undefined,
-        reason: reason.trim() || undefined,
-        team_member_id: memberId || undefined,
-        team_member_name: memberName || undefined,
-        occurred_at: new Date().toISOString(),
+
+        reason:
+          (canUseRemaining &&
+          mode === 'remaining'
+            ? `Saldo informado: ${formatStockQuantity(
+                typed,
+                product.unit,
+              )}${
+                reason.trim()
+                  ? ` · ${reason.trim()}`
+                  : ''
+              }`
+            : reason.trim()) ||
+          undefined,
+
+        team_member_id:
+          memberId || undefined,
+
+        team_member_name:
+          memberName || undefined,
+
+        occurred_at:
+          new Date().toISOString(),
       });
 
-      await feedbackSuccess();
-      toast.success('Movimentação registrada.');
-      router.replace(`/estoque/detalhes?id=${product.id}`);
+      toast.loading(
+        'Salvando movimentação...',
+        {
+          id: 'stock-movement-save',
+        },
+      );
+
+      await operation;
+
+      toast.success(
+        'Movimentação registrada.',
+        {
+          id: 'stock-movement-save',
+        },
+      );
+
+      router.replace(
+        `/estoque/detalhes?id=${product.id}`,
+      );
     } catch (error) {
-      console.error('Erro ao movimentar estoque:', error);
-      await feedbackError();
+      console.error(
+        'Erro ao movimentar estoque:',
+        error,
+      );
+
+      void feedbackError();
+
       toast.error(
         error instanceof Error
           ? error.message
           : 'Não foi possível atualizar o estoque.',
+        {
+          id: 'stock-movement-save',
+        },
       );
-    } finally {
+
       setBusy(false);
     }
   };
@@ -130,86 +317,246 @@ function Content() {
         <p className="text-[10px] font-black uppercase text-emerald-400">
           Saldo atual
         </p>
+
         <p className="mt-2 font-heading text-3xl font-black text-zinc-100">
-          {product.current_quantity.toLocaleString('pt-BR')}
+          {formatStockQuantity(
+            product.current_quantity,
+            product.unit,
+          )}
         </p>
       </section>
 
-      <form onSubmit={submit} className="space-y-5 pb-28" noValidate>
+      <form
+        onSubmit={submit}
+        className="space-y-5 pb-28"
+        noValidate
+      >
         <div className="grid grid-cols-2 gap-2">
-          {options.map(([key, label, description]) => (
-            <button
-              type="button"
-              key={key}
-              onClick={() => {
-                setType(key);
-                setAttempted(false);
-              }}
-              className={`min-h-16 rounded-2xl border p-3 text-left ${
-                type === key
-                  ? 'border-emerald-500/50 bg-emerald-500/10'
-                  : 'border-zinc-800 bg-zinc-900'
-              }`}
-            >
-              <b
-                className={
+          {options.map(
+            ([
+              key,
+              label,
+              description,
+            ]) => (
+              <button
+                type="button"
+                key={key}
+                onClick={() => {
+                  setType(key);
+                  setMode('moved');
+                  setQuantity('');
+                  setAttempted(
+                    false,
+                  );
+                }}
+                className={`min-h-16 rounded-2xl border p-3 text-left ${
                   type === key
-                    ? 'text-emerald-400'
-                    : 'text-zinc-300'
-                }
+                    ? 'border-emerald-500/50 bg-emerald-500/10'
+                    : 'border-zinc-800 bg-zinc-900'
+                }`}
               >
-                {label}
-              </b>
-              <small className="mt-1 block text-[9px] text-zinc-600">
-                {description}
-              </small>
-            </button>
-          ))}
+                <b
+                  className={
+                    type === key
+                      ? 'text-emerald-400'
+                      : 'text-zinc-300'
+                  }
+                >
+                  {label}
+                </b>
+
+                <small className="mt-1 block text-[9px] text-zinc-600">
+                  {description}
+                </small>
+              </button>
+            ),
+          )}
         </div>
+
+        {canUseRemaining && (
+          <div>
+            <p className="mb-2 text-xs font-bold text-zinc-400">
+              Como quer informar?
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('moved');
+                  setQuantity('');
+                  setAttempted(
+                    false,
+                  );
+                }}
+                className={`h-12 rounded-xl border text-xs font-black ${
+                  mode === 'moved'
+                    ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                    : 'border-zinc-800 text-zinc-500'
+                }`}
+              >
+                Quanto saiu
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(
+                    'remaining',
+                  );
+                  setQuantity('');
+                  setAttempted(
+                    false,
+                  );
+                }}
+                className={`h-12 rounded-xl border text-xs font-black ${
+                  mode ===
+                  'remaining'
+                    ? 'border-sky-500/50 bg-sky-500/10 text-sky-400'
+                    : 'border-zinc-800 text-zinc-500'
+                }`}
+              >
+                Quanto sobrou
+              </button>
+            </div>
+          </div>
+        )}
 
         <label
           id="stock-movement-quantity"
           className="block text-xs font-bold text-zinc-400"
         >
-          {type === 'contagem' || type === 'ajuste'
-            ? 'Novo saldo*'
-            : 'Quantidade*'}
+          {canUseRemaining &&
+          mode === 'remaining'
+            ? 'Saldo que sobrou*'
+            : type ===
+                  'contagem' ||
+                type === 'ajuste'
+              ? 'Novo saldo*'
+              : 'Quantidade*'}
+
+          <span className="mt-1 block text-[9px] font-normal text-zinc-600">
+            {quantityInputHint(
+              product.unit,
+            )}
+          </span>
+
           <input
             autoFocus
             inputMode="decimal"
             value={quantity}
             onChange={(event) =>
               setQuantity(
-                event.target.value.replace(/[^0-9.,]/g, ''),
+                event.target.value.replace(
+                  /[^0-9.,]/g,
+                  '',
+                ),
               )
             }
-            aria-invalid={attempted && quantityInvalid}
+            onBlur={() =>
+              quantity.trim() &&
+              setQuantity(
+                normalizeStockQuantityInput(
+                  quantity,
+                ),
+              )
+            }
+            aria-invalid={
+              attempted &&
+              quantityInvalid
+            }
             className={`mt-2 h-14 w-full rounded-2xl border bg-zinc-900 px-4 text-xl font-black text-zinc-100 outline-none ${
-              attempted && quantityInvalid
+              attempted &&
+              quantityInvalid
                 ? 'border-red-500/70 focus:border-red-500'
                 : 'border-zinc-800 focus:border-emerald-500'
             }`}
             placeholder="0"
           />
-          {attempted && quantityInvalid && (
-            <span className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-red-400">
-              <AlertCircle size={12} />
-              {allowsZero
-                ? 'Informe um saldo válido, igual ou maior que zero.'
-                : 'Informe uma quantidade maior que zero.'}
-            </span>
-          )}
+
+          {attempted &&
+            quantityInvalid && (
+              <span className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-red-400">
+                <AlertCircle
+                  size={12}
+                />
+
+                {remainingInvalid
+                  ? 'O saldo restante não pode ser maior que o saldo atual.'
+                  : 'Informe uma quantidade válida.'}
+              </span>
+            )}
         </label>
 
-        {type === 'entrada' && (
+        {quantity.trim() &&
+          !quantityInvalid && (
+            <section className="rounded-2xl border border-sky-500/20 bg-sky-500/[.05] p-4">
+              <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-sky-400">
+                <Calculator
+                  size={14}
+                />
+                Prévia
+              </p>
+
+              {canUseRemaining &&
+                mode ===
+                  'remaining' && (
+                  <p className="mt-2 text-sm font-black text-zinc-100">
+                    Saída calculada:{' '}
+                    {formatStockQuantity(
+                      amount,
+                      product.unit,
+                    )}
+                  </p>
+                )}
+
+              <p className="mt-1 text-xs text-zinc-500">
+                {formatStockQuantity(
+                  product.current_quantity,
+                  product.unit,
+                )}
+                {' → '}
+                <b className="text-zinc-200">
+                  {formatStockQuantity(
+                    Math.max(
+                      0,
+                      resultingBalance,
+                    ),
+                    product.unit,
+                  )}
+                </b>
+              </p>
+            </section>
+          )}
+
+        {type ===
+          'entrada' && (
           <label className="block text-xs font-bold text-zinc-400">
-            Custo por {product.unit==='kg'?'quilo':product.unit==='l'?'litro':product.unit==='un'?'unidade':product.unit}{' '}
-            <span className="font-normal text-zinc-600">(opcional)</span><span className="mt-1 block text-[9px] font-normal leading-relaxed text-amber-400">Use o custo da unidade controlada no estoque, não o preço da caixa/pacote.</span>
+            Custo por{' '}
+            {product.unit === 'kg'
+              ? 'quilo'
+              : product.unit ===
+                  'l'
+                ? 'litro'
+                : product.unit ===
+                    'un'
+                  ? 'unidade'
+                  : product.unit}{' '}
+
+            <span className="font-normal text-zinc-600">
+              (opcional)
+            </span>
+
             <input
               inputMode="numeric"
               value={cost}
               onChange={(event) =>
-                setCost(formatBRLCents(event.target.value))
+                setCost(
+                  formatBRLCents(
+                    event.target
+                      .value,
+                  ),
+                )
               }
               className="mt-2 h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-base font-bold text-zinc-100 outline-none focus:border-emerald-500"
             />
@@ -219,23 +566,40 @@ function Content() {
         <div>
           <p className="mb-2 text-xs font-bold text-zinc-400">
             Responsável{' '}
-            <span className="font-normal text-zinc-600">(opcional)</span>
+            <span className="font-normal text-zinc-600">
+              (opcional)
+            </span>
           </p>
+
           <TeamMemberPicker
             value={memberId}
-            onChange={(member) => {
-              setMemberId(member.id);
-              setMemberName(member.name);
+            onChange={(
+              member,
+            ) => {
+              setMemberId(
+                member.id,
+              );
+
+              setMemberName(
+                member.name,
+              );
             }}
           />
         </div>
 
         <label className="block text-xs font-bold text-zinc-400">
           Motivo / observação{' '}
-          <span className="font-normal text-zinc-600">(opcional)</span>
+          <span className="font-normal text-zinc-600">
+            (opcional)
+          </span>
+
           <textarea
             value={reason}
-            onChange={(event) => setReason(event.target.value)}
+            onChange={(event) =>
+              setReason(
+                event.target.value,
+              )
+            }
             rows={3}
             className="mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-100 outline-none focus:border-emerald-500"
           />
@@ -243,10 +607,13 @@ function Content() {
 
         <button
           disabled={busy}
-          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950 disabled:opacity-40"
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950 active:scale-[.99] disabled:opacity-40"
         >
           <Save size={18} />
-          {busy ? 'Salvando...' : 'Confirmar movimentação'}
+
+          {busy
+            ? 'Salvando...'
+            : 'Confirmar movimentação'}
         </button>
       </form>
     </div>

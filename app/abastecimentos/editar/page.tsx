@@ -36,21 +36,23 @@ function Content() {
     if (busy) return;
 
     setBusy(true);
+    void feedbackSuccess();
+    toast.loading('Salvando compra...', { id: 'purchase-save' });
 
     try {
       await updateStockSupply(supply.id, value);
-      await feedbackSuccess();
-      toast.success('Compra atualizada.');
+      toast.success('Compra atualizada.', { id: 'purchase-save' });
       router.replace(
         `/abastecimentos/detalhes?id=${supply.id}`,
       );
     } catch (error) {
       console.error('Erro ao atualizar compra:', error);
-      await feedbackError();
+      void feedbackError();
       toast.error(
         error instanceof Error
           ? error.message
           : 'Não foi possível salvar a compra.',
+        { id: 'purchase-save' },
       );
     } finally {
       setBusy(false);

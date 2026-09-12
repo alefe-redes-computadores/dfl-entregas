@@ -1847,11 +1847,14 @@ export const useAppStore = create<AppState>()(
         customers: state.customers,
         motoboys: state.motoboys,
         fuelings: state.fuelings,
-        stockSupplies: state.stockSupplies,
+        // Cache local operacional: mantém a experiência offline,
+        // mas evita serializar indefinidamente históricos grandes
+        // a cada atualização do Zustand.
+        stockSupplies: state.stockSupplies.slice(0, 150),
         stockSuppliers: state.stockSuppliers,
         teamMembers: state.teamMembers,
         stockProducts: state.stockProducts,
-        stockMovements: state.stockMovements,
+        stockMovements: state.stockMovements.slice(0, 500),
         ifoodPendingConfirmations: state.ifoodPendingConfirmations,
         isPrivacyMode: state.isPrivacyMode,
         routeAlertsEnabled: state.routeAlertsEnabled,
