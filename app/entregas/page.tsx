@@ -96,6 +96,7 @@ export default function DeliveriesPage() {
   const [status, setStatus] = useState<StatusFilter>('todas');
   const [origin, setOrigin] = useState<OriginFilter>('todas');
   const [fulfillment, setFulfillment] = useState<FulfillmentFilter>('todas');
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
 
   const dayDeliveries = useMemo(
     () =>
@@ -247,65 +248,37 @@ export default function DeliveriesPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Metric icon={Package} label="Pedidos" value={totals.all} color="text-sky-400" />
-        <Metric icon={Clock3} label="Pendentes" value={totals.pending} color="text-amber-400" />
-        <Metric icon={CheckCircle2} label="Concluídos" value={totals.completed} color="text-emerald-400" />
-        <button
-          type="button"
-          onClick={() => setStatus('incompletas')}
-          className={`rounded-2xl border p-3 text-left active:scale-[0.99] ${
-            totals.attention > 0
-              ? 'border-amber-500/25 bg-amber-500/[.055]'
-              : 'border-zinc-800 bg-zinc-900/50'
-          }`}
-        >
-          <AlertTriangle size={15} className={totals.attention > 0 ? 'text-amber-400' : 'text-zinc-600'} />
-          <p className="mt-2 text-xl font-black text-zinc-100">{totals.attention}</p>
-          <p className="text-[10px] text-zinc-500">Com atenção</p>
-        </button>
-      </div>
-
-      {totals.attention > 0 && status !== 'incompletas' && (
-        <button
-          type="button"
-          onClick={() => setStatus('incompletas')}
-          className="flex items-center justify-between gap-3 rounded-[22px] border border-amber-500/20 bg-amber-500/[.06] px-4 py-3 text-left active:scale-[0.99]"
-        >
-          <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
-              <AlertTriangle size={16} />
-            </span>
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 px-3.5 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-4">
             <div>
-              <p className="text-xs font-black text-amber-300">
-                {totals.attention} pedido{totals.attention === 1 ? '' : 's'} precisa{totals.attention === 1 ? '' : 'm'} de atenção
-              </p>
-              <p className="mt-1 text-[10px] text-zinc-500">
-                Rota, endereço ou identificadores obrigatórios podem estar incompletos.
-              </p>
+              <p className="text-lg font-black text-zinc-100">{totals.all}</p>
+              <p className="text-[8px] font-bold uppercase tracking-wide text-zinc-600">Pedidos</p>
+            </div>
+            <div>
+              <p className="text-lg font-black text-amber-400">{totals.pending}</p>
+              <p className="text-[8px] font-bold uppercase tracking-wide text-zinc-600">Pendentes</p>
+            </div>
+            <div>
+              <p className="text-lg font-black text-emerald-400">{totals.completed}</p>
+              <p className="text-[8px] font-bold uppercase tracking-wide text-zinc-600">Concluídos</p>
             </div>
           </div>
-          <ChevronRight size={16} className="shrink-0 text-amber-400" />
-        </button>
-      )}
 
-      <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/40 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600">
-              Progresso do dia
-            </p>
-            <p className="mt-1 text-sm font-black text-zinc-200">
-              {totals.completed} de {totals.all} pedidos concluídos
-            </p>
-          </div>
-          <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-[10px] font-black text-zinc-400">
-            {totals.all ? Math.round((totals.completed / totals.all) * 100) : 0}%
-          </span>
+          {totals.attention > 0 && (
+            <button
+              type="button"
+              onClick={() => setStatus('incompletas')}
+              className="shrink-0 rounded-xl bg-amber-500/10 px-2.5 py-2 text-[9px] font-black text-amber-300"
+            >
+              {totals.attention} atenção
+            </button>
+          )}
         </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-800">
+
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-zinc-800">
           <div
-            className="h-full rounded-full bg-emerald-500 transition-all"
+            className="h-full rounded-full bg-emerald-500"
             style={{
               width: `${totals.all ? Math.round((totals.completed / totals.all) * 100) : 0}%`,
             }}
@@ -326,35 +299,13 @@ export default function DeliveriesPage() {
         />
       </div>
 
-      <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-3">
-        <div className="mb-3 flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <Filter size={14} className="text-zinc-500" />
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
-              Filtros operacionais
-            </p>
-          </div>
-          {(status !== 'todas' || fulfillment !== 'todas' || origin !== 'todas') && (
-            <button
-              onClick={() => {
-                setStatus('todas');
-                setFulfillment('todas');
-                setOrigin('todas');
-              }}
-              className="text-[10px] font-black text-amber-400"
-            >
-              Limpar
-            </button>
-          )}
-        </div>
-
+      <section className="space-y-2">
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
           {(
             [
-              ['todas', 'Todas'],
+              ['todas', 'Todos'],
               ['pendentes', 'Pendentes'],
               ['concluidas', 'Concluídos'],
-              ['incompletas', 'Com atenção'],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -363,52 +314,126 @@ export default function DeliveriesPage() {
               className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-bold ${
                 status === value
                   ? 'bg-zinc-100 text-zinc-950'
-                  : 'border border-zinc-800 bg-zinc-950/40 text-zinc-500'
+                  : 'border border-zinc-800 bg-zinc-900/40 text-zinc-500'
               }`}
             >
               {label}
             </button>
           ))}
+
+          <button
+            type="button"
+            onClick={() =>
+              setAdvancedFiltersOpen(
+                (value) => !value,
+              )
+            }
+            className={`shrink-0 rounded-xl border px-3.5 py-2 text-xs font-bold ${
+              advancedFiltersOpen ||
+              fulfillment !== 'todas' ||
+              origin !== 'todas' ||
+              status === 'incompletas'
+                ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                : 'border-zinc-800 bg-zinc-900/40 text-zinc-500'
+            }`}
+          >
+            <Filter size={12} className="mr-1 inline" />
+            Filtros
+            {(fulfillment !== 'todas' ||
+              origin !== 'todas' ||
+              status === 'incompletas') &&
+              ' •'}
+          </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-4 gap-2">
-          {(
-            [
-              ['todas', 'Todos'],
-              ['delivery', 'Entrega'],
-              ['pickup', 'Retirada'],
-              ['counter', 'Balcão'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setFulfillment(value)}
-              className={`rounded-xl border px-2 py-2 text-[10px] font-bold ${
-                fulfillment === value
-                  ? 'border-sky-500/50 bg-sky-500/10 text-sky-400'
-                  : 'border-zinc-800 bg-zinc-950/30 text-zinc-600'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {advancedFiltersOpen && (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/35 p-3">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() =>
+                  setStatus(
+                    status === 'incompletas'
+                      ? 'todas'
+                      : 'incompletas',
+                  )
+                }
+                className={`rounded-xl border px-2 py-2 text-[10px] font-bold ${
+                  status === 'incompletas'
+                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                    : 'border-zinc-800 text-zinc-600'
+                }`}
+              >
+                Com atenção
+              </button>
 
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          {(['todas', 'ifood', 'loja'] as OriginFilter[]).map((value) => (
-            <button
-              key={value}
-              onClick={() => setOrigin(value)}
-              className={`rounded-xl border py-2 text-[10px] font-bold ${
-                origin === value
-                  ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
-                  : 'border-zinc-800 bg-zinc-950/30 text-zinc-600'
-              }`}
-            >
-              {value === 'todas' ? 'Todas origens' : value === 'ifood' ? 'iFood' : 'Loja'}
-            </button>
-          ))}
-        </div>
+              <button
+                onClick={() => {
+                  setStatus('todas');
+                  setFulfillment('todas');
+                  setOrigin('todas');
+                }}
+                className="rounded-xl border border-zinc-800 px-2 py-2 text-[10px] font-bold text-zinc-500"
+              >
+                Limpar
+              </button>
+            </div>
+
+            <p className="mb-2 mt-3 text-[8px] font-black uppercase tracking-wider text-zinc-600">
+              Modalidade
+            </p>
+            <div className="grid grid-cols-4 gap-1.5">
+              {(
+                [
+                  ['todas', 'Todos'],
+                  ['delivery', 'Entrega'],
+                  ['pickup', 'Retirada'],
+                  ['counter', 'Balcão'],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() =>
+                    setFulfillment(value)
+                  }
+                  className={`rounded-lg border px-1 py-2 text-[9px] font-bold ${
+                    fulfillment === value
+                      ? 'border-sky-500/40 bg-sky-500/10 text-sky-400'
+                      : 'border-zinc-800 text-zinc-600'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mb-2 mt-3 text-[8px] font-black uppercase tracking-wider text-zinc-600">
+              Origem
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(
+                ['todas', 'ifood', 'loja'] as OriginFilter[]
+              ).map((value) => (
+                <button
+                  key={value}
+                  onClick={() =>
+                    setOrigin(value)
+                  }
+                  className={`rounded-lg border py-2 text-[9px] font-bold ${
+                    origin === value
+                      ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                      : 'border-zinc-800 text-zinc-600'
+                  }`}
+                >
+                  {value === 'todas'
+                    ? 'Todas'
+                    : value === 'ifood'
+                      ? 'iFood'
+                      : 'Loja'}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <div className="flex flex-col gap-3">

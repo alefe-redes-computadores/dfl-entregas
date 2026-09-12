@@ -13,6 +13,7 @@ import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete
 import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
 import { geocodeAddress } from '@/lib/store-geocoding';
+import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
@@ -284,8 +285,34 @@ const [routeId, setRouteId] = useState('');
     try {
       const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
-      const cleanStreet = fulfillmentMode === 'delivery' ? normalizeAddressText(streetAddress) : '';
-      const rawPhone = phone.replace(/\D/g, '');
+      const normalizedAddress =
+        fulfillmentMode === 'delivery'
+          ? canonicalizeOperationalAddress(streetAddress)
+          : {
+              address: '',
+              neighborhood: undefined,
+              phone: undefined,
+              observations: [] as string[],
+            };
+
+      const cleanStreet =
+        fulfillmentMode === 'delivery'
+          ? normalizedAddress.address
+          : '';
+
+      const rawPhone =
+        phone.replace(/\D/g, '') ||
+        normalizedAddress.phone ||
+        '';
+
+      const cleanObservation = Array.from(
+        new Set(
+          [
+            observation.trim(),
+            ...normalizedAddress.observations,
+          ].filter(Boolean),
+        ),
+      ).join(' - ');
 
       let resolvedMapsLink = mapsLink.trim();
       if (fulfillmentMode === 'delivery' && cleanStreet && !resolvedMapsLink) {
@@ -304,7 +331,7 @@ const [routeId, setRouteId] = useState('');
           phone: rawPhone || undefined,
           mapsLink: fulfillmentMode === 'delivery' ? resolvedMapsLink : undefined,
           confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
-          observation,
+          observation: cleanObservation,
           origin,
           preferredCustomerId: selectedCustomerId || undefined,
         });
@@ -330,7 +357,7 @@ const [routeId, setRouteId] = useState('');
         maps_link: fulfillmentMode === 'delivery' ? resolvedMapsLink : '',
         phone: rawPhone || undefined,
         notify_whatsapp: notifyWhatsapp,
-        observation,
+        observation: cleanObservation,
         drinks,
         createdAt: now,
         created_at: now,

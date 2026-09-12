@@ -247,8 +247,19 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
 
     const diff = dragCurrentY.current - dragStartY.current;
-    // Um gesto move exatamente uma posição; cards expandidos têm alturas diferentes.
-    const requestedSteps = Math.abs(diff) < 42 ? 0 : diff > 0 ? 1 : -1;
+    // O gesto pode mover mais de uma posição.
+    // 64px mantém controle em cards compactos sem exigir
+    // vários drags consecutivos.
+    const requestedSteps =
+      Math.abs(diff) < 36
+        ? 0
+        : Math.max(
+            -4,
+            Math.min(
+              4,
+              Math.round(diff / 64),
+            ),
+          );
     setDragOffsetY(0);
     setIsHandleDragging(false);
     dragStartY.current = 0;

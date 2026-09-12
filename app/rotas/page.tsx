@@ -144,12 +144,15 @@ export default function RoutesPage() {
       <button onClick={() => setSelectedDate(value => shiftOperationalDateKey(value, 1))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"><ChevronRight size={21}/></button>
     </div>
 
-    <div className="grid grid-cols-2 gap-2">
-      <Metric icon={Clock3} value={counts.montando} label="Montando"/>
-      <Metric icon={Bike} value={counts.rua} label="Na rua" tone="sky"/>
-      <Metric icon={CheckCircle2} value={counts.prontas} label="Prontas" tone="green"/>
-      <Metric icon={CheckCircle2} value={counts.finalizadas} label="Finalizadas" tone="green"/>
-    </div>
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 px-3.5 py-3">
+      <div className="flex items-center justify-between gap-3 text-center">
+        <CompactMetric value={counts.montando} label="Montando" />
+        <CompactMetric value={counts.rua} label="Na rua" tone="sky" />
+        <CompactMetric value={counts.prontas} label="Prontas" tone="green" />
+        <CompactMetric value={counts.finalizadas} label="Finalizadas" tone="green" />
+      </div>
+    </section>
+
     <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar neste dia" className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-11 pr-4 text-sm outline-none focus:border-emerald-500"/></div>
     <div className="flex gap-2 overflow-x-auto no-scrollbar">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
 
@@ -294,6 +297,35 @@ export default function RoutesPage() {
       <button onClick={() => setCalendarOpen(false)} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 text-xs font-bold text-zinc-400"><X size={15}/>Fechar calendário</button>
     </div></div>}
   </div>;
+}
+
+
+function CompactMetric({
+  value,
+  label,
+  tone = 'gray',
+}: {
+  value: number;
+  label: string;
+  tone?: 'gray' | 'sky' | 'green';
+}) {
+  const color =
+    tone === 'sky'
+      ? 'text-sky-400'
+      : tone === 'green'
+        ? 'text-emerald-400'
+        : 'text-zinc-300';
+
+  return (
+    <div className="min-w-0 flex-1">
+      <p className={`text-base font-black ${color}`}>
+        {value}
+      </p>
+      <p className="truncate text-[8px] font-bold text-zinc-600">
+        {label}
+      </p>
+    </div>
+  );
 }
 
 function Metric({icon:Icon,value,label,tone='gray'}:{icon:typeof Bike;value:number;label:string;tone?:'gray'|'sky'|'green'}) { const style=tone==='sky'?'border-sky-500/20 bg-sky-500/5 text-sky-400':tone==='green'?'border-emerald-500/20 bg-emerald-500/5 text-emerald-400':'border-zinc-800 bg-zinc-900/50 text-zinc-400'; return <div className={`rounded-2xl border p-3 ${style}`}><Icon size={15}/><p className="mt-2 text-xl font-black text-zinc-100">{value}</p><p className="text-[10px] text-zinc-500">{label}</p></div>; }

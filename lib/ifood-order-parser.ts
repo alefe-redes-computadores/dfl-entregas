@@ -1,5 +1,6 @@
 // lib/ifood-order-parser.ts
 import type { Delivery } from '@/types';
+import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 
 export interface ParsedIfoodOrder {
   orderId: string; ifoodId: string; confirmationCode: string; customerName: string;
@@ -32,28 +33,13 @@ function mapUrl(line:string) {
 }
 
 function cleanAddress(source:string, observations:string[]) {
-  let line=source.replace(URL,' ')
-    .replace(/\bCEP\s*:?\s*\d{5}-?\d{3}\b/gi,' ')
-    .replace(/,?\s*Patos de Minas\s*(?:[-/,]\s*MG)?\b/gi,' ')
-    .replace(/,?\s*Minas Gerais\b/gi,' ')
-    .replace(/,?\s*MG\b/gi,' ')
-    .replace(/,?\s*Brasil\b/gi,' ')
-    .replace(/(\b\d+)\s*-\s*([A-Za-z]\b)/g,'$1$2')
-    .replace(/\s*[,;]\s*/g,' - ').replace(/\s*[-–—]\s*/g,' - ')
-    .replace(/(?:\s+-\s+){2,}/g,' - ');
-  const parts=line.split(/\s+-\s+/).map(spaces).filter(Boolean);
-  if(!parts.length)return '';
-  let street=parts.shift()!; let number='';
-  const inline=street.match(/^(.*?)[,\s]+(\d+[A-Za-z]?|s\/?n)$/i);
-  if(inline){street=inline[1];number=inline[2];}
-  else if(parts[0]&&/^(?:\d+[A-Za-z]?|s\/?n)$/i.test(parts[0]))number=parts.shift()!;
-  let neighborhood='';
-  for(const part of parts){
-    if(INSTRUCTION.test(part)&&!NEIGHBORHOOD.test(part))addUnique(observations,part);
-    else if(!neighborhood&&!/^(?:casa|resid[eê]ncia)$/i.test(part))neighborhood=part.replace(/^bairro\s+/i,'');
-    else if(part)addUnique(observations,part);
-  }
-  return spaces(`${street.replace(/[,]$/,'')}${number?`, ${number}`:''}${neighborhood?` - ${neighborhood}`:''}`).replace(/[,\-]\s*$/,'');
+  const normalized = canonicalizeOperationalAddress(source);
+
+  normalized.observations.forEach((item) =>
+    addUnique(observations, item)
+  );
+
+  return normalized.address;
 }
 
 function parsePayment(line:string,result:ParsedIfoodOrder){

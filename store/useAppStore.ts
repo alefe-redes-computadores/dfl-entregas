@@ -91,7 +91,17 @@ interface AppState {
   reopenRoute: (routeId: string) => Promise<void>;
   reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
   moveDeliveryToIndex: (routeId: string, deliveryId: string, targetIndex: number) => Promise<void>;
-  setDeliveryOrder: (routeId: string, orderedPendingIds: string[]) => Promise<void>;
+  setDeliveryOrder: (
+    routeId: string,
+    orderedPendingIds: string[],
+    options?: {
+      metadata?: {
+        order_locked?: boolean;
+        order_source?: 'manual' | 'smart';
+        order_updated_at?: string;
+      };
+    },
+  ) => Promise<void>;
   toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void;
   addCustomer: (customer: Customer) => Promise<void>;
   updateCustomer: (id: string, updatedData: Partial<Customer>) => Promise<void>;
@@ -1567,7 +1577,7 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      setDeliveryOrder: async (routeId, orderedPendingIds) => {
+      setDeliveryOrder: async (routeId, orderedPendingIds, options) => {
         const state = get();
         const routeDeliveries = state.deliveries
           .filter((delivery) => delivery.route_id === routeId)
@@ -1600,12 +1610,37 @@ export const useAppStore = create<AppState>()(
         }));
 
         const now = new Date().toISOString();
-        const indexById = new Map(normalized.map((delivery) => [delivery.id, delivery.order_index] as const));
+        const metadata = options?.metadata;
+        const orderUpdatedAt =
+          metadata?.order_updated_at || now;
+
+        const indexById = new Map(
+          normalized.map(
+            (delivery) =>
+              [delivery.id, delivery.order_index] as const,
+          ),
+        );
 
         set((prev) => ({
           deliveries: prev.deliveries.map((delivery) => {
             const nextIndex = indexById.get(delivery.id);
-            return nextIndex === undefined ? delivery : { ...delivery, order_index: nextIndex, updated_at: now };
+            return nextIndex === undefined
+              ? delivery
+              : {
+                  ...delivery,
+                  order_index: nextIndex,
+                  ...(metadata
+                    ? {
+                        order_locked:
+                          metadata.order_locked,
+                        order_source:
+                          metadata.order_source,
+                        order_updated_at:
+                          orderUpdatedAt,
+                      }
+                    : {}),
+                  updated_at: now,
+                };
           }),
         }));
 
@@ -1614,6 +1649,16 @@ export const useAppStore = create<AppState>()(
           normalized.forEach((delivery) => {
             batch.update(doc(db, 'deliveries', delivery.id), {
               order_index: delivery.order_index,
+              ...(metadata
+                ? {
+                    order_locked:
+                      metadata.order_locked,
+                    order_source:
+                      metadata.order_source,
+                    order_updated_at:
+                      orderUpdatedAt,
+                  }
+                : {}),
               updated_at: now,
             });
           });

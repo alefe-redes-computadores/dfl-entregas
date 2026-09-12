@@ -61,6 +61,7 @@ import { firstValidTimestamp } from '@/lib/reports/time';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 import { requestDeviceLocation } from '@/lib/device-location';
 import { geocodeAddress, geocodeStoreAddress } from '@/lib/store-geocoding';
+import { bestOperationalAddress } from '@/lib/operational-address';
 
 interface RouteAccordionProps {
   route: Route;
@@ -443,8 +444,18 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             extractLatLngFromMapsUrl(customer?.maps_link);
           if (savedPoint) return { delivery, customer, point: savedPoint };
 
-          const address = (delivery.address_string || customer?.address || '').trim();
-          if (!address) return { delivery, customer, point: null };
+          const address = bestOperationalAddress(
+            delivery.address_string,
+            customer?.address,
+          );
+
+          if (!address) {
+            return {
+              delivery,
+              customer,
+              point: null,
+            };
+          }
 
           try {
             const point = await geocodeAddress(address);
@@ -510,9 +521,22 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     setOptimizerBusy(true);
 
     try {
-      await setDeliveryOrder(route.id, optimizerOrder);
       const now = new Date().toISOString();
-      await Promise.all(optimizerOrder.map((id) => useAppStore.getState().updateDelivery(id, { order_locked: true, order_source: optimizerEdited ? 'manual' : 'smart', order_updated_at: now })));
+
+      await setDeliveryOrder(
+        route.id,
+        optimizerOrder,
+        {
+          metadata: {
+            order_locked: true,
+            order_source:
+              optimizerEdited
+                ? 'manual'
+                : 'smart',
+            order_updated_at: now,
+          },
+        },
+      );
       setLastAppliedOrder(optimizerPreviousOrder);
       setOptimizerOpen(false);
 

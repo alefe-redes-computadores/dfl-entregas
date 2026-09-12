@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { MapPin, MessageSquare, Smartphone, Store, UserRound } from 'lucide-react';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
+import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 import type { Customer, OrderOrigin } from '@/types';
 
 export interface CustomerFormValue {
@@ -32,7 +33,7 @@ export function CustomerForm({initial,submitLabel,busy,onSubmit}:Props) {
 
   useEffect(()=>{if(!initial)return;setName(initial.name);setPhone(initial.phone?phoneMask(initial.phone):'');setOrigin(initial.origin||'loja');setAddress(initial.address||'');setNeighborhood(initial.neighborhood||'');setMapsLink(initial.maps_link||'');setObservation(initial.observation||'');setCode(initial.last_confirmation_code||'');},[initial]);
 
-  return <form onSubmit={async event=>{event.preventDefault();await onSubmit({name:name.trim(),phone:phone.replace(/\D/g,'')||undefined,origin,address:address.trim()||undefined,neighborhood:neighborhood.trim()||undefined,maps_link:mapsLink.trim()||undefined,observation:observation.trim()||undefined,last_confirmation_code:origin==='ifood'&&code?code:undefined});}} className="flex flex-col gap-5 pb-10">
+  return <form onSubmit={async event=>{event.preventDefault();const normalized=canonicalizeOperationalAddress(address,neighborhood);const mergedObservation=Array.from(new Set([observation.trim(),...normalized.observations].filter(Boolean))).join(' - ');await onSubmit({name:name.trim(),phone:phone.replace(/\D/g,'')||normalized.phone||undefined,origin,address:normalized.address||undefined,neighborhood:normalized.neighborhood||neighborhood.trim()||undefined,maps_link:mapsLink.trim()||undefined,observation:mergedObservation||undefined,last_confirmation_code:origin==='ifood'&&code?code:undefined});}} className="flex flex-col gap-5 pb-10">
     <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-1"><button type="button" onClick={()=>setOrigin('ifood')} className={`flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-bold ${origin==='ifood'?'bg-red-500 text-white':'text-zinc-500'}`}><Smartphone size={17}/>iFood</button><button type="button" onClick={()=>setOrigin('loja')} className={`flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-bold ${origin==='loja'?'bg-emerald-500 text-zinc-950':'text-zinc-500'}`}><Store size={17}/>Loja</button></div>
     <Field icon={UserRound} label="Nome do cliente" required><input value={name} onChange={event=>setName(event.target.value)} placeholder="Nome completo" required className="field-input"/></Field>
     <Field icon={MessageSquare} label="WhatsApp"><input value={phone} onChange={event=>setPhone(phoneMask(event.target.value))} inputMode="tel" placeholder="(34) 99999-9999" className="field-input"/></Field>

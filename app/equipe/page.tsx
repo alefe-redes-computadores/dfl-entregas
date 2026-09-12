@@ -54,6 +54,7 @@ export default function TeamPage() {
   const [form, setForm] = useState(empty);
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
+  const [showInactiveMotoboys, setShowInactiveMotoboys] = useState(false);
 
   useEffect(() => {
     if (searchParams.get('add') === 'interno') {
@@ -84,6 +85,19 @@ export default function TeamPage() {
           a.name.localeCompare(b.name, 'pt-BR'),
       );
   }, [motoboys, query]);
+
+  const inactiveMotoboyCount =
+    filteredMotoboys.filter(
+      (motoboy) => !motoboy.active,
+    ).length;
+
+  const displayedMotoboys =
+    filteredMotoboys.filter(
+      (motoboy) =>
+        motoboy.active ||
+        showInactiveMotoboys ||
+        Boolean(query.trim()),
+    );
 
   const openNew = () => {
     setForm(empty);
@@ -173,8 +187,15 @@ export default function TeamPage() {
           label="Entregadores"
         />
         <Metric
-          value={members.length + motoboys.length}
-          label="Cadastros"
+          value={
+            members.filter(
+              (member) => member.active,
+            ).length +
+            motoboys.filter(
+              (motoboy) => motoboy.active,
+            ).length
+          }
+          label="Na operação"
         />
       </div>
 
@@ -272,7 +293,7 @@ export default function TeamPage() {
         </div>
 
         <div className="space-y-2">
-          {filteredMotoboys.map((motoboy) => (
+          {displayedMotoboys.map((motoboy) => (
             <article
               key={motoboy.id}
               className={`rounded-[20px] border p-3.5 ${
@@ -333,10 +354,26 @@ export default function TeamPage() {
             </article>
           ))}
 
-          {filteredMotoboys.length === 0 && (
+          {displayedMotoboys.length === 0 && (
             <Empty text="Nenhum entregador neste filtro." />
           )}
         </div>
+
+        {!query.trim() && inactiveMotoboyCount > 0 && (
+          <button
+            type="button"
+            onClick={() =>
+              setShowInactiveMotoboys(
+                (value) => !value,
+              )
+            }
+            className="flex h-10 w-full items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950/30 text-[10px] font-black text-zinc-500"
+          >
+            {showInactiveMotoboys
+              ? 'Ocultar fora da escala'
+              : `Ver ${inactiveMotoboyCount} fora da escala`}
+          </button>
+        )}
 
         <button
           type="button"
