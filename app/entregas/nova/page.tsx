@@ -53,6 +53,7 @@ const [routeId, setRouteId] = useState('');
   const [confirmationCode, setConfirmationCode] = useState('');
 
   const [customerName, setCustomerName] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [phone, setPhone] = useState('');
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
 
@@ -136,7 +137,11 @@ const [routeId, setRouteId] = useState('');
     if (parsed.orderId) { setOrderId(parsed.orderId); identified.push(`Nº #${parsed.orderId}`); }
     if (parsed.ifoodId) { setIfoodId(parsed.ifoodId); identified.push(`ID ${parsed.ifoodId}`); }
     if (parsed.confirmationCode) { setConfirmationCode(parsed.confirmationCode); identified.push(`Cód. ${parsed.confirmationCode}`); }
-    if (parsed.customerName) { setCustomerName(parsed.customerName); identified.push('Cliente'); }
+    if (parsed.customerName) {
+      setCustomerName(parsed.customerName);
+      setSelectedCustomerId('');
+      identified.push('Cliente');
+    }
     if (parsed.phone) { setPhone(formatPhoneInput(parsed.phone)); identified.push('Zap'); }
     if (parsed.address) { setStreetAddress(parsed.address); identified.push('Endereço'); }
     if (parsed.mapsLink) { setMapsLink(parsed.mapsLink); identified.push('Link Maps'); }
@@ -231,6 +236,7 @@ const [routeId, setRouteId] = useState('');
   }, [streetAddress, mapsLink]);
 
   const handleCustomerSelect = (c: Customer) => {
+    setSelectedCustomerId(c.id);
     setCustomerName(c.name);
     if (c.address) setStreetAddress(c.address);
     if (c.phone) setPhone(formatPhoneInput(c.phone));
@@ -300,6 +306,7 @@ const [routeId, setRouteId] = useState('');
           confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
           observation,
           origin,
+          preferredCustomerId: selectedCustomerId || undefined,
         });
       }
 
@@ -604,7 +611,15 @@ const [routeId, setRouteId] = useState('');
         {/* CLIENTE E WHATSAPP */}
         <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">05 · Cliente</p><p className="mt-1 text-sm font-black text-zinc-200">Contato e identificação</p></div>
-          <CustomerAutocomplete value={customerName} onChange={setCustomerName} onSelect={handleCustomerSelect} customers={customers} />
+          <CustomerAutocomplete
+            value={customerName}
+            onChange={(nextName) => {
+              setCustomerName(nextName);
+              setSelectedCustomerId('');
+            }}
+            onSelect={handleCustomerSelect}
+            customers={customers}
+          />
 
           <div className="flex items-center gap-2">
             <div className="flex-1">

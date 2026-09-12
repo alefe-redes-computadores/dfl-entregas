@@ -268,16 +268,70 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   const handleCloseRoute = async () => {
     if (actionBusy) return;
+
     setActionBusy(true);
+
     try {
       await closeRoute(route.id);
-      if (Capacitor.isNativePlatform()) await Haptics.notification({ type: NotificationType.Success });
-      toast.success('Rota finalizada!', { description: 'Enviada para as rotas concluídas.' });
-      setIsOpen(false);
 
+      if (Capacitor.isNativePlatform()) {
+        await Haptics.notification({
+          type: NotificationType.Success,
+        });
+      }
+
+      const pendingIfood =
+        useAppStore
+          .getState()
+          .ifoodPendingConfirmations
+          .filter(
+            (item) =>
+              item.route_id === route.id &&
+              (item.status || 'pending') === 'pending',
+          );
+
+      if (pendingIfood.length > 0) {
+        const params = new URLSearchParams();
+
+        if (operationalRouteDateKey) {
+          params.set('date', operationalRouteDateKey);
+        }
+
+        params.set('route', route.id);
+        params.set(
+          'routeName',
+          route.name || 'Rota finalizada',
+        );
+
+        const href = `/confirmacoes?${params.toString()}`;
+
+        toast.success('Rota finalizada!', {
+          description:
+            `${pendingIfood.length} pedido${
+              pendingIfood.length === 1 ? '' : 's'
+            } aguardando confirmação no iFood.`,
+          action: {
+            label: 'Confirmar iFood',
+            onClick: () => router.push(href),
+          },
+        });
+      } else {
+        toast.success('Rota finalizada!', {
+          description:
+            'Enviada para as rotas concluídas.',
+        });
+      }
+
+      setIsOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível finalizar a rota.');
-    } finally { setActionBusy(false); }
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível finalizar a rota.',
+      );
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   const handleDeleteEmptyRoute = async () => {

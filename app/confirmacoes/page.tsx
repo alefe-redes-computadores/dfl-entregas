@@ -135,7 +135,26 @@ export default function ConfirmacoesPage() {
           year: 'numeric',
         });
 
-  const confirmationReturn = `/confirmacoes?date=${encodeURIComponent(selectedDateKey)}`;
+  const confirmationReturn = useMemo(() => {
+    const params = new URLSearchParams({
+      date: selectedDateKey,
+    });
+
+    if (requestedRouteId) {
+      params.set('route', requestedRouteId);
+    }
+
+    if (requestedRouteName) {
+      params.set('routeName', requestedRouteName);
+    }
+
+    return `/confirmacoes?${params.toString()}`;
+  }, [
+    requestedRouteId,
+    requestedRouteName,
+    selectedDateKey,
+  ]);
+
   const deliveryDateSuffix = `&date=${encodeURIComponent(selectedDateKey)}`;
 
   const allIfood = useMemo(
@@ -626,10 +645,10 @@ export default function ConfirmacoesPage() {
           <div className="mt-1 flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-black text-zinc-100">
-                ${requestedRouteName || 'Rota finalizada'}
+                {requestedRouteName || 'Rota finalizada'}
               </p>
               <p className="mt-1 text-[11px] text-zinc-500">
-                ${pendingManualConfirmations.length} pedido${pendingManualConfirmations.length === 1 ? '' : 's'} aguardando confirmação no iFood
+                {pendingManualConfirmations.length} pedido{pendingManualConfirmations.length === 1 ? '' : 's'} aguardando confirmação no iFood
               </p>
             </div>
             <button

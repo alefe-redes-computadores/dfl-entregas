@@ -45,6 +45,10 @@ function ConfirmarContent() {
     (state) => state.updateIfoodPendingConfirmation,
   );
 
+  const pendingConfirmations = useAppStore(
+    (state) => state.ifoodPendingConfirmations,
+  );
+
   const [orderId, setOrderId] = useState(initialOrderId);
   const [code, setCode] = useState(initialCode);
   const [copiedFirstValue, setCopiedFirstValue] = useState(false);
@@ -105,15 +109,81 @@ function ConfirmarContent() {
     try {
       await vibrate(ImpactStyle.Medium);
 
+      const currentPending = pendingConfirmations.find(
+        (item) => item.id === pendingId,
+      );
+
       await updatePendingConfirmation(pendingId, {
         status: 'resolved',
         resolved_at: new Date().toISOString(),
       });
 
-      toast.success('Pedido marcado como confirmado no iFood.');
+      const latest =
+        useAppStore.getState().ifoodPendingConfirmations;
+
+      const nextReady =
+        currentPending?.route_id
+          ? latest.find((item) => {
+              if (item.id === pendingId) return false;
+
+              if ((item.status || 'pending') !== 'pending') {
+                return false;
+              }
+
+              if (item.route_id !== currentPending.route_id) {
+                return false;
+              }
+
+              const nextId = (item.ifood_id || '')
+                .replace(/\D/g, '')
+                .slice(0, 8);
+
+              const nextCode = (item.confirmation_code || '')
+                .replace(/\D/g, '')
+                .slice(0, 4);
+
+              return (
+                nextId.length === 8 &&
+                nextCode.length === 4
+              );
+            })
+          : undefined;
+
+      if (nextReady) {
+        const nextId = (nextReady.ifood_id || '')
+          .replace(/\D/g, '')
+          .slice(0, 8);
+
+        const nextCode = (nextReady.confirmation_code || '')
+          .replace(/\D/g, '')
+          .slice(0, 4);
+
+        toast.success(
+          'Confirmado. Próximo pedido carregado.',
+        );
+
+        router.replace(
+          `/confirmar?orderId=${encodeURIComponent(
+            nextId,
+          )}&code=${encodeURIComponent(
+            nextCode,
+          )}&pendingId=${encodeURIComponent(
+            nextReady.id,
+          )}&returnTo=${encodeURIComponent(returnTo)}`,
+        );
+
+        return;
+      }
+
+      toast.success(
+        'Pedido marcado como confirmado no iFood.',
+      );
+
       router.replace(returnTo);
     } catch {
-      toast.error('Não foi possível concluir a pendência.');
+      toast.error(
+        'Não foi possível concluir a pendência.',
+      );
     }
   };
 

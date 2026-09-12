@@ -1,27 +1,11 @@
 // lib/customer-duplicates.ts
 import type { Customer, Delivery } from '@/types';
-
-const plain = (value?: string) =>
-  (value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\(\d+\)\s*$/g, '')
-    .replace(/\b(rua|r\.?)\b/g, ' ')
-    .replace(/\b(avenida|av\.?)\b/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ');
-
-const digits = (value?: string) => (value || '').replace(/\D/g, '');
-
-const addressKey = (value?: string) =>
-  plain(value)
-    .replace(/\bpatos de minas\b/g, ' ')
-    .replace(/\bminas gerais\b|\bmg\b|\bbrasil\b/g, ' ')
-    .replace(/\b\d{5}\s?\d{3}\b/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ');
+import {
+  customerIdentityEvidence,
+  customerNameSimilarity,
+  normalizeCustomerPhone,
+  sameCustomerAddress,
+} from '@/lib/customer-identity';
 
 export interface CustomerDuplicateCandidate {
   left: Customer;
@@ -32,17 +16,15 @@ export interface CustomerDuplicateCandidate {
   rightOrders: number;
 }
 
-export function customerBaseName(customer: Pick<Customer, 'name'>) {
-  return plain(customer.name);
-}
-
 export function customerDuplicateCandidates(
   customers: Customer[],
   deliveries: Delivery[],
 ): CustomerDuplicateCandidate[] {
   const orderCounts = new Map<string, number>();
+
   deliveries.forEach((delivery) => {
     if (!delivery.customer_id) return;
+
     orderCounts.set(
       delivery.customer_id,
       (orderCounts.get(delivery.customer_id) || 0) + 1,
@@ -55,44 +37,75 @@ export function customerDuplicateCandidates(
     for (let j = i + 1; j < customers.length; j += 1) {
       const left = customers[i];
       const right = customers[j];
-      const leftName = customerBaseName(left);
-      const rightName = customerBaseName(right);
 
-      if (!leftName || leftName !== rightName) continue;
+      const leftToRight = customerIdentityEvidence(
+        left,
+        right.name,
+        {
+          address: right.address,
+          phone: right.phone,
+        },
+      );
 
-      const reasons = ['Mesmo nome-base'];
-      let score = 45;
+      const rightToLeft = customerIdentityEvidence(
+        right,
+        left.name,
+        {
+          address: left.address,
+          phone: left.phone,
+        },
+      );
 
-      const leftPhone = digits(left.phone);
-      const rightPhone = digits(right.phone);
-      if (leftPhone && rightPhone && leftPhone === rightPhone) {
-        score += 35;
-        reasons.push('Mesmo telefone');
-      }
+      const similarity = customerNameSimilarity(
+        left.name,
+        right.name,
+      );
 
-      const leftAddress = addressKey(left.address);
-      const rightAddress = addressKey(right.address);
-      if (leftAddress && rightAddress && leftAddress === rightAddress) {
-        score += 35;
-        reasons.push('Mesmo endereço');
-      }
+      const leftPhone = normalizeCustomerPhone(left.phone);
+      const rightPhone = normalizeCustomerPhone(right.phone);
 
-      const leftNeighborhood = plain(left.neighborhood);
-      const rightNeighborhood = plain(right.neighborhood);
-      if (
-        leftNeighborhood &&
-        rightNeighborhood &&
-        leftNeighborhood === rightNeighborhood
-      ) {
-        score += 10;
-        reasons.push('Mesmo bairro');
-      }
+      const samePhone =
+        Boolean(
+          leftPhone &&
+            rightPhone &&
+            leftPhone.length >= 10 &&
+            rightPhone.length >= 10,
+        ) && leftPhone === rightPhone;
 
-      // Nome igual sozinho é suspeita, não autorização automática de merge.
+      const sameAddress =
+        Boolean(left.address && right.address) &&
+        sameCustomerAddress(
+          left.address,
+          right.address,
+        );
+
+      const probable =
+        leftToRight.reusable ||
+        rightToLeft.reusable ||
+        samePhone ||
+        (sameAddress && similarity >= 0.65);
+
+      if (!probable) continue;
+
+      const reasons = Array.from(
+        new Set([
+          ...leftToRight.reasons,
+          ...rightToLeft.reasons,
+          ...(samePhone ? ['Mesmo telefone'] : []),
+          ...(sameAddress ? ['Mesmo endereço'] : []),
+        ]),
+      );
+
+      const score = Math.max(
+        leftToRight.score,
+        rightToLeft.score,
+        samePhone && sameAddress ? 100 : 0,
+      );
+
       result.push({
         left,
         right,
-        score: Math.min(score, 100),
+        score,
         reasons,
         leftOrders: orderCounts.get(left.id) || 0,
         rightOrders: orderCounts.get(right.id) || 0,
@@ -103,6 +116,8 @@ export function customerDuplicateCandidates(
   return result.sort(
     (a, b) =>
       b.score - a.score ||
-      b.leftOrders + b.rightOrders - (a.leftOrders + a.rightOrders),
+      b.leftOrders +
+        b.rightOrders -
+        (a.leftOrders + a.rightOrders),
   );
 }
