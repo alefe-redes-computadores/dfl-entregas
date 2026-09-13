@@ -8,6 +8,8 @@ import {
 import {
   Beef,
   Boxes,
+  Snowflake,
+  Sandwich,
   Wheat,
   Check,
   CupSoda,
@@ -43,6 +45,8 @@ const ICONS: Record<
   sparkles: Sparkles,
   soup: Soup,
   bread: Wheat,
+  snowflake: Snowflake,
+  cheese: Sandwich,
   boxes: Boxes,
 };
 

@@ -1,7 +1,7 @@
 // lib/motoboy-analytics.ts
-import type { Delivery, Motoboy, MotoboyPaymentRule, Route } from '@/types';
+import type { Delivery, Motoboy, MotoboyPaymentRule, MotoboySettlementAdjustment, Route } from '@/types';
 
-export interface ValeInput { id: string; description: string; amount: number; }
+export type ValeInput = MotoboySettlementAdjustment;
 export const normalizeName=(value?:string)=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLocaleLowerCase('pt-BR');
 export const operationalDateKey=(value:Date|string)=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
 export const routeOperationalDate=(route:Route)=>route.started_at||route.departure_time||route.created_at||route.updated_at;

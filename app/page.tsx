@@ -388,7 +388,7 @@ export default function HomePage() {
       <section className="space-y-3">
         <div className="flex items-end justify-between gap-3 px-1">
           <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Operação de hoje</p>
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Operação do período</p>
             <h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">Visão rápida</h2>
           </div>
           <p className="text-[10px] font-bold text-zinc-600">{completedDeliveries}/{totalEntregas} entregas</p>
@@ -448,13 +448,7 @@ export default function HomePage() {
         </div>
       )}
 
-      <section className="space-y-2">
-        <div className="flex items-center justify-between px-1">
-          <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Inteligência</p><h2 className="mt-0.5 font-heading text-sm font-black text-zinc-300">Leitura operacional</h2></div>
-          <a href="/relatorios" className="text-[9px] font-black uppercase tracking-wide text-indigo-400">Ver análises</a>
-        </div>
-        <OperationalRadar />
-      </section>
+      <OperationalRadar />
 
       {storeOrdersDoDia.length > 0 && !globalMotoboy && (
         <section className="flex flex-col gap-3">
@@ -535,15 +529,15 @@ export default function HomePage() {
             Object.keys(closedRoutesByMotoboy).sort().map(motoboyName => {
               const Icon = getMotoboyIcon(motoboyName);
               return (
-                <div key={motoboyName} className="flex flex-col gap-3 rounded-3xl border border-zinc-800/60 bg-zinc-900/20 p-3">
-                  <div className="flex items-center gap-2 px-2 pt-1">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
-                      <Icon size={14} />
+                <div key={motoboyName} className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 px-1">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-zinc-500">
+                      <Icon size={13} />
                     </div>
-                    <h3 className="text-sm font-bold text-zinc-300">{motoboyName}</h3>
-                    <span className="ml-auto text-xs font-semibold text-zinc-500">{closedRoutesByMotoboy[motoboyName].length} rotas</span>
+                    <h3 className="text-xs font-bold text-zinc-500">{motoboyName}</h3>
+                    <span className="ml-auto text-[10px] font-semibold text-zinc-700">{closedRoutesByMotoboy[motoboyName].length} rotas</span>
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1.5">
                     {closedRoutesByMotoboy[motoboyName].map(route => (
                       <RouteAccordion key={route.id} route={route} />
                     ))}

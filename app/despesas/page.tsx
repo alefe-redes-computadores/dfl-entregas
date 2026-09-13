@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Bike,
   BriefcaseBusiness,
@@ -17,7 +17,9 @@ import {
   Plus,
   ReceiptText,
   Search,
+  SlidersHorizontal,
   Trash2,
+  X,
   Truck,
   UserRound,
   Utensils,
@@ -125,6 +127,7 @@ const escapeHtml = (value: unknown) =>
 
 export default function ExpensesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const expenses = useAppStore((state) => state.operationalExpenses);
   const motoboys = useAppStore((state) => state.motoboys);
@@ -133,7 +136,11 @@ export default function ExpensesPage() {
   const [month, setMonth] = useState(() => new Date());
   const [query, setQuery] = useState('');
   const [type, setType] = useState<OperationalExpenseType | 'todas'>('todas');
-  const [source, setSource] = useState<SourceFilter>('todas');
+  const [source, setSource] = useState<SourceFilter>(
+    searchParams.get('source') === 'motoboy_settlement' ? 'motoboy_settlement' : 'todas',
+  );
+  const [motoboyFilter, setMotoboyFilter] = useState(searchParams.get('motoboy') || 'todos');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<OperationalExpense | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -155,6 +162,7 @@ export default function ExpensesPage() {
           source === 'todas' ||
           (item.source_kind || 'manual') === source,
       )
+      .filter((item) => motoboyFilter === 'todos' || item.motoboy_id === motoboyFilter)
       .filter((item) => {
         if (!term) return true;
         return [
@@ -173,7 +181,7 @@ export default function ExpensesPage() {
           new Date(b.occurred_at).getTime() -
           new Date(a.occurred_at).getTime(),
       );
-  }, [monthly, query, source, type]);
+  }, [monthly, motoboyFilter, query, source, type]);
 
   const grouped = useMemo(
     () =>
@@ -483,7 +491,7 @@ export default function ExpensesPage() {
           <div className="mb-2 flex items-center gap-2">
             <UserRound size={15} className="text-sky-400" />
             <p className="text-[10px] font-black uppercase tracking-[.14em] text-zinc-500">
-              Despesas por motoboy
+              Movimentações por motoboy
             </p>
           </div>
 
@@ -518,39 +526,23 @@ export default function ExpensesPage() {
         />
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-        <Chip active={type === 'todas'} label="Todas" onClick={() => setType('todas')} />
-        {(Object.keys(META) as OperationalExpenseType[]).map((key) => (
-          <Chip
-            key={key}
-            active={type === key}
-            label={META[key].label}
-            onClick={() => setType(key)}
-          />
-        ))}
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => setFiltersOpen(true)} className={`flex h-11 items-center gap-2 rounded-[14px] border px-3.5 text-[10px] font-black ${(type !== 'todas' || source !== 'todas' || motoboyFilter !== 'todos')?'border-rose-400/30 bg-rose-500/10 text-rose-300':'border-zinc-800 bg-zinc-900/45 text-zinc-500'}`}>
+          <SlidersHorizontal size={15} />Filtros
+          {(Number(type !== 'todas') + Number(source !== 'todas') + Number(motoboyFilter !== 'todos')) > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[8px] text-white">{Number(type !== 'todas') + Number(source !== 'todas') + Number(motoboyFilter !== 'todos')}</span>}
+        </button>
+        {(type !== 'todas' || source !== 'todas' || motoboyFilter !== 'todos') && <button type="button" onClick={() => {setType('todas');setSource('todas');setMotoboyFilter('todos')}} className="h-11 rounded-[14px] px-3 text-[10px] font-black text-zinc-600">Limpar</button>}
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        {(
-          [
-            ['todas', 'Todas origens'],
-            ['manual', 'Manuais'],
-            ['motoboy_settlement', 'Acertos'],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setSource(value)}
-            className={`rounded-xl border px-2 py-2 text-[9px] font-black ${
-              source === value
-                ? 'border-rose-400/30 bg-rose-500/10 text-rose-300'
-                : 'border-zinc-800 bg-zinc-900/35 text-zinc-600'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {filtersOpen && <div className="fixed inset-0 z-[120] flex items-end bg-black/75 p-3 backdrop-blur-sm" onMouseDown={event=>{if(event.target===event.currentTarget)setFiltersOpen(false)}}>
+        <section className="dfl-bottom-sheet mx-auto w-full max-w-md p-5 pb-7">
+          <div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-[.16em] text-rose-400">Despesas</p><h2 className="mt-1 font-heading text-lg font-black text-zinc-100">Filtrar lançamentos</h2></div><button onClick={()=>setFiltersOpen(false)} className="dfl-icon-button"><X size={17}/></button></div>
+          <ExpenseFilter label="Categoria" value={type} setValue={value=>setType(value as OperationalExpenseType|'todas')} options={[['todas','Todas'],...(Object.keys(META) as OperationalExpenseType[]).map(key=>[key,META[key].label] as [string,string])]} />
+          <ExpenseFilter label="Origem" value={source} setValue={value=>setSource(value as SourceFilter)} options={[['todas','Todas as origens'],['manual','Manuais'],['motoboy_settlement','Acertos']]} />
+          <ExpenseFilter label="Motoboy" value={motoboyFilter} setValue={setMotoboyFilter} options={[['todos','Todos'],...motoboys.map(item=>[item.id,item.name] as [string,string])]} />
+          <div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={()=>{setType('todas');setSource('todas');setMotoboyFilter('todos')}} className="h-12 rounded-xl border border-zinc-800 text-xs font-black text-zinc-500">Limpar</button><button type="button" onClick={()=>setFiltersOpen(false)} className="h-12 rounded-xl bg-rose-500 text-xs font-black text-white">Aplicar</button></div>
+        </section>
+      </div>}
 
       <section className="space-y-4">
         {grouped.map(([key, items]) => (
@@ -739,4 +731,8 @@ function Chip({
       {label}
     </button>
   );
+}
+
+function ExpenseFilter({label,value,setValue,options}:{label:string;value:string;setValue:(value:string)=>void;options:[string,string][]}) {
+  return <label className="mt-4 block"><span className="mb-1.5 block text-[9px] font-black uppercase tracking-[.14em] text-zinc-600">{label}</span><select value={value} onChange={event=>setValue(event.target.value)} className="dfl-search px-3.5">{options.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>;
 }

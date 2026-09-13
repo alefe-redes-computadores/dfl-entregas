@@ -94,8 +94,13 @@ function Content() {
     (sum, day) => sum + (day.settlement?.amount || 0),
     0,
   );
-  const monthOtherExpenses = monthDays.reduce(
-    (sum, day) => sum + day.otherExpenses,
+  const monthAdjustments = monthDays.reduce(
+    (sum, day) =>
+      sum +
+      (day.settlement?.settlement_adjustments || []).reduce(
+        (current, adjustment) => current + adjustment.amount,
+        0,
+      ),
     0,
   );
 
@@ -263,14 +268,14 @@ function Content() {
           />
           <MonthMetric
             icon={CircleDollarSign}
-            label="Acertos"
+            label="Recebido"
             value={money(monthSettlement)}
             tone="green"
           />
           <MonthMetric
             icon={ReceiptText}
-            label="Outras despesas"
-            value={money(monthOtherExpenses)}
+            label="Ajustes"
+            value={money(monthAdjustments)}
             tone="amber"
           />
         </section>
@@ -349,13 +354,10 @@ function Content() {
                       <div className="mb-2 grid grid-cols-2 gap-2">
                         <div className="rounded-xl bg-zinc-950/35 p-2.5">
                           <p className="text-[8px] font-black uppercase text-zinc-700">
-                            Custo do entregador
+                            Recebido pelo entregador
                           </p>
-                          <p className="mt-1 text-[11px] font-black text-zinc-300">
-                            {money(
-                              (day.settlement?.amount || 0) +
-                                day.otherExpenses,
-                            )}
+                          <p className="mt-1 text-[11px] font-black text-emerald-300">
+                            {money(day.settlement?.amount || 0)}
                           </p>
                         </div>
 
@@ -463,6 +465,16 @@ function Content() {
             </p>
           </div>
         )}
+      </section>
+
+      <section className="rounded-[22px] border border-zinc-800/70 bg-zinc-900/30 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[.15em] text-zinc-600">Movimentações financeiras</p>
+            <p className="mt-1 text-[11px] text-zinc-500">Acertos e demais lançamentos ligados ao entregador</p>
+          </div>
+          <button type="button" onClick={() => router.push(`/despesas?motoboy=${encodeURIComponent(motoboy.id)}`)} className="rounded-xl border border-sky-500/20 bg-sky-500/[.05] px-3 py-2 text-[9px] font-black text-sky-300">Ver movimentações</button>
+        </div>
       </section>
 
       <MotoboyOperationalMemory motoboyId={motoboy.id} />

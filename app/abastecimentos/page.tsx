@@ -12,6 +12,8 @@ import {
   PackageOpen,
 
   Search,
+  SlidersHorizontal,
+  X,
   UserRound,
   Wallet,
   Boxes,
@@ -71,9 +73,10 @@ export default function StockSuppliesPage() {
 
   const [month, setMonth] = useState(() => new Date());
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<StockSupplyStatus | 'todos'>(
-    'todos',
-  );
+  const [status, setStatus] = useState<StockSupplyStatus | 'todos'>('todos');
+  const [buyer, setBuyer] = useState('todos');
+  const [supplierFilter, setSupplierFilter] = useState('todos');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [expandedDays, setExpandedDays] = useState<
     Record<string, boolean>
   >(() => ({ [todayKey()]: true }));
@@ -103,6 +106,8 @@ export default function StockSuppliesPage() {
 
           return (
             (status === 'todos' || item.status === status) &&
+            (buyer === 'todos' || item.purchaser_name === buyer) &&
+            (supplierFilter === 'todos' || item.supplier === supplierFilter) &&
             haystack.includes(normalizedQuery)
           );
         })
@@ -111,7 +116,7 @@ export default function StockSuppliesPage() {
             supplyDate(b).getTime() -
             supplyDate(a).getTime(),
         ),
-    [monthly, normalizedQuery, status],
+    [buyer, monthly, normalizedQuery, status, supplierFilter],
   );
 
   const days = useMemo(
@@ -143,8 +148,19 @@ export default function StockSuppliesPage() {
         ),
     );
 
-  const hasActiveSearch =
-    Boolean(normalizedQuery) || status !== 'todos';
+  const buyers = useMemo(
+    () => [...new Set(monthly.map((item) => item.purchaser_name).filter((value): value is string => Boolean(value)))].sort((a,b)=>a.localeCompare(b,'pt-BR')),
+    [monthly],
+  );
+  const supplierNames = useMemo(
+    () => [...new Set(monthly.map((item) => item.supplier).filter((value): value is string => Boolean(value)))].sort((a,b)=>a.localeCompare(b,'pt-BR')),
+    [monthly],
+  );
+  const activeFilterCount =
+    Number(status !== 'todos') +
+    Number(buyer !== 'todos') +
+    Number(supplierFilter !== 'todos');
+  const hasActiveSearch = Boolean(normalizedQuery) || activeFilterCount > 0;
 
   return (
     <div className="dfl-page">
@@ -223,31 +239,62 @@ export default function StockSuppliesPage() {
         />
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {(
-          [
-            'todos',
-            'solicitado',
-            'em_compra',
-            'recebido',
-            'conferido',
-          ] as const
-        ).map((key) => (
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setFiltersOpen(true)}
+          className={`flex h-11 items-center gap-2 rounded-[14px] border px-3.5 text-[10px] font-black ${
+            activeFilterCount
+              ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+              : 'border-zinc-800 bg-zinc-900/45 text-zinc-500'
+          }`}
+        >
+          <SlidersHorizontal size={15} />
+          Filtros
+          {activeFilterCount > 0 && (
+            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[8px] text-zinc-950">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+        {activeFilterCount > 0 && (
           <button
-            key={key}
-            onClick={() => setStatus(key)}
-            className={`shrink-0 rounded-full border px-4 py-2 text-[10px] font-black ${
-              status === key
-                ? 'border-amber-500/40 bg-amber-500/10 text-amber-400'
-                : 'border-zinc-800 bg-zinc-900 text-zinc-500'
-            }`}
+            type="button"
+            onClick={() => { setStatus('todos'); setBuyer('todos'); setSupplierFilter('todos'); }}
+            className="h-11 rounded-[14px] px-3 text-[10px] font-black text-zinc-600"
           >
-            {key === 'todos'
-              ? 'Todos'
-              : SUPPLY_STATUS_LABELS[key]}
+            Limpar
           </button>
-        ))}
+        )}
       </div>
+
+      {filtersOpen && (
+        <div
+          className="fixed inset-0 z-[120] flex items-end bg-black/75 p-3 backdrop-blur-sm"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setFiltersOpen(false); }}
+        >
+          <section className="dfl-bottom-sheet mx-auto w-full max-w-md p-5 pb-7">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[.16em] text-amber-400">Compras</p>
+                <h2 className="mt-1 font-heading text-lg font-black text-zinc-100">Filtrar histórico</h2>
+              </div>
+              <button onClick={() => setFiltersOpen(false)} className="dfl-icon-button"><X size={17} /></button>
+            </div>
+
+            <PurchaseFilter label="Situação" value={status} setValue={(value)=>setStatus(value as StockSupplyStatus | 'todos')} options={[
+              ['todos','Todas'],['solicitado','Solicitado'],['em_compra','Em compra'],['recebido','Recebido'],['conferido','Conferido']
+            ]} />
+            <PurchaseFilter label="Comprador" value={buyer} setValue={setBuyer} options={[['todos','Todos'],...buyers.map((value)=>[value,value] as [string,string])]} />
+            <PurchaseFilter label="Fornecedor" value={supplierFilter} setValue={setSupplierFilter} options={[['todos','Todos'],...supplierNames.map((value)=>[value,value] as [string,string])]} />
+
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => { setStatus('todos'); setBuyer('todos'); setSupplierFilter('todos'); }} className="h-12 rounded-xl border border-zinc-800 text-xs font-black text-zinc-500">Limpar</button>
+              <button type="button" onClick={() => setFiltersOpen(false)} className="h-12 rounded-xl bg-amber-500 text-xs font-black text-zinc-950">Aplicar</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       <section className="space-y-3">
         {days.map(([key, items]) => {
@@ -406,4 +453,8 @@ function Metric({
       </p>
     </div>
   );
+}
+
+function PurchaseFilter({label,value,setValue,options}:{label:string;value:string;setValue:(value:string)=>void;options:[string,string][]}) {
+  return <label className="mt-4 block"><span className="mb-1.5 block text-[9px] font-black uppercase tracking-[.14em] text-zinc-600">{label}</span><select value={value} onChange={event=>setValue(event.target.value)} className="dfl-search px-3.5">{options.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>;
 }

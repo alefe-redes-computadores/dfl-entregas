@@ -92,6 +92,13 @@ export interface StockSupply {
 
 export type OperationalExpenseType = 'motoboy' | 'frete' | 'manutencao' | 'taxa' | 'alimentacao' | 'servico' | 'material' | 'outro';
 
+export interface MotoboySettlementAdjustment {
+  id: string;
+  kind: 'meal' | 'advance' | 'other';
+  description: string;
+  amount: number;
+}
+
 export interface OperationalExpense {
   id: string;
   occurred_at: string;
@@ -102,6 +109,12 @@ export interface OperationalExpense {
   motoboy_name?: string;
   source_kind?: 'motoboy_settlement' | 'manual';
   source_id?: string;
+  settlement_gross_amount?: number;
+  settlement_adjustments?: MotoboySettlementAdjustment[];
+  settlement_delivery_count?: number;
+  settlement_route_count?: number;
+  settlement_cash_collected?: number;
+  settlement_cash_handed_over?: boolean;
   observation?: string;
   created_at: string;
   updated_at: string;

@@ -7,7 +7,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { stockLevel, stockProductValue, stockValue } from '@/lib/stock';
 import { buildStockRecommendations, stockIntelligenceSummary } from '@/lib/stock-intelligence';
 import { SUPPLY_UNIT_LABELS } from '@/lib/stock-supply';
-import { stockCategoryOrder, stockProductCategory } from '@/lib/stock-categories';
+import { stockCategoryOrder, stockProductCategory, stockCategoryTone } from '@/lib/stock-categories';
 import { StockCategoryIcon } from '@/components/stock/StockCategoryPicker';
 import { formatStockQuantity } from '@/lib/stock-quantity';
 import type { StockProduct } from '@/types';
@@ -51,9 +51,21 @@ export default function StockPage() {
     </section>}
     <div className="relative"><Search size={19} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar produto" className="dfl-search pl-11 pr-4"/></div>
     <div className="grid grid-cols-3 gap-2">{(['todos','baixo','zero'] as const).map(key=><button key={key} onClick={()=>setFilter(key)} className={`h-11 rounded-xl border text-xs font-bold ${filter===key?'border-emerald-500/40 bg-emerald-500/10 text-emerald-400':'border-zinc-800 bg-zinc-900 text-zinc-500'}`}>{key==='todos'?'Todos':key==='baixo'?'Baixo':'Zerado'}</button>)}</div>
-    <section className="space-y-3">{groups.map(([category,items])=>{const attention=items.filter(p=>stockLevel(p)!=='ok').length;const isCollapsed=Boolean(collapsed[category]);return <section key={category} className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/35"><button onClick={()=>setCollapsed(v=>({...v,[category]:!v[category]}))} className="flex w-full items-center gap-3 p-4 text-left"><span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400"><StockCategoryIcon category={category} size={16}/></span><div className="min-w-0 flex-1"><h2 className="truncate font-heading text-sm font-black text-zinc-200">{category}</h2><p className="mt-0.5 text-[9px] text-zinc-600">{items.length} {items.length===1?'produto':'produtos'}{attention?` · ${attention} em atenção`:''}</p></div><ChevronDown size={17} className={`text-zinc-600 transition-transform ${isCollapsed?'-rotate-90':''}`}/></button>{!isCollapsed&&<div className="border-t border-zinc-800/70">{items.map(product=><ProductRow key={product.id} product={product} open={()=>router.push(`/estoque/detalhes?id=${product.id}`)} move={()=>router.push(`/estoque/movimentar?id=${product.id}`)}/>)}</div>}</section>})}{!groups.length&&<div className="dfl-empty"><PackagePlus size={34} className="mx-auto text-zinc-700"/><p className="mt-3 text-sm font-bold text-zinc-400">Nenhum produto encontrado</p></div>}</section>
+    <section className="space-y-3">{groups.map(([category,items])=>{const attention=items.filter(p=>stockLevel(p)!=='ok').length;const isCollapsed=Boolean(collapsed[category]);return <section key={category} className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/35"><button onClick={()=>setCollapsed(v=>({...v,[category]:!v[category]}))} className="flex w-full items-center gap-3 p-4 text-left"><span className={`grid h-9 w-9 place-items-center rounded-xl ${categoryToneClasses(stockCategoryTone(category))}`}><StockCategoryIcon category={category} size={16}/></span><div className="min-w-0 flex-1"><h2 className="truncate font-heading text-sm font-black text-zinc-200">{category}</h2><p className="mt-0.5 text-[9px] text-zinc-600">{items.length} {items.length===1?'produto':'produtos'}{attention?` · ${attention} em atenção`:''}</p></div><ChevronDown size={17} className={`text-zinc-600 transition-transform ${isCollapsed?'-rotate-90':''}`}/></button>{!isCollapsed&&<div className="border-t border-zinc-800/70">{items.map(product=><ProductRow key={product.id} product={product} open={()=>router.push(`/estoque/detalhes?id=${product.id}`)} move={()=>router.push(`/estoque/movimentar?id=${product.id}`)}/>)}</div>}</section>})}{!groups.length&&<div className="dfl-empty"><PackagePlus size={34} className="mx-auto text-zinc-700"/><p className="mt-3 text-sm font-bold text-zinc-400">Nenhum produto encontrado</p></div>}</section>
   </div>;
 }
+const categoryToneClasses=(tone:ReturnType<typeof stockCategoryTone>)=>({
+  rose:'bg-rose-500/10 text-rose-400',
+  amber:'bg-amber-500/10 text-amber-400',
+  sky:'bg-sky-500/10 text-sky-400',
+  emerald:'bg-emerald-500/10 text-emerald-400',
+  violet:'bg-violet-500/10 text-violet-400',
+  orange:'bg-orange-500/10 text-orange-400',
+  lime:'bg-lime-500/10 text-lime-400',
+  cyan:'bg-cyan-500/10 text-cyan-400',
+  zinc:'bg-zinc-800 text-zinc-400',
+}[tone]);
+
 function CompactMetric({label,value,alert=false}:{label:string;value:string;alert?:boolean}){return <div className={`rounded-2xl border px-3.5 py-3 ${alert?'border-amber-500/25 bg-amber-500/[.055]':'border-zinc-800 bg-zinc-900/45'}`}><p className={`text-[9px] font-bold ${alert?'text-amber-400':'text-zinc-600'}`}>{label}</p><p className="mt-1 truncate text-base font-black text-zinc-100">{value}</p></div>}
 const prioritySort=(a:StockProduct,b:StockProduct)=>{const rank={zero:0,baixo:1,ok:2};return rank[stockLevel(a)]-rank[stockLevel(b)]||a.name.localeCompare(b.name,'pt-BR')};
 const shortUnit=(p:StockProduct)=>SUPPLY_UNIT_LABELS[p.unit].toLocaleLowerCase('pt-BR');
