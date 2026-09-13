@@ -9,6 +9,7 @@ import ClientInit from '@/components/ClientInit';
 import { StoreAutomation } from '@/components/StoreAutomation';
 import { RouteOperations } from '@/components/RouteOperations';
 import { NativeRuntime } from '@/components/NativeRuntime';
+import { PwaRuntime } from '@/components/pwa/PwaRuntime';
 import './globals.css';
 
 const poppins = Poppins({
@@ -49,6 +50,7 @@ export default function RootLayout({
       <body>
         <ClientInit />
         <NativeRuntime />
+        <PwaRuntime />
         <StoreAutomation />
         <RouteOperations />
         <ErrorBoundary>

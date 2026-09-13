@@ -2314,6 +2314,7 @@ export const useAppStore = create<AppState>()(
         stockProducts: state.stockProducts,
         stockMovements: state.stockMovements.slice(0, 500),
         ifoodPendingConfirmations: state.ifoodPendingConfirmations,
+        operationalExpenses: state.operationalExpenses,
         isPrivacyMode: state.isPrivacyMode,
         routeAlertsEnabled: state.routeAlertsEnabled,
         theme: state.theme,
