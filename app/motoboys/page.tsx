@@ -10,7 +10,7 @@ import { getMotoboyRoutes, normalizeName } from '@/lib/motoboy-analytics';
 
 type Filter='ativos'|'inativos'|'todos';
 export default function MotoboysPage(){
-  const router=useRouter();const motoboys=useAppStore(state=>state.motoboys);const routes=useAppStore(state=>state.routes);const deliveries=useAppStore(state=>state.deliveries);const [filter,setFilter]=useState<Filter>('ativos');const [query,setQuery]=useState('');
+  const router=useRouter();const motoboys=useAppStore(state=>state.motoboys);const operationalExpenses=useAppStore(state=>state.operationalExpenses);const routes=useAppStore(state=>state.routes);const deliveries=useAppStore(state=>state.deliveries);const [filter,setFilter]=useState<Filter>('ativos');const [query,setQuery]=useState('');
   const items=useMemo(()=>motoboys.map(motoboy=>{const linkedRoutes=getMotoboyRoutes(motoboy,routes);const routeIds=new Set(linkedRoutes.map(route=>route.id));const linkedDeliveries=deliveries.filter(delivery=>routeIds.has(delivery.route_id));return {motoboy,routes:linkedRoutes,deliveries:linkedDeliveries,completed:linkedDeliveries.filter(delivery=>delivery.completed).length};}),[deliveries,motoboys,routes]);
   const filtered=useMemo(()=>items.filter(({motoboy})=>(filter==='todos'||(filter==='ativos'&&motoboy.active)||(filter==='inativos'&&!motoboy.active))&&(!query.trim()||normalizeName(motoboy.name).includes(normalizeName(query)))).sort((a,b)=>a.motoboy.name.localeCompare(b.motoboy.name,'pt-BR')),[filter,items,query]);
   return <div className="dfl-page"><PageHeader title="Equipe de motoboys" subtitle="Histórico, regras e acertos" to="/loja"/>

@@ -7,7 +7,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { stockLevel, stockProductValue, stockValue } from '@/lib/stock';
 import { buildStockRecommendations, stockIntelligenceSummary } from '@/lib/stock-intelligence';
 import { SUPPLY_UNIT_LABELS } from '@/lib/stock-supply';
-import { canonicalStockCategory, stockCategoryOrder } from '@/lib/stock-categories';
+import { stockCategoryOrder, stockProductCategory } from '@/lib/stock-categories';
 import { StockCategoryIcon } from '@/components/stock/StockCategoryPicker';
 import { formatStockQuantity } from '@/lib/stock-quantity';
 import type { StockProduct } from '@/types';
@@ -20,7 +20,7 @@ export default function StockPage() {
   const recommendationMap=useMemo(()=>new Map(buildStockRecommendations(active,movements).map(item=>[item.productId,item])),[active,movements]);
   const suggested=useMemo(()=>active.filter(p=>(recommendationMap.get(p.id)?.recommendedQuantity||0)>0).sort(prioritySort),[active,recommendationMap]);
   const visible=useMemo(()=>active.filter(p=>p.name.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'))&&(filter==='todos'||stockLevel(p)===filter)).sort(prioritySort),[active,filter,query]);
-  const groups=useMemo(()=>Object.entries(visible.reduce<Record<string,StockProduct[]>>((all,p)=>{const key=canonicalStockCategory(p.category);(all[key]||=[]).push(p);return all},{})).map(([category,items])=>[category,[...items].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))] as [string,StockProduct[]]).sort(([a],[b])=>stockCategoryOrder(a)-stockCategoryOrder(b)||a.localeCompare(b,'pt-BR')),[visible]);
+  const groups=useMemo(()=>Object.entries(visible.reduce<Record<string,StockProduct[]>>((all,p)=>{const key=stockProductCategory(p.name,p.category);(all[key]||=[]).push(p);return all},{})).map(([category,items])=>[category,[...items].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))] as [string,StockProduct[]]).sort(([a],[b])=>stockCategoryOrder(a)-stockCategoryOrder(b)||a.localeCompare(b,'pt-BR')),[visible]);
   const money=(value:number)=>value.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
   return <div className="dfl-page">
     <header className="flex items-center justify-between"><div className="flex items-center gap-3"><button onClick={()=>router.replace('/loja')} className="grid h-12 w-12 place-items-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400"><ChevronLeft size={21}/></button><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-emerald-400">Controle físico</p><h1 className="font-heading text-2xl font-black text-zinc-100">Estoque</h1></div></div></header>

@@ -6,7 +6,7 @@ export const DEFAULT_STOCK_CATEGORIES = [
   'Mercearia',
   'Hortifrúti',
   'Bebidas',
-  'Frios e laticínios',
+  'Frios',
   'Molhos e condimentos',
   'Congelados',
   'Embalagens',
@@ -71,7 +71,7 @@ export function canonicalStockCategory(
       value,
     )
   ) {
-    return 'Frios e laticínios';
+    return 'Frios';
   }
 
   if (
@@ -120,6 +120,19 @@ export function canonicalStockCategory(
     );
 
   return exact || category?.trim() || 'Outros';
+}
+
+export function stockProductCategory(
+  productName?: string,
+  category?: string,
+): string {
+  const product = norm(productName || '');
+
+  if (/bacon(?:\s+fatiado)?|mussarela|presunto|apresuntado/.test(product)) {
+    return 'Frios';
+  }
+
+  return canonicalStockCategory(category);
 }
 
 export function suggestStockCategory(

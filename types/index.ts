@@ -90,7 +90,7 @@ export interface StockSupply {
   updated_at: string;
 }
 
-export type OperationalExpenseType = 'motoboy' | 'frete' | 'manutencao' | 'taxa' | 'outro';
+export type OperationalExpenseType = 'motoboy' | 'frete' | 'manutencao' | 'taxa' | 'alimentacao' | 'servico' | 'material' | 'outro';
 
 export interface OperationalExpense {
   id: string;

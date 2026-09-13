@@ -1,394 +1,58 @@
-// app/despesas/novo/page.tsx
 'use client';
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Bike,
-  CalendarDays,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  ReceiptText,
-  Truck,
-  Wrench,
-  BadgeDollarSign,
-  MoreHorizontal,
-  UserRound,
+  Bike, BriefcaseBusiness, ChevronLeft, Ellipsis, Package,
+  ReceiptText, Save, Truck, Utensils, Wrench,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import type { OperationalExpenseType } from '@/types';
-import { dateFromKey, dateKey, shiftDateKey } from '@/lib/operational-time';
 
-const TYPES: Array<{
-  value: OperationalExpenseType;
-  label: string;
-  hint: string;
-  icon: typeof Bike;
-}> = [
-  { value: 'motoboy', label: 'Motoboy', hint: 'Diária ou custo ligado a um entregador', icon: Bike },
-  { value: 'frete', label: 'Frete', hint: 'Transporte ou deslocamento operacional', icon: Truck },
-  { value: 'manutencao', label: 'Manutenção', hint: 'Equipamento, estrutura ou reparo', icon: Wrench },
-  { value: 'taxa', label: 'Taxa', hint: 'Tarifa ou cobrança operacional', icon: BadgeDollarSign },
-  { value: 'outro', label: 'Outro', hint: 'Outro custo fora do estoque', icon: MoreHorizontal },
+const OPTIONS:Array<{value:OperationalExpenseType;label:string;description:string;Icon:typeof Bike}>=[
+  {value:'motoboy',label:'Motoboy',description:'Diária, complemento, ajuda ou custo ligado ao entregador',Icon:Bike},
+  {value:'frete',label:'Frete',description:'Frete avulso ou deslocamento contratado',Icon:Truck},
+  {value:'manutencao',label:'Manutenção',description:'Reparo, peça ou manutenção operacional',Icon:Wrench},
+  {value:'taxa',label:'Taxa',description:'Taxas, tarifas e cobranças operacionais',Icon:ReceiptText},
+  {value:'alimentacao',label:'Alimentação',description:'Refeição ou alimentação ligada à operação',Icon:Utensils},
+  {value:'servico',label:'Serviço',description:'Serviço terceirizado ou apoio operacional',Icon:BriefcaseBusiness},
+  {value:'material',label:'Material',description:'Material operacional fora do estoque controlado',Icon:Package},
+  {value:'outro',label:'Outro',description:'Despesa operacional sem categoria específica',Icon:Ellipsis},
 ];
+const localDateTime=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)};
 
-const moneyFromDigits = (digits: string) => {
-  const cents = Number(digits || '0');
-  return cents / 100;
-};
+export default function NewExpensePage(){
+  const router=useRouter();
+  const add=useAppStore(s=>s.addOperationalExpense);
+  const motoboys=useAppStore(s=>s.motoboys);
+  const [type,setType]=useState<OperationalExpenseType>('motoboy');
+  const [description,setDescription]=useState('');
+  const [amount,setAmount]=useState('');
+  const [occurredAt,setOccurredAt]=useState(localDateTime);
+  const [motoboyId,setMotoboyId]=useState('');
+  const [observation,setObservation]=useState('');
+  const [saving,setSaving]=useState(false);
+  const activeMotoboys=useMemo(()=>motoboys.filter(m=>m.active).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')),[motoboys]);
+  const needsMotoboy=type==='motoboy'||type==='frete';
 
-const moneyMask = (digits: string) =>
-  moneyFromDigits(digits).toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
+  const save=async()=>{if(saving)return;const numeric=Number(amount.replace(/\./g,'').replace(',','.'));if(!description.trim())return void toast.error('Informe a descrição da despesa.');if(!Number.isFinite(numeric)||numeric<=0)return void toast.error('Informe um valor válido.');if(!occurredAt)return void toast.error('Informe a data da despesa.');const m=motoboys.find(x=>x.id===motoboyId);const now=new Date().toISOString();setSaving(true);try{await add({id:`expense-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,occurred_at:new Date(occurredAt).toISOString(),type,description:description.trim(),amount:numeric,motoboy_id:m?.id,motoboy_name:m?.name,source_kind:'manual',observation:observation.trim()||undefined,created_at:now,updated_at:now});toast.success('Despesa registrada.');router.replace('/despesas')}catch(error){toast.error('Não foi possível salvar a despesa.',{description:error instanceof Error?error.message:undefined})}finally{setSaving(false)}};
 
-export default function NewExpensePage() {
-  const router = useRouter();
-  const add = useAppStore((state) => state.addOperationalExpense);
-  const motoboys = useAppStore((state) => state.motoboys);
-  const expenses = useAppStore((state) => state.operationalExpenses);
+  return <div className="dfl-page">
+    <header className="flex items-center gap-3"><button onClick={()=>router.replace('/despesas')} className="dfl-icon-button"><ChevronLeft size={20}/></button><div><p className="text-[10px] font-black uppercase tracking-[.18em] text-rose-400">Novo lançamento</p><h1 className="font-heading text-xl font-black text-zinc-100">Nova despesa</h1></div></header>
 
-  const [type, setType] = useState<OperationalExpenseType>('outro');
-  const [description, setDescription] = useState('');
-  const [amountDigits, setAmountDigits] = useState('');
-  const [occurredAt, setOccurredAt] = useState(() => dateKey(new Date()));
-  const [observation, setObservation] = useState('');
-  const [motoboyId, setMotoboyId] = useState('');
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [motoboyOpen, setMotoboyOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+    <section className="space-y-3"><div><p className="text-[9px] font-black uppercase tracking-[.16em] text-zinc-600">Categoria</p><h2 className="mt-0.5 text-sm font-black text-zinc-200">O que gerou este custo?</h2></div><div className="grid grid-cols-2 gap-2">{OPTIONS.map(({value,label,description:help,Icon})=>{const active=type===value;return <button key={value} onClick={()=>{setType(value);if(value!=='motoboy'&&value!=='frete')setMotoboyId('')}} className={`min-h-[104px] rounded-[20px] border p-3 text-left transition active:scale-[.98] ${active?'border-rose-400/35 bg-rose-500/[.08]':'border-zinc-800 bg-zinc-900/40'}`}><span className={`grid h-9 w-9 place-items-center rounded-xl ${active?'bg-rose-500/15 text-rose-300':'bg-zinc-950/60 text-zinc-500'}`}><Icon size={17}/></span><p className="mt-2 text-xs font-black text-zinc-200">{label}</p><p className="mt-1 line-clamp-2 text-[9px] leading-relaxed text-zinc-600">{help}</p></button>})}</div></section>
 
-  const selectedMotoboy = motoboys.find((item) => item.id === motoboyId);
-  const amount = moneyFromDigits(amountDigits);
-  const selectedDate = dateFromKey(occurredAt);
-
-  const settlementAlreadyExists = useMemo(() => {
-    if (!motoboyId || type !== 'motoboy') return false;
-    return expenses.some(
-      (item) =>
-        item.source_kind === 'motoboy_settlement' &&
-        item.source_id === `motoboy:${motoboyId}:${occurredAt}`,
-    );
-  }, [expenses, motoboyId, occurredAt, type]);
-
-  const selectType = (value: OperationalExpenseType) => {
-    setType(value);
-    if (value !== 'motoboy') setMotoboyId('');
-    if (!description.trim()) {
-      const label = TYPES.find((item) => item.value === value)?.label;
-      setDescription(label || '');
-    }
-  };
-
-  const save = async () => {
-    const cleanDescription = description.trim();
-
-    if (cleanDescription.length < 2) {
-      toast.error('Informe uma descrição.');
-      return;
-    }
-    if (amount <= 0) {
-      toast.error('Informe um valor maior que zero.');
-      return;
-    }
-    if (type === 'motoboy' && !selectedMotoboy) {
-      toast.error('Selecione o entregador.');
-      return;
-    }
-    if (settlementAlreadyExists) {
-      toast.error('A diária deste entregador já foi lançada pelo acerto.', {
-        description: 'Evitei registrar o mesmo custo duas vezes.',
-      });
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const now = new Date().toISOString();
-
-      await add({
-        id: `expense-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        occurred_at: `${occurredAt}T12:00:00-03:00`,
-        type,
-        description: cleanDescription,
-        amount,
-        motoboy_id: selectedMotoboy?.id,
-        motoboy_name: selectedMotoboy?.name,
-        source_kind: 'manual',
-        observation: observation.trim() || undefined,
-        created_at: now,
-        updated_at: now,
-      });
-
-      toast.success('Despesa operacional registrada.');
-      router.replace('/despesas');
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Não foi possível registrar a despesa.',
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-5 pb-28">
-      <PageHeader
-        title="Nova despesa"
-        subtitle="Custo operacional fora do estoque"
-        to="/despesas"
-      />
-
-      <section className="rounded-[22px] border border-amber-500/20 bg-amber-500/[.045] p-4">
-        <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-400">
-            <ReceiptText size={18} />
-          </div>
-          <div>
-            <p className="text-sm font-black text-zinc-100">Lançamento operacional</p>
-            <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
-              Estoque continua em Compras. Aqui entram custos de operação, com vínculo real ao entregador quando necessário.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <Field label="Categoria">
-        <div className="grid grid-cols-2 gap-2">
-          {TYPES.map((item) => {
-            const Icon = item.icon;
-            const active = type === item.value;
-            return (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => selectType(item.value)}
-                className={`rounded-2xl border p-3 text-left ${
-                  active
-                    ? 'border-amber-500/40 bg-amber-500/10'
-                    : 'border-zinc-800 bg-zinc-900/45'
-                }`}
-              >
-                <Icon size={16} className={active ? 'text-amber-400' : 'text-zinc-600'} />
-                <p className="mt-2 text-xs font-black text-zinc-200">{item.label}</p>
-                <p className="mt-1 line-clamp-2 text-[9px] leading-relaxed text-zinc-600">
-                  {item.hint}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-      </Field>
-
-      {type === 'motoboy' && (
-        <Field label="Entregador">
-          <button
-            type="button"
-            onClick={() => setMotoboyOpen(true)}
-            className="flex h-12 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-left"
-          >
-            <span className="flex items-center gap-2">
-              <UserRound size={16} className="text-sky-400" />
-              <span className={selectedMotoboy ? 'text-sm font-bold text-zinc-200' : 'text-sm text-zinc-600'}>
-                {selectedMotoboy?.name || 'Selecionar entregador'}
-              </span>
-            </span>
-            <ChevronRight size={16} className="text-zinc-600" />
-          </button>
-
-          {settlementAlreadyExists && (
-            <p className="mt-2 rounded-xl border border-red-500/20 bg-red-500/[.05] px-3 py-2 text-[10px] text-red-300">
-              Já existe um lançamento automático do Acerto para este entregador nesta data. Despesas manuais continuam permitidas quando forem custos diferentes.
-            </p>
-          )}
-        </Field>
-      )}
-
-      <Field label="Descrição">
-        <input
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-          placeholder={
-            type === 'motoboy'
-              ? 'Ex.: Diária do entregador'
-              : type === 'manutencao'
-                ? 'Ex.: Manutenção da chapa'
-                : 'Descreva a despesa'
-          }
-          className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-sm outline-none focus:border-amber-500"
-        />
-      </Field>
-
-      <Field label="Valor">
-        <input
-          value={moneyMask(amountDigits)}
-          onChange={(event) => setAmountDigits(event.target.value.replace(/\D/g, '').slice(0, 10))}
-          inputMode="numeric"
-          className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-xl font-black text-amber-300 outline-none focus:border-amber-500"
-        />
-      </Field>
-
-      <Field label="Data">
-        <button
-          type="button"
-          onClick={() => setCalendarOpen(true)}
-          className="flex h-12 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-4"
-        >
-          <span className="flex items-center gap-2 text-sm font-bold text-zinc-200">
-            <CalendarDays size={16} className="text-amber-400" />
-            {selectedDate.toLocaleDateString('pt-BR', {
-              day: '2-digit',
-              month: 'long',
-              year: 'numeric',
-            })}
-          </span>
-          <ChevronRight size={16} className="text-zinc-600" />
-        </button>
-      </Field>
-
-      <Field label="Observação">
-        <textarea
-          rows={4}
-          value={observation}
-          onChange={(event) => setObservation(event.target.value)}
-          placeholder="Detalhes opcionais"
-          className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm outline-none focus:border-amber-500"
-        />
-      </Field>
-
-      <button
-        type="button"
-        disabled={busy}
-        onClick={save}
-        className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-amber-500 font-black text-zinc-950 active:scale-[.98] disabled:opacity-50"
-      >
-        <Check size={18} />
-        {busy ? 'Salvando...' : 'Salvar despesa'}
-      </button>
-
-      {motoboyOpen && (
-        <div
-          className="fixed inset-0 z-[100] flex items-end bg-black/75 p-3 backdrop-blur-sm"
-          onClick={() => setMotoboyOpen(false)}
-        >
-          <section
-            className="w-full rounded-[28px] border border-zinc-800 bg-zinc-950 p-4"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-3">
-              <p className="text-[10px] font-black uppercase tracking-wider text-sky-400">
-                Entregador
-              </p>
-              <h2 className="mt-1 text-lg font-black text-zinc-100">Vincular despesa</h2>
-            </div>
-            <div className="max-h-[50vh] space-y-2 overflow-y-auto">
-              {motoboys.map((motoboy) => (
-                <button
-                  key={motoboy.id}
-                  type="button"
-                  onClick={() => {
-                    setMotoboyId(motoboy.id);
-                    setMotoboyOpen(false);
-                    if (!description.trim() || description === 'Motoboy') {
-                      setDescription(`Diária de motoboy · ${motoboy.name}`);
-                    }
-                  }}
-                  className="flex w-full items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/55 p-3 text-left"
-                >
-                  <span>
-                    <strong className="block text-sm text-zinc-200">{motoboy.name}</strong>
-                    <span className="mt-0.5 block text-[10px] text-zinc-600">
-                      {motoboy.active ? 'Ativo / escalado' : 'Fora da escala'}
-                    </span>
-                  </span>
-                  <ChevronRight size={15} className="text-zinc-600" />
-                </button>
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
-
-      {calendarOpen && (
-        <div
-          className="fixed inset-0 z-[100] flex items-end bg-black/75 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
-          onClick={() => setCalendarOpen(false)}
-        >
-          <section
-            className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-950 p-4"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setOccurredAt((key) => shiftDateKey(key, -1))}
-                className="grid h-10 w-10 place-items-center rounded-xl bg-zinc-900 text-zinc-400"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <div className="text-center">
-                <p className="text-[9px] font-black uppercase tracking-wider text-amber-400">
-                  Data da despesa
-                </p>
-                <p className="mt-1 text-sm font-black text-zinc-100">
-                  {dateFromKey(occurredAt).toLocaleDateString('pt-BR', {
-                    day: '2-digit',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOccurredAt((key) => shiftDateKey(key, 1))}
-                className="grid h-10 w-10 place-items-center rounded-xl bg-zinc-900 text-zinc-400"
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setOccurredAt(dateKey(new Date()));
-                setCalendarOpen(false);
-              }}
-              className="mt-4 h-11 w-full rounded-xl bg-amber-500/10 text-xs font-black text-amber-400"
-            >
-              Usar hoje
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setCalendarOpen(false)}
-              className="mt-2 h-11 w-full rounded-xl bg-zinc-900 text-xs font-black text-zinc-400"
-            >
-              Confirmar data
-            </button>
-          </section>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <p className="mb-1.5 px-1 text-[10px] font-black uppercase tracking-[.14em] text-zinc-500">
-        {label}
-      </p>
-      {children}
+    <section className="space-y-3 rounded-[24px] border border-zinc-800/80 bg-zinc-900/35 p-4">
+      <Field label="Descrição"><input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: diária do João, troca de óleo, taxa..." className="dfl-search px-3.5"/></Field>
+      <div className="grid grid-cols-2 gap-3"><Field label="Valor"><input value={amount} onChange={e=>setAmount(e.target.value.replace(/[^\d.,]/g,''))} inputMode="decimal" placeholder="0,00" className="dfl-search px-3.5"/></Field><Field label="Quando"><input type="datetime-local" value={occurredAt} onChange={e=>setOccurredAt(e.target.value)} className="dfl-search px-2.5 text-[11px]"/></Field></div>
+      {needsMotoboy&&<Field label="Motoboy relacionado · opcional"><select value={motoboyId} onChange={e=>setMotoboyId(e.target.value)} className="dfl-search px-3.5"><option value="">Sem vínculo</option>{activeMotoboys.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>}
+      <Field label="Observação · opcional"><textarea value={observation} onChange={e=>setObservation(e.target.value)} rows={3} placeholder="Detalhe útil para lembrar depois" className="w-full resize-none rounded-[16px] border border-zinc-800/80 bg-zinc-950/55 px-3.5 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-rose-500/50"/></Field>
     </section>
-  );
+
+    <div className="rounded-[20px] border border-zinc-800/70 bg-zinc-900/25 p-3"><p className="text-[10px] leading-relaxed text-zinc-600">Compras de estoque e abastecimentos continuam nos módulos próprios. Aqui entram outras despesas da operação para evitar dupla contagem.</p></div>
+    <button disabled={saving} onClick={save} className="flex min-h-[52px] items-center justify-center gap-2 rounded-[16px] bg-rose-500 text-sm font-black text-white active:scale-[.98] disabled:opacity-50"><Save size={17}/>{saving?'Salvando...':'Salvar despesa'}</button>
+  </div>
 }
+
+function Field({label,children}:{label:string;children:React.ReactNode}){return <label className="block"><span className="mb-1.5 block text-[9px] font-black uppercase tracking-[.14em] text-zinc-600">{label}</span>{children}</label>}

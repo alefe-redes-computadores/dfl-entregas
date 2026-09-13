@@ -110,7 +110,7 @@ export function nativeBackTarget(pathname: string, search = ''): string | null {
     return '/estoque';
   }
 
-  if (path === '/despesas/novo') return '/despesas';
+  if (path === '/despesas/novo' || path === '/despesas/editar') return '/despesas';
 
   // Hubs/listas de segundo nível.
   if (

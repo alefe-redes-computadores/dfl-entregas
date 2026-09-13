@@ -78,7 +78,7 @@ interface AppState {
   setSelectedDate: (date: Date) => void;
   goToPreviousDay: () => void;
   goToNextDay: () => void;
-  getDeliveriesByRoute: (routeId: string) => Delivery[];
+  getDeliveriesByRoute: (routeId: string) => (Delivery & { is_expanded?: boolean })[];
   getCustomerById: (customerId?: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
   updateRoute: (routeId: string, data: Partial<Route>) => Promise<void>;
@@ -127,6 +127,7 @@ interface AppState {
   reverseStockSupply: (id: string) => Promise<void>;
   countStockProducts: (counts: Array<{ product_id: string; quantity: number }>, responsible?: { id?: string; name?: string }) => Promise<void>;
   addOperationalExpense: (expense: OperationalExpense) => Promise<void>;
+  updateOperationalExpense: (id: string, data: Partial<OperationalExpense>) => Promise<void>;
   deleteOperationalExpense: (id: string) => Promise<void>;
   addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
   updateIfoodPendingConfirmation: (id: string, data: Partial<IfoodPendingConfirmation>) => Promise<void>;
@@ -1688,6 +1689,36 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           set({ operationalExpenses: previous });
           console.error(error);
+          throw error;
+        }
+      },
+
+      updateOperationalExpense: async (id, data) => {
+        const previous = get().operationalExpenses;
+        const current = previous.find((item) => item.id === id);
+
+        if (!current) {
+          throw new Error('Despesa não encontrada.');
+        }
+
+        const next: Partial<OperationalExpense> = {
+          ...data,
+          updated_at: new Date().toISOString(),
+        };
+
+        set((state) => ({
+          operationalExpenses: state.operationalExpenses.map((item) =>
+            item.id === id ? { ...item, ...next } : item,
+          ),
+        }));
+
+        try {
+          await updateDoc(
+            doc(db, 'operational_expenses', id),
+            sanitizeForFirebase(next),
+          );
+        } catch (error) {
+          set({ operationalExpenses: previous });
           throw error;
         }
       },

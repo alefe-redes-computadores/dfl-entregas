@@ -1,6 +1,7 @@
 'use client';
 
 import { PreRouteIntelligence } from '@/components/home/PreRouteIntelligence';
+import { RouteSequenceAdvisor } from '@/components/home/RouteSequenceAdvisor';
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -652,6 +653,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       {isOpen && (
         <div className="px-4 pb-3">
           <PreRouteIntelligence
+            route={route}
+            deliveries={sortedDeliveries}
+            customers={customers}
+          />
+          <RouteSequenceAdvisor
             route={route}
             deliveries={sortedDeliveries}
             customers={customers}

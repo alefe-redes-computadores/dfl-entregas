@@ -339,6 +339,11 @@ export default function HomePage() {
     activeMotoboysToday,
   } = homeOperation;
 
+  const hasOperationSummary =
+    totalEntregas > 0 ||
+    openRoutes.length > 0 ||
+    faturamentoTotal > 0;
+
   const formatOrderTime = (
     order: (typeof ordersDoDia)[number],
   ) => {
@@ -379,6 +384,7 @@ export default function HomePage() {
       <OperationalCommandCenter routes={routesDoDia} deliveries={deliveriesDoDia} />
       <ShiftBriefing />
 
+      {hasOperationSummary ? (
       <section className="space-y-3">
         <div className="flex items-end justify-between gap-3 px-1">
           <div>
@@ -405,6 +411,21 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      ) : (
+        <section className="rounded-[20px] border border-zinc-800/80 bg-zinc-900/30 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-zinc-900 text-zinc-600">
+              <Package size={16} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-black text-zinc-300">Sem movimento neste período</p>
+              <p className="mt-0.5 text-[10px] text-zinc-600">
+                Entregas, rotas e faturamento aparecem aqui quando houver operação.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {activeMotoboysToday.length > 0 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">

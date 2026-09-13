@@ -209,7 +209,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       const code = delivery.confirmation_code || customer?.last_confirmation_code;
       await executeCompletion(code);
     } else {
-      toggleDeliveryExpansion(delivery.id, !isExpanded);
+      if (!isExpanded) {
+      getDeliveriesByRoute(route.id)
+        .filter((item) => item.id !== delivery.id && item.is_expanded)
+        .forEach((item) => toggleDeliveryExpansion(item.id, false));
+    }
+    toggleDeliveryExpansion(delivery.id, !isExpanded);
     }
   }
 
@@ -327,11 +332,15 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     <>
       <div className={clsx(
           "relative overflow-hidden rounded-[22px] transition-all duration-200",
-          delivery.completed ? "opacity-65" : "shadow-sm",
+          delivery.completed ? "opacity-80" : "shadow-sm",
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
           isNeighbor && !delivery.completed && "border-sky-500/30",
           isHandleDragging && "z-20 scale-[1.015] border-sky-400/60 shadow-[0_18px_45px_rgba(0,0,0,0.45)]",
-          isExpanded ? "bg-zinc-900 border border-sky-500/25 shadow-[0_12px_30px_rgba(0,0,0,0.28)]" : "bg-zinc-900/35 border border-zinc-800/70"
+          isExpanded
+            ? "bg-zinc-900 border border-sky-500/30 shadow-[0_14px_34px_rgba(0,0,0,0.32)]"
+            : delivery.completed
+              ? "bg-zinc-900/24 border border-emerald-500/12"
+              : "bg-zinc-900/35 border border-zinc-800/70"
         )}
         style={{ transform: isHandleDragging ? `translateY(${dragOffsetY}px)` : undefined }}
       >
@@ -473,7 +482,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       </div>
                     </div>
 
-                    {(delivery.completed || route.status === 'fechada') && (
+                    {isExpanded && (delivery.completed || route.status === 'fechada') && (
                       <div className="flex items-center gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 px-3 py-2 text-[10px] font-bold text-zinc-500">
                         <GripVertical size={13} />
                         {delivery.completed ? 'Entrega concluída — posição preservada' : 'Rota fechada — ordem bloqueada'}
@@ -623,7 +632,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 border-t border-zinc-800/80 px-4 py-3 bg-zinc-950/40">
+              <div className={clsx(
+                "mx-3 mb-3 flex flex-col border border-zinc-800/70 bg-zinc-950/45",
+                isExpanded ? "gap-2.5 rounded-[18px] px-3 py-3" : "gap-2 rounded-[16px] px-3 py-2.5",
+                delivery.completed && !isExpanded && "bg-emerald-500/[.025] border-emerald-500/10"
+              )}>
                 <div className="flex items-center gap-2 flex-wrap">
                   {delivery.is_paid ? (
                     <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-500">
@@ -647,7 +660,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     onClick={() => handleTriggerAction('complete')}
                     disabled={isRecoveryRoute}
                     className={clsx(
-                      "flex-1 flex h-12 items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all active:scale-95 shadow-lg disabled:active:scale-100",
+                      "flex-1 flex h-11 items-center justify-center gap-2 rounded-xl text-[13px] font-black transition-all active:scale-95 shadow-lg disabled:active:scale-100",
                       isRecoveryRoute
                         ? "cursor-not-allowed border border-amber-500/20 bg-amber-500/[.06] text-amber-300 shadow-none"
                         : delivery.completed
@@ -678,7 +691,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   <Link
                     href={`/entregas/editar?id=${delivery.id}${operationalDateQuery}`}
                     onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); }}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90 transition-all"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 active:scale-90 transition-all"
                   >
                     <Pencil size={16} />
                   </Link>
@@ -689,7 +702,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code);
                       toast.success('Entrega copiada!');
                     }}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 active:scale-90 transition-all"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 active:scale-90 transition-all"
                   >
                     <Share2 size={16} strokeWidth={2.5} />
                   </button>
