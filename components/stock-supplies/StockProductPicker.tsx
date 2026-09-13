@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import {
   Boxes,
   Check,
+  ChevronDown,
   Plus,
   Search,
   X,
@@ -54,6 +55,7 @@ export function StockProductPicker({
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [showOtherProducts, setShowOtherProducts] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Mercearia');
@@ -103,30 +105,75 @@ export function StockProductPicker({
     [preferredRank, products, query],
   );
 
-  const groups = useMemo(
-    () =>
+  const displaySections = useMemo(() => {
+    const groupByCategory = (items: StockProduct[]) =>
       Object.entries(
-        filtered.reduce<Record<string, StockProduct[]>>(
+        items.reduce<Record<string, StockProduct[]>>(
           (all, product) => {
             const key = canonicalStockCategory(
               product.category,
             );
+
             (all[key] ||= []).push(product);
             return all;
           },
           {},
         ),
-      ).map(([categoryName, items]) => [
-        categoryName,
-        [...items].sort((a, b) =>
-          a.name.localeCompare(b.name, 'pt-BR'),
-        ),
-      ] as [string, StockProduct[]]).sort(([a], [b]) =>
-        stockCategoryOrder(a) - stockCategoryOrder(b) ||
-        a.localeCompare(b, 'pt-BR'),
-      ),
-    [filtered],
-  );
+      )
+        .map(
+          ([categoryName, items]) =>
+            [
+              categoryName,
+              [...items].sort((a, b) =>
+                a.name.localeCompare(b.name, 'pt-BR'),
+              ),
+            ] as [string, StockProduct[]],
+        )
+        .sort(
+          ([a], [b]) =>
+            stockCategoryOrder(a) -
+              stockCategoryOrder(b) ||
+            a.localeCompare(b, 'pt-BR'),
+        );
+
+    const preferred = filtered.filter((product) =>
+      preferredRank.has(product.id),
+    );
+
+    const others = filtered.filter(
+      (product) => !preferredRank.has(product.id),
+    );
+
+    if (!preferred.length) {
+      return [
+        {
+          key: 'all' as const,
+          label: null,
+          groups: groupByCategory(filtered),
+        },
+      ];
+    }
+
+    return [
+      {
+        key: 'preferred' as const,
+        label: 'Comprados neste fornecedor',
+        groups: groupByCategory(preferred),
+      },
+      ...(others.length
+        ? [
+            {
+              key: 'others' as const,
+              label: 'Outros produtos',
+              groups: groupByCategory(others),
+            },
+          ]
+        : []),
+    ];
+  }, [
+    filtered,
+    preferredRank,
+  ]);
 
   const canCreate =
     query.trim().length >= 2 &&
@@ -189,7 +236,10 @@ export function StockProductPicker({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setShowOtherProducts(false);
+          setOpen(true);
+        }}
         aria-invalid={invalid}
         className={`mt-1 flex min-h-14 w-full items-center gap-3 rounded-2xl border bg-zinc-900 px-4 py-3 text-left ${
           invalid
@@ -305,82 +355,214 @@ export function StockProductPicker({
                   </button>
                 )}
 
-                <p className="mt-2 text-[9px] leading-relaxed text-zinc-600">Produtos arquivados não entram em novas compras. Se não encontrar um item, você pode cadastrá-lo aqui.</p><div className="mt-3 space-y-4">
-                  {groups.map(
-                    ([categoryName, items]) => (
-                      <section key={categoryName}>
-                        <p className="mb-2 text-[9px] font-black uppercase tracking-wider text-zinc-600">
-                          {categoryName}
-                        </p>
+                <p className="mt-2 text-[9px] leading-relaxed text-zinc-600">
+                  Produtos arquivados não entram em novas compras. Se não
+                  encontrar um item, você pode cadastrá-lo aqui.
+                </p>
 
-                        <div className="space-y-2">
-                          {items.map((product) => {
-                            const level =
-                              stockLevel(product);
+                {preferredCount > 0 && !query.trim() && (
+                  <div className="mt-3 rounded-xl border border-emerald-500/15 bg-emerald-500/[.04] px-3 py-2">
+                    <p className="text-[10px] font-bold text-emerald-300">
+                      Sugestões pelo histórico de compras
+                    </p>
+                    <p className="mt-0.5 text-[9px] leading-relaxed text-zinc-600">
+                      {supplierLabel
+                        ? `Priorizando produtos já comprados em ${supplierLabel}.`
+                        : 'Priorizando produtos já comprados deste fornecedor.'}
+                    </p>
+                  </div>
+                )}
 
-                            return (
+                {filtered.length === 0 ? (
+                  <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 text-center">
+                    <p className="text-sm font-bold text-zinc-400">
+                      Nenhum produto encontrado
+                    </p>
+                    <p className="mt-1 text-[10px] text-zinc-600">
+                      Ajuste a busca ou cadastre um novo produto.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-5">
+                    {displaySections.map((section) => {
+                      const isOthers =
+                        section.key === 'others';
+
+                      const expanded =
+                        !isOthers ||
+                        Boolean(query.trim()) ||
+                        showOtherProducts;
+
+                      const sectionCount =
+                        section.groups.reduce(
+                          (total, [, items]) =>
+                            total + items.length,
+                          0,
+                        );
+
+                      return (
+                        <section key={section.key}>
+                          {section.label &&
+                            (isOthers ? (
                               <button
                                 type="button"
-                                key={product.id}
-                                onClick={() => {
-                                  onChange(product.id);
-                                  setOpen(false);
-                                  setQuery('');
-                                }}
-                                className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/55 p-3 text-left"
+                                onClick={() =>
+                                  setShowOtherProducts(
+                                    (value) => !value,
+                                  )
+                                }
+                                className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/45 px-3 py-3 text-left"
                               >
-                                <span
-                                  className={`h-9 w-1 rounded-full ${
-                                    level === 'zero'
-                                      ? 'bg-red-500'
-                                      : level === 'baixo'
-                                        ? 'bg-amber-500'
-                                        : 'bg-emerald-500'
-                                  }`}
-                                />
-
-                                <span className="min-w-0 flex-1">
-                                  <b className="block truncate text-sm text-zinc-200">
-                                    {product.name}
+                                <span>
+                                  <b className="block text-[10px] font-black uppercase tracking-wider text-zinc-400">
+                                    Outros produtos
                                   </b>
-                                  <small className="block text-[9px] text-zinc-600">
-                                    {formatStockQuantity(
-                                      projectedQuantity(product),
-                                      product.unit,
-                                    )}{' '}
-                                    · custo{' '}
-                                    {(
-                                      product.average_cost || 0
-                                    ).toLocaleString(
-                                      'pt-BR',
-                                      {
-                                        style: 'currency',
-                                        currency: 'BRL',
-                                      },
-                                    )}
-                                    /
-                                    {SUPPLY_UNIT_LABELS[
-                                      product.unit
-                                    ].toLocaleLowerCase(
-                                      'pt-BR',
-                                    )}
+                                  <small className="mt-0.5 block text-[9px] text-zinc-600">
+                                    {sectionCount}{' '}
+                                    {sectionCount === 1
+                                      ? 'produto disponível'
+                                      : 'produtos disponíveis'}
                                   </small>
                                 </span>
 
-                                {value === product.id && (
-                                  <Check
-                                    size={16}
-                                    className="text-emerald-400"
-                                  />
-                                )}
+                                <ChevronDown
+                                  size={16}
+                                  className={`text-zinc-500 transition-transform ${
+                                    expanded
+                                      ? 'rotate-180'
+                                      : ''
+                                  }`}
+                                />
                               </button>
-                            );
-                          })}
-                        </div>
-                      </section>
-                    ),
-                  )}
-                </div>
+                            ) : (
+                              <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.04] px-3 py-2.5">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                                  Comprados neste fornecedor
+                                </p>
+                                <p className="mt-0.5 text-[9px] text-zinc-600">
+                                  {sectionCount}{' '}
+                                  {sectionCount === 1
+                                    ? 'produto recorrente'
+                                    : 'produtos recorrentes'}
+                                </p>
+                              </div>
+                            ))}
+
+                          {expanded && (
+                            <div
+                              className={`space-y-4 ${
+                                section.label
+                                  ? 'mt-3'
+                                  : ''
+                              }`}
+                            >
+                              {section.groups.map(
+                                ([categoryName, items]) => (
+                                  <div key={categoryName}>
+                                    <p className="mb-2 text-[9px] font-black uppercase tracking-wider text-zinc-600">
+                                      {categoryName}
+                                    </p>
+
+                                    <div className="space-y-2">
+                                      {items.map(
+                                        (product) => {
+                                          const level =
+                                            stockLevel(
+                                              product,
+                                            );
+
+                                          return (
+                                            <button
+                                              type="button"
+                                              key={
+                                                product.id
+                                              }
+                                              onClick={() => {
+                                                onChange(
+                                                  product.id,
+                                                );
+                                                setOpen(
+                                                  false,
+                                                );
+                                                setQuery(
+                                                  '',
+                                                );
+                                              }}
+                                              className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/55 p-3 text-left"
+                                            >
+                                              <span
+                                                className={`h-9 w-1 rounded-full ${
+                                                  level ===
+                                                  'zero'
+                                                    ? 'bg-red-500'
+                                                    : level ===
+                                                        'baixo'
+                                                      ? 'bg-amber-500'
+                                                      : 'bg-emerald-500'
+                                                }`}
+                                              />
+
+                                              <span className="min-w-0 flex-1">
+                                                <b className="block truncate text-sm text-zinc-200">
+                                                  {
+                                                    product.name
+                                                  }
+                                                </b>
+
+                                                <small className="block text-[9px] text-zinc-600">
+                                                  {formatStockQuantity(
+                                                    projectedQuantity(
+                                                      product,
+                                                    ),
+                                                    product.unit,
+                                                  )}{' '}
+                                                  · custo{' '}
+                                                  {(
+                                                    product.average_cost ||
+                                                    0
+                                                  ).toLocaleString(
+                                                    'pt-BR',
+                                                    {
+                                                      style:
+                                                        'currency',
+                                                      currency:
+                                                        'BRL',
+                                                    },
+                                                  )}
+                                                  /
+                                                  {SUPPLY_UNIT_LABELS[
+                                                    product
+                                                      .unit
+                                                  ].toLocaleLowerCase(
+                                                    'pt-BR',
+                                                  )}
+                                                </small>
+                                              </span>
+
+                                              {value ===
+                                                product.id && (
+                                                <Check
+                                                  size={
+                                                    16
+                                                  }
+                                                  className="text-emerald-400"
+                                                />
+                                              )}
+                                            </button>
+                                          );
+                                        },
+                                      )}
+                                    </div>
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                          )}
+                        </section>
+                      );
+                    })}
+                  </div>
+                )}
               </>
             ) : (
               <div className="mt-5 space-y-4">

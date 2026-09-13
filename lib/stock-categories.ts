@@ -60,12 +60,12 @@ export function canonicalStockCategory(category?:string):string{
   return exact||category?.trim()||'Outros';
 }
 
-export function stockProductCategory(productName?:string,category?:string):string{
-  const product=norm(productName||'');
-  if(/hamburg/.test(product))return'Congelados';
-  if(/file.*frango|frango.*file|peito.*frango/.test(product))return'Açougue';
-  if(/salsich|bacon(?:\s+fatiado)?|mussarela|presunto|apresuntado/.test(product))return'Frios';
-  if(/batata palha|milho verde|milho/.test(product))return'Mercearia';
+export function stockProductCategory(
+  _productName?: string,
+  category?: string,
+): string {
+  // A categoria persistida é a classificação atual escolhida pelo usuário.
+  // O nome serve apenas para sugestão/migração de legado.
   return canonicalStockCategory(category);
 }
 

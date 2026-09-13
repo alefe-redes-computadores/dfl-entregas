@@ -26,7 +26,7 @@ import {
   findExistingCustomer,
   nextCustomerName,
 } from '@/lib/customer-identity';
-import { stockProductCategory } from '@/lib/stock-categories';
+import { stockProductCategory, suggestStockCategory } from '@/lib/stock-categories';
 import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop } from '@/lib/route-stops';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 
@@ -426,24 +426,64 @@ export const useAppStore = create<AppState>()(
           const mergedStockSuppliers = mergeById(fbStockSuppliers, get().stockSuppliers).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
           const mergedStockProducts = mergeById(fbStockProducts, get().stockProducts).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
-          // Migração conservadora: só corrige categorias legadas cuja
-          // classificação é inequívoca pelo nome ou pelo rótulo antigo.
+          // Migração conservadora de categorias antigas.
+          // Depois que existe uma categoria explícita válida, ela é soberana.
           const categoryMigrations = mergedStockProducts
             .map((product) => {
-              const inferred = stockProductCategory(
-                product.name,
-                product.category,
-              );
               const current = (product.category || '').trim();
-              const legacyGeneric =
-                /ingrediente|frios e latic[ií]nios/i.test(current);
-              const explicitKnownProduct =
-                /hamburg|bacon|salsich|mussarela|presunto|apresuntado|fil[eé].*frango|peito.*frango|batata palha|milho/i.test(
-                  product.name,
-                );
 
-              return inferred !== current &&
-                (legacyGeneric || explicitKnownProduct)
+              const normalize = (value: string) =>
+                value
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .trim()
+                  .toLocaleLowerCase('pt-BR');
+
+              const currentNorm = normalize(current);
+              const nameNorm = normalize(product.name);
+
+              let inferred: string | null = null;
+
+              // Alias histórico.
+              if (currentNorm === 'frios e laticinios') {
+                inferred = 'Frios';
+              }
+
+              // Categoria genérica antiga: pode ser migrada uma vez.
+              else if (/^ingredientes?$/.test(currentNorm)) {
+                inferred = suggestStockCategory(product.name);
+              }
+
+              // Correções comprovadas de dados legados.
+              else if (
+                currentNorm === 'mercearia' &&
+                /bacon(?:\s+fatiado)?/.test(nameNorm)
+              ) {
+                inferred = 'Frios';
+              }
+
+              else if (
+                currentNorm === 'mercearia' &&
+                /hamburg/.test(nameNorm)
+              ) {
+                inferred = 'Congelados';
+              }
+
+              else if (
+                currentNorm === 'mercearia' &&
+                /(file.*frango|peito.*frango)/.test(nameNorm)
+              ) {
+                inferred = 'Açougue';
+              }
+
+              else if (
+                currentNorm === 'mercearia' &&
+                /salsich/.test(nameNorm)
+              ) {
+                inferred = 'Frios';
+              }
+
+              return inferred && inferred !== current
                 ? { product, inferred }
                 : null;
             })
@@ -468,6 +508,7 @@ export const useAppStore = create<AppState>()(
                     updated_at: new Date().toISOString(),
                   },
                 );
+
                 product.category = inferred;
               },
             );
