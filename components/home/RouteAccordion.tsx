@@ -410,23 +410,34 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   const getCurrentOrigin = async (): Promise<{ point: LatLngPoint | null; label: string }> => {
-    try {
-      const point=await requestDeviceLocation();setOptimizerLocationError('');return { point, label: 'Minha localização atual' };
-    } catch (error) {
-      console.warn('GPS indisponível para organizar rota:', error);
-      setOptimizerLocationError(error instanceof Error?error.message:'Não foi possível consultar a localização.');
-    }
-
     const lat = Number(storeSettings?.storeLatitude);
     const lng = Number(storeSettings?.storeLongitude);
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      return { point: { lat, lng }, label: 'Localização salva da loja' };
+      setOptimizerLocationError('');
+      return { point: { lat, lng }, label: 'Loja · localização salva' };
     }
-    const linkedStorePoint=extractLatLngFromMapsUrl(storeSettings?.storeMapsLink);
-    if(linkedStorePoint)return {point:linkedStorePoint,label:'Link salvo da loja'};
-    const storeAddress=storeSettings?.storeAddress?.trim();
-    if(storeAddress){try{const point=await geocodeStoreAddress(storeAddress);await updateStoreSettings({storeLatitude:point.lat,storeLongitude:point.lng});setOptimizerLocationError('');return{point,label:'Endereço cadastrado da loja'}}catch(error){setOptimizerLocationError(error instanceof Error?`GPS falhou e o endereço da loja não pôde ser localizado: ${error.message}`:'Origem indisponível.')}}
-    return { point: null, label: 'GPS e localização da loja indisponíveis' };
+    const linkedStorePoint = extractLatLngFromMapsUrl(storeSettings?.storeMapsLink);
+    if (linkedStorePoint) {
+      setOptimizerLocationError('');
+      return { point: linkedStorePoint, label: 'Loja · ponto salvo no mapa' };
+    }
+    const storeAddress = storeSettings?.storeAddress?.trim();
+    if (storeAddress) {
+      try {
+        const point = await geocodeStoreAddress(storeAddress);
+        await updateStoreSettings({ storeLatitude: point.lat, storeLongitude: point.lng });
+        setOptimizerLocationError('');
+        return { point, label: 'Loja · endereço cadastrado' };
+      } catch (error) { console.warn('Endereço da loja não localizado:', error); }
+    }
+    try {
+      const point = await requestDeviceLocation();
+      setOptimizerLocationError('Posição da loja ausente; usando localização atual como fallback.');
+      return { point, label: 'Localização atual · fallback' };
+    } catch (error) {
+      setOptimizerLocationError(error instanceof Error ? error.message : 'Não foi possível determinar a origem.');
+      return { point: null, label: 'Origem indisponível' };
+    }
   };
 
   const buildOptimizerPreview = async () => {
@@ -869,16 +880,22 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 </div>
               )}
 
+              <p className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-[9px] leading-relaxed text-zinc-600">
+                Distâncias da prévia são aproximações em linha reta. A sequência agrupa o mesmo bairro; o Google Maps continua responsável pelo trajeto viário final.
+              </p>
+
               <div className="mt-4 space-y-2">
                 {optimizerRows.map((row, index) => {
                   const previousIndex = optimizerPreviousOrder.indexOf(row.delivery.id);
                   const changed = previousIndex !== index;
 
                   let legDistance: string | null = null;
+                  let storeDistance: string | null = null;
                   if (optimizerOrigin && row.point) {
                     const previousPrecise = optimizerRows.slice(0, index).reverse().find((item) => item.point);
                     const from = previousPrecise?.point || optimizerOrigin;
                     legDistance = formatDistance(distanceMeters(from, row.point));
+                    storeDistance = formatDistance(distanceMeters(optimizerOrigin, row.point));
                   }
 
                   return (
@@ -913,7 +930,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                           {row.approximate ? (
                             <span className="text-[9px] font-black text-amber-400">Aproximado</span>
                           ) : (
-                            <span className="text-[9px] font-black text-emerald-400">{legDistance || 'Preciso'}</span>
+                            <>
+                              <span className="block text-[9px] font-black text-emerald-400">{legDistance ? `~${legDistance} do ponto anterior` : 'Ponto localizado'}</span>
+                              {storeDistance && <span className="mt-0.5 block text-[8px] font-bold text-zinc-600">~{storeDistance} em linha reta da loja</span>}
+                            </>
                           )}
                           {changed && (
                             <p className="mt-1 text-[9px] font-bold text-zinc-600">era {previousIndex + 1}º</p>

@@ -29,7 +29,13 @@ export function RouteDepartureChecklist({
       id: delivery.id,
       name: customer?.name || delivery.customer_name || 'Cliente',
       drinks: delivery.drinks?.trim() || '',
-      change: delivery.change_for && delivery.change_for > 0 ? delivery.change_for : 0,
+      change:
+        !delivery.is_paid &&
+        delivery.payment_method === 'dinheiro' &&
+        delivery.change_for &&
+        delivery.change_for > (delivery.value || 0)
+          ? Math.max(0, delivery.change_for - (delivery.value || 0))
+          : 0,
       missingAddress: !(delivery.address_string || customer?.address)?.trim(),
       missingConfirmation:
         delivery.origin === 'ifood' &&

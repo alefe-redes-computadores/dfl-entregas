@@ -65,7 +65,7 @@ export async function copyDeliveryToClipboard(
       parts.push(ifoodInfo);
 
       if (currentCode) {
-        parts.push(`🔑 *Código Salvo:* ${currentCode} ✅`);
+        parts.push(`🔑 *Código iFood:* ${currentCode} ✅`);
       } else {
         parts.push(`🚨 *ATENÇÃO: PEGAR CÓDIGO DE 4 DÍGITOS COM O CLIENTE!*`);
       }
@@ -74,11 +74,11 @@ export async function copyDeliveryToClipboard(
     }
 
     parts.push(`🏠 *Endereço:* ${delivery.address_string}`);
-    if (delivery.observation) parts.push(`⚠️ *OBS:* ${delivery.observation}`);
+    if (delivery.observation) parts.push(`⚠️ *Observação:* ${delivery.observation}`);
 
     if (clientPhone && delivery.notify_whatsapp) {
       const gateMsg = encodeURIComponent('Olá! Sou o entregador da Da Família Lanches, cheguei no portão com seu pedido!');
-      parts.push(`📲 *Chamar no Portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
+      parts.push(`📲 *Chamar no portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
     }
 
     if (delivery.is_paid) {
@@ -87,7 +87,7 @@ export async function copyDeliveryToClipboard(
       const pMethod = delivery.payment_method?.toUpperCase().replace('_', ' ') || 'PAGAMENTO';
       if (delivery.payment_method === 'dinheiro') {
         if (delivery.change_for) {
-          const troco = delivery.change_for - (delivery.value || 0);
+          const troco = Math.max(0, delivery.change_for - (delivery.value || 0));
           parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Cliente paga com R$ ${formatMoney(delivery.change_for)} | Troco: R$ ${formatMoney(troco)})`);
         } else {
           parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Valor exato)`);
@@ -162,7 +162,7 @@ export async function generateRouteMessages(
 
     const totalDeliveries = deliveries.length;
     const drinksSummary: Record<string, { qty: number; name: string }> = {};
-    const stopsNeedingCode: { num: number; neighborhood: string }[] = [];
+    const stopsNeedingCode: { num: number; neighborhood: string; street: string }[] = [];
     const stopsNeedingCall: { num: number; name: string }[] = [];
     const stopsNeedingPosMachine: number[] = [];
 
@@ -182,7 +182,7 @@ export async function generateRouteMessages(
       if (prevDuration) {
         const matchPrev = previousRoute.name.match(/\d+/);
         const prevNum = matchPrev ? matchPrev[0] : 'anterior';
-        msg1.push(`⏱️ Rota anterior (${prevNum}): *${prevDuration}*`);
+        msg1.push(`⏱️ *Rota anterior (Rota ${prevNum}):* ${prevDuration}`);
       }
     }
 
@@ -254,7 +254,7 @@ export async function generateRouteMessages(
           msg1.push(`🔑 *Cód. iFood Salvo:* \`${existingCode}\` ✅`);
         } else {
           // Salva para a lista do final
-          stopsNeedingCode.push({ num, neighborhood });
+          stopsNeedingCode.push({ num, neighborhood, street });
         }
       }
 
@@ -262,13 +262,13 @@ export async function generateRouteMessages(
       msg1.push(`- Bairro: \`${neighborhood}\``);
 
       if (delivery.observation) {
-        msg1.push(`⚠️ *OBS:* ${delivery.observation}`);
+        msg1.push(`⚠️ *Observação:* ${delivery.observation}`);
       }
 
       if (clientPhone && delivery.notify_whatsapp) {
         stopsNeedingCall.push({ num, name: clientName });
         const gateMsg = encodeURIComponent('Olá! Sou o entregador da Da Família Lanches, cheguei no portão com seu pedido!');
-        msg1.push(`📲 *Chamar no Portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
+        msg1.push(`📲 *Chamar no portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
       }
 
       const valueStr = formatMoney(delivery.value || 0);
@@ -292,7 +292,7 @@ export async function generateRouteMessages(
           msg1.push(`- 💳 *Pagamento:* *R$ ${valueStr} (CARTÃO)*`);
           stopsNeedingPosMachine.push(num);
         } else if (delivery.payment_method === 'dinheiro' && delivery.change_for) {
-          const troco = delivery.change_for - (delivery.value || 0);
+          const troco = Math.max(0, delivery.change_for - (delivery.value || 0));
           msg1.push(`- 💵 *Pagamento:* R$ ${valueStr} *(Paga c/ R$ ${formatMoney(delivery.change_for)} | Troco: R$ ${formatMoney(troco)})*`);
         } else {
           msg1.push(`- 💵 *Pagamento:* *R$ ${valueStr} (${delivery.payment_method?.toUpperCase() || 'DINHEIRO'})*`);
@@ -346,7 +346,7 @@ export async function generateRouteMessages(
       if (prevDuration) {
         const matchPrev = previousRoute.name.match(/\d+/);
         const prevNum = matchPrev ? matchPrev[0] : 'anterior';
-        msg2.push(`⏱️ Rota anterior (${prevNum}): *${prevDuration}*`);
+        msg2.push(`⏱️ *Rota anterior (Rota ${prevNum}):* ${prevDuration}`);
       }
     }
 
@@ -367,7 +367,7 @@ export async function generateRouteMessages(
       const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` 📲 *[ZAP]*` : '';
 
       // Removemos o aviso sujo de [CÓDIGO] daqui para deixar a lista limpa
-      msg2.push(`${num}. ${neighborhood}${streetLabel}${drinkInfo}${zapWarning}`);
+      msg2.push(`${num}. *${neighborhood}*${streetLabel}${drinkInfo}${zapWarning}`);
     });
 
     msg2.push(`──────────────`);
@@ -393,8 +393,9 @@ export async function generateRouteMessages(
     if (stopsNeedingCode.length > 0) {
       msg2.push(`🔐 *Códigos iFood*`);
       msg2.push(`Pegar com o cliente:`);
-      stopsNeedingCode.forEach(s => {
-        msg2.push(`• ${s.num}. *${s.neighborhood}*`);
+      stopsNeedingCode.forEach((stop) => {
+        const duplicateNeighborhood = neighborhoodCounts[stop.neighborhood] > 1;
+        msg2.push(`• ${stop.num}. *${stop.neighborhood}*${duplicateNeighborhood ? ` (${stop.street})` : ''}`);
       });
       msg2.push(`──────────────`);
     }

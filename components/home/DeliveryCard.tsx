@@ -108,6 +108,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
     if (
       options.offerIfoodPortal &&
+      delivery.completed &&
       normalizedId.length === 8 &&
       copiedDigits === normalizedId
     ) {
@@ -236,7 +237,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     e.stopPropagation();
     dragCurrentY.current = e.touches[0].clientY;
     const diff = dragCurrentY.current - dragStartY.current;
-    setDragOffsetY(Math.max(-180, Math.min(180, diff)));
+    setDragOffsetY(Math.max(-150, Math.min(150, diff * 0.72)));
   };
 
   const handleDragEnd = async (e: React.TouchEvent<HTMLButtonElement>) => {
@@ -248,19 +249,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
 
     const diff = dragCurrentY.current - dragStartY.current;
-    // O gesto pode mover mais de uma posição.
-    // 64px mantém controle em cards compactos sem exigir
-    // vários drags consecutivos.
+    // Touch V2: o primeiro salto exige intenção clara e cada posição
+    // adicional consome aproximadamente a altura útil de um card.
+    const absDiff = Math.abs(diff);
     const requestedSteps =
-      Math.abs(diff) < 36
+      absDiff < 64
         ? 0
-        : Math.max(
-            -4,
-            Math.min(
-              4,
-              Math.round(diff / 64),
-            ),
-          );
+        : Math.sign(diff) * Math.min(4, 1 + Math.floor((absDiff - 64) / 104));
     setDragOffsetY(0);
     setIsHandleDragging(false);
     dragStartY.current = 0;

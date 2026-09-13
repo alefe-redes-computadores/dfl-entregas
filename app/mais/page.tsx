@@ -92,7 +92,7 @@ export default function MaisPage() {
         </p>
       </header>
 
-      <section className="flex flex-col items-center justify-center gap-3 rounded-[28px] border border-zinc-800 bg-zinc-900/40 p-6 shadow-sm">
+      <section className="flex flex-col items-center justify-center gap-3 rounded-[24px] border border-zinc-800/80 bg-zinc-900/40 p-6 shadow-sm">
         <div className="relative h-20 w-20 overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 ring-4 ring-zinc-800">
           {user?.photoURL ? (
             <img

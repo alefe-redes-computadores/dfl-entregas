@@ -310,7 +310,7 @@ export default function LojaPage() {
               </p>
               <span className={`h-2 w-2 shrink-0 rounded-full ${isStoreOpen ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
             </div>
-            <p className="mt-0.5 truncate text-[10px] text-zinc-600">
+            <p className="mt-0.5 line-clamp-2 text-[10px] text-zinc-600">
               {isStoreOpen
                 ? `${activeMotoboys.length} entregador${activeMotoboys.length === 1 ? '' : 'es'} ativo${activeMotoboys.length === 1 ? '' : 's'} agora`
                 : 'Toque para iniciar a operação manualmente'}
@@ -501,7 +501,7 @@ export default function LojaPage() {
                   <span className="text-zinc-500">Ainda sem sinais suficientes</span>
                 )}
               </div>
-              <p className="mt-1.5 truncate text-xs font-black text-zinc-200">
+              <p className="mt-1.5 line-clamp-2 text-xs font-black text-zinc-200">
                 {intelligence.highlights[0]?.title || 'O cérebro ainda está formando uma base confiável'}
               </p>
               <p className="mt-1 text-[10px] text-zinc-600">
