@@ -311,10 +311,16 @@ export default function StockSuppliesPage() {
             0,
           );
 
+          const isToday = key === todayKey();
+
           return (
             <section
               key={key}
-              className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40"
+              className={`overflow-hidden rounded-[24px] border ${
+                isToday
+                  ? 'border-emerald-500/25 bg-emerald-500/[.045]'
+                  : 'border-zinc-800 bg-zinc-900/40'
+              }`}
             >
               <button
                 onClick={() =>
@@ -325,13 +331,24 @@ export default function StockSuppliesPage() {
                 }
                 className="flex w-full items-center gap-3 p-4 text-left"
               >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-400">
+                <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
+                  isToday
+                    ? 'bg-emerald-500/10 text-emerald-400'
+                    : 'bg-amber-500/10 text-amber-400'
+                }`}>
                   <CalendarDays size={17} />
                 </span>
 
                 <div className="min-w-0 flex-1">
-                  <h2 className="font-heading text-sm font-black capitalize text-zinc-200">
+                  <h2 className={`font-heading text-sm font-black capitalize ${
+                    isToday ? 'text-emerald-300' : 'text-zinc-200'
+                  }`}>
                     {dayLabel(key)}
+                    {isToday && (
+                      <span className="ml-2 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[8px] uppercase tracking-wider text-emerald-400">
+                        atual
+                      </span>
+                    )}
                   </h2>
                   <p className="mt-1 text-[9px] font-bold text-zinc-600">
                     {items.length}{' '}

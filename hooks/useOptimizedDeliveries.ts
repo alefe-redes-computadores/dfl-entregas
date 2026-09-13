@@ -1,5 +1,6 @@
 import type { Delivery, Customer } from '@/types';
 import { deliveryPoint, neighborMetadata } from '@/lib/route-intelligence';
+import { groupDeliveriesByStop } from '@/lib/route-stops';
 
 const normalizedAddress = (value?: string) =>
   String(value || '')
@@ -10,14 +11,9 @@ const normalizedAddress = (value?: string) =>
     .replace(/\s*[-–—]\s*/g, ' - ')
     .trim();
 
-const fallbackOrder = (delivery: Delivery) => {
-  const created = new Date(delivery.created_at || delivery.createdAt || delivery.updated_at || 0).getTime();
-  return Number.isFinite(created) ? created : Number.MAX_SAFE_INTEGER;
-};
-
 export function useOptimizedDeliveries(
   deliveries: Delivery[],
-  getCustomerById: (id: string) => Customer | undefined
+  getCustomerById: (id: string) => Customer | undefined,
 ) {
   const neighborhoodCounts = deliveries.reduce((acc, delivery) => {
     const customer = getCustomerById(delivery.customer_id);
@@ -33,28 +29,38 @@ export function useOptimizedDeliveries(
     return acc;
   }, {} as Record<string, number>);
 
-  const sortedDeliveries = [...deliveries].sort((a, b) => {
-    // Concluídas ficam agrupadas no fim, mas nenhuma regra "inteligente"
-    // pode sobrescrever a ordem manual dentro de cada grupo.
-    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+  const groups = groupDeliveriesByStop(deliveries);
+  const sortedDeliveries = groups.flatMap((group) => group.deliveries);
+  const pendingDeliveries = sortedDeliveries.filter((delivery) => !delivery.completed);
+  const pendingGroups = groupDeliveriesByStop(pendingDeliveries);
 
-    const aOrder = a.order_index;
-    const bOrder = b.order_index;
+  const stopMeta = new Map<
+    string,
+    { orderInStop: number; totalOrders: number; first: boolean; stopNumber: number }
+  >();
 
-    if (aOrder !== undefined && bOrder !== undefined && aOrder !== bOrder) {
-      return aOrder - bOrder;
-    }
-    if (aOrder !== undefined && bOrder === undefined) return -1;
-    if (aOrder === undefined && bOrder !== undefined) return 1;
-
-    const fallbackDiff = fallbackOrder(a) - fallbackOrder(b);
-    if (fallbackDiff !== 0) return fallbackDiff;
-
-    return a.id.localeCompare(b.id);
+  pendingGroups.forEach((group, stopIndex) => {
+    group.deliveries.forEach((delivery, orderIndex) => {
+      stopMeta.set(delivery.id, {
+        orderInStop: orderIndex + 1,
+        totalOrders: group.deliveries.length,
+        first: orderIndex === 0,
+        stopNumber: stopIndex + 1,
+      });
+    });
   });
 
-  const pendingDeliveries = sortedDeliveries.filter((delivery) => !delivery.completed);
-  const neighborMeta = neighborMetadata(sortedDeliveries.map(delivery => ({ delivery, customer: getCustomerById(delivery.customer_id), point: deliveryPoint(delivery, getCustomerById(delivery.customer_id)) })));
+  const neighborMeta = neighborMetadata(
+    groups.map((group) => {
+      const delivery = group.representative;
+      const customer = getCustomerById(delivery.customer_id);
+      return {
+        delivery,
+        customer,
+        point: deliveryPoint(delivery, customer),
+      };
+    }),
+  );
 
   return {
     sortedDeliveries,
@@ -63,5 +69,8 @@ export function useOptimizedDeliveries(
     addressCounts,
     normalizedAddress,
     neighborMeta,
+    stopMeta,
+    totalStops: groups.length,
+    pendingStops: pendingGroups.length,
   };
 }

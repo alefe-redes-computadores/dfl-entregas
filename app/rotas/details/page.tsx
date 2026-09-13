@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
 import { RouteOperationalMemory } from '@/components/intelligence/EntityOperationalMemory';
+import { groupDeliveriesByStop } from '@/lib/route-stops';
 import { RouteDepartureChecklist } from '@/components/routes/RouteDepartureChecklist';
 
 const fmt = (...values: TimestampLike[]) => {
@@ -93,6 +94,7 @@ export default function RouteDetailsPage() {
 
   const pending = deliveries.filter((item) => !item.completed).length;
   const completed = deliveries.length - pending;
+  const totalStops = groupDeliveriesByStop(deliveries).length;
   const total = deliveries.reduce((sum, item) => sum + (item.value || 0), 0);
   const progress = deliveries.length
     ? Math.round((completed / deliveries.length) * 100)
@@ -319,7 +321,7 @@ export default function RouteDetailsPage() {
             </h2>
           </div>
           <span className="text-[10px] font-black text-zinc-600">
-            {deliveries.length} parada{deliveries.length === 1 ? '' : 's'}
+            {deliveries.length} pedido{deliveries.length === 1 ? '' : 's'} · {totalStops} parada{totalStops === 1 ? '' : 's'}
           </span>
         </div>
 

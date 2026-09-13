@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Bike, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, Search, User, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp } from '@/lib/reports/time';
+import { groupDeliveriesByStop } from '@/lib/route-stops';
 import {
   dateKey,
   operationalDateFromKey,
@@ -77,6 +78,7 @@ export default function RoutesPage() {
   const rows = useMemo(() => dayRoutes.map(route => {
     const linked = deliveriesByRoute.get(route.id) || [];
     const completed = linked.filter(delivery => delivery.completed).length;
+    const stops = groupDeliveriesByStop(linked).length;
     const amount = linked.reduce((total, delivery) => total + (delivery.value || 0), 0);
     const startedAt = canonicalRouteStartedAt(route);
     const ready =
@@ -92,7 +94,7 @@ export default function RoutesPage() {
           : startedAt
             ? 'na-rua'
             : 'montando';
-    return { route, linked, completed, amount, state };
+    return { route, linked, completed, stops, amount, state };
   }).filter(({ route, state }) => {
     const term = query.trim().toLocaleLowerCase('pt-BR');
     return (filter === 'todas' || state === filter) && (!term || `${route.name} ${route.motoboy_name}`.toLocaleLowerCase('pt-BR').includes(term));
@@ -169,7 +171,7 @@ export default function RoutesPage() {
     <div className="flex gap-2 overflow-x-auto no-scrollbar">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
 
     <div className="flex flex-col gap-3">
-      {rows.map(({ route, linked, completed, amount, state }) => {
+      {rows.map(({ route, linked, completed, stops, amount, state }) => {
         const progress = linked.length ? Math.round((completed / linked.length) * 100) : 0;
         const pending = Math.max(0, linked.length - completed);
         const stateLabel =
@@ -232,7 +234,7 @@ export default function RoutesPage() {
 
             <div className="mt-4">
               <div className="flex items-center justify-between text-[10px] font-bold">
-                <span className="text-zinc-500">{completed}/{linked.length} concluídas</span>
+                <span className="text-zinc-500">{completed}/{linked.length} pedidos · {stops} parada{stops === 1 ? "" : "s"}</span>
                 <span className={pending ? 'text-amber-400' : 'text-emerald-400'}>
                   {pending
                     ? `${pending} pendente${pending === 1 ? '' : 's'}`

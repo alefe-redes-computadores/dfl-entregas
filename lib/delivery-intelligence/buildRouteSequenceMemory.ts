@@ -8,6 +8,7 @@ import type {
 
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { parseTimestamp } from '@/lib/reports/time';
+import { groupDeliveriesByStop } from '@/lib/route-stops';
 
 import {
   median,
@@ -112,11 +113,25 @@ function buildObservations(input: {
 
   byRoute.forEach(
     (routeDeliveries, routeId) => {
-      const ordered = [...routeDeliveries].sort(
+      const orderedDeliveries = [...routeDeliveries].sort(
         (a, b) =>
           (a.order_index as number) -
           (b.order_index as number),
       );
+
+      const ordered = groupDeliveriesByStop(
+        orderedDeliveries,
+      ).map((group) => {
+        const completed = group.deliveries
+          .filter((delivery) => parseTimestamp(delivery.completed_at))
+          .sort((a, b) => {
+            const aTime = parseTimestamp(a.completed_at)?.getTime() || 0;
+            const bTime = parseTimestamp(b.completed_at)?.getTime() || 0;
+            return bTime - aTime;
+          });
+
+        return completed[0] || group.representative;
+      });
 
       for (
         let index = 1;

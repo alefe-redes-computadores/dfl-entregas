@@ -34,12 +34,16 @@ export function StockProductPicker({
   onChange,
   invalid = false,
   draftIncoming = {},
+  preferredProductIds = [],
+  supplierLabel,
 }: {
   products: StockProduct[];
   value?: string;
   onChange: (value: string) => void;
   invalid?: boolean;
   draftIncoming?: Record<string, number>;
+  preferredProductIds?: string[];
+  supplierLabel?: string;
 }) {
   const addStockProduct = useAppStore(
     (state) => state.addStockProduct,
@@ -64,16 +68,39 @@ export function StockProductPicker({
   const projectedQuantity = (product: StockProduct) =>
     product.current_quantity + (draftIncoming[product.id] || 0);
 
+  const preferredCount = preferredProductIds.filter((id) =>
+    products.some((product) => product.id === id),
+  ).length;
+
+  const preferredRank = useMemo(
+    () =>
+      new Map(
+        preferredProductIds.map(
+          (id, index) => [id, index] as const,
+        ),
+      ),
+    [preferredProductIds],
+  );
+
   const filtered = useMemo(
     () =>
       products
         .filter((product) =>
           normalize(product.name).includes(normalize(query)),
         )
-        .sort((a, b) =>
-          a.name.localeCompare(b.name, 'pt-BR'),
-        ),
-    [products, query],
+        .sort((a, b) => {
+          const aRank = preferredRank.get(a.id);
+          const bRank = preferredRank.get(b.id);
+
+          if (aRank !== undefined && bRank === undefined) return -1;
+          if (aRank === undefined && bRank !== undefined) return 1;
+          if (aRank !== undefined && bRank !== undefined) {
+            return aRank - bRank;
+          }
+
+          return a.name.localeCompare(b.name, 'pt-BR');
+        }),
+    [preferredRank, products, query],
   );
 
   const groups = useMemo(

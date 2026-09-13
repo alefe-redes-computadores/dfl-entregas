@@ -63,6 +63,7 @@ import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 import { requestDeviceLocation } from '@/lib/device-location';
 import { geocodeAddress, geocodeStoreAddress } from '@/lib/store-geocoding';
 import { bestOperationalAddress } from '@/lib/operational-address';
+import { deliveryStopKey, groupDeliveriesByStop } from '@/lib/route-stops';
 
 interface RouteAccordionProps {
   route: Route;
@@ -111,6 +112,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const deliveries = getDeliveriesByRoute(route.id);
   const totalDeliveries = deliveries.length;
   const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
+  const totalStops = groupDeliveriesByStop(deliveries).length;
+  const pendingStopGroups = groupDeliveriesByStop(
+    deliveries.filter((delivery) => !delivery.completed),
+  );
+  const pendingStopsCount = pendingStopGroups.length;
   const progressPercent = totalDeliveries > 0 ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
 
   const routeTotalValue = deliveries.reduce((acc, curr) => acc + (curr.value || 0), 0);
@@ -128,15 +134,19 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const motoboyObj = motoboys.find((m) => m.name === route.motoboy_name);
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
-  const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress, neighborMeta } = useOptimizedDeliveries(deliveries, getCustomerById);
+  const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress, neighborMeta, stopMeta } = useOptimizedDeliveries(deliveries, getCustomerById);
 
   const optimizerRows = useMemo(() => {
+    const representatives = groupDeliveriesByStop(
+      pendingDeliveries,
+    ).map((group) => group.representative);
+
     const orderIds = optimizerOrder.length > 0
       ? optimizerOrder
-      : pendingDeliveries.map((delivery) => delivery.id);
+      : representatives.map((delivery) => delivery.id);
 
     return orderIds
-      .map((id) => pendingDeliveries.find((delivery) => delivery.id === id))
+      .map((id) => representatives.find((delivery) => delivery.id === id))
       .filter(Boolean)
       .map((delivery) => {
         const customer = getCustomerById(delivery!.customer_id);
@@ -446,10 +456,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     setOptimizerBusy(true);
 
     try {
-      const previousIds = pendingDeliveries.map((delivery) => delivery.id);
+      const representatives = groupDeliveriesByStop(
+        pendingDeliveries,
+      ).map((group) => group.representative);
+      const previousIds = representatives.map((delivery) => delivery.id);
 
       const resolvedStops = await Promise.all(
-        pendingDeliveries.map(async (delivery) => {
+        representatives.map(async (delivery) => {
           const customer = getCustomerById(delivery.customer_id);
           const savedPoint =
             extractLatLngFromMapsUrl(delivery.maps_link) ||
@@ -535,9 +548,18 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     try {
       const now = new Date().toISOString();
 
+      const expandedOrder = optimizerOrder.flatMap((id) => {
+        const delivery = pendingDeliveries.find((item) => item.id === id);
+        if (!delivery) return [];
+        const key = deliveryStopKey(delivery);
+        return pendingDeliveries
+          .filter((item) => deliveryStopKey(item) === key)
+          .map((item) => item.id);
+      });
+
       await setDeliveryOrder(
         route.id,
-        optimizerOrder,
+        expandedOrder,
         {
           metadata: {
             order_locked: true,
@@ -586,7 +608,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const handleOpenMaps = async () => {
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
 
-    const stops = pendingDeliveries.map((d) => {
+    const stops = groupDeliveriesByStop(pendingDeliveries).map((group) => {
+      const d = group.representative;
       const cust = getCustomerById(d.customer_id);
       return resolveStopLocation(d, cust?.maps_link);
     });
@@ -628,7 +651,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             <span className={clsx("max-w-[104px] whitespace-normal rounded-xl px-2 py-1 text-center text-[10px] font-black leading-tight min-[390px]:max-w-none min-[390px]:whitespace-nowrap min-[390px]:rounded-full min-[390px]:px-2.5 min-[390px]:text-xs", pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white" : isInProgress ? "bg-sky-500/20 text-sky-400" : "bg-zinc-800 text-zinc-400")}>
               {pendingDeliveriesCount === 0 && totalDeliveries > 0
                 ? 'Pronta para finalizar'
-                : `${pendingDeliveriesCount} pendente${pendingDeliveriesCount !== 1 ? 's' : ''}`}
+                : pendingStopsCount === pendingDeliveriesCount
+                  ? `${pendingDeliveriesCount} pendente${pendingDeliveriesCount !== 1 ? 's' : ''}`
+                  : `${pendingDeliveriesCount} pedidos · ${pendingStopsCount} parada${pendingStopsCount !== 1 ? 's' : ''}`}
             </span>
           ) : (
             <div className="flex items-center gap-2">
@@ -699,12 +724,24 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           ) : (
             sortedDeliveries.map((delivery) => {
               const cust = getCustomerById(delivery.customer_id);
+              const physicalStop = stopMeta.get(delivery.id);
               const addressKey = normalizedAddress(delivery.address_string || cust?.address);
               const isNeighbor = addressKey ? (addressCounts[addressKey] > 1) : false;
               const nearby = neighborMeta.get(delivery.id);
               const pendingIndex = pendingDeliveries.findIndex((item) => item.id === delivery.id);
               return (
-                <DeliveryCard
+                <div key={delivery.id}>
+                  {physicalStop?.first && physicalStop.totalOrders > 1 && (
+                    <div className="mb-1.5 mt-1 flex items-center justify-between rounded-xl border border-violet-500/15 bg-violet-500/[.045] px-3 py-2">
+                      <span className="text-[9px] font-black uppercase tracking-[.12em] text-violet-300">
+                        Parada {physicalStop.stopNumber}
+                      </span>
+                      <span className="text-[9px] font-bold text-zinc-500">
+                        {physicalStop.totalOrders} pedidos no mesmo endereço
+                      </span>
+                    </div>
+                  )}
+                  <DeliveryCard
                   key={delivery.id}
                   delivery={delivery}
                   customer={cust}
@@ -715,6 +752,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   position={pendingIndex >= 0 ? pendingIndex + 1 : undefined}
                   pendingCount={pendingDeliveries.length}
                 />
+                </div>
               );
             })
           )}
@@ -738,7 +776,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                     </span>
                     <div>
                       <p className="text-xs font-black text-zinc-100">Organizar rota</p>
-                      <p className="mt-0.5 text-[10px] text-zinc-500">Urgentes primeiro · GPS ou loja</p>
+                      <p className="mt-0.5 text-[10px] text-zinc-500">Paradas físicas · urgentes primeiro · GPS ou loja</p>
                     </div>
                   </div>
                   <ArrowRight size={16} className="text-violet-300" />
@@ -859,7 +897,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                     <MapPinned size={11} /> Precisão
                   </p>
                   <p className="mt-1 text-xs font-bold text-zinc-200">
-                    {pendingDeliveries.length - optimizerApproximateIds.length}/{pendingDeliveries.length} pontos
+                    {pendingStopGroups.length - optimizerApproximateIds.length}/{pendingStopGroups.length} paradas
                   </p>
                 </div>
               </div>

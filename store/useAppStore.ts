@@ -26,6 +26,8 @@ import {
   findExistingCustomer,
   nextCustomerName,
 } from '@/lib/customer-identity';
+import { stockProductCategory } from '@/lib/stock-categories';
+import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop } from '@/lib/route-stops';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -422,6 +424,61 @@ export const useAppStore = create<AppState>()(
           const mergedTeamMembers = mergeById(fbTeamMembers, get().teamMembers).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
           const mergedStockSuppliers = mergeById(fbStockSuppliers, get().stockSuppliers).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
           const mergedStockProducts = mergeById(fbStockProducts, get().stockProducts).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+          // Migração conservadora: só corrige categorias legadas cuja
+          // classificação é inequívoca pelo nome ou pelo rótulo antigo.
+          const categoryMigrations = mergedStockProducts
+            .map((product) => {
+              const inferred = stockProductCategory(
+                product.name,
+                product.category,
+              );
+              const current = (product.category || '').trim();
+              const legacyGeneric =
+                /ingrediente|frios e latic[ií]nios/i.test(current);
+              const explicitKnownProduct =
+                /hamburg|bacon|salsich|mussarela|presunto|apresuntado|fil[eé].*frango|peito.*frango|batata palha|milho/i.test(
+                  product.name,
+                );
+
+              return inferred !== current &&
+                (legacyGeneric || explicitKnownProduct)
+                ? { product, inferred }
+                : null;
+            })
+            .filter(
+              (
+                item,
+              ): item is {
+                product: StockProduct;
+                inferred: string;
+              } => Boolean(item),
+            );
+
+          if (categoryMigrations.length) {
+            const migrationBatch = writeBatch(db);
+
+            categoryMigrations.forEach(
+              ({ product, inferred }) => {
+                migrationBatch.update(
+                  doc(db, 'stock_products', product.id),
+                  {
+                    category: inferred,
+                    updated_at: new Date().toISOString(),
+                  },
+                );
+                product.category = inferred;
+              },
+            );
+
+            void migrationBatch.commit().catch((error) => {
+              console.error(
+                'Falha ao persistir categorias legadas do estoque:',
+                error,
+              );
+            });
+          }
+
           const mergedStockMovements = mergeById(fbStockMovements, get().stockMovements).sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
 
           const mergedPendingConfirmations = [...fbPendingConfirmations];
@@ -1459,149 +1516,101 @@ export const useAppStore = create<AppState>()(
 
       reorderDelivery: async (routeId, deliveryId, direction) => {
         const state = get();
-        if (state.deliveries.find((delivery) => delivery.id === deliveryId)?.order_locked) throw new Error('Destrave a parada antes de reordenar.');
+        const pending = state.deliveries
+          .filter((delivery) => delivery.route_id === routeId && !delivery.completed)
+          .map((delivery) => ({ ...delivery }));
 
-        const routeDeliveries = state.deliveries
-          .filter((delivery) => delivery.route_id === routeId)
-          .map((delivery) => ({ ...delivery }))
-          .sort((a, b) => {
-            if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        const selected = pending.find((delivery) => delivery.id === deliveryId);
+        if (!selected) return;
 
-            const aOrder = a.order_index;
-            const bOrder = b.order_index;
-
-            if (aOrder !== undefined && bOrder !== undefined && aOrder !== bOrder) {
-              return aOrder - bOrder;
-            }
-            if (aOrder !== undefined && bOrder === undefined) return -1;
-            if (aOrder === undefined && bOrder !== undefined) return 1;
-
-            const timeA = new Date(a.created_at || a.createdAt || a.updated_at || 0).getTime();
-            const timeB = new Date(b.created_at || b.createdAt || b.updated_at || 0).getTime();
-            if (timeA !== timeB) return timeA - timeB;
-
-            return a.id.localeCompare(b.id);
-          });
-
-        const pending = routeDeliveries.filter((delivery) => !delivery.completed);
-        const completed = routeDeliveries.filter((delivery) => delivery.completed);
-
-        const currentIndex = pending.findIndex((delivery) => delivery.id === deliveryId);
-        if (currentIndex === -1) return;
-
-        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-        if (targetIndex < 0 || targetIndex >= pending.length) return;
-
-        [pending[currentIndex], pending[targetIndex]] = [pending[targetIndex], pending[currentIndex]];
-
-        const normalized = [...pending, ...completed].map((delivery, index) => ({
-          ...delivery,
-          order_index: index,
-        }));
-
-        const now = new Date().toISOString();
-        const nextIndexById = new Map(
-          normalized.map((delivery) => [delivery.id, delivery.order_index] as const)
+        const groups = groupDeliveriesByStop(pending);
+        const currentIndex = groups.findIndex(
+          (group) => group.key === deliveryStopKey(selected),
         );
-
-        set((prev) => ({
-          deliveries: prev.deliveries.map((delivery) => {
-            const nextIndex = nextIndexById.get(delivery.id);
-            return nextIndex === undefined
-              ? delivery
-              : { ...delivery, order_index: nextIndex, updated_at: now };
-          }),
-        }));
-
-        try {
-          const batch = writeBatch(db);
-
-          normalized.forEach((delivery) => {
-            batch.update(doc(db, 'deliveries', delivery.id), {
-              order_index: delivery.order_index,
-              updated_at: now,
-            });
-          });
-
-          await batch.commit();
-        } catch (error) {
-          set({ deliveries: state.deliveries });
-          console.error('Erro ao salvar reordenação:', error);
-          throw error;
+        if (currentIndex < 0) return;
+        if (groups[currentIndex].locked) {
+          throw new Error('Destrave a parada antes de reordenar.');
         }
+
+        const targetIndex =
+          direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+        if (targetIndex < 0 || targetIndex >= groups.length) return;
+        if (groups[targetIndex].locked) {
+          throw new Error('A parada vizinha está travada na sequência.');
+        }
+
+        [groups[currentIndex], groups[targetIndex]] = [
+          groups[targetIndex],
+          groups[currentIndex],
+        ];
+
+        await get().setDeliveryOrder(
+          routeId,
+          groups.flatMap((group) =>
+            group.deliveries.map((delivery) => delivery.id),
+          ),
+          {
+            metadata: {
+              order_source: 'manual',
+              order_updated_at: new Date().toISOString(),
+            },
+          },
+        );
       },
 
       moveDeliveryToIndex: async (routeId, deliveryId, targetIndex) => {
         const state = get();
-        if (state.deliveries.find((delivery) => delivery.id === deliveryId)?.order_locked) throw new Error('Destrave a parada antes de reordenar.');
+        const pending = state.deliveries
+          .filter((delivery) => delivery.route_id === routeId && !delivery.completed)
+          .map((delivery) => ({ ...delivery }));
 
-        const routeDeliveries = state.deliveries
-          .filter((delivery) => delivery.route_id === routeId)
-          .map((delivery) => ({ ...delivery }))
-          .sort((a, b) => {
-            if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        const selected = pending.find((delivery) => delivery.id === deliveryId);
+        if (!selected || pending.length < 2) return;
 
-            const aOrder = a.order_index;
-            const bOrder = b.order_index;
+        const groups = groupDeliveriesByStop(pending);
+        if (groups.length < 2) return;
 
-            if (aOrder !== undefined && bOrder !== undefined && aOrder !== bOrder) {
-              return aOrder - bOrder;
-            }
-            if (aOrder !== undefined && bOrder === undefined) return -1;
-            if (aOrder === undefined && bOrder !== undefined) return 1;
+        const currentGroupIndex = groups.findIndex(
+          (group) => group.key === deliveryStopKey(selected),
+        );
+        if (currentGroupIndex < 0) return;
+        if (groups[currentGroupIndex].locked) {
+          throw new Error('Destrave a parada antes de reordenar.');
+        }
 
-            const timeA = new Date(a.created_at || a.createdAt || a.updated_at || 0).getTime();
-            const timeB = new Date(b.created_at || b.createdAt || b.updated_at || 0).getTime();
-            if (timeA !== timeB) return timeA - timeB;
+        const safeIndex = Math.max(0, Math.min(targetIndex, pending.length - 1));
+        const targetDelivery = pending[safeIndex];
+        const targetKey = targetDelivery
+          ? deliveryStopKey(targetDelivery)
+          : groups[groups.length - 1].key;
 
-            return a.id.localeCompare(b.id);
-          });
-
-        const pending = routeDeliveries.filter((delivery) => !delivery.completed);
-        const completed = routeDeliveries.filter((delivery) => delivery.completed);
-        const currentIndex = pending.findIndex((delivery) => delivery.id === deliveryId);
-
-        if (currentIndex === -1 || pending.length < 2) return;
-
-        const safeTarget = Math.max(0, Math.min(targetIndex, pending.length - 1));
-        if (safeTarget === currentIndex) return;
-
-        const [moved] = pending.splice(currentIndex, 1);
-        pending.splice(safeTarget, 0, moved);
-
-        const normalized = [...pending, ...completed].map((delivery, index) => ({
-          ...delivery,
-          order_index: index,
-        }));
-
-        const now = new Date().toISOString();
-        const nextIndexById = new Map(
-          normalized.map((delivery) => [delivery.id, delivery.order_index] as const)
+        let targetGroupIndex = groups.findIndex(
+          (group) => group.key === targetKey,
         );
 
-        set((prev) => ({
-          deliveries: prev.deliveries.map((delivery) => {
-            const nextIndex = nextIndexById.get(delivery.id);
-            return nextIndex === undefined
-              ? delivery
-              : { ...delivery, order_index: nextIndex, updated_at: now };
-          }),
-        }));
+        if (targetGroupIndex < 0) targetGroupIndex = groups.length - 1;
+        if (targetGroupIndex === currentGroupIndex) return;
 
-        try {
-          const batch = writeBatch(db);
-          normalized.forEach((delivery) => {
-            batch.update(doc(db, 'deliveries', delivery.id), {
-              order_index: delivery.order_index,
-              updated_at: now,
-            });
-          });
-          await batch.commit();
-        } catch (error) {
-          set({ deliveries: state.deliveries });
-          console.error('Erro ao mover entrega para posição:', error);
-          throw error;
+        if (groups[targetGroupIndex].locked) {
+          throw new Error('A parada de destino está travada na sequência.');
         }
+
+        const [moved] = groups.splice(currentGroupIndex, 1);
+        groups.splice(targetGroupIndex, 0, moved);
+
+        await get().setDeliveryOrder(
+          routeId,
+          groups.flatMap((group) =>
+            group.deliveries.map((delivery) => delivery.id),
+          ),
+          {
+            metadata: {
+              order_source: 'manual',
+              order_updated_at: new Date().toISOString(),
+            },
+          },
+        );
       },
 
       setDeliveryOrder: async (routeId, orderedPendingIds, options) => {
@@ -1616,8 +1625,14 @@ export const useAppStore = create<AppState>()(
 
         const uniqueIds = Array.from(new Set(orderedPendingIds));
         const validIds = uniqueIds.filter((id) => pendingById.has(id));
-        const missingIds = pending.map((delivery) => delivery.id).filter((id) => !validIds.includes(id));
-        const finalPendingIds = [...validIds, ...missingIds];
+        const missingIds = pending
+          .map((delivery) => delivery.id)
+          .filter((id) => !validIds.includes(id));
+
+        const finalPendingIds = expandStopOrder(
+          [...validIds, ...missingIds],
+          pending,
+        );
 
         if (finalPendingIds.length !== pending.length) {
           throw new Error('A ordem recebida não corresponde às entregas pendentes da rota.');

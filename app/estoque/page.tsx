@@ -43,7 +43,7 @@ export default function StockPage() {
         {suggested.slice(0,4).map(p=>{const rec=recommendationMap.get(p.id)!;return <div key={p.id} className="rounded-xl bg-zinc-950/50 px-3 py-2">
           <p className="truncate text-[10px] font-bold text-zinc-300">{p.name}</p>
           <p className="mt-0.5 text-[9px] font-black text-amber-400">Comprar {rec.recommendedQuantity.toLocaleString('pt-BR',{maximumFractionDigits:2})} {shortUnit(p)}</p>
-          <p className="mt-1 truncate text-[8px] text-zinc-600">{rec.usesHistory?`Média ${rec.averageDailyConsumption.toLocaleString('pt-BR',{maximumFractionDigits:2})}/dia · confiança ${rec.confidence}`:'Regra configurada · histórico insuficiente'}</p>
+          <p className="mt-1 truncate text-[8px] text-zinc-600">{rec.minimumReached?'Mínimo atingido agora':rec.daysUntilMinimum!==null?`~${rec.daysUntilMinimum.toLocaleString('pt-BR',{maximumFractionDigits:1})} dias até o mínimo · confiança ${rec.confidence}`:'Regra configurada · histórico insuficiente'}</p>
         </div>})}
       </div>
       {stockBrain.withoutSafetyStock>0&&<p className="mt-3 text-[9px] font-bold text-amber-300/80">{stockBrain.withoutSafetyStock} produto{stockBrain.withoutSafetyStock===1?' está':'s estão'} sem estoque de segurança configurado.</p>}

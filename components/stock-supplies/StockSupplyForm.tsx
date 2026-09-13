@@ -113,6 +113,7 @@ export function StockSupplyForm({
   );
 
   const movements = useAppStore((state) => state.stockMovements);
+  const historicalSupplies = useAppStore((state) => state.stockSupplies);
 
   const [occurredAt, setOccurredAt] = useState(local(initial?.occurred_at));
   const [status, setStatus] = useState<StockSupplyStatus>(
@@ -120,6 +121,50 @@ export function StockSupplyForm({
   );
   const [supplierId, setSupplierId] = useState(initial?.supplier_id || '');
   const [supplierText, setSupplierText] = useState(initial?.supplier || '');
+
+  const preferredProductIds = useMemo(() => {
+    const supplierName = supplierText
+      .trim()
+      .toLocaleLowerCase('pt-BR');
+
+    if (!supplierId && !supplierName) return [];
+
+    const score = new Map<string, number>();
+
+    historicalSupplies.forEach((supply) => {
+      const sameSupplier =
+        (supplierId && supply.supplier_id === supplierId) ||
+        (!supplierId &&
+          supplierName &&
+          (supply.supplier || '')
+            .trim()
+            .toLocaleLowerCase('pt-BR') === supplierName);
+
+      if (!sameSupplier) return;
+      if (
+        supply.status !== 'recebido' &&
+        supply.status !== 'conferido'
+      ) {
+        return;
+      }
+
+      supply.items.forEach((item) => {
+        if (!item.stock_product_id) return;
+        score.set(
+          item.stock_product_id,
+          (score.get(item.stock_product_id) || 0) + 1,
+        );
+      });
+    });
+
+    return [...score.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => id);
+  }, [
+    historicalSupplies,
+    supplierId,
+    supplierText,
+  ]);
   const [purchaserName, setPurchaserName] = useState(
     initial?.purchaser_name || defaultBuyerName || 'Álefe',
   );
@@ -584,6 +629,8 @@ export function StockSupplyForm({
                 <StockProductPicker
                   products={products}
                   draftIncoming={draftIncoming}
+                  preferredProductIds={preferredProductIds}
+                  supplierLabel={supplierText || undefined}
                   value={item.stock_product_id}
                   onChange={(value) =>
                     chooseProduct(item.id, value)

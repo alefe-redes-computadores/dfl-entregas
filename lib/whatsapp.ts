@@ -4,11 +4,12 @@ import { resolveStopLocation, buildGoogleMapsRouteUrl, cleanAddressForMaps } fro
 import { routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { bestOperationalAddress, hasHouseNumber } from "@/lib/operational-address";
+import { deliveryStopKey, stopNumberMap } from '@/lib/route-stops';
 
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const deliveryCharge = (delivery: Delivery) => delivery.customer_charge ?? delivery.value ?? 0;
-const deliveryGroupKey = (delivery: Delivery) => delivery.stop_group_id || delivery.id;
+const deliveryGroupKey = deliveryStopKey;
 
 type ParsedDrinkItem = {
   qty: number;
@@ -165,6 +166,7 @@ export async function generateRouteMessages(
 
     const totalDeliveries = deliveries.length;
     const totalStops = new Set(deliveries.map((delivery) => deliveryGroupKey(delivery))).size;
+    const physicalStopNumbers = stopNumberMap(deliveries);
     const drinksSummary: Record<string, { qty: number; name: string }> = {};
     const stopsNeedingCode: { num: number; neighborhood: string; street: string }[] = [];
     const stopsNeedingCall: { num: number; name: string }[] = [];
@@ -244,7 +246,7 @@ export async function generateRouteMessages(
 
       if (isFuzzy) {
         hasFuzzyAddresses = true;
-        fuzzyDeliveries.push({ id: delivery.id, index: num, name: customer?.name || 'Cliente', address: delivery.address_string, neighborhood });
+        fuzzyDeliveries.push({ id: delivery.id, index: stopNumber, name: customer?.name || 'Cliente', address: delivery.address_string, neighborhood });
       }
 
       const stopLocation = resolveStopLocation(delivery, customer?.maps_link);
@@ -285,7 +287,7 @@ export async function generateRouteMessages(
       }
 
       if (clientPhone && delivery.notify_whatsapp) {
-        stopsNeedingCall.push({ num, name: clientName });
+        stopsNeedingCall.push({ num: stopNumber, name: clientName });
         const gateMsg = encodeURIComponent('Olá! Sou o entregador da Da Família Lanches, cheguei no portão com seu pedido!');
         msg1.push(`📲 *Chamar no portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
       }
@@ -295,7 +297,7 @@ export async function generateRouteMessages(
       if (delivery.value === 1) {
         msg1.push(`- 💵 *Pagamento:* R$ 1,00 (Cartão)`);
         msg1.push(`- ⚠️ *UM REAL mesmo* (pedido proporcional)`);
-        stopsNeedingPosMachine.push(num);
+        stopsNeedingPosMachine.push(stopNumber);
       } else if (delivery.is_paid) {
         if (delivery.payment_method === 'pix') {
           msg1.push(`- 📱 *Pagamento:* PIX Confirmado ✅`);
@@ -306,10 +308,10 @@ export async function generateRouteMessages(
         if (delivery.payment_method === 'pix') {
           msg1.push(`- 📱 *Pagamento:* *R$ ${valueStr} (PIX QR)*`);
           msg1.push(`- ❌ *Ainda não pagou, cobrar na maquininha!*`);
-          stopsNeedingPosMachine.push(num);
+          stopsNeedingPosMachine.push(stopNumber);
         } else if (delivery.payment_method?.includes('cartao')) {
           msg1.push(`- 💳 *Pagamento:* *R$ ${valueStr} (CARTÃO)*`);
-          stopsNeedingPosMachine.push(num);
+          stopsNeedingPosMachine.push(stopNumber);
         } else if (delivery.payment_method === 'dinheiro' && delivery.change_for) {
           const troco = Math.max(0, delivery.change_for - deliveryCharge(delivery));
           msg1.push(`- 💵 *Pagamento:* R$ ${valueStr} *(Paga c/ R$ ${formatMoney(delivery.change_for)} | Troco: R$ ${formatMoney(troco)})*`);
@@ -435,7 +437,7 @@ export async function generateRouteMessages(
       let totalDinheiroAReceber = 0;
 
       pendingMoney.forEach((d) => {
-        const num = deliveries.findIndex(x => x.id === d.id) + 1;
+        const num = physicalStopNumbers.get(deliveryGroupKey(d)) || 1;
         const pedidoVal = deliveryCharge(d);
         const dinheiroEmMaos = d.change_for ? d.change_for : pedidoVal;
         totalDinheiroAReceber += dinheiroEmMaos;

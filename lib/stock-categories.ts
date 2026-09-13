@@ -63,6 +63,7 @@ export function canonicalStockCategory(category?:string):string{
 export function stockProductCategory(productName?:string,category?:string):string{
   const product=norm(productName||'');
   if(/hamburg/.test(product))return'Congelados';
+  if(/file.*frango|frango.*file|peito.*frango/.test(product))return'Açougue';
   if(/salsich|bacon(?:\s+fatiado)?|mussarela|presunto|apresuntado/.test(product))return'Frios';
   if(/batata palha|milho verde|milho/.test(product))return'Mercearia';
   return canonicalStockCategory(category);
@@ -72,6 +73,7 @@ export function suggestStockCategory(productName?:string):string{
   const value=norm(productName||'');
   if(!value)return'Mercearia';
   if(/hamburg/.test(value))return'Congelados';
+  if(/file.*frango|frango.*file|peito.*frango/.test(value))return'Açougue';
   if(/salsich|bacon|mussarela|presunto|apresuntado/.test(value))return'Frios';
   if(/batata palha|milho verde|milho/.test(value))return'Mercearia';
   const inferred=canonicalStockCategory(value);

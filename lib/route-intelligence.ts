@@ -1,5 +1,6 @@
 import type { Customer, Delivery } from '@/types';
 import { distanceMeters, extractLatLngFromMapsUrl, type LatLngPoint } from '@/lib/maps';
+import { deliveryStopKey } from '@/lib/route-stops';
 
 export type RouteStop = { delivery: Delivery; customer?: Customer; point: LatLngPoint | null };
 
@@ -42,22 +43,127 @@ function nearest(origin: LatLngPoint, stops: RouteStop[]) {
  * Distância aqui é geométrica, nunca quilometragem rodoviária.
  */
 export function buildSmartRouteOrder(origin: LatLngPoint, stops: RouteStop[]) {
-  const urgent=stops.filter(i=>i.delivery.is_urgent).sort((a,b)=>createdTime(a.delivery)-createdTime(b.delivery));
-  const normal=stops.filter(i=>!i.delivery.is_urgent);
-  const movable=normal.filter(i=>!i.delivery.order_locked);
-  const precise=movable.filter(i=>i.point);
-  const approximate=movable.filter(i=>!i.point).sort((a,b)=>createdTime(a.delivery)-createdTime(b.delivery));
-  const map=new Map<string,RouteStop[]>();
-  precise.forEach(stop=>{const key=groupKey(stop); map.set(key,[...(map.get(key)||[]),stop]);});
-  const groups=[...map.entries()].map(([key,items])=>({key,items,center:centroid(items)}));
-  const optimized:RouteStop[]=[]; let cursor=origin;
-  while(groups.length){
-    groups.sort((a,b)=>distanceMeters(cursor,a.center)-distanceMeters(cursor,b.center) || Math.min(...a.items.map(i=>createdTime(i.delivery)))-Math.min(...b.items.map(i=>createdTime(i.delivery))) || a.key.localeCompare(b.key));
-    const group=groups.shift()!; const ordered=nearest(cursor,group.items); optimized.push(...ordered); cursor=ordered[ordered.length-1].point!;
+  const groupMap = new Map<
+    string,
+    {
+      key: string;
+      items: RouteStop[];
+      representative: RouteStop;
+      urgent: boolean;
+      locked: boolean;
+    }
+  >();
+
+  [...stops]
+    .sort(
+      (a, b) =>
+        createdTime(a.delivery) - createdTime(b.delivery) ||
+        a.delivery.id.localeCompare(b.delivery.id),
+    )
+    .forEach((stop) => {
+      const key = deliveryStopKey(stop.delivery);
+      const current = groupMap.get(key);
+
+      if (current) {
+        current.items.push(stop);
+        current.urgent ||= stop.delivery.is_urgent === true;
+        current.locked ||= stop.delivery.order_locked === true;
+        if (!current.representative.point && stop.point) {
+          current.representative = stop;
+        }
+        return;
+      }
+
+      groupMap.set(key, {
+        key,
+        items: [stop],
+        representative: stop,
+        urgent: stop.delivery.is_urgent === true,
+        locked: stop.delivery.order_locked === true,
+      });
+    });
+
+  const physicalStops = [...groupMap.values()];
+  const urgent = physicalStops
+    .filter((group) => group.urgent)
+    .sort(
+      (a, b) =>
+        createdTime(a.representative.delivery) -
+        createdTime(b.representative.delivery),
+    );
+
+  const normal = physicalStops.filter((group) => !group.urgent);
+  const movable = normal.filter((group) => !group.locked);
+  const precise = movable.filter((group) => group.representative.point);
+  const approximate = movable
+    .filter((group) => !group.representative.point)
+    .sort(
+      (a, b) =>
+        createdTime(a.representative.delivery) -
+        createdTime(b.representative.delivery),
+    );
+
+  const neighborhoods = new Map<string, typeof precise>();
+
+  precise.forEach((group) => {
+    const key = groupKey(group.representative);
+    neighborhoods.set(key, [
+      ...(neighborhoods.get(key) || []),
+      group,
+    ]);
+  });
+
+  const neighborhoodGroups = [...neighborhoods.entries()].map(
+    ([key, groups]) => ({
+      key,
+      groups,
+      center: centroid(
+        groups.map((group) => group.representative),
+      ),
+    }),
+  );
+
+  const optimized: typeof precise = [];
+  let cursor = origin;
+
+  while (neighborhoodGroups.length) {
+    neighborhoodGroups.sort(
+      (a, b) =>
+        distanceMeters(cursor, a.center) -
+          distanceMeters(cursor, b.center) ||
+        a.key.localeCompare(b.key),
+    );
+
+    const neighborhood = neighborhoodGroups.shift()!;
+    const orderedRepresentatives = nearest(
+      cursor,
+      neighborhood.groups.map((group) => group.representative),
+    );
+
+    orderedRepresentatives.forEach((stop) => {
+      const group = neighborhood.groups.find(
+        (candidate) =>
+          candidate.key === deliveryStopKey(stop.delivery),
+      );
+      if (group) optimized.push(group);
+    });
+
+    const last = orderedRepresentatives[orderedRepresentatives.length - 1];
+    if (last?.point) cursor = last.point;
   }
-  const queue=[...optimized,...approximate];
-  const merged=normal.map(item=>item.delivery.order_locked?item:queue.shift()!);
-  return [...urgent,...merged];
+
+  const queue = [...optimized, ...approximate];
+  const merged = normal.map((group) =>
+    group.locked ? group : queue.shift()!,
+  );
+
+  return [...urgent, ...merged].flatMap((group) =>
+    group.items.sort(
+      (a, b) =>
+        createdTime(a.delivery) - createdTime(b.delivery) ||
+        a.delivery.id.localeCompare(b.delivery.id),
+    ),
+  );
 }
 
 export function neighborMetadata(stops: RouteStop[], thresholdMeters=250) {
