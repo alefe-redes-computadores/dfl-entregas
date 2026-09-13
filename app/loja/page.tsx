@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
@@ -76,8 +76,6 @@ export default function LojaPage() {
   const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
   const [tempPause, setTempPause] = useState<StorePause>({ id: '', start_date: '', end_date: '', reason: '' });
 
-  const hourScrollRef = useRef<HTMLDivElement>(null);
-  const minScrollRef = useRef<HTMLDivElement>(null);
   const [timePicker, setTimePicker] = useState<{ isOpen: boolean; shiftIndex: number; field: 'start' | 'end'; hour: string; minute: string; } | null>(null);
 
   useEffect(() => {
@@ -164,15 +162,6 @@ export default function LojaPage() {
 
     return () => controller.abort();
   }, [hasHydrated]);
-
-  useEffect(() => {
-    if (timePicker?.isOpen) {
-      setTimeout(() => {
-        if (hourScrollRef.current) { const hEl = hourScrollRef.current.querySelector(`[data-val="${timePicker.hour}"]`); if (hEl) hEl.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-        if (minScrollRef.current) { const mEl = minScrollRef.current.querySelector(`[data-val="${timePicker.minute}"]`); if (mEl) mEl.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-      }, 50);
-    }
-  }, [timePicker?.isOpen]);
 
   const toggleStore = async () => {
     if (Capacitor.isNativePlatform()) {
@@ -448,11 +437,11 @@ export default function LojaPage() {
             className="flex w-full items-center justify-between gap-4 p-4 text-left active:bg-zinc-900"
           >
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wide text-emerald-500">Financeiro</p>
+              <p className="text-[10px] font-black uppercase tracking-wide text-emerald-500">Valor dos pedidos</p>
               <p className="mt-1 font-heading text-xl font-black text-emerald-400">
                 {isPrivacyMode ? 'R$ •••••' : `R$ ${formatMoney(dashboardData.faturamentoTotal)}`}
               </p>
-              <p className="mt-1 text-[10px] text-zinc-600">Conferência do movimento registrado</p>
+              <p className="mt-1 text-[10px] text-zinc-600">Total econômico registrado no período</p>
             </div>
             <ChevronRight size={18} className="text-zinc-700" />
           </button>
@@ -721,39 +710,11 @@ export default function LojaPage() {
                 <button onClick={() => applyQuickAdjustment('janta')} className="text-left py-5 border-b border-zinc-800/80 text-zinc-300 text-sm font-semibold active:bg-zinc-900/50 transition-colors">Janta | 18:00 às 23:00h</button>
              </div>
            </div>
-           <div className="fixed bottom-0 w-full p-4 bg-zinc-950 border-t border-zinc-800 pb-8 shrink-0"><button onClick={saveDayEditor} className="w-full h-14 bg-zinc-100 hover:bg-white text-zinc-950 font-black rounded-xl text-lg active:scale-95 transition-all shadow-xl">Confirmar</button></div>
+           <div className="dfl-fixed-footer fixed bottom-0 left-1/2 w-full max-w-md -translate-x-1/2 border-t border-zinc-800 bg-zinc-950 p-4 shrink-0"><button onClick={saveDayEditor} className="w-full h-14 bg-zinc-100 hover:bg-white text-zinc-950 font-black rounded-xl text-lg active:scale-95 transition-all shadow-xl">Confirmar</button></div>
         </div>
       )}
 
       {timePicker && <StoreTimePicker field={timePicker.field} hour={timePicker.hour} minute={timePicker.minute} onClose={() => setTimePicker(null)} onConfirm={confirmTimePicker} onChange={(value) => setTimePicker(current => current ? {...current,...value} : null)} />}
-      {false && timePicker && (
-        <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-black/80 animate-in fade-in">
-          <div className="bg-[#1a1a1a] rounded-t-[32px] p-6 pb-10 flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-300 relative">
-             <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-zinc-700" />
-             <div className="flex items-center justify-between mb-8"><h3 className="font-bold text-xl text-zinc-50">Horário de {timePicker?.field === 'start' ? 'início' : 'término'}</h3><button onClick={() => setTimePicker(null)} className="p-2.5 bg-zinc-800 rounded-full text-zinc-400 active:scale-90"><X size={20}/></button></div>
-             <div className="flex justify-center gap-4 h-56 relative mb-8">
-               <div className="absolute top-1/2 left-4 right-4 h-14 -translate-y-1/2 bg-[#2d2d2d] rounded-2xl pointer-events-none z-0" />
-               <div className="absolute top-0 w-full h-16 bg-gradient-to-b from-[#1a1a1a] to-transparent pointer-events-none z-10"/>
-               <div className="absolute bottom-0 w-full h-16 bg-gradient-to-t from-[#1a1a1a] to-transparent pointer-events-none z-10"/>
-               <div ref={hourScrollRef} className="flex-1 flex flex-col overflow-y-auto items-center z-20 pb-[96px] pt-[96px] hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                  {Array.from({length: 24}).map((_, i) => {
-                    const h = String(i).padStart(2, '0');
-                    return (<div key={h} data-val={h} onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker(p => ({...p!, hour: h})); }} className="shrink-0 h-14 w-20 flex items-center justify-center cursor-pointer"><span className={`text-2xl transition-all ${timePicker?.hour === h ? 'font-black text-zinc-50 scale-110' : 'font-semibold text-zinc-500'}`}>{h}</span></div>)
-                  })}
-               </div>
-               <div className="flex items-center justify-center text-3xl font-black text-zinc-600 z-20 pb-2">:</div>
-               <div ref={minScrollRef} className="flex-1 flex flex-col overflow-y-auto items-center z-20 pb-[96px] pt-[96px] hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                  {Array.from({length: 60}).map((_, i) => {
-                    const m = String(i).padStart(2, '0');
-                    return (<div key={m} data-val={m} onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker(p => ({...p!, minute: m})); }} className="shrink-0 h-14 w-20 flex items-center justify-center cursor-pointer"><span className={`text-2xl transition-all ${timePicker?.minute === m ? 'font-black text-zinc-50 scale-110' : 'font-semibold text-zinc-500'}`}>{m}</span></div>)
-                  })}
-               </div>
-             </div>
-             <button onClick={confirmTimePicker} className="w-full h-14 bg-zinc-100 hover:bg-white text-zinc-950 font-black rounded-xl text-lg active:scale-95 transition-all shadow-lg">Confirmar</button>
-          </div>
-        </div>
-      )}
-
       {isPauseModalOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 px-4 animate-in fade-in">
            <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 p-6 rounded-3xl flex flex-col gap-5 shadow-2xl">

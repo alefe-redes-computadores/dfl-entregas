@@ -111,7 +111,7 @@ export function BottomNav() {
 
   return (
     <>
-      <nav className="safe-bottom pointer-events-none fixed inset-x-0 bottom-0 z-40 px-2 pb-1">
+      <nav className="safe-bottom pointer-events-none fixed bottom-0 left-1/2 z-40 w-full max-w-md -translate-x-1/2 px-2 pb-1">
         <div className="pointer-events-auto mx-auto flex max-w-md items-center justify-between rounded-[22px] border border-zinc-800/80 bg-zinc-950/95 px-1.5 py-1.5 shadow-[0_-10px_36px_rgba(0,0,0,.38)] backdrop-blur-xl">
           {NAV_ITEMS.filter((item) => item.href !== '__fab__' || Boolean(addMode)).map((item) => {
             const Icon = item.icon;
@@ -155,7 +155,7 @@ export function BottomNav() {
           onClick={() => setShowAddSheet(false)}
         >
           <div
-            className="dfl-bottom-sheet safe-bottom w-full p-5 pb-7"
+            className="dfl-bottom-sheet safe-bottom mx-auto w-full max-w-md p-5 pb-7"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-700" />

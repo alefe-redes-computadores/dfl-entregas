@@ -124,7 +124,7 @@ export function ReportDrilldownSheet({
 
   return (
     <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-black/80 backdrop-blur-sm">
-      <section className="max-h-[92vh] overflow-hidden rounded-t-[34px] border-t border-zinc-800 bg-zinc-950 shadow-2xl">
+      <section className="safe-bottom max-h-[92dvh] overflow-hidden rounded-t-[34px] border-t border-zinc-800 bg-zinc-950 shadow-2xl">
         <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-zinc-800" />
 
         <header className="flex items-start justify-between gap-4 border-b border-zinc-800/80 px-5 pb-4 pt-4">
@@ -149,7 +149,7 @@ export function ReportDrilldownSheet({
 
         <div className="max-h-[calc(92vh-100px)] overflow-y-auto px-5 pb-10 pt-4">
           {buckets.length > 0 && (
-            <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
+            <div className="mb-5 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setSelectedKey(null)}

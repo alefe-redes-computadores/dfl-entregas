@@ -176,7 +176,7 @@ export default function RoutesPage() {
     </section>
 
     <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar neste dia" className="dfl-search pl-11 pr-4"/></div>
-    <div className="flex gap-2 overflow-x-auto no-scrollbar">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
+    <div className="dfl-filter-row">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
 
     <div className="flex flex-col gap-3">
       {rows.map(({ route, linked, completed, stops, amount, customerCharge, state }) => {

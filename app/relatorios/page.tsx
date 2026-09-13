@@ -120,7 +120,7 @@ export default function RelatoriosPage() {
 
   return (
     <div className="relative flex flex-col gap-5 pb-28">
-      <header className="sticky top-0 z-30 -mx-2 flex items-center justify-between border-b border-zinc-900 bg-zinc-950/90 px-4 pb-3 pt-4 backdrop-blur-xl">
+      <header className="-mx-2 flex items-center justify-between border-b border-zinc-900/80 px-4 pb-3 pt-2">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -162,7 +162,7 @@ export default function RelatoriosPage() {
             active={activeTab === 'financeiro'}
             onClick={() => setActiveTab('financeiro')}
             icon={<Wallet size={13} />}
-            label="Receita"
+            label="Valores"
           />
           <TabButton
             active={activeTab === 'operacao'}
@@ -532,7 +532,7 @@ export default function RelatoriosPage() {
               </div>
 
               <p className="mt-3 text-[10px] leading-relaxed text-zinc-600">
-                O relatório usa apenas os compras de estoque registradas no novo módulo. Registros antigos de combustível permanecem preservados, mas não são misturados nestas métricas.
+                O relatório usa apenas as compras de estoque registradas no novo módulo. Registros antigos de combustível permanecem preservados, mas não são misturados nestas métricas.
               </p>
             </section>
           </>

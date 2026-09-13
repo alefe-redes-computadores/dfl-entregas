@@ -313,7 +313,7 @@ export default function DeliveriesPage() {
       </div>
 
       <section className="space-y-2">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+        <div className="dfl-filter-row">
           {(
             [
               ['todas', 'Todos'],

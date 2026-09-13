@@ -9,7 +9,7 @@
 // - respostas válidas visitadas são gravadas para uso offline;
 // - chamadas de terceiros/Firebase não são interceptadas.
 
-const VERSION = 'dfl-entregas-v2';
+const VERSION = 'dfl-entregas-v3';
 const CORE_CACHE = `${VERSION}-core`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const ASSET_CACHE = `${VERSION}-assets`;

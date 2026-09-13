@@ -11,6 +11,7 @@ import { OperationalRadar } from '@/components/home/OperationalRadar';
 import { ShiftBriefing } from '@/components/home/ShiftBriefing';
 import { OperationalCommandCenter } from '@/components/home/OperationalCommandCenter';
 import { OperationalDatePicker } from '@/components/home/OperationalDatePicker';
+import { deliveryEconomicValue } from '@/lib/delivery-finance';
 
 function formatDateLabel(date: Date): string {
   const todayKey = saoPauloDateKey(new Date());
@@ -238,7 +239,7 @@ export default function HomePage() {
       ).length;
 
     const faturamentoTotal = ordersDoDia.reduce(
-      (acc, order) => acc + (order.value || 0),
+      (acc, order) => acc + deliveryEconomicValue(order),
       0,
     );
 
@@ -405,9 +406,9 @@ export default function HomePage() {
             <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Rotas abertas</p>
           </a>
           <div className="dfl-card col-span-2 min-w-0 p-4">
-            <div className="flex items-center justify-between gap-1"><TrendingUp size={14} className="shrink-0 text-emerald-400" /><button type="button" onClick={togglePrivacyMode} aria-label={isPrivacyMode ? 'Mostrar faturamento' : 'Ocultar faturamento'} className="shrink-0 text-zinc-600 active:scale-90">{isPrivacyMode ? <EyeOff size={13} /> : <Eye size={13} />}</button></div>
+            <div className="flex items-center justify-between gap-1"><TrendingUp size={14} className="shrink-0 text-emerald-400" /><button type="button" onClick={togglePrivacyMode} aria-label={isPrivacyMode ? 'Mostrar valor dos pedidos' : 'Ocultar valor dos pedidos'} className="shrink-0 text-zinc-600 active:scale-90">{isPrivacyMode ? <EyeOff size={13} /> : <Eye size={13} />}</button></div>
             <p className="mt-3 truncate font-heading text-[15px] font-black leading-none text-zinc-50">{isPrivacyMode ? 'R$ •••' : `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p>
-            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Faturamento</p>
+            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Valor dos pedidos</p>
           </div>
         </div>
       </section>
@@ -420,7 +421,7 @@ export default function HomePage() {
             <div className="min-w-0 flex-1">
               <p className="text-xs font-black text-zinc-300">Sem movimento neste período</p>
               <p className="mt-0.5 text-[10px] text-zinc-600">
-                Entregas, rotas e faturamento aparecem aqui quando houver operação.
+                Entregas, rotas e valores aparecem aqui quando houver operação.
               </p>
             </div>
           </div>
