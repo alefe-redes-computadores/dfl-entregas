@@ -1,6 +1,7 @@
 import type { Customer, Delivery, Route, StockSupply } from '@/types';
 import { SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { deliveryCustomerCharge, deliveryEconomicValue, deliveryIfoodSubsidy } from '@/lib/delivery-finance';
 import {
   deliveryOperationalTimestamp,
   trustedRouteDurationMinutes,
@@ -142,7 +143,7 @@ function aggregate(
     const current = map.get(key) ?? { count: 0, revenue: 0 };
     map.set(key, {
       count: current.count + 1,
-      revenue: current.revenue + money(delivery.value),
+      revenue: current.revenue + deliveryEconomicValue(delivery),
     });
   });
 
@@ -184,7 +185,7 @@ function buildDaily(
     };
     byDate.set(delivery.reportDateKey, {
       count: current.count + 1,
-      revenue: current.revenue + money(delivery.value),
+      revenue: current.revenue + deliveryEconomicValue(delivery),
     });
   });
 
@@ -215,7 +216,7 @@ function buildWeekdays(
     if (!delivery.reportDateKey) return;
     const index = weekdayIndexFromKey(delivery.reportDateKey);
     counts[index].count += 1;
-    counts[index].revenue += money(delivery.value);
+    counts[index].revenue += deliveryEconomicValue(delivery);
   });
 
   let dateKeys: string[];
@@ -545,12 +546,22 @@ export function buildReportModel(input: {
         )
       : [];
 
+  // totalRevenue preserva o nome do contrato de ReportModel por
+  // compatibilidade, mas representa VALOR ECONÔMICO DOS PEDIDOS.
   const currentRevenue = current.reduce(
-    (sum, delivery) => sum + money(delivery.value),
+    (sum, delivery) => sum + deliveryEconomicValue(delivery),
     0,
   );
   const previousRevenue = previous.reduce(
-    (sum, delivery) => sum + money(delivery.value),
+    (sum, delivery) => sum + deliveryEconomicValue(delivery),
+    0,
+  );
+  const currentCustomerCharge = current.reduce(
+    (sum, delivery) => sum + deliveryCustomerCharge(delivery),
+    0,
+  );
+  const currentIfoodSubsidy = current.reduce(
+    (sum, delivery) => sum + deliveryIfoodSubsidy(delivery),
     0,
   );
 
@@ -596,6 +607,8 @@ export function buildReportModel(input: {
     metrics: {
       totalDeliveries: current.length,
       totalRevenue: Number(currentRevenue.toFixed(2)),
+      totalCustomerCharge: Number(currentCustomerCharge.toFixed(2)),
+      totalIfoodSubsidy: Number(currentIfoodSubsidy.toFixed(2)),
       averageTicket:
         current.length > 0
           ? Number((currentRevenue / current.length).toFixed(2))

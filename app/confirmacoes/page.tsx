@@ -37,6 +37,7 @@ import {
   type IfoodConfirmationState,
 } from '@/lib/ifood-confirmations';
 import type { Delivery, IfoodPendingConfirmation } from '@/types';
+import { deliveryCustomerCharge, deliveryEconomicValue, deliveryIfoodSubsidy } from '@/lib/delivery-finance';
 
 type QueueFilter = 'all' | IfoodConfirmationState;
 
@@ -972,7 +973,10 @@ export default function ConfirmacoesPage() {
                       {fulfillmentLabel(delivery)}
                     </span>
                     <span>•</span>
-                    <span>{money(delivery.value || 0)}</span>
+                    <span>
+                      {money(deliveryCustomerCharge(delivery))}
+                      {deliveryIfoodSubsidy(delivery) > 0 ? ' cliente' : ''}
+                    </span>
                   </div>
                 </div>
 

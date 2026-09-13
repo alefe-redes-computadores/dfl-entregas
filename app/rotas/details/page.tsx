@@ -21,6 +21,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
 import { RouteOperationalMemory } from '@/components/intelligence/EntityOperationalMemory';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
+import { sumDeliveryFinance } from '@/lib/delivery-finance';
 import { RouteDepartureChecklist } from '@/components/routes/RouteDepartureChecklist';
 
 const fmt = (...values: TimestampLike[]) => {
@@ -95,7 +96,9 @@ export default function RouteDetailsPage() {
   const pending = deliveries.filter((item) => !item.completed).length;
   const completed = deliveries.length - pending;
   const totalStops = groupDeliveriesByStop(deliveries).length;
-  const total = deliveries.reduce((sum, item) => sum + (item.value || 0), 0);
+  const routeFinance = sumDeliveryFinance(deliveries);
+  const total = routeFinance.economicValue;
+  const customerCharge = routeFinance.customerCharge;
   const progress = deliveries.length
     ? Math.round((completed / deliveries.length) * 100)
     : 0;
@@ -258,7 +261,12 @@ export default function RouteDetailsPage() {
             <p className="mt-2 text-lg font-black text-emerald-400">
               R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
-            <p className="text-[10px] text-zinc-600">Valor bruto</p>
+            {Math.abs(total - customerCharge) > 0.009 && (
+              <p className="mt-1 text-[9px] font-bold text-zinc-600">
+                Cobrado: R$ {customerCharge.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </p>
+            )}
+            <p className="text-[10px] text-zinc-600">Valor dos pedidos</p>
           </div>
         </div>
 

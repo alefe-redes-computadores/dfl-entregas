@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { deliveryCustomerCharge, deliveryIfoodSubsidy } from '@/lib/delivery-finance';
 import { fulfillmentLabel, getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
   dateKey,
@@ -540,7 +541,7 @@ export default function DeliveriesPage() {
                 <div className="shrink-0 text-right">
                   <p className="text-sm font-black text-emerald-400">
                     R${' '}
-                    {(delivery.value || 0).toLocaleString('pt-BR', {
+                    {deliveryCustomerCharge(delivery).toLocaleString('pt-BR', {
                       minimumFractionDigits: 2,
                     })}
                   </p>

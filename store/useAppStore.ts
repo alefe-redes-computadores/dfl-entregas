@@ -28,6 +28,7 @@ import {
 } from '@/lib/customer-identity';
 import { stockProductCategory } from '@/lib/stock-categories';
 import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop } from '@/lib/route-stops';
+import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -1216,7 +1217,10 @@ export const useAppStore = create<AppState>()(
             .filter((item) => item.customer_id === customer.id && item.completed === true);
           updatedCustomerData = {
             orderCount: completedForCustomer.length,
-            totalSpent: completedForCustomer.reduce((total, item) => total + (item.value || 0), 0),
+            totalSpent: completedForCustomer.reduce(
+              (total, item) => total + deliveryCustomerCharge(item),
+              0,
+            ),
             updated_at: now,
           };
         }
@@ -1445,7 +1449,7 @@ export const useAppStore = create<AppState>()(
                 confirmation_code: code || undefined,
                 customer_name:
                   delivery.customer_name || customer?.name || 'Cliente',
-                value: delivery.value,
+                value: deliveryCustomerCharge(delivery),
                 note: 'Entrega concluída; confirmação externa do iFood ainda pendente.',
                 status: 'pending',
                 created_at: now,
@@ -2103,7 +2107,7 @@ export const useAppStore = create<AppState>()(
           ),
           orderCount: completed.length,
           totalSpent: completed.reduce(
-            (sum, delivery) => sum + (delivery.value || 0),
+            (sum, delivery) => sum + deliveryCustomerCharge(delivery),
             0,
           ),
           updated_at: now,

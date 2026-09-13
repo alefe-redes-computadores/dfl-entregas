@@ -82,6 +82,8 @@ export interface ReportModel {
   metrics: {
     totalDeliveries: number;
     totalRevenue: number;
+    totalCustomerCharge: number;
+    totalIfoodSubsidy: number;
     averageTicket: number;
     deliveryVariation: number | null;
     revenueVariation: number | null;

@@ -3,6 +3,7 @@
 
 import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import type { Customer, Delivery, Route } from '@/types';
+import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 
 type Props = {
   route: Route;
@@ -33,8 +34,8 @@ export function RouteDepartureChecklist({
         !delivery.is_paid &&
         delivery.payment_method === 'dinheiro' &&
         delivery.change_for &&
-        delivery.change_for > (delivery.value || 0)
-          ? Math.max(0, delivery.change_for - (delivery.value || 0))
+        delivery.change_for > deliveryCustomerCharge(delivery)
+          ? Math.max(0, delivery.change_for - deliveryCustomerCharge(delivery))
           : 0,
       missingAddress: !(delivery.address_string || customer?.address)?.trim(),
       missingConfirmation:

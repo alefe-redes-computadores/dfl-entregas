@@ -1,5 +1,6 @@
 // lib/customer-analytics.ts
 import type { Customer, Delivery } from '@/types';
+import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { deliveryDate } from '@/lib/operational-time';
 
 export interface CustomerStats {
@@ -42,7 +43,7 @@ export function getCustomerStats(customer: Customer, deliveries: Delivery[]): Cu
   const linked = deliveries
     .filter(delivery => deliveryBelongsToCustomer(delivery, customer))
     .sort((a,b) => new Date(getDeliveryCreatedAt(b) || 0).getTime() - new Date(getDeliveryCreatedAt(a) || 0).getTime());
-  const totalValue = linked.reduce((total, delivery) => total + (delivery.value || 0), 0);
+  const totalValue = linked.reduce((total, delivery) => total + deliveryCustomerCharge(delivery), 0);
   const completedCount = linked.filter(delivery => delivery.completed).length;
   return {
     deliveries: linked,

@@ -192,7 +192,7 @@ export default function RelatoriosPage() {
             accentColor="emerald"
           />
           <SummaryCard
-            title="Faturamento"
+            title="Valor dos pedidos"
             value={money(model.metrics.totalRevenue)}
             subtitle={variationSubtitle(
               model.metrics.revenueVariation,
@@ -310,6 +310,20 @@ export default function RelatoriosPage() {
           <>
             <section className="grid grid-cols-2 gap-3">
               <SummaryCard
+                title="Cobrado dos clientes"
+                value={money(model.metrics.totalCustomerCharge)}
+                subtitle="Valor efetivamente pago/cobrado do cliente"
+                icon={<Banknote size={20} />}
+                accentColor="emerald"
+              />
+              <SummaryCard
+                title="Subsídio iFood"
+                value={money(model.metrics.totalIfoodSubsidy)}
+                subtitle="Parcela econômica registrada como subsídio"
+                icon={<Store size={20} />}
+                accentColor="amber"
+              />
+              <SummaryCard
                 title="Ticket médio"
                 value={money(model.metrics.averageTicket)}
                 icon={<Banknote size={20} />}
@@ -325,18 +339,18 @@ export default function RelatoriosPage() {
             </section>
 
             <ReportChartCard
-              title="Faturamento diário"
-              description="Receita separada do volume para evitar dois eixos e interpretações confusas."
+              title="Valor econômico diário"
+              description="Soma o valor econômico dos pedidos. Cobrança do cliente e subsídio iFood permanecem conceitos separados."
               icon={<Banknote size={18} />}
               data={model.dailyRevenue}
               chartType="line"
               dataKey="revenue"
-              valueLabel="Faturamento"
+              valueLabel="Valor dos pedidos"
               valueFormatter={money}
               onExplore={() =>
                 setDrilldown({
                   kind: 'daily',
-                  title: 'Faturamento por dia',
+                  title: 'Valor dos pedidos por dia',
                   subtitle:
                     'Abra uma data para conferir os pedidos que compõem o valor.',
                 })
@@ -345,9 +359,9 @@ export default function RelatoriosPage() {
                 setDrilldown({
                   kind: 'daily',
                   key: bucket.key,
-                  title: `Faturamento · ${bucket.label}`,
+                  title: `Valor dos pedidos · ${bucket.label}`,
                   subtitle:
-                    'Pedidos que formam exatamente o faturamento deste dia.',
+                    'Pedidos que formam exatamente o valor econômico deste dia.',
                 })
               }
             />
