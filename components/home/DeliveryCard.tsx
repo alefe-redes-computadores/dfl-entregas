@@ -703,7 +703,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       {/* Modal Redirecionamento Direto para o Portal iFood */}
       {confirmRedirectModal.isOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-sm rounded-[32px] border border-zinc-800 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-4">
+          <div className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-4">
             <div className="flex flex-col items-center justify-center text-center gap-3">
               <div className="h-16 w-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center border border-red-500/20 mb-2">
                 <CheckSquare size={28} />
@@ -743,7 +743,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       {/* Modal Digitar Código Manual iFood na Baixa */}
       {isIfoodModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-sm rounded-[32px] border border-zinc-700 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-5">
+          <div className="w-full max-w-sm rounded-[28px] border border-zinc-700 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/10 text-red-500 border border-red-500/20">

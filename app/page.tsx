@@ -365,7 +365,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex flex-col gap-5 pb-32">
+    <div className="dfl-page">
 
       <OperationalDatePicker
         selectedDate={selectedDate}
@@ -387,18 +387,18 @@ export default function HomePage() {
           </div>
           <p className="text-[10px] font-bold text-zinc-600">{completedDeliveries}/{totalEntregas} entregas</p>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <a href={`/entregas?date=${encodeURIComponent(selectedDateKey)}`} className="min-w-0 rounded-[20px] border border-zinc-800 bg-zinc-900/45 p-3 active:scale-[0.98]">
+        <div className="grid grid-cols-[1.15fr_.85fr] gap-2">
+          <a href={`/entregas?date=${encodeURIComponent(selectedDateKey)}`} className="dfl-card-interactive min-w-0 p-4">
             <div className="flex items-center justify-between gap-1"><Package size={14} className="shrink-0 text-sky-400" />{pendingDeliveries > 0 && <span className="truncate text-[8px] font-black text-amber-400">{pendingDeliveries} pend.</span>}</div>
             <p className="mt-3 font-heading text-2xl font-black leading-none text-zinc-50">{totalEntregas}</p>
             <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Entregas</p>
           </a>
-          <a href={`/rotas?date=${encodeURIComponent(selectedDateKey)}`} className={`min-w-0 rounded-[20px] border p-3 active:scale-[0.98] ${readyRoutes.length > 0 ? 'border-emerald-500/25 bg-emerald-500/[.055]' : 'border-zinc-800 bg-zinc-900/45'}`}>
+          <a href={`/rotas?date=${encodeURIComponent(selectedDateKey)}`} className={`min-w-0 rounded-[22px] border p-4 shadow-[0_10px_26px_rgba(0,0,0,.12)] transition active:scale-[0.985] ${readyRoutes.length > 0 ? 'border-emerald-500/25 bg-emerald-500/[.055]' : 'border-zinc-800 bg-zinc-900/45'}`}>
             <div className="flex items-center justify-between gap-1"><Bike size={14} className="shrink-0 text-emerald-400" />{readyRoutes.length > 0 && <span className="truncate text-[8px] font-black text-emerald-400">{readyRoutes.length} pronta</span>}</div>
             <p className="mt-3 font-heading text-2xl font-black leading-none text-zinc-50">{openRoutes.length}</p>
             <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Rotas abertas</p>
           </a>
-          <div className="min-w-0 rounded-[20px] border border-zinc-800 bg-zinc-900/45 p-3">
+          <div className="dfl-card col-span-2 min-w-0 p-4">
             <div className="flex items-center justify-between gap-1"><TrendingUp size={14} className="shrink-0 text-emerald-400" /><button type="button" onClick={togglePrivacyMode} aria-label={isPrivacyMode ? 'Mostrar faturamento' : 'Ocultar faturamento'} className="shrink-0 text-zinc-600 active:scale-90">{isPrivacyMode ? <EyeOff size={13} /> : <Eye size={13} />}</button></div>
             <p className="mt-3 truncate font-heading text-[15px] font-black leading-none text-zinc-50">{isPrivacyMode ? 'R$ •••' : `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p>
             <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Faturamento</p>

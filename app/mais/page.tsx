@@ -79,7 +79,7 @@ export default function MaisPage() {
   const syncing = isSyncing || syncChecking;
 
   return (
-    <div className="relative flex flex-col gap-6 pb-24 animate-in fade-in duration-300">
+    <div className="dfl-page relative animate-in fade-in duration-300">
       <header>
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-500">
           Sistema
@@ -92,7 +92,7 @@ export default function MaisPage() {
         </p>
       </header>
 
-      <section className="flex flex-col items-center justify-center gap-3 rounded-[24px] border border-zinc-800/80 bg-zinc-900/40 p-6 shadow-sm">
+      <section className="flex flex-col items-center justify-center gap-3 rounded-[26px] border border-emerald-500/15 bg-gradient-to-br from-emerald-500/[.07] via-zinc-900/55 to-zinc-950 p-6 shadow-[0_18px_40px_rgba(0,0,0,.18)]">
         <div className="relative h-20 w-20 overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 ring-4 ring-zinc-800">
           {user?.photoURL ? (
             <img
@@ -116,18 +116,7 @@ export default function MaisPage() {
           </p>
         </div>
       </section>
-
-      <section className="flex flex-col gap-2">
-
-
-        <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
-
-
-
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-2">
+<section className="flex flex-col gap-2">
         <h2 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
           Sistema e dados
         </h2>

@@ -55,9 +55,9 @@ export default function RootLayout({
         <RouteOperations />
         <ErrorBoundary>
           <AuthGuard>
-            <div className="mx-auto flex min-h-screen max-w-md flex-col bg-zinc-950 text-zinc-100">
+            <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-zinc-950/95 text-zinc-100 shadow-[0_0_80px_rgba(0,0,0,0.38)]">
               <Header />
-              <main className="flex-1 px-4 pb-28 pt-4">{children}</main>
+              <main className="relative flex-1 px-3.5 pb-28 pt-3.5 sm:px-4">{children}</main>
               <BottomNav />
             </div>
             <Toaster

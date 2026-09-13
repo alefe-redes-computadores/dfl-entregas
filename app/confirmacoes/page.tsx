@@ -534,11 +534,11 @@ export default function ConfirmacoesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-5 pb-28">
+    <div className="dfl-page">
       <header className="flex items-center gap-3">
         <button
           onClick={() => router.replace('/mais')}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-300 active:scale-95"
+          className="dfl-icon-button"
           aria-label="Voltar"
         >
           <ChevronLeft size={20} />
@@ -671,7 +671,7 @@ export default function ConfirmacoesPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar pedido, cliente, ID ou código"
-          className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900/55 pl-11 pr-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-red-500/50"
+          className="dfl-search pl-11 pr-4 focus:border-red-500/50"
         />
       </div>
 
@@ -1062,7 +1062,7 @@ export default function ConfirmacoesPage() {
         })}
 
         {queue.length === 0 && (
-          <div className="rounded-[28px] border border-dashed border-zinc-800 px-5 py-14 text-center">
+          <div className="dfl-empty">
             <CheckCircle2 size={34} className="mx-auto text-emerald-500/70" />
             <h3 className="mt-4 font-heading text-base font-black text-zinc-200">
               Nenhuma pendência neste filtro
@@ -1077,7 +1077,7 @@ export default function ConfirmacoesPage() {
       <button
         type="button"
         onClick={() => setIsBatchOpen(true)}
-        className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-4 z-[55] flex h-14 items-center gap-2 rounded-2xl border border-red-400/25 bg-red-500 px-4 font-black text-white shadow-[0_14px_36px_rgba(239,68,68,.28)] active:scale-95"
+        className="fixed bottom-[calc(6.2rem+env(safe-area-inset-bottom))] right-4 z-[55] flex h-12 items-center gap-2 rounded-[16px] border border-red-400/25 bg-red-500 px-3.5 text-xs font-black text-white shadow-[0_14px_32px_rgba(239,68,68,.24)] active:scale-95"
         aria-label="Adicionar pendências iFood"
       >
         <Plus size={18} />

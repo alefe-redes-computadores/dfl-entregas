@@ -211,13 +211,13 @@ export default function DeliveriesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-5 pb-28">
+    <div className="dfl-page">
       <header className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <button
             onClick={() => router.replace('/loja')}
             aria-label="Voltar para Minha Loja"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-300 active:scale-95"
+            className="dfl-icon-button"
           >
             <ChevronLeft size={20} />
           </button>
@@ -307,7 +307,7 @@ export default function DeliveriesPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar neste dia"
-          className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900/55 pl-11 pr-4 text-sm outline-none focus:border-amber-500"
+          className="dfl-search pl-11 pr-4 focus:border-amber-500/50"
         />
       </div>
 
@@ -552,7 +552,7 @@ export default function DeliveriesPage() {
         })}
 
         {rows.length === 0 && (
-          <div className="rounded-[28px] border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-12 text-center">
+          <div className="dfl-empty">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-900 text-zinc-700">
               <Package size={22} />
             </div>

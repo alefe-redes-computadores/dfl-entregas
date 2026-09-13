@@ -111,8 +111,8 @@ export function BottomNav() {
 
   return (
     <>
-      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-md items-center justify-between px-2 py-2">
+      <nav className="safe-bottom pointer-events-none fixed inset-x-0 bottom-0 z-40 px-2 pb-1">
+        <div className="pointer-events-auto mx-auto flex max-w-md items-center justify-between rounded-[22px] border border-zinc-800/80 bg-zinc-950/95 px-1.5 py-1.5 shadow-[0_-10px_36px_rgba(0,0,0,.38)] backdrop-blur-xl">
           {NAV_ITEMS.filter((item) => item.href !== '__fab__' || Boolean(addMode)).map((item) => {
             const Icon = item.icon;
             const isFab = item.href === '__fab__';
@@ -124,7 +124,7 @@ export function BottomNav() {
                   <button
                     onClick={handleAdd}
                     aria-label={addMode?.label || 'Adicionar'}
-                    className="-mt-7 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-zinc-950 shadow-lg shadow-amber-500/30 transition-transform active:scale-90"
+                    className="-mt-6 flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[18px] border border-amber-300/40 bg-gradient-to-br from-amber-300 to-amber-500 text-zinc-950 shadow-[0_10px_26px_rgba(245,158,11,.28)] transition-transform active:scale-90"
                   >
                     <Icon size={26} strokeWidth={2.5} />
                   </button>
@@ -137,8 +137,8 @@ export function BottomNav() {
                 key={item.label}
                 onClick={() => router.push(item.href)}
                 className={clsx(
-                  'flex min-w-0 flex-1 flex-col items-center gap-1 py-1 text-[10px] font-bold',
-                  isActive ? 'text-emerald-400' : 'text-zinc-600',
+                  'mx-0.5 flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-[14px] py-1.5 text-[9px] font-black transition',
+                  isActive ? 'bg-emerald-500/10 text-emerald-400' : 'text-zinc-600 active:bg-zinc-900',
                 )}
               >
                 <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
@@ -155,7 +155,7 @@ export function BottomNav() {
           onClick={() => setShowAddSheet(false)}
         >
           <div
-            className="safe-bottom w-full rounded-t-[30px] border-t border-zinc-800 bg-zinc-950 p-5 pb-7"
+            className="dfl-bottom-sheet safe-bottom w-full p-5 pb-7"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-700" />

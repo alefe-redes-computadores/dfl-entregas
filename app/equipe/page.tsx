@@ -170,7 +170,7 @@ export default function TeamPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 pb-28">
+    <div className="dfl-page gap-4">
       <PageHeader
         title="Equipe"
         subtitle="Pessoas da loja e entregadores"
@@ -208,7 +208,7 @@ export default function TeamPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar pessoa"
-          className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900/55 pl-11 pr-4 text-sm outline-none focus:border-violet-500"
+          className="dfl-search pl-11 pr-4 focus:border-violet-500/50"
         />
       </div>
 

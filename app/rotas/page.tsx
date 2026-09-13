@@ -145,9 +145,9 @@ export default function RoutesPage() {
   );
   const selectDate = (key: string) => { setSelectedDate(key); setFilter('todas'); setCalendarOpen(false); };
 
-  return <div className="flex flex-col gap-5 pb-28">
+  return <div className="dfl-page">
     <header className="flex items-center justify-between">
-      <div className="flex min-w-0 items-center gap-3"><button onClick={() => router.replace('/loja')} aria-label="Voltar para Minha Loja" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-300 active:scale-95"><ChevronLeft size={20}/></button><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Operação diária</p><h1 className="font-heading text-2xl font-bold text-zinc-50">Rotas</h1></div></div>
+      <div className="flex min-w-0 items-center gap-3"><button onClick={() => router.replace('/loja')} aria-label="Voltar para Minha Loja" className="dfl-icon-button"><ChevronLeft size={20}/></button><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Operação diária</p><h1 className="font-heading text-2xl font-bold text-zinc-50">Rotas</h1></div></div>
     </header>
 
     <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2">
@@ -165,7 +165,7 @@ export default function RoutesPage() {
       </div>
     </section>
 
-    <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar neste dia" className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-11 pr-4 text-sm outline-none focus:border-emerald-500"/></div>
+    <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar neste dia" className="dfl-search pl-11 pr-4"/></div>
     <div className="flex gap-2 overflow-x-auto no-scrollbar">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
 
     <div className="flex flex-col gap-3">
@@ -278,7 +278,7 @@ export default function RoutesPage() {
       })}
 
       {rows.length === 0 && (
-        <div className="rounded-[28px] border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-12 text-center">
+        <div className="dfl-empty">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-900 text-zinc-700">
             <MapPin size={22}/>
           </div>

@@ -333,8 +333,8 @@ export default function LojaPage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[22px] border border-amber-500/25 bg-gradient-to-br from-amber-500/[.09] to-zinc-900/40 p-3 text-left active:scale-[0.97]">
+        <div className="grid grid-cols-2 gap-2.5">
+          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[24px] border border-amber-500/25 bg-gradient-to-br from-amber-500/[.11] via-amber-500/[.035] to-zinc-900/45 p-4 shadow-[0_14px_32px_rgba(0,0,0,.14)] text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
@@ -343,7 +343,7 @@ export default function LojaPage() {
             <p className="mt-1 min-h-[2.35rem] text-[9px] leading-[1.3] text-zinc-500">{dashboardData.totalEntregas} registradas no período</p>
           </button>
 
-          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[22px] border border-sky-500/25 bg-gradient-to-br from-sky-500/[.09] to-zinc-900/40 p-3 text-left active:scale-[0.97]">
+          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[24px] border border-sky-500/25 bg-gradient-to-br from-sky-500/[.11] via-sky-500/[.035] to-zinc-900/45 p-4 shadow-[0_14px_32px_rgba(0,0,0,.14)] text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />

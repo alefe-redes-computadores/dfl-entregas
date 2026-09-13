@@ -147,12 +147,12 @@ export default function StockSuppliesPage() {
     Boolean(normalizedQuery) || status !== 'todos';
 
   return (
-    <div className="flex flex-col gap-5 pb-28">
+    <div className="dfl-page">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.replace('/loja')}
-            className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400"
+            className="dfl-icon-button h-11 w-11"
           >
             <ChevronLeft size={21} />
           </button>
@@ -203,7 +203,7 @@ export default function StockSuppliesPage() {
         </button>
       </section>
 
-      <section className="grid grid-cols-2 gap-2">
+      <section className="grid grid-cols-2 gap-2 rounded-[24px] border border-zinc-800/70 bg-zinc-900/25 p-2">
         <CompactMetric label="Gasto no mês" value={money(metrics.totalAmount)} />
         <CompactMetric label="Compras" value={String(metrics.count)} />
         <CompactMetric label="Itens" value={String(metrics.itemCount)} />
@@ -219,7 +219,7 @@ export default function StockSuppliesPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar produto, fornecedor ou comprador"
-          className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-11 pr-4 text-sm text-zinc-100 outline-none focus:border-amber-500"
+          className="dfl-search pl-11 pr-4 focus:border-amber-500/50"
         />
       </div>
 
@@ -370,7 +370,7 @@ export default function StockSuppliesPage() {
         })}
 
         {!days.length && (
-          <div className="rounded-[28px] border border-dashed border-zinc-800 py-14 text-center">
+          <div className="dfl-empty">
             <PackageOpen
               size={34}
               className="mx-auto text-zinc-700"
