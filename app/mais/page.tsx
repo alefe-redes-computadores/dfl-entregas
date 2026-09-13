@@ -118,9 +118,7 @@ export default function MaisPage() {
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-          Ferramentas
-        </h2>
+
 
         <div className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">
 

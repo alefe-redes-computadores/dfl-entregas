@@ -1,7 +1,7 @@
 // components/stock-supplies/StockSupplyForm.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Calculator, PackagePlus, Plus, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -137,6 +137,9 @@ export function StockSupplyForm({
   );
   const [observation, setObservation] = useState(initial?.observation || '');
   const [attempted, setAttempted] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const allowLeaveRef = useRef(false);
 
   const [items, setItems] = useState<Draft[]>(
     initial?.items?.length
@@ -158,6 +161,51 @@ export function StockSupplyForm({
         })
       : [fresh()],
   );
+
+  const draftIncoming = useMemo(
+    () =>
+      items.reduce<Record<string, number>>((all, item) => {
+        if (!item.stock_product_id) return all;
+        const qty = number(item.purchaseQty) * number(item.conversion);
+        if (!Number.isFinite(qty) || qty <= 0) return all;
+        all[item.stock_product_id] =
+          (all[item.stock_product_id] || 0) + qty;
+        return all;
+      }, {}),
+    [items],
+  );
+
+  useEffect(() => {
+    if (!dirty || typeof window === 'undefined') return;
+
+    window.history.pushState({ dflPurchaseDraftGuard: true }, '', window.location.href);
+
+    const onPopState = () => {
+      if (allowLeaveRef.current) return;
+      window.history.pushState({ dflPurchaseDraftGuard: true }, '', window.location.href);
+      setLeaveOpen(true);
+    };
+
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('popstate', onPopState);
+    window.addEventListener('beforeunload', onBeforeUnload);
+
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [dirty]);
+
+  const confirmLeave = () => {
+    allowLeaveRef.current = true;
+    setDirty(false);
+    setLeaveOpen(false);
+    window.setTimeout(() => window.history.go(-2), 0);
+  };
 
   const update = (id: string, data: Partial<Draft>) =>
     setItems((all) =>
@@ -350,6 +398,8 @@ export function StockSupplyForm({
 
     const now = new Date().toISOString();
 
+    allowLeaveRef.current = true;
+    setDirty(false);
     await onSubmit({
       occurred_at: new Date(occurredAt).toISOString(),
       status,
@@ -376,7 +426,7 @@ export function StockSupplyForm({
   };
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-5 pb-10" noValidate>
+    <form onInputCapture={() => setDirty(true)} onClickCapture={(event) => { const target = event.target as HTMLElement; if (target.closest('button') && !target.closest('button[type="submit"]')) setDirty(true); }} onSubmit={submit} className="flex flex-col gap-5 pb-10" noValidate>
       <section className="rounded-[26px] border border-amber-500/20 bg-amber-500/[.05] p-4">
         <div className="flex items-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-2xl bg-amber-500/10 text-amber-400">
@@ -533,6 +583,7 @@ export function StockSupplyForm({
                 Produto*
                 <StockProductPicker
                   products={products}
+                  draftIncoming={draftIncoming}
                   value={item.stock_product_id}
                   onChange={(value) =>
                     chooseProduct(item.id, value)
@@ -603,8 +654,13 @@ export function StockSupplyForm({
                             Estoque atual
                             <b className="block text-zinc-300">
                               {formatStockQuantity(
-                                product.current_quantity,
+                                product.current_quantity + (draftIncoming[product.id] || 0),
                                 product.unit,
+                              )}
+                              {(draftIncoming[product.id] || 0) > 0 && (
+                                <span className="ml-1 text-[8px] text-emerald-400">
+                                  (+{formatStockQuantity(draftIncoming[product.id] || 0, product.unit)} nesta compra)
+                                </span>
                               )}
                             </b>
                           </span>
@@ -863,7 +919,44 @@ export function StockSupplyForm({
         <Save size={18} />
         {busy ? 'Registrando...' : submitLabel}
       </button>
-    </form>
+
+      {leaveOpen && (
+        <div
+          className="fixed inset-0 z-[180] flex items-end bg-black/80 p-3 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setLeaveOpen(false);
+          }}
+        >
+          <div className="mx-auto w-full max-w-md rounded-[28px] border border-zinc-800 bg-zinc-950 p-5 shadow-2xl">
+            <p className="text-[10px] font-black uppercase tracking-[.18em] text-amber-400">
+              Compra não salva
+            </p>
+            <h3 className="mt-2 font-heading text-lg font-black text-zinc-100">
+              Deseja realmente sair?
+            </h3>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+              Há alterações nesta compra que ainda não foram salvas.
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setLeaveOpen(false)}
+                className="h-12 rounded-xl bg-zinc-900 text-sm font-bold text-zinc-300"
+              >
+                Não, continuar
+              </button>
+              <button
+                type="button"
+                onClick={confirmLeave}
+                className="h-12 rounded-xl bg-amber-500 text-sm font-black text-zinc-950"
+              >
+                Sim, sair
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+</form>
   );
 }
 

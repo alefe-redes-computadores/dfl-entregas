@@ -33,11 +33,13 @@ export function StockProductPicker({
   value,
   onChange,
   invalid = false,
+  draftIncoming = {},
 }: {
   products: StockProduct[];
   value?: string;
   onChange: (value: string) => void;
   invalid?: boolean;
+  draftIncoming?: Record<string, number>;
 }) {
   const addStockProduct = useAppStore(
     (state) => state.addStockProduct,
@@ -58,6 +60,9 @@ export function StockProductPicker({
   const selected =
     allProducts.find((product) => product.id === value) ||
     products.find((product) => product.id === value);
+
+  const projectedQuantity = (product: StockProduct) =>
+    product.current_quantity + (draftIncoming[product.id] || 0);
 
   const filtered = useMemo(
     () =>
@@ -185,7 +190,7 @@ export function StockProductPicker({
           {selected && (
             <small className="mt-0.5 block text-[9px] text-zinc-600">
               {formatStockQuantity(
-                selected.current_quantity,
+                projectedQuantity(selected),
                 selected.unit,
               )}{' '}
               em estoque · custo médio{' '}
@@ -313,7 +318,7 @@ export function StockProductPicker({
                                   </b>
                                   <small className="block text-[9px] text-zinc-600">
                                     {formatStockQuantity(
-                                      product.current_quantity,
+                                      projectedQuantity(product),
                                       product.unit,
                                     )}{' '}
                                     · custo{' '}

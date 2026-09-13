@@ -52,7 +52,7 @@ export async function copyDeliveryToClipboard(
     const currentCode = delivery.confirmation_code || savedCustomerCode;
     const clientPhone = delivery.phone?.replace(/\D/g, '');
 
-    parts.push(`📦 *DADOS DA ENTREGA* 📦`);
+    parts.push(`📦 *Entrega*`);
     if (isUrgent) parts.push(`🚨 *ATENÇÃO: ENTREGA URGENTE* 🚨`);
     parts.push('');
 
@@ -166,11 +166,11 @@ export async function generateRouteMessages(
     const stopsNeedingCall: { num: number; name: string }[] = [];
     const stopsNeedingPosMachine: number[] = [];
 
-    msg1.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+    msg1.push(`──────────────`);
     const matchRouteNumber = route.name.match(/\d+/);
     const routeNumber = matchRouteNumber ? parseInt(matchRouteNumber[0], 10) : 1;
 
-    msg1.push(`🏍️ *ROTA ${routeNumber} · ${route.motoboy_name.toUpperCase()}*`);
+    msg1.push(`🏍️ *Rota ${routeNumber} · ${route.motoboy_name}*`);
     msg1.push(`📦 *${totalDeliveries} ${totalDeliveries === 1 ? 'entrega' : 'entregas'}*`);
 
     if (previousRoute) {
@@ -182,11 +182,11 @@ export async function generateRouteMessages(
       if (prevDuration) {
         const matchPrev = previousRoute.name.match(/\d+/);
         const prevNum = matchPrev ? matchPrev[0] : 'anterior';
-        msg1.push(`⏱️ *Tempo da rota ${prevNum}:* \`${prevDuration}\``);
+        msg1.push(`⏱️ Rota anterior (${prevNum}): *${prevDuration}*`);
       }
     }
 
-    msg1.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+    msg1.push(`──────────────`);
     msg1.push(`📍 *PARADAS*`);
     const ifoodCount = deliveries.filter((delivery) => delivery.origin === 'ifood').length;
     const storeCount = deliveries.filter((delivery) => delivery.origin === 'loja').length;
@@ -310,7 +310,7 @@ export async function generateRouteMessages(
         });
       }
 
-      msg1.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+      msg1.push(`──────────────`);
     });
 
     msg1.push(`🗺️ *ROTA OTIMIZADA:*`);
@@ -327,16 +327,15 @@ export async function generateRouteMessages(
       msg1.push(`*(🚨 Nota: ${fuzzyDeliveries.length === 1 ? 'A parada' : 'As paradas'} ${fuzzyDeliveries.map(f => f.index).join(', ')} possuem endereço simplificado).*`);
       msg1.push('');
     }
-    msg1.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+    msg1.push(`──────────────`);
 
     // MENSAGEM 2: ACERTO FINANCEIRO, BAG E RECOLHIMENTO
     const now = new Date();
     const timeString = `${String(now.getHours()).padStart(2, '0')}h${String(now.getMinutes()).padStart(2, '0')}m`;
 
-    msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
-    msg2.push(`🏍️ *ROTA ${routeNumber} · ${route.motoboy_name.toUpperCase()}*`);
-    msg2.push(`📦 *${totalDeliveries} ${totalDeliveries === 1 ? 'entrega' : 'entregas'}*`);
-    msg2.push(`🕒 *Saída:* \`${timeString}\``);
+    msg2.push(`──────────────`);
+    msg2.push(`🏍️ *Rota ${routeNumber} · ${route.motoboy_name}*`);
+    msg2.push(`📦 ${totalDeliveries} ${totalDeliveries === 1 ? 'entrega' : 'entregas'} · saída *${timeString}*`);
 
     if (previousRoute) {
       const prevDuration = formatDuration(
@@ -347,12 +346,12 @@ export async function generateRouteMessages(
       if (prevDuration) {
         const matchPrev = previousRoute.name.match(/\d+/);
         const prevNum = matchPrev ? matchPrev[0] : 'anterior';
-        msg2.push(`⏱️ *Tempo da rota ${prevNum}:* \`${prevDuration}\``);
+        msg2.push(`⏱️ Rota anterior (${prevNum}): *${prevDuration}*`);
       }
     }
 
-    msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
-    msg2.push(`📋 *CONFERÊNCIA DE SAÍDA*`);
+    msg2.push(`──────────────`);
+    msg2.push(`*Antes de sair*`);
     msg2.push('');
 
     deliveries.forEach((delivery, index) => {
@@ -371,47 +370,47 @@ export async function generateRouteMessages(
       msg2.push(`${num}. ${neighborhood}${streetLabel}${drinkInfo}${zapWarning}`);
     });
 
-    msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+    msg2.push(`──────────────`);
 
     const drinkKeys = Object.keys(drinksSummary);
     if (drinkKeys.length > 0) {
-      msg2.push(`🥤 *RESUMO DE BEBIDAS (BAG):*`);
-      msg2.push(`⚠️ *Conferir itens antes de sair da loja:*`);
+      msg2.push(`🥤 *Bebidas da bag*`);
+      msg2.push(`Conferir antes de sair:`);
       msg2.push('');
       drinkKeys.forEach(key => {
         msg2.push(`• *${drinksSummary[key].qty}x ${drinksSummary[key].name}*`);
       });
-      msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+      msg2.push(`──────────────`);
     }
 
     if (stopsNeedingPosMachine.length > 0) {
-      msg2.push(`💳 *LEVAR MAQUININHA DE CARTÃO!*`);
+      msg2.push(`💳 *Levar maquininha*`);
       msg2.push(`⚠️ *Cobrança nas paradas: ${stopsNeedingPosMachine.join(', ')}*`);
-      msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+      msg2.push(`──────────────`);
     }
 
     // LISTA ORGANIZADA DE CÓDIGOS NO FINAL
     if (stopsNeedingCode.length > 0) {
-      msg2.push(`🔐 *CÓDIGOS IFOOD (PEGAR NA PORTA):*`);
-      msg2.push(`⚠️ *Pegar o código das seguintes entregas:*`);
+      msg2.push(`🔐 *Códigos iFood*`);
+      msg2.push(`Pegar com o cliente:`);
       stopsNeedingCode.forEach(s => {
-        msg2.push(`• Entrega ${s.num}: *${s.neighborhood}*`);
+        msg2.push(`• ${s.num}. *${s.neighborhood}*`);
       });
-      msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+      msg2.push(`──────────────`);
     }
 
     if (stopsNeedingCall.length > 0) {
-      msg2.push(`📲 *CHAMAR NO PORTÃO VIA ZAP:*`);
+      msg2.push(`📲 *Chamar no portão*`);
       stopsNeedingCall.forEach(s => {
         msg2.push(`• Parada ${s.num} (${s.name}): Toque no link da Msg 1 para abrir a conversa!`);
       });
-      msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+      msg2.push(`──────────────`);
     }
 
     // CÁLCULO EXATO DO DINHEIRO RECOLHIDO
     const pendingMoney = deliveries.filter(d => !d.is_paid && d.payment_method === 'dinheiro');
     if (pendingMoney.length > 0) {
-      msg2.push(`💵 *DINHEIRO A RECOLHER (ENTREGAR NO CAIXA):*`);
+      msg2.push(`💵 *Dinheiro para o caixa*`);
       msg2.push('');
       let totalDinheiroAReceber = 0;
 
@@ -430,8 +429,8 @@ export async function generateRouteMessages(
       });
 
       msg2.push('');
-      msg2.push(`● *TOTAL A PASSAR PRO CAIXA:* \`R$ ${formatMoney(totalDinheiroAReceber)}\``);
-      msg2.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+      msg2.push(`*Total para o caixa:* \`R$ ${formatMoney(totalDinheiroAReceber)}\``);
+      msg2.push(`──────────────`);
     }
 
     return {

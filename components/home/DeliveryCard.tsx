@@ -336,7 +336,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
           isNeighbor && !delivery.completed && "border-sky-500/30",
           isHandleDragging && "z-20 scale-[1.015] border-sky-400/60 shadow-[0_18px_45px_rgba(0,0,0,0.45)]",
-          isExpanded ? "bg-zinc-900/90 border border-zinc-700/80" : "bg-zinc-900/45 border border-zinc-800/80"
+          isExpanded ? "bg-zinc-900 border border-sky-500/25 shadow-[0_12px_30px_rgba(0,0,0,0.28)]" : "bg-zinc-900/35 border border-zinc-800/70"
         )}
         style={{ transform: isHandleDragging ? `translateY(${dragOffsetY}px)` : undefined }}
       >
@@ -361,7 +361,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           style={{ transform: `translateX(${swipeOffset}px)` }}
           className={clsx("relative z-10 flex flex-col bg-zinc-900 h-full w-full", !isSwiping && "transition-transform duration-200")}
         >
-          <div className="flex flex-col p-3.5">
+          <div className={clsx("flex flex-col", isExpanded ? "p-4" : "p-3")}>
             <div className="flex items-start gap-3">
               <div className="relative shrink-0 mt-0.5">
                 <span className={clsx("flex items-center justify-center h-10 w-10 rounded-xl border", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>

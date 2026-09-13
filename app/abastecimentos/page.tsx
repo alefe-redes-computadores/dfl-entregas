@@ -14,6 +14,7 @@ import {
   Search,
   UserRound,
   Wallet,
+  Boxes,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { StockSupplierIcon } from '@/components/stock-supplies/StockSupplierIcon';
@@ -165,7 +166,14 @@ export default function StockSuppliesPage() {
           </div>
         </div>
 
-
+        <button
+          type="button"
+          onClick={() => router.push('/estoque')}
+          className="flex h-11 items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/[.06] px-3 text-xs font-black text-emerald-400 active:scale-95"
+        >
+          <Boxes size={16} />
+          Estoque
+        </button>
       </header>
 
       <section className="flex items-center justify-between rounded-[20px] border border-zinc-800 bg-zinc-900/50 px-3 py-2">
