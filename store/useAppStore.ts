@@ -85,6 +85,7 @@ interface AppState {
   startRoute: (routeId: string) => Promise<void>;
   deleteRoute: (routeId: string) => Promise<void>;
   addDelivery: (delivery: Delivery) => Promise<void>;
+  addDeliveries: (deliveries: Delivery[]) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
   closeRoute: (routeId: string) => Promise<void>;
@@ -1058,6 +1059,31 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           set((state) => ({ deliveries: state.deliveries.filter((item) => item.id !== delivery.id) }));
           console.error(error);
+          throw error;
+        }
+      },
+
+      addDeliveries: async (items) => {
+        if (!items.length) return;
+        const now = new Date().toISOString();
+        const prepared = items.map((delivery) => ({
+          ...delivery,
+          createdAt: delivery.createdAt || delivery.created_at || now,
+          created_at: delivery.created_at || delivery.createdAt || now,
+          updated_at: now,
+        } as Delivery));
+        const previous = get().deliveries;
+        set((state) => ({ deliveries: [...prepared, ...state.deliveries] }));
+        try {
+          const batch = writeBatch(db);
+          prepared.forEach((delivery) => batch.set(
+            doc(db, 'deliveries', delivery.id),
+            sanitizeForFirebase(delivery),
+          ));
+          await batch.commit();
+        } catch (error) {
+          set({ deliveries: previous, syncError: true });
+          console.error('Erro ao adicionar pedidos em lote:', error);
           throw error;
         }
       },

@@ -67,6 +67,8 @@ const [routeId, setRouteId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<Delivery['payment_method']>('dinheiro');
   const [isPaid, setIsPaid] = useState(false);
   const [changeFor, setChangeFor] = useState('');
+  const [ifoodSubsidy, setIfoodSubsidy] = useState('');
+  const [hasIfoodSubsidy, setHasIfoodSubsidy] = useState(false);
   const [isUrgent, setIsUrgent] = useState(false);
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
@@ -439,7 +441,10 @@ const [routeId, setRouteId] = useState('');
       setRouteId(linkedRoute ? delivery.route_id : '');
       setOrderId(delivery.order_id || '');
       setIfoodId(delivery.ifood_id || '');
-      setValue(delivery.value ? delivery.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
+      const charge = delivery.customer_charge ?? delivery.value;
+      setValue(charge ? charge.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
+      setIfoodSubsidy(delivery.ifood_subsidy ? delivery.ifood_subsidy.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
+      setHasIfoodSubsidy(Boolean(delivery.ifood_subsidy));
       setStreetAddress(delivery.address_string || '');
       setMapsLink(delivery.maps_link || '');
 
@@ -522,7 +527,9 @@ const [routeId, setRouteId] = useState('');
 
     setIsSaving(true);
     try {
-      const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
+      const customerCharge = parseFloat(value.replace(/\./g, '').replace(',', '.'));
+      const subsidy = origin === 'ifood' && hasIfoodSubsidy && ifoodSubsidy ? parseFloat(ifoodSubsidy.replace(/\./g, '').replace(',', '.')) : 0;
+      const cleanValue = Math.max(0, customerCharge) + Math.max(0, subsidy);
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
       const cleanStreet = fulfillmentMode === 'delivery' ? normalizeAddressText(streetAddress) : '';
       const rawPhone = phone.replace(/\D/g, '');
@@ -559,6 +566,8 @@ const [routeId, setRouteId] = useState('');
         customer_id: customerId || '',
         customer_name: customerName.trim() || undefined,
         value: cleanValue,
+        customer_charge: Math.max(0, customerCharge),
+        ifood_subsidy: subsidy > 0 ? subsidy : undefined,
         is_paid: isPaid,
         is_urgent: isUrgent,
         payment_method: paymentMethod,
@@ -968,7 +977,7 @@ const [routeId, setRouteId] = useState('');
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400">07 · Financeiro</p><p className="mt-1 text-sm font-black text-zinc-200">Valor, pagamento e observações</p></div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-zinc-300">Valor (R$)*</label>
+              <label className="text-xs font-bold text-zinc-300">{origin==='ifood'&&hasIfoodSubsidy?'Cliente paga (R$)*':'Valor (R$)*'}</label>
               <input
                 type="text"
                 inputMode="numeric"
@@ -991,6 +1000,8 @@ const [routeId, setRouteId] = useState('');
               />
             </div>
           </div>
+
+          {origin === 'ifood' && (<div className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3"><button type="button" onClick={()=>{setHasIfoodSubsidy(v=>!v);if(hasIfoodSubsidy)setIfoodSubsidy('')}} className="flex w-full items-center justify-between text-left"><span className="text-[11px] font-black text-zinc-300">Cupom / subsídio do iFood</span><span className="text-[9px] font-black text-emerald-400">{hasIfoodSubsidy?'Ativo':'Adicionar'}</span></button>{hasIfoodSubsidy&&<input type="text" inputMode="numeric" placeholder="Subsídio iFood" value={ifoodSubsidy} onChange={e=>setIfoodSubsidy(formatCurrencyInput(e.target.value))} className="mt-3 h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-sm font-bold text-zinc-100"/>}</div>)}
 
           <div className={`flex flex-col gap-2 transition-all duration-300 ${isPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
             <label className="text-xs font-semibold text-zinc-400">Forma de Pagamento</label>

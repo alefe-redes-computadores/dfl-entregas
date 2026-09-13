@@ -200,6 +200,9 @@ export interface Delivery {
   id: string;
   route_id: string;
   fulfillment_mode?: FulfillmentMode; // legado sem campo = delivery
+  stop_group_id?: string;
+  customer_charge?: number;
+  ifood_subsidy?: number;
   order_id?: string;
   ifood_id?: string;
   origin: OrderOrigin;

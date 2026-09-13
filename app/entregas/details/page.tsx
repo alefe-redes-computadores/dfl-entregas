@@ -107,6 +107,9 @@ function DeliveryDetailsContent() {
       )}`
     : '';
 
+  const customerCharge = delivery.customer_charge ?? delivery.value;
+  const subsidy = delivery.ifood_subsidy || 0;
+
   const paymentIcon =
     delivery.payment_method === 'dinheiro'
       ? Banknote
@@ -335,7 +338,7 @@ function DeliveryDetailsContent() {
         <div className="mt-5 grid grid-cols-2 gap-3">
           <div>
             <p className="text-[10px] uppercase text-zinc-500">Valor</p>
-            <p className="text-xl font-black text-emerald-400">{money(delivery.value)}</p>
+            <p className="text-xl font-black text-emerald-400">{money(customerCharge)}</p>{subsidy > 0 && <p className="mt-1 text-[10px] text-zinc-500">Total econômico {money(delivery.value)} · iFood {money(subsidy)}</p>}
           </div>
           <div>
             <p className="text-[10px] uppercase text-zinc-500">Pagamento</p>

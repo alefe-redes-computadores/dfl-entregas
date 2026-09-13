@@ -3,7 +3,7 @@
 import {
   useState, useMemo } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store, Smartphone, Banknote, QrCode,
   CreditCard, ChevronDown, AlertTriangle, Navigation, CheckCircle2, Link2,
-  MessageCircle, Info, Sparkles, ClipboardPaste, Bike, ShoppingBag,
+  MessageCircle, Info, Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, Trash2, UsersRound, TicketPercent,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { dateKey, routeDate } from '@/lib/operational-time';
@@ -11,12 +11,14 @@ import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
-import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
+import { parseIfoodOrdersText } from '@/lib/ifood-order-parser';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
+
+type ExtraIfoodOrderDraft = { id:string; orderId:string; ifoodId:string; confirmationCode:string; customerName:string; customerCharge:string; subsidy:string; };
 
 export default function NovaEntregaPage() {
   const router = useRouter();
@@ -34,6 +36,7 @@ export default function NovaEntregaPage() {
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
   const addDelivery = useAppStore((state) => state.addDelivery);
+  const addDeliveries = useAppStore((state) => state.addDeliveries);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
 
   const openRoutes = routes.filter((route) => {
@@ -65,6 +68,11 @@ const [routeId, setRouteId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<Delivery['payment_method']>('dinheiro');
   const [isPaid, setIsPaid] = useState(false);
   const [changeFor, setChangeFor] = useState('');
+  const [ifoodSubsidy, setIfoodSubsidy] = useState('');
+  const [hasIfoodSubsidy, setHasIfoodSubsidy] = useState(false);
+  const [extraIfoodOrders, setExtraIfoodOrders] = useState<ExtraIfoodOrderDraft[]>([]);
+  const [multiOrderReviewOpen, setMultiOrderReviewOpen] = useState(false);
+  const [fulfillmentOptionsOpen, setFulfillmentOptionsOpen] = useState(false);
   const [isUrgent, setIsUrgent] = useState(false);
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
@@ -125,76 +133,29 @@ const [routeId, setRouteId] = useState('');
   };
 
   const handleExecuteMagicParse = async () => {
-    if (!magicText.trim()) {
-      toast.error('Cole o texto do pedido antes de processar.');
-      return;
-    }
-
+    if (!magicText.trim()) { toast.error('Cole o texto do pedido antes de processar.'); return; }
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-
-    const parsed = parseIfoodOrderText(magicText);
-    const identified: string[] = [];
-
-    if (parsed.orderId) { setOrderId(parsed.orderId); identified.push(`Nº #${parsed.orderId}`); }
-    if (parsed.ifoodId) { setIfoodId(parsed.ifoodId); identified.push(`ID ${parsed.ifoodId}`); }
-    if (parsed.confirmationCode) { setConfirmationCode(parsed.confirmationCode); identified.push(`Cód. ${parsed.confirmationCode}`); }
-    if (parsed.customerName) {
-      setCustomerName(parsed.customerName);
-      setSelectedCustomerId('');
-      identified.push('Cliente');
-    }
-    if (parsed.phone) { setPhone(formatPhoneInput(parsed.phone)); identified.push('Zap'); }
-    if (parsed.address) { setStreetAddress(parsed.address); identified.push('Endereço'); }
-    if (parsed.mapsLink) { setMapsLink(parsed.mapsLink); identified.push('Link Maps'); }
-    if (parsed.paymentMethod) {
-      setPaymentMethod(parsed.paymentMethod);
-      setIsPaid(parsed.isPaid);
-      if (parsed.paymentMethod !== 'dinheiro' || parsed.isPaid) setChangeFor('');
-      identified.push(parsed.isPaid ? 'Pago no app' : 'Pagamento');
-    }
-    if (parsed.value) { setValue(formatCurrencyInput(parsed.value.replace(/\D/g, ''))); identified.push(`Valor R$ ${parsed.value}`); }
-    if (parsed.changeFor) { setChangeFor(formatCurrencyInput(parsed.changeFor.replace(/\D/g, ''))); identified.push(`Troco p/ ${parsed.changeFor}`); }
-    if (parsed.drinks.length > 0) { setDrinks(parsed.drinks.join(', ')); identified.push('Bebidas'); }
-    if (parsed.observations.length > 0) {
-      setObservation((current) => current ? `${current} - ${parsed.observations.join(' - ')}` : parsed.observations.join(' - '));
-      identified.push('Obs');
-    }
-
-    const routeResolution = resolveParsedRoute(parsed.routeNumber, parsed.motoboyHint);
-
-    if (routeResolution.routeId) {
-      setRouteId(routeResolution.routeId);
-      const matchedRoute = routeResolution.candidates[0];
-      identified.push(`Rota ${matchedRoute.name}`);
-    } else if ((parsed.routeNumber || parsed.motoboyHint) && routeResolution.candidates.length > 1) {
-      toast.warning('Mais de uma rota combina com o texto.', {
-        description: routeResolution.candidates
-          .map((route) => `${route.name} · ${route.motoboy_name}`)
-          .join(' | '),
-        duration: 5000,
-      });
-    } else if (parsed.routeNumber || parsed.motoboyHint) {
-      toast.info('Pista de rota identificada, mas sem correspondência segura.', {
-        description: [
-          parsed.routeNumber ? `Rota ${parsed.routeNumber}` : '',
-          parsed.motoboyHint || '',
-        ].filter(Boolean).join(' · '),
-        duration: 4500,
-      });
-    }
-
-    if (identified.length === 0) {
-      toast.error('Nenhum dado reconhecido no texto.');
-      return;
-    }
-
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
-    toast.success('Campos preenchidos pelo parser.', {
-      description: `Detectados: ${identified.join(' • ')}`,
-      duration: 4000,
-    });
-    setMagicText('');
-    setIsParserOpen(false);
+    const parsedOrders=parseIfoodOrdersText(magicText); const parsed=parsedOrders[0]; const identified:string[]=[];
+    if(parsed.orderId){setOrderId(parsed.orderId);identified.push(`Nº #${parsed.orderId}`)}
+    if(parsed.ifoodId){setIfoodId(parsed.ifoodId);identified.push(`ID ${parsed.ifoodId}`)}
+    if(parsed.confirmationCode){setConfirmationCode(parsed.confirmationCode);identified.push(`Cód. ${parsed.confirmationCode}`)}
+    if(parsed.customerName){setCustomerName(parsed.customerName);setSelectedCustomerId('');identified.push('Cliente')}
+    if(parsed.phone){setPhone(formatPhoneInput(parsed.phone));identified.push('Zap')}
+    if(parsed.address){setStreetAddress(parsed.address);identified.push('Endereço')}
+    if(parsed.mapsLink){setMapsLink(parsed.mapsLink);identified.push('Link Maps')}
+    if(parsed.paymentMethod){setPaymentMethod(parsed.paymentMethod);setIsPaid(parsed.isPaid);if(parsed.paymentMethod!=='dinheiro'||parsed.isPaid)setChangeFor('');identified.push(parsed.isPaid?'Pago no app':'Pagamento')}
+    const charge=parsed.customerCharge||parsed.value;
+    if(charge){setValue(formatCurrencyInput(charge.replace(/\D/g,'')));identified.push(`Cobrança R$ ${charge}`)}
+    if(parsed.subsidy){setHasIfoodSubsidy(true);setIfoodSubsidy(formatCurrencyInput(parsed.subsidy.replace(/\D/g,'')));identified.push(`Cupom R$ ${parsed.subsidy}`)}else{setHasIfoodSubsidy(false);setIfoodSubsidy('')}
+    if(parsed.changeFor){setChangeFor(formatCurrencyInput(parsed.changeFor.replace(/\D/g,'')));identified.push(`Troco p/ ${parsed.changeFor}`)}
+    if(parsed.drinks.length){setDrinks(parsed.drinks.join(', '));identified.push('Bebidas')}
+    if(parsed.observations.length){setObservation(current=>{const incoming=parsed.observations.join(' - ');return current&&!current.includes(incoming)?`${current} - ${incoming}`:current||incoming});identified.push('Obs')}
+    const routeResolution=resolveParsedRoute(parsed.routeNumber,parsed.motoboyHint);if(routeResolution.routeId){setRouteId(routeResolution.routeId);identified.push(`Rota ${routeResolution.candidates[0].name}`)}
+    if(parsedOrders.length>1){setExtraIfoodOrders(parsedOrders.slice(1).map((item,index)=>({id:`extra-${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,orderId:item.orderId,ifoodId:item.ifoodId,confirmationCode:item.confirmationCode||parsed.confirmationCode,customerName:item.customerName||parsed.customerName,customerCharge:item.customerCharge||item.value||charge,subsidy:item.subsidy})));setMultiOrderReviewOpen(true);identified.push(`${parsedOrders.length} pedidos no mesmo destino`)}else setExtraIfoodOrders([]);
+    if(!identified.length){toast.error('Nenhum dado reconhecido no texto.');return}
+    if(Capacitor.isNativePlatform())await Haptics.impact({style:ImpactStyle.Heavy});
+    toast.success(parsedOrders.length>1?'Vários pedidos detectados.':'Campos preenchidos pelo parser.',{description:parsedOrders.length>1?`${parsedOrders.length} pedidos encontrados. Revise nomes, IDs, códigos e valores.`:`Detectados: ${identified.join(' • ')}`,duration:5000});
+    setMagicText('');setIsParserOpen(false);
   };
 
   const handlePasteFromClipboard = async () => {
@@ -247,134 +208,39 @@ const [routeId, setRouteId] = useState('');
     toast.success('Cliente carregado.');
   };
 
+  const parseMoney = (input:string) => { const parsed=Number(input.replace(/\./g,'').replace(',','.')); return Number.isFinite(parsed)?parsed:0; };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!value || (fulfillmentMode === 'delivery' && (!routeId || !streetAddress))) {
-      toast.error(
-        fulfillmentMode === 'delivery'
-          ? 'Preencha os campos obrigatórios (Rota, Valor e Rua)'
-          : 'Informe o valor do pedido',
-      );
-      return;
+    if(!value||(fulfillmentMode==='delivery'&&(!routeId||!streetAddress))){toast.error(fulfillmentMode==='delivery'?'Preencha os campos obrigatórios (Rota, Valor e Rua)':'Informe o valor do pedido');return}
+    if(fulfillmentMode==='delivery'&&!openRoutes.some(route=>route.id===routeId)){toast.error('Selecione uma rota aberta da operação de hoje.');return}
+    const drafts=origin==='ifood'?[{id:'primary',orderId,ifoodId,confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:''},...extraIfoodOrders]:[];
+    if(origin==='ifood'){
+      const invalid=drafts.find(d=>!d.orderId.trim()||(d.ifoodId&&d.ifoodId.replace(/\D/g,'').length!==8)||(d.confirmationCode&&d.confirmationCode.replace(/\D/g,'').length!==4));
+      if(invalid){toast.error('Revise os identificadores iFood.',{description:'Cada pedido precisa de número; ID deve ter 8 dígitos e código deve ter 4 quando informados.'});return}
     }
-
-    if (fulfillmentMode === 'delivery') {
-      const selectedRoute = openRoutes.find((route) => route.id === routeId);
-      if (!selectedRoute) {
-        toast.error('Selecione uma rota aberta da operação de hoje.');
-        return;
-      }
-    }
-
-    if (origin === 'ifood') {
-      if (!orderId) {
-        toast.error('Pedidos do iFood exigem o Número do Pedido.');
-        return;
-      }
-      if (confirmationCode && confirmationCode.length !== 4) {
-        toast.error('Código Inválido', { description: 'Deve conter exatamente 4 dígitos.' });
-        return;
-      }
-      if (ifoodId && ifoodId.length !== 8) {
-        toast.error('ID Inválido', { description: 'Deve conter exatamente 8 dígitos.' });
-        return;
-      }
-    }
-
     setIsSaving(true);
-    try {
-      const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
-      const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
-      const normalizedAddress =
-        fulfillmentMode === 'delivery'
-          ? canonicalizeOperationalAddress(streetAddress)
-          : {
-              address: '',
-              neighborhood: undefined,
-              phone: undefined,
-              observations: [] as string[],
-            };
-
-      const cleanStreet =
-        fulfillmentMode === 'delivery'
-          ? normalizedAddress.address
-          : '';
-
-      const rawPhone =
-        phone.replace(/\D/g, '') ||
-        normalizedAddress.phone ||
-        '';
-
-      const cleanObservation = Array.from(
-        new Set(
-          [
-            observation.trim(),
-            ...normalizedAddress.observations,
-          ].filter(Boolean),
-        ),
-      ).join(' - ');
-
-      let resolvedMapsLink = mapsLink.trim();
-      if (fulfillmentMode === 'delivery' && cleanStreet && !resolvedMapsLink) {
-        try {
-          const point = await geocodeAddress(cleanStreet);
-          if (point) resolvedMapsLink = `https://www.google.com/maps?q=${point.lat},${point.lng}`;
-        } catch (error) {
-          console.warn('Não foi possível resolver coordenadas automaticamente:', error);
+    try{
+      const normalizedAddress=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(streetAddress):{address:'',neighborhood:undefined,phone:undefined,observations:[] as string[]};
+      const cleanStreet=fulfillmentMode==='delivery'?normalizedAddress.address:'';
+      const rawPhone=phone.replace(/\D/g,'')||normalizedAddress.phone||'';
+      const cleanObservation=Array.from(new Set([observation.trim(),...normalizedAddress.observations].filter(Boolean))).join(' - ');
+      let resolvedMapsLink=mapsLink.trim();
+      if(fulfillmentMode==='delivery'&&cleanStreet&&!resolvedMapsLink){try{const point=await geocodeAddress(cleanStreet);if(point)resolvedMapsLink=`https://www.google.com/maps?q=${point.lat},${point.lng}`}catch(error){console.warn('Não foi possível resolver coordenadas automaticamente:',error)}}
+      const now=new Date().toISOString();
+      if(origin==='ifood'){
+        const stopGroupId=drafts.length>1?`stop-${Date.now()}-${Math.random().toString(36).slice(2,7)}`:undefined;
+        const deliveriesToCreate:Delivery[]=[];
+        for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));let customerId='';if(draftName){customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?cleanStreet:undefined,phone:index===0?(rawPhone||undefined):undefined,mapsLink:fulfillmentMode==='delivery'?resolvedMapsLink:undefined,confirmationCode:draft.confirmationCode||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:index===0?(selectedCustomerId||undefined):undefined})}
+          deliveriesToCreate.push({id:index===0?Date.now().toString():`${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:stopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:isPaid,is_urgent:isUrgent,payment_method:paymentMethod,change_for:index===0&&changeFor?parseMoney(changeFor):undefined,address_string:fulfillmentMode==='delivery'?cleanStreet:'',maps_link:fulfillmentMode==='delivery'?resolvedMapsLink:'',phone:index===0?(rawPhone||undefined):undefined,notify_whatsapp:index===0?notifyWhatsapp:false,observation:cleanObservation||undefined,drinks:index===0?drinks:'',createdAt:now,created_at:now,updated_at:now});
         }
+        await addDeliveries(deliveriesToCreate);toast.success(drafts.length>1?`${drafts.length} pedidos cadastrados na mesma parada.`:'Entrega cadastrada com sucesso!');
+      }else{
+        let customerId='';if(customerName.trim())customerId=await findOrCreateCustomer(customerName,{address:fulfillmentMode==='delivery'?cleanStreet:undefined,phone:rawPhone||undefined,mapsLink:fulfillmentMode==='delivery'?resolvedMapsLink:undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});
+        const cleanValue=parseMoney(value);await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,origin,customer_id:customerId,customer_name:customerName.trim()||undefined,value:cleanValue,customer_charge:cleanValue,is_paid:isPaid,is_urgent:isUrgent,payment_method:paymentMethod,change_for:changeFor?parseMoney(changeFor):undefined,address_string:fulfillmentMode==='delivery'?cleanStreet:'',maps_link:fulfillmentMode==='delivery'?resolvedMapsLink:'',phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success('Entrega cadastrada com sucesso!');
       }
-
-      let customerId: string | undefined = undefined;
-      if (customerName.trim()) {
-        customerId = await findOrCreateCustomer(customerName, {
-          address: fulfillmentMode === 'delivery' ? cleanStreet : undefined,
-          phone: rawPhone || undefined,
-          mapsLink: fulfillmentMode === 'delivery' ? resolvedMapsLink : undefined,
-          confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
-          observation: cleanObservation,
-          origin,
-          preferredCustomerId: selectedCustomerId || undefined,
-        });
-      }
-
-      const now = new Date().toISOString();
-      const novaEntrega: Delivery = {
-        id: Date.now().toString(),
-        route_id: fulfillmentMode === 'delivery' ? routeId : '',
-        fulfillment_mode: fulfillmentMode,
-        origin,
-        order_id: origin === 'ifood' ? (orderId || undefined) : undefined,
-        ifood_id: origin === 'ifood' ? (ifoodId || undefined) : undefined,
-        confirmation_code: origin === 'ifood' ? (confirmationCode || undefined) : undefined,
-        customer_id: customerId || '',
-        customer_name: customerName.trim() || undefined,
-        value: cleanValue,
-        is_paid: isPaid,
-        is_urgent: isUrgent,
-        payment_method: paymentMethod,
-        change_for: cleanChangeFor,
-        address_string: fulfillmentMode === 'delivery' ? cleanStreet : '',
-        maps_link: fulfillmentMode === 'delivery' ? resolvedMapsLink : '',
-        phone: rawPhone || undefined,
-        notify_whatsapp: notifyWhatsapp,
-        observation: cleanObservation,
-        drinks,
-        createdAt: now,
-        created_at: now,
-        updated_at: now,
-      };
-
-      await addDelivery(novaEntrega);
-      toast.success('Entrega cadastrada com sucesso!');
-      router.replace(safeReturnTo || deliveriesReturn);
-    } catch (error) {
-      console.error('Erro ao cadastrar entrega:', error);
-      toast.error('Não foi possível cadastrar a entrega.', {
-        description: 'Confira sua conexão e tente novamente.',
-      });
-    } finally {
-      setIsSaving(false);
-    }
+      router.replace(safeReturnTo||deliveriesReturn);
+    }catch(error){console.error('Erro ao cadastrar entrega:',error);toast.error('Não foi possível cadastrar a entrega.',{description:'Confira os dados e sua conexão e tente novamente.'})}finally{setIsSaving(false)}
   };
 
   return (
@@ -411,37 +277,13 @@ const [routeId, setRouteId] = useState('');
       )}
 
 
-      {/* MODALIDADE OPERACIONAL */}
-      <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">
-        <div className="mb-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">01 · Modalidade</p>
-          <p className="mt-1 text-sm font-black text-zinc-200">Como este pedido será atendido?</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">Entrega entra em rota. Retirada e balcão permanecem fora da logística.</p>
+      {/* MODALIDADE OPERACIONAL — compacta */}
+      <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/40 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">01 · Modalidade</p><p className="mt-1 text-sm font-black text-zinc-200">{fulfillmentMode==='delivery'?'Entrega':fulfillmentMode==='pickup'?'Retirada na loja':'Balcão / presencial'}</p></div>
+          <button type="button" onClick={()=>setFulfillmentOptionsOpen(v=>!v)} className="flex h-10 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-[11px] font-black text-zinc-400">Alterar <ChevronDown size={14} className={fulfillmentOptionsOpen?'rotate-180':''}/></button>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          {([
-            ['delivery', 'Entrega', Bike],
-            ['pickup', 'Retirada', ShoppingBag],
-            ['counter', 'Balcão', Store],
-          ] as const).map(([mode, label, Icon]) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => {
-                setFulfillmentMode(mode);
-                setIsRouteDropdownOpen(false);
-              }}
-              className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl border px-2 text-[11px] font-black transition-all ${
-                fulfillmentMode === mode
-                  ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
-                  : 'border-zinc-800 bg-zinc-950/30 text-zinc-500'
-              }`}
-            >
-              <Icon size={17} />
-              {label}
-            </button>
-          ))}
-        </div>
+        {fulfillmentOptionsOpen&&(<div className="mt-3 grid grid-cols-3 gap-2">{([['delivery','Entrega',Bike],['pickup','Retirada',ShoppingBag],['counter','Balcão',Store]] as const).map(([mode,label,Icon])=><button key={mode} type="button" onClick={()=>{setFulfillmentMode(mode);setFulfillmentOptionsOpen(false);setIsRouteDropdownOpen(false)}} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl border px-2 text-[10px] font-black ${fulfillmentMode===mode?'border-amber-500/45 bg-amber-500/10 text-amber-400':'border-zinc-800 bg-zinc-950/30 text-zinc-500'}`}><Icon size={16}/>{label}</button>)}</div>)}
       </section>
 
       {/* SELETOR DE ORIGEM (iFood vs Loja Própria) */}
@@ -632,7 +474,13 @@ const [routeId, setRouteId] = useState('');
                 className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 font-mono font-bold tracking-widest focus:outline-none ${confirmationCode.length > 0 && confirmationCode.length < 4 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`}
               />
             </div>
-          </div></section>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-3">
+            <div><p className="text-[11px] font-black text-zinc-200">Mais pedidos neste endereço?</p><p className="mt-0.5 text-[10px] text-zinc-600">Uma parada física; clientes, IDs e códigos ficam separados.</p></div>
+            <button type="button" onClick={()=>{setExtraIfoodOrders(current=>[...current,{id:`manual-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,orderId:'',ifoodId:'',confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:''}]);setMultiOrderReviewOpen(true)}} className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/10 px-3 text-[10px] font-black text-red-400"><Plus size={13}/>Adicionar</button>
+          </div>
+          {extraIfoodOrders.length>0&&(<button type="button" onClick={()=>setMultiOrderReviewOpen(true)} className="mt-2 flex h-11 w-full items-center justify-between rounded-xl border border-violet-500/20 bg-violet-500/[.06] px-3"><span className="flex items-center gap-2 text-[11px] font-black text-violet-300"><UsersRound size={14}/>{extraIfoodOrders.length+1} pedidos na mesma parada</span><span className="text-[10px] font-bold text-zinc-500">Revisar</span></button>)}
+          </section>
         )}
 
         {/* CLIENTE E WHATSAPP */}
@@ -742,7 +590,7 @@ const [routeId, setRouteId] = useState('');
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-zinc-300">Valor (R$)*</label>
+              <label className="text-xs font-bold text-zinc-300">{origin==='ifood'&&hasIfoodSubsidy?'Cliente paga (R$)*':'Valor (R$)*'}</label>
               <input
                 type="text"
                 inputMode="numeric"
@@ -765,6 +613,8 @@ const [routeId, setRouteId] = useState('');
               />
             </div>
           </div>
+
+          {origin==='ifood'&&(<div className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3"><button type="button" onClick={()=>{setHasIfoodSubsidy(v=>!v);if(hasIfoodSubsidy)setIfoodSubsidy('')}} className="flex w-full items-center justify-between gap-3 text-left"><span className="flex items-center gap-2"><TicketPercent size={15} className={hasIfoodSubsidy?'text-emerald-400':'text-zinc-600'}/><span><strong className="block text-[11px] text-zinc-300">Cupom / subsídio do iFood</strong><span className="text-[9px] text-zinc-600">O motoboy cobra somente o valor do cliente.</span></span></span><span className={`rounded-full px-2 py-1 text-[9px] font-black ${hasIfoodSubsidy?'bg-emerald-500/10 text-emerald-400':'bg-zinc-800 text-zinc-500'}`}>{hasIfoodSubsidy?'Ativo':'Adicionar'}</span></button>{hasIfoodSubsidy&&(<div className="mt-3 grid grid-cols-2 gap-2"><input type="text" inputMode="numeric" placeholder="Subsídio iFood" value={ifoodSubsidy} onChange={e=>setIfoodSubsidy(formatCurrencyInput(e.target.value))} className="h-11 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-sm font-bold text-zinc-100 outline-none"/><div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.05] p-2.5"><p className="text-[9px] font-black uppercase text-emerald-500">Total econômico</p><p className="mt-1 text-sm font-black text-zinc-100">R$ {(parseMoney(value)+parseMoney(ifoodSubsidy)).toLocaleString('pt-BR',{minimumFractionDigits:2})}</p></div></div>)}</div>)}
 
           <div className={`flex flex-col gap-2 transition-all duration-300 ${isPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
             <label className="text-xs font-semibold text-zinc-400">Forma de Pagamento</label>
@@ -825,6 +675,7 @@ const [routeId, setRouteId] = useState('');
           {isSaving ? 'Salvando...' : 'Salvar Entrega'}
         </button>
       </form>
+      {multiOrderReviewOpen&&(<div className="fixed inset-0 z-[140] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center" onClick={()=>setMultiOrderReviewOpen(false)}><section className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-[28px] border border-zinc-800 bg-zinc-950 p-5" onClick={e=>e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">Mesma parada</p><h2 className="mt-1 text-lg font-black text-zinc-100">Revisar pedidos adicionais</h2><p className="mt-1 text-[11px] text-zinc-500">Clientes existentes serão reutilizados pela identidade atual; contas realmente diferentes continuam separadas.</p></div><button type="button" onClick={()=>setMultiOrderReviewOpen(false)} className="h-9 rounded-xl border border-zinc-800 px-3 text-[10px] font-black text-zinc-400">Fechar</button></div><div className="mt-4 space-y-3">{extraIfoodOrders.map((draft,index)=><article key={draft.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3"><div className="mb-3 flex items-center justify-between"><p className="text-[10px] font-black uppercase text-zinc-500">Pedido {index+2}</p><button type="button" onClick={()=>setExtraIfoodOrders(c=>c.filter(x=>x.id!==draft.id))} className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-400"><Trash2 size={13}/></button></div><div className="grid grid-cols-2 gap-2"><input value={draft.orderId} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,orderId:e.target.value.replace(/\D/g,'')}:x))} placeholder="Nº pedido" inputMode="numeric" className="h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-xs text-zinc-100"/><input value={draft.ifoodId} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,ifoodId:e.target.value.replace(/\D/g,'').slice(0,8)}:x))} placeholder="ID 8 dígitos" inputMode="numeric" className="h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-xs text-zinc-100"/><input value={draft.customerName} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,customerName:e.target.value}:x))} placeholder="Nome / conta" className="col-span-2 h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-xs text-zinc-100"/><input value={draft.confirmationCode} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,confirmationCode:e.target.value.replace(/\D/g,'').slice(0,4)}:x))} placeholder="Código" inputMode="numeric" className="h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 font-mono text-xs text-amber-400"/><input value={draft.customerCharge} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,customerCharge:formatCurrencyInput(e.target.value)}:x))} placeholder="Cliente paga" inputMode="numeric" className="h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-xs text-zinc-100"/><input value={draft.subsidy} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,subsidy:formatCurrencyInput(e.target.value)}:x))} placeholder="Cupom / subsídio" inputMode="numeric" className="col-span-2 h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-xs text-zinc-100"/></div></article>)}</div><button type="button" onClick={()=>setExtraIfoodOrders(c=>[...c,{id:`manual-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,orderId:'',ifoodId:'',confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:''}])} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-violet-500/30 bg-violet-500/[.05] text-[11px] font-black text-violet-300"><Plus size={14}/>Outro pedido neste endereço</button></section></div>)}
     </div>
   );
 }

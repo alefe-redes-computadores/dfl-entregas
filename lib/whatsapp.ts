@@ -7,6 +7,9 @@ import { bestOperationalAddress, hasHouseNumber } from "@/lib/operational-addres
 
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const deliveryCharge = (delivery: Delivery) => delivery.customer_charge ?? delivery.value ?? 0;
+const deliveryGroupKey = (delivery: Delivery) => delivery.stop_group_id || delivery.id;
+
 type ParsedDrinkItem = {
   qty: number;
   name: string;
@@ -47,7 +50,7 @@ export async function copyDeliveryToClipboard(
   try {
     const parts: string[] = [];
     const isIfood = delivery.origin === 'ifood';
-    const valueStr = formatMoney(delivery.value || 0);
+    const valueStr = formatMoney(deliveryCharge(delivery));
     const isUrgent = delivery.is_urgent;
     const currentCode = delivery.confirmation_code || savedCustomerCode;
     const clientPhone = delivery.phone?.replace(/\D/g, '');
@@ -87,7 +90,7 @@ export async function copyDeliveryToClipboard(
       const pMethod = delivery.payment_method?.toUpperCase().replace('_', ' ') || 'PAGAMENTO';
       if (delivery.payment_method === 'dinheiro') {
         if (delivery.change_for) {
-          const troco = Math.max(0, delivery.change_for - (delivery.value || 0));
+          const troco = Math.max(0, delivery.change_for - deliveryCharge(delivery));
           parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Cliente paga com R$ ${formatMoney(delivery.change_for)} | Troco: R$ ${formatMoney(troco)})`);
         } else {
           parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Valor exato)`);
@@ -161,6 +164,7 @@ export async function generateRouteMessages(
     const msg2: string[] = [];
 
     const totalDeliveries = deliveries.length;
+    const totalStops = new Set(deliveries.map((delivery) => deliveryGroupKey(delivery))).size;
     const drinksSummary: Record<string, { qty: number; name: string }> = {};
     const stopsNeedingCode: { num: number; neighborhood: string; street: string }[] = [];
     const stopsNeedingCall: { num: number; name: string }[] = [];
@@ -171,7 +175,7 @@ export async function generateRouteMessages(
     const routeNumber = matchRouteNumber ? parseInt(matchRouteNumber[0], 10) : 1;
 
     msg1.push(`🏍️ *Rota ${routeNumber} · ${route.motoboy_name}*`);
-    msg1.push(`📦 *${totalDeliveries} ${totalDeliveries === 1 ? 'entrega' : 'entregas'}*`);
+    msg1.push(totalStops===totalDeliveries?`📦 *${totalDeliveries} ${totalDeliveries===1?'entrega':'entregas'}*`:`📦 *${totalDeliveries} pedidos · ${totalStops} ${totalStops===1?'parada':'paradas'}*`);
 
     if (previousRoute) {
       const prevDuration = formatDuration(
@@ -203,6 +207,9 @@ export async function generateRouteMessages(
     msg1.push('');
 
     const routeMapAddresses: string[] = [];
+    const seenStopGroups = new Set<string>();
+    const firstStopNumber = new Map<string, number>();
+    const seenCodesByGroup = new Map<string, Set<string>>();
 
     const neighborhoodCounts = deliveries.reduce((acc: Record<string, number>, d) => {
       const cust = getCustomerById(d.customer_id);
@@ -213,7 +220,11 @@ export async function generateRouteMessages(
 
     deliveries.forEach((delivery, index) => {
       const num = index + 1;
-      const emojiNum = getNumberEmoji(num);
+      const groupKey = deliveryGroupKey(delivery);
+      const firstInGroup = !seenStopGroups.has(groupKey);
+      if (firstInGroup) { seenStopGroups.add(groupKey); firstStopNumber.set(groupKey, seenStopGroups.size); }
+      const stopNumber = firstStopNumber.get(groupKey) || seenStopGroups.size;
+      const emojiNum = getNumberEmoji(stopNumber);
       const customer = getCustomerById(delivery.customer_id);
       const neighborhood = customer?.neighborhood || delivery.address_string.split('-').pop()?.trim() || 'Bairro não inf.';
       const street = bestOperationalAddress(delivery.address_string, customer?.address) || "Endereço não informado";
@@ -237,7 +248,7 @@ export async function generateRouteMessages(
       }
 
       const stopLocation = resolveStopLocation(delivery, customer?.maps_link);
-      routeMapAddresses.push(stopLocation);
+      if (firstInGroup) routeMapAddresses.push(stopLocation);
 
       const clientName = customer?.name || 'Cliente';
       msg1.push(`*${emojiNum} ${clientName}* *(${stopOriginLabel})*`);
@@ -251,15 +262,23 @@ export async function generateRouteMessages(
 
       if (isIfood) {
         if (existingCode) {
-          msg1.push(`🔑 *Cód. iFood Salvo:* \`${existingCode}\` ✅`);
+          const seenCodes = seenCodesByGroup.get(groupKey) || new Set<string>();
+          if (!seenCodes.has(existingCode)) {
+            msg1.push(`🔑 *Cód. iFood:* \`${existingCode}\` ✅`);
+            seenCodes.add(existingCode);
+            seenCodesByGroup.set(groupKey, seenCodes);
+          }
         } else {
-          // Salva para a lista do final
-          stopsNeedingCode.push({ num, neighborhood, street });
+          stopsNeedingCode.push({ num: stopNumber, neighborhood, street });
         }
       }
 
-      msg1.push(`🏠 Endereço: ${street}`);
-      msg1.push(`- Bairro: \`${neighborhood}\``);
+      if (firstInGroup) {
+        msg1.push(`🏠 Endereço: ${street}`);
+        msg1.push(`- Bairro: \`${neighborhood}\``);
+      } else {
+        msg1.push(`↳ *Mesmo endereço da parada ${stopNumber}*`);
+      }
 
       if (delivery.observation) {
         msg1.push(`⚠️ *Observação:* ${delivery.observation}`);
@@ -271,7 +290,7 @@ export async function generateRouteMessages(
         msg1.push(`📲 *Chamar no portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
       }
 
-      const valueStr = formatMoney(delivery.value || 0);
+      const valueStr = formatMoney(deliveryCharge(delivery));
 
       if (delivery.value === 1) {
         msg1.push(`- 💵 *Pagamento:* R$ 1,00 (Cartão)`);
@@ -292,7 +311,7 @@ export async function generateRouteMessages(
           msg1.push(`- 💳 *Pagamento:* *R$ ${valueStr} (CARTÃO)*`);
           stopsNeedingPosMachine.push(num);
         } else if (delivery.payment_method === 'dinheiro' && delivery.change_for) {
-          const troco = Math.max(0, delivery.change_for - (delivery.value || 0));
+          const troco = Math.max(0, delivery.change_for - deliveryCharge(delivery));
           msg1.push(`- 💵 *Pagamento:* R$ ${valueStr} *(Paga c/ R$ ${formatMoney(delivery.change_for)} | Troco: R$ ${formatMoney(troco)})*`);
         } else {
           msg1.push(`- 💵 *Pagamento:* *R$ ${valueStr} (${delivery.payment_method?.toUpperCase() || 'DINHEIRO'})*`);
@@ -335,7 +354,7 @@ export async function generateRouteMessages(
 
     msg2.push(`──────────────`);
     msg2.push(`🏍️ *Rota ${routeNumber} · ${route.motoboy_name}*`);
-    msg2.push(`📦 ${totalDeliveries} ${totalDeliveries === 1 ? 'entrega' : 'entregas'} · saída *${timeString}*`);
+    msg2.push(totalStops===totalDeliveries?`📦 ${totalDeliveries} ${totalDeliveries===1?'entrega':'entregas'} · saída *${timeString}*`:`📦 ${totalDeliveries} pedidos · ${totalStops} ${totalStops===1?'parada':'paradas'} · saída *${timeString}*`);
 
     if (previousRoute) {
       const prevDuration = formatDuration(
@@ -417,7 +436,7 @@ export async function generateRouteMessages(
 
       pendingMoney.forEach((d) => {
         const num = deliveries.findIndex(x => x.id === d.id) + 1;
-        const pedidoVal = d.value || 0;
+        const pedidoVal = deliveryCharge(d);
         const dinheiroEmMaos = d.change_for ? d.change_for : pedidoVal;
         totalDinheiroAReceber += dinheiroEmMaos;
 
