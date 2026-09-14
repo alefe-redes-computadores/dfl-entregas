@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Crown, GitMerge, MapPin, MessageCircle, PackageOpen, Plus, Search, Smartphone, Store, Trophy, UserRound } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Crown, GitMerge, MapPin, MessageCircle, PackageOpen, Search, Smartphone, Store, Trophy, UserRound } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { getCustomerStats, isOperationalCustomer, normalizeCustomerName } from '@/lib/customer-analytics';
 import { customerDuplicateCandidates } from '@/lib/customer-duplicates';
@@ -50,14 +50,6 @@ export default function CustomersPage(){
           </h1>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={() => router.push('/clientes/novo')}
-        className="flex h-11 shrink-0 items-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-black text-zinc-950 active:scale-95"
-      >
-        <Plus size={18} />
-        Novo
-      </button>
     </header>
     <div className="grid grid-cols-3 gap-2"><Metric value={customers.length} label="Clientes"/><Metric value={items.filter(item=>item.stats.orderCount>0).length} label="Com pedidos"/><Metric value={deliveries.length} label="Pedidos ligados"/></div>
     {duplicateCount>0&&<button type="button" onClick={()=>router.push('/clientes/duplicados')} className="flex min-h-12 items-center justify-between rounded-2xl border border-amber-500/20 bg-amber-500/[.06] px-4 text-left active:scale-[.99]"><span className="flex items-center gap-2 text-xs font-black text-amber-400"><GitMerge size={16}/>Revisar possíveis duplicados <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px]">{duplicateCount}</span></span><ChevronRight size={16} className="text-amber-500/60"/></button>}

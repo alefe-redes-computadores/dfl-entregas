@@ -1078,15 +1078,6 @@ export default function ConfirmacoesPage() {
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => setIsBatchOpen(true)}
-        className="fixed bottom-[calc(6.2rem+env(safe-area-inset-bottom))] right-4 z-[55] flex h-12 items-center gap-2 rounded-[16px] border border-red-400/25 bg-red-500 px-3.5 text-xs font-black text-white shadow-[0_14px_32px_rgba(239,68,68,.24)] active:scale-95"
-        aria-label="Adicionar pendências iFood"
-      >
-        <Plus size={18} />
-        Adicionar
-      </button>
 
       {pendingDeleteManual && (
         <div

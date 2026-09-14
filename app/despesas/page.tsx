@@ -14,7 +14,6 @@ import {
   Pencil,
   Package,
   PieChart,
-  Plus,
   ReceiptText,
   Search,
   SlidersHorizontal,
@@ -379,14 +378,6 @@ export default function ExpensesPage() {
             <FileDown size={18} />
           </button>
 
-          <button
-            type="button"
-            onClick={() => router.push('/despesas/novo')}
-            className="flex h-11 items-center gap-2 rounded-[16px] bg-rose-500 px-3.5 text-xs font-black text-white active:scale-95"
-          >
-            <Plus size={16} />
-            Nova
-          </button>
         </div>
       </header>
 
