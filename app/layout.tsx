@@ -27,9 +27,39 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'DFL Entregas',
+  title: {
+    default: 'DFL Entregas',
+    template: '%s · DFL Entregas',
+  },
   description: 'Logística de entregas da Da Família Lanches',
+  applicationName: 'DFL Entregas',
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      {
+        url: '/favicon.ico',
+        sizes: '64x64',
+      },
+      {
+        url: '/icon-192.png',
+        type: 'image/png',
+        sizes: '192x192',
+      },
+      {
+        url: '/icon-512.png',
+        type: 'image/png',
+        sizes: '512x512',
+      },
+    ],
+    apple: [
+      {
+        url: '/apple-touch-icon.png',
+        type: 'image/png',
+        sizes: '180x180',
+      },
+    ],
+    shortcut: ['/favicon.ico'],
+  },
 };
 
 export const viewport: Viewport = {

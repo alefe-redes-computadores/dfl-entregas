@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { LogIn, Bike } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const user = useAppStore((state) => state.user);
@@ -48,8 +48,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (!user) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 p-6">
-        <div className="mb-8 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
-          <Bike size={48} />
+        <div className="mb-7 rounded-[30px] border border-zinc-800/80 bg-zinc-900/70 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+          <img
+            src="/brand/dfl-entregas.png"
+            alt="DFL Entregas"
+            width={128}
+            height={128}
+            className="h-28 w-28 rounded-[24px] object-contain"
+          />
         </div>
         <h1 className="mb-2 font-heading text-3xl font-bold text-zinc-50">DFL Entregas</h1>
         <p className="mb-12 text-center text-zinc-400">

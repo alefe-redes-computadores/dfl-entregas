@@ -29,6 +29,16 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
+      - name: Gerar identidade visual do app
+        run: |
+          python3 scripts/generate-brand-assets.py dfl-entregas-icon-master.png public
+          test -s public/icon-192.png
+          test -s public/icon-512.png
+          test -s public/icon-maskable-192.png
+          test -s public/icon-maskable-512.png
+          test -s public/apple-touch-icon.png
+          test -s public/favicon.ico
+
       - name: Build estático do Next.js
         run: npm run build
         env:
@@ -53,12 +63,15 @@ jobs:
           npx cap sync android
           npx cap doctor android || true
 
-      - name: Gerar ícones e splash
+      - name: Gerar ícones e splash Android
         run: |
           mkdir -p assets
           cp public/icon-512.png assets/icon.png
+          cp public/icon-maskable-512.png assets/icon-only.png
           cp public/icon-512.png assets/splash.png
           npx @capacitor/assets generate --android
+          test -d android/app/src/main/res/mipmap-mdpi
+          test -d android/app/src/main/res/mipmap-xxxhdpi
 
       - name: Gerar ícone de notificações
         run: |
