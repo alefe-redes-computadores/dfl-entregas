@@ -1,6 +1,7 @@
 export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debito' | 'cartao';
 export type RouteStatus = 'aberta' | 'fechada';
 export type OrderOrigin = 'ifood' | 'loja';
+export type IntegrationSourceSystem = 'dfl_site' | 'dfl_entregas';
 export type FulfillmentMode = 'delivery' | 'pickup' | 'counter';
 export type PaymentRuleType = 'fixed' | 'per_delivery' | 'fixed_plus_variable';
 export type MotoboyType = 'fixo' | 'avulso';
@@ -205,6 +206,35 @@ export interface Delivery {
   ifood_subsidy?: number;
   order_id?: string;
   ifood_id?: string;
+
+  /**
+   * Origem TÉCNICA de um registro integrado.
+   *
+   * Não substitui `origin`:
+   * - origin = canal/comercial (loja | ifood)
+   * - source_system = sistema que originou tecnicamente o registro
+   *
+   * Entregas locais/legadas continuam válidas sem este campo.
+   */
+  source_system?: IntegrationSourceSystem;
+
+  /**
+   * ID do pedido no sistema externo.
+   *
+   * Para DFL Site:
+   * corresponde ao ID de Pedidos/{id}.
+   *
+   * Não reutilizamos `order_id`, pois esse campo já participa
+   * do domínio operacional/iFood existente.
+   */
+  external_order_id?: string;
+
+  /**
+   * Versão do contrato do pedido recebido do sistema externo.
+   * Ex.: orderSchemaVersion do DFL Site.
+   */
+  external_order_schema_version?: number;
+
   origin: OrderOrigin;
   confirmation_code?: string;
   customer_id: string;
