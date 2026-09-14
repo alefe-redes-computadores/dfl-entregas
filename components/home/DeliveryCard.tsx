@@ -254,13 +254,16 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
 
     const diff = dragCurrentY.current - dragStartY.current;
-    // Touch V2: o primeiro salto exige intenção clara e cada posição
-    // adicional consome aproximadamente a altura útil de um card.
+    // Touch V3: gesto curto já move uma parada e o deslocamento
+    // continua previsível mesmo em telas pequenas.
     const absDiff = Math.abs(diff);
     const requestedSteps =
-      absDiff < 64
+      absDiff < 28
         ? 0
-        : Math.sign(diff) * Math.min(4, 1 + Math.floor((absDiff - 64) / 104));
+        : Math.sign(diff) * Math.min(
+            6,
+            1 + Math.floor((absDiff - 28) / 72),
+          );
     setDragOffsetY(0);
     setIsHandleDragging(false);
     dragStartY.current = 0;
@@ -276,8 +279,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
       await moveDeliveryToIndex(delivery.route_id, delivery.id, targetIndex);
       toast.success(`Parada movida para a posição ${targetIndex + 1}.`, { duration: 1300 });
-    } catch {
-      toast.error('Não foi possível salvar a nova posição.');
+    } catch (error) {
+      console.error('Erro ao reordenar parada:', error);
+      toast.error('Não foi possível salvar a nova posição.', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'A ordem anterior foi preservada.',
+      });
     }
   };
 
@@ -753,38 +762,101 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       )}
 
 
-      {/* Modal Digitar Código Manual iFood na Baixa */}
+      {/* Código iFood — captura operacional compacta */}
       {isIfoodModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-sm rounded-[28px] border border-zinc-700 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/10 text-red-500 border border-red-500/20">
-                  <Smartphone size={20} />
-                </div>
-                <div>
-                  <h3 className="font-heading text-base font-bold text-zinc-50">Código iFood</h3>
-                  <p className="text-xs text-zinc-400">Pedido #{delivery.order_id}</p>
-                </div>
+        <div
+          className="fixed inset-0 z-[120] flex items-end bg-black/70 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-16 backdrop-blur-sm animate-in fade-in duration-150 sm:items-center sm:justify-center"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsIfoodModalOpen(false);
+              setInputCode('');
+            }
+          }}
+        >
+          <div
+            className="mx-auto w-full max-w-sm rounded-[24px] border border-zinc-800 bg-zinc-950 p-4 shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-red-500/20 bg-red-500/10 text-red-400">
+                <ShieldCheck size={17} />
               </div>
-              <button onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); setIsIfoodModalOpen(false); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 hover:text-zinc-200">
-                <X size={16} />
+
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-black text-zinc-100">
+                  Código de confirmação
+                </h3>
+                <p className="mt-0.5 truncate text-[10px] text-zinc-500">
+                  {customer?.name || delivery.customer_name || 'Cliente iFood'}
+                  {delivery.order_id ? ` · #${delivery.order_id}` : ''}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsIfoodModalOpen(false);
+                  setInputCode('');
+                }}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-zinc-900 text-zinc-500"
+                aria-label="Fechar"
+              >
+                <X size={15} />
               </button>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-semibold text-zinc-400">Digite os 4 dígitos informados pelo cliente</label>
-              <input type="text" inputMode="numeric" maxLength={4} autoFocus placeholder="Ex: 5821" value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ''))} className="h-16 w-full rounded-2xl border-2 border-red-500/50 bg-zinc-950 px-4 text-center font-mono text-2xl font-bold tracking-widest text-zinc-50 focus:border-red-500 focus:outline-none transition-colors" />
+            <div className="mt-4">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                autoFocus
+                aria-label="Código de confirmação do cliente"
+                placeholder="0000"
+                value={inputCode}
+                onChange={(event) =>
+                  setInputCode(
+                    event.target.value.replace(/\D/g, '').slice(0, 4),
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && inputCode.length === 4) {
+                    void executeCompletion(inputCode);
+                  }
+                }}
+                className="h-14 w-full rounded-2xl border border-red-500/30 bg-zinc-900/70 px-4 text-center font-mono text-2xl font-black tracking-[0.35em] text-zinc-50 outline-none focus:border-red-400"
+              />
+              <p className="mt-2 text-center text-[9px] leading-relaxed text-zinc-600">
+                O código fica salvo na entrega e no cadastro do cliente.
+                A confirmação externa do iFood continua separada.
+              </p>
             </div>
 
-            <div className="flex flex-col gap-2.5">
-              <button type="button" onClick={async () => { if (inputCode.length < 4) { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy }); toast.error('Digite os 4 dígitos ou clique em Pular.'); return; } await executeCompletion(inputCode); }} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-bold text-zinc-950 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
-                <ShieldCheck size={18} /> Concluir com Código
-              </button>
-              <button type="button" onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); await executeCompletion(); }} className="flex h-12 w-full items-center justify-center rounded-2xl bg-zinc-800/80 font-semibold text-zinc-300 hover:bg-zinc-700 active:scale-95 transition-all text-sm">
-                Pular (Sem Código)
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={inputCode.length !== 4}
+              onClick={async () => {
+                if (inputCode.length !== 4) return;
+                await executeCompletion(inputCode);
+              }}
+              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-35"
+            >
+              <CheckCircle2 size={17} />
+              Salvar e finalizar
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                if (Capacitor.isNativePlatform()) {
+                  await Haptics.impact({ style: ImpactStyle.Light });
+                }
+                await executeCompletion();
+              }}
+              className="mt-1.5 flex h-10 w-full items-center justify-center text-[10px] font-bold text-zinc-500"
+            >
+              Finalizar sem código
+            </button>
           </div>
         </div>
       )}

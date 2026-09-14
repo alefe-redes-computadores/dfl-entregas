@@ -562,7 +562,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         expandedOrder,
         {
           metadata: {
-            order_locked: true,
+            // Organizar a rota NÃO significa travar todas as paradas.
+            // Travas explícitas já existentes são preservadas pelo store.
             order_source:
               optimizerEdited
                 ? 'manual'
@@ -728,7 +729,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               const addressKey = normalizedAddress(delivery.address_string || cust?.address);
               const isNeighbor = addressKey ? (addressCounts[addressKey] > 1) : false;
               const nearby = neighborMeta.get(delivery.id);
-              const pendingIndex = pendingDeliveries.findIndex((item) => item.id === delivery.id);
               return (
                 <div key={delivery.id}>
                   {physicalStop?.first && physicalStop.totalOrders > 1 && (
@@ -749,8 +749,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   isNeighbor={Boolean(isNeighbor || nearby)}
                   neighborPosition={nearby?.position}
                   neighborTotal={nearby?.total}
-                  position={pendingIndex >= 0 ? pendingIndex + 1 : undefined}
-                  pendingCount={pendingDeliveries.length}
+                  position={!delivery.completed ? physicalStop?.stopNumber : undefined}
+                  pendingCount={pendingStopGroups.length}
                 />
                 </div>
               );
@@ -925,7 +925,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               )}
 
               <p className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-[9px] leading-relaxed text-zinc-600">
-                Distâncias da prévia são aproximações em linha reta. A sequência agrupa o mesmo bairro; o Google Maps continua responsável pelo trajeto viário final.
+                Distâncias da prévia são aproximações em linha reta. A sugestão segue a próxima parada localizada mais próxima; o Google Maps continua responsável pelo trajeto viário final.
               </p>
 
               <div className="mt-4 space-y-2">
@@ -965,8 +965,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                           <p className="truncate text-xs font-black text-zinc-200">
                             {row.customer?.name || row.delivery.customer_name || `Pedido ${row.delivery.order_id || ''}`}
                           </p>
-                          <p className="mt-1 truncate text-[10px] text-zinc-500">
-                            {row.delivery.address_string || 'Endereço não informado'}
+                          {row.customer?.neighborhood && (
+                            <p className="mt-1 text-[10px] font-black text-zinc-400">
+                              {row.customer.neighborhood}
+                            </p>
+                          )}
+                          <p className="mt-0.5 break-words text-[10px] leading-snug text-zinc-500">
+                            {row.delivery.address_string || row.customer?.address || 'Endereço não informado'}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">

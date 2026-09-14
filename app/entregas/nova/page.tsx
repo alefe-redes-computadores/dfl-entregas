@@ -614,7 +614,35 @@ const [routeId, setRouteId] = useState('');
             </div>
           </div>
 
-          {origin==='ifood'&&(<div className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3"><button type="button" onClick={()=>{setHasIfoodSubsidy(v=>!v);if(hasIfoodSubsidy)setIfoodSubsidy('')}} className="flex w-full items-center justify-between gap-3 text-left"><span className="flex items-center gap-2"><TicketPercent size={15} className={hasIfoodSubsidy?'text-emerald-400':'text-zinc-600'}/><span><strong className="block text-[11px] text-zinc-300">Cupom / subsídio do iFood</strong><span className="text-[9px] text-zinc-600">O motoboy cobra somente o valor do cliente.</span></span></span><span className={`rounded-full px-2 py-1 text-[9px] font-black ${hasIfoodSubsidy?'bg-emerald-500/10 text-emerald-400':'bg-zinc-800 text-zinc-500'}`}>{hasIfoodSubsidy?'Ativo':'Adicionar'}</span></button>{hasIfoodSubsidy&&(<div className="mt-3 grid grid-cols-2 gap-2"><input type="text" inputMode="numeric" placeholder="Subsídio iFood" value={ifoodSubsidy} onChange={e=>setIfoodSubsidy(formatCurrencyInput(e.target.value))} className="h-11 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-sm font-bold text-zinc-100 outline-none"/><div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.05] p-2.5"><p className="text-[9px] font-black uppercase text-emerald-500">Total econômico</p><p className="mt-1 text-sm font-black text-zinc-100">R$ {(parseMoney(value)+parseMoney(ifoodSubsidy)).toLocaleString('pt-BR',{minimumFractionDigits:2})}</p></div></div>)}</div>)}
+          {origin==='ifood'&&(<div className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3"><button type="button" onClick={()=>{setHasIfoodSubsidy(v=>!v);if(hasIfoodSubsidy)setIfoodSubsidy('')}} className="flex w-full items-center justify-between gap-3 text-left"><span className="flex items-center gap-2"><TicketPercent size={15} className={hasIfoodSubsidy?'text-emerald-400':'text-zinc-600'}/><span><strong className="block text-[11px] text-zinc-300">Cupom / subsídio do iFood</strong><span className="text-[9px] text-zinc-600">O motoboy cobra somente o valor do cliente.</span></span></span><span className={`rounded-full px-2 py-1 text-[9px] font-black ${hasIfoodSubsidy?'bg-emerald-500/10 text-emerald-400':'bg-zinc-800 text-zinc-500'}`}>{hasIfoodSubsidy?'Ativo':'Adicionar'}</span></button>{hasIfoodSubsidy&&(
+            <div className="mt-3 grid grid-cols-2 items-stretch gap-2">
+              <label className="flex min-w-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900/45 p-2.5">
+                <span className="text-[9px] font-black uppercase tracking-wide text-zinc-500">
+                  iFood cobre
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="R$ 0,00"
+                  value={ifoodSubsidy}
+                  onChange={e=>setIfoodSubsidy(formatCurrencyInput(e.target.value))}
+                  className="mt-1 h-10 w-full min-w-0 rounded-lg border border-zinc-800 bg-zinc-950/55 px-3 text-base font-black text-zinc-100 outline-none focus:border-emerald-500"
+                />
+              </label>
+
+              <div className="flex min-w-0 flex-col justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/[.055] p-2.5">
+                <p className="text-[9px] font-black uppercase tracking-wide text-emerald-500">
+                  Total do pedido
+                </p>
+                <p className="mt-1 truncate text-base font-black text-zinc-100">
+                  R$ {(parseMoney(value)+parseMoney(ifoodSubsidy)).toLocaleString('pt-BR',{minimumFractionDigits:2})}
+                </p>
+                <p className="mt-0.5 truncate text-[8px] font-bold text-zinc-600">
+                  Cliente {parseMoney(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+                </p>
+              </div>
+            </div>
+          )}</div>)}
 
           <div className={`flex flex-col gap-2 transition-all duration-300 ${isPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
             <label className="text-xs font-semibold text-zinc-400">Forma de Pagamento</label>

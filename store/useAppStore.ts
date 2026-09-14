@@ -1624,17 +1624,14 @@ export const useAppStore = create<AppState>()(
           throw new Error('Destrave a parada antes de reordenar.');
         }
 
-        const safeIndex = Math.max(0, Math.min(targetIndex, pending.length - 1));
-        const targetDelivery = pending[safeIndex];
-        const targetKey = targetDelivery
-          ? deliveryStopKey(targetDelivery)
-          : groups[groups.length - 1].key;
-
-        let targetGroupIndex = groups.findIndex(
-          (group) => group.key === targetKey,
+        // targetIndex é índice de PARADA física, não de Delivery.
+        // Usar `pending[targetIndex]` quebrava quando uma parada tinha
+        // dois ou mais pedidos no mesmo stop_group_id.
+        const targetGroupIndex = Math.max(
+          0,
+          Math.min(targetIndex, groups.length - 1),
         );
 
-        if (targetGroupIndex < 0) targetGroupIndex = groups.length - 1;
         if (targetGroupIndex === currentGroupIndex) return;
 
         if (groups[targetGroupIndex].locked) {
@@ -1718,12 +1715,13 @@ export const useAppStore = create<AppState>()(
                   order_index: nextIndex,
                   ...(metadata
                     ? {
-                        order_locked:
-                          metadata.order_locked,
-                        order_source:
-                          metadata.order_source,
-                        order_updated_at:
-                          orderUpdatedAt,
+                        ...(metadata.order_locked !== undefined
+                          ? { order_locked: metadata.order_locked }
+                          : {}),
+                        ...(metadata.order_source !== undefined
+                          ? { order_source: metadata.order_source }
+                          : {}),
+                        order_updated_at: orderUpdatedAt,
                       }
                     : {}),
                   updated_at: now,
@@ -1738,12 +1736,13 @@ export const useAppStore = create<AppState>()(
               order_index: delivery.order_index,
               ...(metadata
                 ? {
-                    order_locked:
-                      metadata.order_locked,
-                    order_source:
-                      metadata.order_source,
-                    order_updated_at:
-                      orderUpdatedAt,
+                    ...(metadata.order_locked !== undefined
+                      ? { order_locked: metadata.order_locked }
+                      : {}),
+                    ...(metadata.order_source !== undefined
+                      ? { order_source: metadata.order_source }
+                      : {}),
+                    order_updated_at: orderUpdatedAt,
                   }
                 : {}),
               updated_at: now,

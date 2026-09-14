@@ -33,6 +33,54 @@ export function describePaymentRule(
   return `${money(rule.fixed_amount || 0)} até ${rule.threshold || 0} entregas · + ${money(rule.extra_fee || 0)} por entrega adicional`;
 }
 
+/*
+ * Compatibilidade financeira de legado.
+ *
+ * Regra atual:
+ *   source_kind === 'motoboy_settlement'
+ *
+ * Registros antigos podem ter sido gravados antes desse marcador.
+ * Não reescrevemos o Firestore e não consideramos qualquer despesa
+ * vinculada ao motoboy como pagamento.
+ *
+ * Só aceitamos como acerto legado quando há evidência explícita:
+ * - source_id canônico motoboy:<id>:<data>; ou
+ * - lançamento do tipo motoboy com descrição/observação de
+ *   diária, acerto ou pagamento do entregador.
+ */
+const LEGACY_SETTLEMENT_TEXT =
+  /\b(?:di[aá]ria|acerto|pagamento\s+(?:de|do|ao)\s+(?:motoboy|entregador)|pagamento\s+motoboy)\b/i;
+
+export function isMotoboySettlementExpense(
+  expense: OperationalExpense,
+  motoboyId: string,
+): boolean {
+  if (expense.motoboy_id !== motoboyId) return false;
+
+  if (expense.source_kind === 'motoboy_settlement') {
+    return true;
+  }
+
+  if (
+    expense.source_id?.startsWith(`motoboy:${motoboyId}:`)
+  ) {
+    return true;
+  }
+
+  if (expense.type !== 'motoboy') {
+    return false;
+  }
+
+  const evidence = [
+    expense.description,
+    expense.observation,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return LEGACY_SETTLEMENT_TEXT.test(evidence);
+}
+
 export function buildMotoboyLedger(input: {
   motoboy: Motoboy;
   routes: Route[];
@@ -46,10 +94,11 @@ export function buildMotoboyLedger(input: {
   );
 
   const settlementExpenses = input.expenses
-    .filter(
-      (expense) =>
-        expense.motoboy_id === input.motoboy.id &&
-        expense.source_kind === 'motoboy_settlement',
+    .filter((expense) =>
+      isMotoboySettlementExpense(
+        expense,
+        input.motoboy.id,
+      ),
     )
     .sort(
       (a, b) =>
@@ -61,7 +110,10 @@ export function buildMotoboyLedger(input: {
     .filter(
       (expense) =>
         expense.motoboy_id === input.motoboy.id &&
-        expense.source_kind !== 'motoboy_settlement',
+        !isMotoboySettlementExpense(
+          expense,
+          input.motoboy.id,
+        ),
     )
     .sort(
       (a, b) =>
