@@ -234,6 +234,8 @@ export interface Delivery {
    * Ex.: orderSchemaVersion do DFL Site.
    */
   external_order_schema_version?: number;
+  site_order_status?: string;
+  site_order_status_updated_at?: string | null;
 
   origin: OrderOrigin;
   confirmation_code?: string;

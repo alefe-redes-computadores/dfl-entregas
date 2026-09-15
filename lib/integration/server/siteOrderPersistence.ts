@@ -2,7 +2,7 @@ import 'server-only';
 import type { Customer, Delivery } from '@/types';
 import type { ExternalIdentityLink, IntegrationInboxReceipt } from '../contracts';
 import { planDflSiteOrderCreated } from '../consumer';
-import { assertDflSiteOrderCreatedEvent, siteDeliveryId, type DflSiteOrderCreatedEvent } from '../site-order';
+import { assertDflSiteOrderCreatedEvent, assertDflSiteOrderUpdatedEvent, siteDeliveryId, type DflSiteOrderCreatedEvent, type DflSiteOrderUpdatedEvent } from '../site-order';
 import { buildExternalIdentityLink, externalIdentityLinkId, INTEGRATION_COLLECTIONS } from '../identity';
 import { adminDb } from './admin';
 
@@ -161,5 +161,72 @@ export async function consumeDflSiteOrderCreatedPersisted(rawEvent: unknown): Pr
     else tx.create(inboxRef, plan.inbox);
 
     return { already_processed: false, event_id: event.event_id, delivery_id: plan.delivery.id, customer_id: plan.customer.id };
+  });
+}
+
+
+export interface PersistedSiteOrderUpdatedResult {
+  already_processed: boolean;
+  event_id: string;
+  delivery_id: string;
+  customer_id: string;
+  site_order_status: string;
+}
+
+export async function consumeDflSiteOrderUpdatedPersisted(rawEvent: unknown): Promise<PersistedSiteOrderUpdatedResult> {
+  assertDflSiteOrderUpdatedEvent(rawEvent);
+  const event: DflSiteOrderUpdatedEvent = rawEvent;
+
+  return adminDb.runTransaction(async (tx) => {
+    const inboxRef = adminDb.collection(INTEGRATION_COLLECTIONS.inbox).doc(encodeDocId(event.event_id));
+    const orderIdentityRef = adminDb.collection(INTEGRATION_COLLECTIONS.identities).doc(externalIdentityLinkId({
+      source_system: 'dfl_site', external_entity_type: 'order', external_entity_id: event.payload.orderId,
+    }));
+    const deliveryRef = adminDb.collection('deliveries').doc(siteDeliveryId(event.payload.orderId));
+
+    // Todas as leituras acontecem antes de qualquer escrita.
+    const [inboxSnap, identitySnap, deliverySnap] = await Promise.all([
+      tx.get(inboxRef), tx.get(orderIdentityRef), tx.get(deliveryRef),
+    ]);
+
+    const delivery = deliverySnap.exists ? asDelivery(deliverySnap.id, deliverySnap.data()!) : null;
+    if (inboxSnap.exists) {
+      const receipt = inboxSnap.data() as IntegrationInboxReceipt;
+      if (receipt.status === 'processed' && receipt.event_id === event.event_id &&
+          receipt.local_entity_type === 'delivery' && receipt.local_entity_id === deliveryRef.id && delivery) {
+        return { already_processed: true, event_id: event.event_id, delivery_id: delivery.id,
+          customer_id: delivery.customer_id, site_order_status: delivery.site_order_status || event.payload.status };
+      }
+      throw new Error('event_id já existe no inbox em estado incompatível.');
+    }
+
+    if (!identitySnap.exists) throw new Error('order.updated recebido antes de order.created/ExternalIdentity.');
+    const identity = identitySnap.data() as ExternalIdentityLink;
+    if (!sameLink(identity, 'delivery', deliveryRef.id) || identity.source_system !== 'dfl_site' ||
+        identity.external_entity_type !== 'order' || identity.external_entity_id !== event.payload.orderId) {
+      throw new Error('ExternalIdentity do pedido está inconsistente.');
+    }
+    if (!delivery) throw new Error('ExternalIdentity do pedido aponta para Delivery inexistente.');
+    if (delivery.source_system !== 'dfl_site' || delivery.external_order_id !== event.payload.orderId) {
+      throw new Error('Delivery vinculada diverge do pedido externo.');
+    }
+
+    const now = new Date().toISOString();
+    // Snapshot comercial somente: NÃO altera estado logístico/rota.
+    tx.update(deliveryRef, firestoreData({
+      site_order_status: event.payload.status,
+      site_order_status_updated_at: event.payload.statusUpdatedAt,
+      external_order_schema_version: event.payload.orderSchemaVersion,
+      updated_at: now,
+    }));
+    const receipt: IntegrationInboxReceipt = {
+      event_id: event.event_id, event_type: event.event_type, source_system: event.source_system,
+      entity_type: event.entity_type, entity_id: event.entity_id, schema_version: event.schema_version,
+      received_at: now, processed_at: now, status: 'processed',
+      local_entity_type: 'delivery', local_entity_id: delivery.id, updated_at: now,
+    };
+    tx.create(inboxRef, firestoreData(receipt));
+    return { already_processed: false, event_id: event.event_id, delivery_id: delivery.id,
+      customer_id: delivery.customer_id, site_order_status: event.payload.status };
   });
 }

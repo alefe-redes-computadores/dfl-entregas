@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isIntegrationEventEnvelope } from '@/lib/integration/contracts';
-import { consumeDflSiteOrderCreatedPersisted } from '@/lib/integration/server/siteOrderPersistence';
+import { consumeDflSiteOrderCreatedPersisted, consumeDflSiteOrderUpdatedPersisted } from '@/lib/integration/server/siteOrderPersistence';
 import { assertSignedIntegrationRequest } from '@/lib/integration/server/signature';
 
 export const runtime = 'nodejs';
@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (event.event_type === 'order.updated') {
-      // Contrato reconhecido, mas sincronização de status é deliberadamente posterior.
-      return NextResponse.json({ ok: false, accepted: false, deferred: true, error: 'order.updated ainda não habilitado.' }, { status: 422 });
+      const result = await consumeDflSiteOrderUpdatedPersisted(event);
+      return NextResponse.json({ ok: true, accepted: true, ...result }, { status: result.already_processed ? 200 : 201 });
     }
 
     return errorResponse(new Error(`event_type não suportado no inbound: ${event.event_type}`), 400);

@@ -64,6 +64,14 @@ export type DflSiteOrderCreatedEvent =
     schema_version: typeof INTEGRATION_SCHEMA_VERSION;
   };
 
+export type DflSiteOrderUpdatedEvent =
+  IntegrationEventEnvelope<DflSiteOrderEventPayloadV1> & {
+    event_type: 'order.updated';
+    source_system: 'dfl_site';
+    entity_type: 'order';
+    schema_version: typeof INTEGRATION_SCHEMA_VERSION;
+  };
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -180,6 +188,18 @@ export function assertDflSiteOrderCreatedEvent(
   if (value.entity_id.trim() !== value.payload.orderId.trim()) {
     throw new Error('entity_id e payload.orderId divergem.');
   }
+}
+
+export function assertDflSiteOrderUpdatedEvent(
+  value: unknown,
+): asserts value is DflSiteOrderUpdatedEvent {
+  if (!isIntegrationEventEnvelope(value)) throw new Error('Envelope de integração inválido.');
+  if (value.schema_version !== 1) throw new Error('schema_version não suportado.');
+  if (value.source_system !== 'dfl_site') throw new Error('source_system inválido para order.updated.');
+  if (value.event_type !== 'order.updated') throw new Error('Evento não é order.updated.');
+  if (value.entity_type !== 'order') throw new Error('entity_type inválido para order.updated.');
+  if (!isDflSiteOrderPayloadV1(value.payload)) throw new Error('Payload DFL Site Order V1 inválido.');
+  if (value.entity_id.trim() !== value.payload.orderId.trim()) throw new Error('entity_id e payload.orderId divergem.');
 }
 
 const text = (value?: string | null) => value?.trim() || '';
@@ -306,6 +326,8 @@ export function deliveryDraftFromSite(
     source_system: 'dfl_site',
     external_order_id: payload.orderId,
     external_order_schema_version: payload.orderSchemaVersion,
+    site_order_status: payload.status,
+    site_order_status_updated_at: payload.statusUpdatedAt,
 
     customer_id: customerId,
     customer_name: customerName || undefined,
