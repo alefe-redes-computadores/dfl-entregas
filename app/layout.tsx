@@ -33,32 +33,32 @@ export const metadata: Metadata = {
   },
   description: 'Logística de entregas da Da Família Lanches',
   applicationName: 'DFL Entregas',
-  manifest: '/manifest.json',
+  manifest: '/manifest.json?v=2',
   icons: {
     icon: [
       {
-        url: '/favicon.ico',
+        url: '/favicon.ico?v=2',
         sizes: '64x64',
       },
       {
-        url: '/icon-192.png',
+        url: '/icon-192.png?v=2',
         type: 'image/png',
         sizes: '192x192',
       },
       {
-        url: '/icon-512.png',
+        url: '/icon-512.png?v=2',
         type: 'image/png',
         sizes: '512x512',
       },
     ],
     apple: [
       {
-        url: '/apple-touch-icon.png',
+        url: '/apple-touch-icon.png?v=2',
         type: 'image/png',
         sizes: '180x180',
       },
     ],
-    shortcut: ['/favicon.ico'],
+    shortcut: ['/favicon.ico?v=2'],
   },
 };
 

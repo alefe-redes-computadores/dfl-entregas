@@ -48,13 +48,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (!user) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 p-6">
-        <div className="mb-7 rounded-[30px] border border-zinc-800/80 bg-zinc-900/70 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+        <div className="mb-7">
           <img
-            src="/brand/dfl-entregas.png"
+            src="/brand/dfl-entregas.png?v=2"
             alt="DFL Entregas"
             width={128}
             height={128}
-            className="h-28 w-28 rounded-[24px] object-contain"
+            className="h-28 w-28 object-contain"
           />
         </div>
         <h1 className="mb-2 font-heading text-3xl font-bold text-zinc-50">DFL Entregas</h1>

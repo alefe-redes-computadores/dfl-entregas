@@ -9,21 +9,21 @@
 // - respostas válidas visitadas são gravadas para uso offline;
 // - chamadas de terceiros/Firebase não são interceptadas.
 
-const VERSION = 'dfl-entregas-v4';
+const VERSION = 'dfl-entregas-v5';
 const CORE_CACHE = `${VERSION}-core`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const ASSET_CACHE = `${VERSION}-assets`;
 
 const CORE_URLS = [
   '/',
-  '/manifest.json',
-  '/favicon.ico',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/icon-maskable-192.png',
-  '/icon-maskable-512.png',
-  '/apple-touch-icon.png',
-  '/brand/dfl-entregas.png',
+  '/manifest.json?v=2',
+  '/favicon.ico?v=2',
+  '/icon-192.png?v=2',
+  '/icon-512.png?v=2',
+  '/icon-maskable-192.png?v=2',
+  '/icon-maskable-512.png?v=2',
+  '/apple-touch-icon.png?v=2',
+  '/brand/dfl-entregas.png?v=2',
 ];
 
 const APP_CACHE_PREFIX = 'dfl-entregas-';
