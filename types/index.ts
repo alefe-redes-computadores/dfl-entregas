@@ -236,6 +236,8 @@ export interface Delivery {
   external_order_schema_version?: number;
   site_order_status?: string;
   site_order_status_updated_at?: string | null;
+  site_order_last_event_at?: string;
+  site_order_last_event_id?: string;
 
   origin: OrderOrigin;
   confirmation_code?: string;

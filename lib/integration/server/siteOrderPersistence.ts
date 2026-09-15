@@ -167,10 +167,32 @@ export async function consumeDflSiteOrderCreatedPersisted(rawEvent: unknown): Pr
 
 export interface PersistedSiteOrderUpdatedResult {
   already_processed: boolean;
+  stale_ignored: boolean;
   event_id: string;
   delivery_id: string;
   customer_id: string;
   site_order_status: string;
+}
+
+function eventClock(event: DflSiteOrderUpdatedEvent) {
+  const timestamp = event.payload.statusUpdatedAt || event.occurred_at;
+  const time = Date.parse(timestamp);
+  if (!Number.isFinite(time)) throw new Error('Timestamp comercial inválido em order.updated.');
+  return { timestamp: new Date(time).toISOString(), time, eventId: event.event_id };
+}
+
+function storedCommercialClock(delivery: Delivery) {
+  const raw = delivery.site_order_last_event_at || delivery.site_order_status_updated_at || null;
+  if (!raw) return null;
+  const time = Date.parse(raw);
+  if (!Number.isFinite(time)) throw new Error('Delivery possui timestamp comercial inválido.');
+  return { timestamp: new Date(time).toISOString(), time, eventId: delivery.site_order_last_event_id || '' };
+}
+
+function incomingWins(incoming: ReturnType<typeof eventClock>, current: ReturnType<typeof storedCommercialClock>) {
+  if (!current) return true;
+  if (incoming.time !== current.time) return incoming.time > current.time;
+  return incoming.eventId.localeCompare(current.eventId) > 0;
 }
 
 export async function consumeDflSiteOrderUpdatedPersisted(rawEvent: unknown): Promise<PersistedSiteOrderUpdatedResult> {
@@ -194,7 +216,7 @@ export async function consumeDflSiteOrderUpdatedPersisted(rawEvent: unknown): Pr
       const receipt = inboxSnap.data() as IntegrationInboxReceipt;
       if (receipt.status === 'processed' && receipt.event_id === event.event_id &&
           receipt.local_entity_type === 'delivery' && receipt.local_entity_id === deliveryRef.id && delivery) {
-        return { already_processed: true, event_id: event.event_id, delivery_id: delivery.id,
+        return { already_processed: true, stale_ignored: false, event_id: event.event_id, delivery_id: delivery.id,
           customer_id: delivery.customer_id, site_order_status: delivery.site_order_status || event.payload.status };
       }
       throw new Error('event_id já existe no inbox em estado incompatível.');
@@ -212,21 +234,41 @@ export async function consumeDflSiteOrderUpdatedPersisted(rawEvent: unknown): Pr
     }
 
     const now = new Date().toISOString();
-    // Snapshot comercial somente: NÃO altera estado logístico/rota.
-    tx.update(deliveryRef, firestoreData({
-      site_order_status: event.payload.status,
-      site_order_status_updated_at: event.payload.statusUpdatedAt,
-      external_order_schema_version: event.payload.orderSchemaVersion,
-      updated_at: now,
-    }));
-    const receipt: IntegrationInboxReceipt = {
+    const incoming = eventClock(event);
+    const current = storedCommercialClock(delivery);
+    const applyIncoming = incomingWins(incoming, current);
+
+    // Evento atrasado é consumido/auditado, mas NÃO pode regredir o snapshot comercial.
+    if (applyIncoming) {
+      tx.update(deliveryRef, firestoreData({
+        site_order_status: event.payload.status,
+        site_order_status_updated_at: event.payload.statusUpdatedAt,
+        site_order_last_event_at: incoming.timestamp,
+        site_order_last_event_id: event.event_id,
+        external_order_schema_version: event.payload.orderSchemaVersion,
+        updated_at: now,
+      }));
+    }
+
+    const receipt = {
       event_id: event.event_id, event_type: event.event_type, source_system: event.source_system,
       entity_type: event.entity_type, entity_id: event.entity_id, schema_version: event.schema_version,
-      received_at: now, processed_at: now, status: 'processed',
-      local_entity_type: 'delivery', local_entity_id: delivery.id, updated_at: now,
+      received_at: now, processed_at: now, status: 'processed' as const,
+      local_entity_type: 'delivery' as const, local_entity_id: delivery.id, updated_at: now,
+      processing_outcome: applyIncoming ? 'applied' : 'ignored_stale',
+      incoming_event_at: incoming.timestamp,
+      ...(current ? { previous_event_at: current.timestamp } : {}),
+      ...(current?.eventId ? { previous_event_id: current.eventId } : {}),
     };
     tx.create(inboxRef, firestoreData(receipt));
-    return { already_processed: false, event_id: event.event_id, delivery_id: delivery.id,
-      customer_id: delivery.customer_id, site_order_status: event.payload.status };
+
+    return {
+      already_processed: false,
+      stale_ignored: !applyIncoming,
+      event_id: event.event_id,
+      delivery_id: delivery.id,
+      customer_id: delivery.customer_id,
+      site_order_status: applyIncoming ? event.payload.status : (delivery.site_order_status || event.payload.status),
+    };
   });
 }
