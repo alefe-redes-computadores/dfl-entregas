@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
+  ...(process.env.DFL_STATIC_EXPORT === '1'
+    ? { output: 'export' }
+    : {}),
   images: {
     unoptimized: true,
   },
