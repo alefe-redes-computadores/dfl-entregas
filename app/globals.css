@@ -63,11 +63,29 @@ h1, h2, h3, h4, h5, h6 {
   --dfl-safe-top: env(safe-area-inset-top, 0px);
   --dfl-safe-bottom: env(safe-area-inset-bottom, 0px);
   --dfl-nav-height: 4.85rem;
+
+  /*
+   * O aplicativo acompanha o viewport real do aparelho.
+   * O limite só entra em telas >= 640px, onde o app passa a funcionar
+   * deliberadamente como uma coluna mobile centralizada.
+   */
+  --dfl-app-width: 100%;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --dfl-app-width: 28rem;
+  }
 }
 
 .dfl-shell {
   min-height: 100dvh;
-  width: min(100%, 28rem);
+  width: var(--dfl-app-width);
+}
+
+.dfl-fixed-width {
+  width: var(--dfl-app-width);
+  max-width: 100%;
 }
 
 .dfl-main {

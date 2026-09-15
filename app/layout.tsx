@@ -85,7 +85,7 @@ export default function RootLayout({
         <RouteOperations />
         <ErrorBoundary>
           <AuthGuard>
-            <div className="dfl-shell relative mx-auto flex w-full max-w-md flex-col overflow-x-hidden bg-zinc-950/95 text-zinc-100 shadow-[0_0_80px_rgba(0,0,0,0.38)]">
+            <div className="dfl-shell relative mx-auto flex w-full flex-col overflow-x-hidden bg-zinc-950/95 text-zinc-100">
               <Header />
               <main className="dfl-main relative flex-1 px-3.5 pt-3.5 sm:px-4">{children}</main>
               <BottomNav />

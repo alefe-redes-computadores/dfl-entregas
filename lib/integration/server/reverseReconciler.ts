@@ -89,16 +89,21 @@ export async function reconcileReverseTrackingOutbox() {
     adminDb.collection('routes').get(),
   ]);
 
-  const routes = new Map(
-    routeSnap.docs.map((doc: QueryDocumentSnapshot) => [
-      doc.id,
-      doc.data() as Raw,
-    ]),
-  );
-  const all = deliverySnap.docs.map((doc: QueryDocumentSnapshot) => ({
-    id: doc.id,
-    data: doc.data() as Raw,
-  }));
+  // Fronteira Firestore -> domínio explicitamente tipada.
+  // Não dependemos da inferência genérica do firebase-admin/runner Linux.
+  const routes = new Map<string, Raw>();
+  for (const doc of routeSnap.docs as QueryDocumentSnapshot[]) {
+    routes.set(doc.id, doc.data() as Raw);
+  }
+
+  const all: Array<{ id: string; data: Raw }> = [];
+  for (const doc of deliverySnap.docs as QueryDocumentSnapshot[]) {
+    all.push({
+      id: doc.id,
+      data: doc.data() as Raw,
+    });
+  }
+
   const byRoute = new Map<string, Array<{ id: string; data: Raw }>>();
 
   for (const item of all) {
