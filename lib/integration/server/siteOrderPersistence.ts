@@ -82,9 +82,11 @@ export async function consumeDflSiteOrderCreatedPersisted(rawEvent: unknown): Pr
     const inbox = inboxSnap.exists ? (inboxSnap.data() as IntegrationInboxReceipt) : null;
     const orderIdentity = orderIdentitySnap.exists ? (orderIdentitySnap.data() as ExternalIdentityLink) : null;
     const customerIdentity = customerIdentitySnap?.exists ? (customerIdentitySnap.data() as ExternalIdentityLink) : null;
-    const deterministicDelivery = deliverySnap.exists ? asDelivery(deliverySnap.id, deliverySnap.data()!) : null;
-    const customers = customersSnap.docs.map(
-      (snap: QueryDocumentSnapshot<DocumentData>) =>
+    const deterministicDelivery: Delivery | null = deliverySnap.exists
+      ? asDelivery(deliverySnap.id, deliverySnap.data()!)
+      : null;
+    const customers: Customer[] = customersSnap.docs.map(
+      (snap: QueryDocumentSnapshot<DocumentData>): Customer =>
         asCustomer(snap.id, snap.data()),
     );
 
@@ -130,7 +132,9 @@ export async function consumeDflSiteOrderCreatedPersisted(rawEvent: unknown): Pr
     }
 
     const customerRef = adminDb.collection('customers').doc(plan.customer.id);
-    const customerExists = customers.some((customer) => customer.id === plan.customer.id);
+    const customerExists: boolean = customers.some(
+      (customer: Customer): boolean => customer.id === plan.customer.id,
+    );
     if (plan.create_customer && customerExists) {
       throw new Error('Customer determinístico já existe sem vínculo esperado; revisão manual necessária.');
     }
@@ -215,7 +219,9 @@ export async function consumeDflSiteOrderUpdatedPersisted(rawEvent: unknown): Pr
       tx.get(inboxRef), tx.get(orderIdentityRef), tx.get(deliveryRef),
     ]);
 
-    const delivery = deliverySnap.exists ? asDelivery(deliverySnap.id, deliverySnap.data()!) : null;
+    const delivery: Delivery | null = deliverySnap.exists
+      ? asDelivery(deliverySnap.id, deliverySnap.data()!)
+      : null;
     if (inboxSnap.exists) {
       const receipt = inboxSnap.data() as IntegrationInboxReceipt;
       if (receipt.status === 'processed' && receipt.event_id === event.event_id &&
