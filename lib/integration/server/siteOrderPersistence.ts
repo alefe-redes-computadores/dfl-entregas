@@ -1,4 +1,5 @@
 import 'server-only';
+import type { DocumentData } from 'firebase-admin/firestore';
 import type { Customer, Delivery } from '@/types';
 import type { ExternalIdentityLink, IntegrationInboxReceipt } from '../contracts';
 import { planDflSiteOrderCreated } from '../consumer';
@@ -12,8 +13,8 @@ const encodeDocId = (value: string) => {
   return id;
 };
 
-const asCustomer = (id: string, data: FirebaseFirestore.DocumentData): Customer => ({ id, ...data } as Customer);
-const asDelivery = (id: string, data: FirebaseFirestore.DocumentData): Delivery => ({ id, ...data } as Delivery);
+const asCustomer = (id: string, data: DocumentData): Customer => ({ id, ...data } as Customer);
+const asDelivery = (id: string, data: DocumentData): Delivery => ({ id, ...data } as Delivery);
 
 function sameLink(link: ExternalIdentityLink, type: 'delivery' | 'customer', id: string) {
   return link.local_entity_type === type && link.local_entity_id === id;
@@ -22,9 +23,9 @@ function sameLink(link: ExternalIdentityLink, type: 'delivery' | 'customer', id:
 // Firestore Admin rejeita propriedades undefined por padrão.
 // Os drafts locais usam undefined legitimamente para campos opcionais;
 // removemos somente undefined antes de persistir, preservando null.
-function firestoreData<T>(value: T): FirebaseFirestore.DocumentData {
+function firestoreData<T>(value: T): DocumentData {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return value as FirebaseFirestore.DocumentData;
+    return value as DocumentData;
   }
 
   return Object.fromEntries(
