@@ -1,5 +1,5 @@
 import 'server-only';
-import type { DocumentData } from 'firebase-admin/firestore';
+import type { DocumentData, QueryDocumentSnapshot, Transaction } from 'firebase-admin/firestore';
 import type { Customer, Delivery } from '@/types';
 import type { ExternalIdentityLink, IntegrationInboxReceipt } from '../contracts';
 import { planDflSiteOrderCreated } from '../consumer';
@@ -58,7 +58,7 @@ export async function consumeDflSiteOrderCreatedPersisted(rawEvent: unknown): Pr
   const event: DflSiteOrderCreatedEvent = rawEvent;
   const externalCustomerId = event.payload.customerSnapshot?.id?.trim() || undefined;
 
-  return adminDb.runTransaction(async (tx) => {
+  return adminDb.runTransaction(async (tx: Transaction) => {
     const inboxRef = adminDb.collection(INTEGRATION_COLLECTIONS.inbox).doc(encodeDocId(event.event_id));
     const orderIdentityRef = adminDb.collection(INTEGRATION_COLLECTIONS.identities).doc(externalIdentityLinkId({
       source_system: 'dfl_site', external_entity_type: 'order', external_entity_id: event.payload.orderId,
@@ -83,7 +83,10 @@ export async function consumeDflSiteOrderCreatedPersisted(rawEvent: unknown): Pr
     const orderIdentity = orderIdentitySnap.exists ? (orderIdentitySnap.data() as ExternalIdentityLink) : null;
     const customerIdentity = customerIdentitySnap?.exists ? (customerIdentitySnap.data() as ExternalIdentityLink) : null;
     const deterministicDelivery = deliverySnap.exists ? asDelivery(deliverySnap.id, deliverySnap.data()!) : null;
-    const customers = customersSnap.docs.map((snap) => asCustomer(snap.id, snap.data()));
+    const customers = customersSnap.docs.map(
+      (snap: QueryDocumentSnapshot<DocumentData>) =>
+        asCustomer(snap.id, snap.data()),
+    );
 
     if (orderIdentity && !sameLink(orderIdentity, 'delivery', siteDeliveryId(event.payload.orderId))) {
       throw new Error('Conflito: pedido externo já aponta para outra entidade local.');
@@ -200,7 +203,7 @@ export async function consumeDflSiteOrderUpdatedPersisted(rawEvent: unknown): Pr
   assertDflSiteOrderUpdatedEvent(rawEvent);
   const event: DflSiteOrderUpdatedEvent = rawEvent;
 
-  return adminDb.runTransaction(async (tx) => {
+  return adminDb.runTransaction(async (tx: Transaction) => {
     const inboxRef = adminDb.collection(INTEGRATION_COLLECTIONS.inbox).doc(encodeDocId(event.event_id));
     const orderIdentityRef = adminDb.collection(INTEGRATION_COLLECTIONS.identities).doc(externalIdentityLinkId({
       source_system: 'dfl_site', external_entity_type: 'order', external_entity_id: event.payload.orderId,
