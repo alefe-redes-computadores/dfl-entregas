@@ -1,31 +1,23 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
-import type { QueryDocumentSnapshot, Transaction } from 'firebase-admin/firestore';
+import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { adminDb } from './admin';
 import { buildIntegrationEvent, buildOutboxRecord } from '../contracts';
 
 type Raw = Record<string, unknown>;
-
-type Stop = {
-  key: string;
-  deliveries: Array<{ id: string; data: Raw }>;
-  pending: Array<{ id: string; data: Raw }>;
-};
+type Item = { id: string; data: Raw };
+type Stop = { key: string; deliveries: Item[]; pending: Item[] };
 
 const str = (value: unknown) => typeof value === 'string' ? value : '';
 const bool = (value: unknown) => value === true;
 const num = (value: unknown) =>
   typeof value === 'number' && Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
 
-function isSiteDelivery(data: Raw) {
-  return data.source_system === 'dfl_site' && str(data.external_order_id).trim().length > 0;
-}
-
 function stopKey(id: string, data: Raw) {
   return str(data.stop_group_id).trim() || id;
 }
 
-function groups(items: Array<{ id: string; data: Raw }>): Stop[] {
+function groups(items: Item[]): Stop[] {
   const ordered = [...items].sort((a, b) => {
     const delta = num(a.data.order_index) - num(b.data.order_index);
     return delta || a.id.localeCompare(b.id);
@@ -55,83 +47,74 @@ function routeClosed(route: Raw | undefined) {
 
 function occurredAt(delivery: Raw, route: Raw | undefined) {
   const candidates = [
-    str(delivery.completed_at),
-    str(delivery.order_updated_at),
-    str(delivery.updated_at),
-    str(route?.end_time),
-    str(route?.updated_at),
-    str(route?.started_at),
-    str(route?.departure_time),
+    str(delivery.completed_at), str(delivery.order_updated_at), str(delivery.updated_at),
+    str(route?.end_time), str(route?.updated_at), str(route?.started_at), str(route?.departure_time),
   ].filter(Boolean);
-  const valid = candidates
-    .map((value) => ({ value, time: Date.parse(value) }))
-    .filter((item) => Number.isFinite(item.time))
-    .sort((a, b) => b.time - a.time);
+  const valid = candidates.map((value) => ({ value, time: Date.parse(value) }))
+    .filter((item) => Number.isFinite(item.time)).sort((a, b) => b.time - a.time);
   return valid[0]?.value || new Date().toISOString();
 }
 
-function eventType(input: {
-  delivery: Raw;
-  route: Raw | undefined;
-  pendingIndex: number;
-}) {
-  if (bool(input.delivery.completed)) return 'delivery.completed' as const;
-  if (routeClosed(input.route)) return 'route.completed' as const;
-  if (routeStarted(input.route) && input.pendingIndex === 0) return 'delivery.next_stop' as const;
-  if (routeStarted(input.route)) return 'delivery.position_changed' as const;
-  if (str(input.delivery.route_id)) return 'delivery.assigned' as const;
+function eventType(delivery: Raw, route: Raw | undefined, pendingIndex: number) {
+  if (bool(delivery.completed)) return 'delivery.completed' as const;
+  if (routeClosed(route)) return 'route.completed' as const;
+  if (routeStarted(route) && pendingIndex === 0) return 'delivery.next_stop' as const;
+  if (routeStarted(route)) return 'delivery.position_changed' as const;
+  if (str(delivery.route_id)) return 'delivery.assigned' as const;
   return null;
 }
 
+async function loadRoute(routeId: string): Promise<Raw | undefined> {
+  if (!routeId) return undefined;
+  const snap = await adminDb.collection('routes').doc(routeId).get();
+  return snap.exists ? snap.data() as Raw : undefined;
+}
+
+async function loadRouteDeliveries(routeId: string, fallback: Item): Promise<Item[]> {
+  if (!routeId) return [fallback];
+  const snap = await adminDb.collection('deliveries').where('route_id', '==', routeId).get();
+  return (snap.docs as QueryDocumentSnapshot[]).map((doc) => ({ id: doc.id, data: doc.data() as Raw }));
+}
+
 export async function reconcileReverseTrackingOutbox() {
-  const [deliverySnap, routeSnap] = await Promise.all([
-    adminDb.collection('deliveries').get(),
-    adminDb.collection('routes').get(),
-  ]);
+  // O worker reverso só precisa partir de deliveries pertencentes ao Site.
+  // A versão anterior lia TODAS as deliveries e TODAS as routes a cada minuto.
+  const siteSnap = await adminDb.collection('deliveries')
+    .where('source_system', '==', 'dfl_site')
+    .get();
 
-  // Fronteira Firestore -> domínio explicitamente tipada.
-  // Não dependemos da inferência genérica do firebase-admin/runner Linux.
-  const routes = new Map<string, Raw>();
-  for (const doc of routeSnap.docs as QueryDocumentSnapshot[]) {
-    routes.set(doc.id, doc.data() as Raw);
-  }
+  const siteDeliveries: Item[] = (siteSnap.docs as QueryDocumentSnapshot[])
+    .map((doc) => ({ id: doc.id, data: doc.data() as Raw }))
+    .filter((item) => str(item.data.external_order_id).trim().length > 0);
 
-  const all: Array<{ id: string; data: Raw }> = [];
-  for (const doc of deliverySnap.docs as QueryDocumentSnapshot[]) {
-    all.push({
-      id: doc.id,
-      data: doc.data() as Raw,
-    });
-  }
+  const routeIds = [...new Set(siteDeliveries.map((item) => str(item.data.route_id).trim()).filter(Boolean))];
+  const routeMap = new Map<string, Raw | undefined>();
+  const routeItemsMap = new Map<string, Item[]>();
 
-  const byRoute = new Map<string, Array<{ id: string; data: Raw }>>();
+  // Carregamos somente as rotas que contêm deliveries do Site. As deliveries
+  // da rota continuam necessárias para calcular posição por parada física.
+  await Promise.all(routeIds.map(async (routeId) => {
+    const [route, items] = await Promise.all([
+      loadRoute(routeId),
+      loadRouteDeliveries(routeId, siteDeliveries.find((item) => str(item.data.route_id) === routeId)!),
+    ]);
+    routeMap.set(routeId, route);
+    routeItemsMap.set(routeId, items);
+  }));
 
-  for (const item of all) {
-    const routeId = str(item.data.route_id);
-    if (!routeId) continue;
-    const list = byRoute.get(routeId) || [];
-    list.push(item);
-    byRoute.set(routeId, list);
-  }
+  const candidates: Array<{ eventId: string; event: ReturnType<typeof buildIntegrationEvent> }> = [];
 
-  const candidates: Array<{
-    eventId: string;
-    event: ReturnType<typeof buildIntegrationEvent>;
-  }> = [];
-
-  for (const item of all) {
-    if (!isSiteDelivery(item.data)) continue;
-
-    const routeId = str(item.data.route_id);
-    const route = routeId ? routes.get(routeId) : undefined;
-    const routeItems = routeId ? (byRoute.get(routeId) || []) : [item];
+  for (const item of siteDeliveries) {
+    const routeId = str(item.data.route_id).trim();
+    const route = routeId ? routeMap.get(routeId) : undefined;
+    const routeItems = routeId ? (routeItemsMap.get(routeId) || [item]) : [item];
     const stopGroups = groups(routeItems);
     const key = stopKey(item.id, item.data);
     const stopIndex = stopGroups.findIndex((group) => group.key === key);
     const pendingGroups = stopGroups.filter((group) => group.pending.length > 0);
     const pendingIndex = pendingGroups.findIndex((group) => group.key === key);
     const started = routeStarted(route);
-    const type = eventType({ delivery: item.data, route, pendingIndex });
+    const type = eventType(item.data, route, pendingIndex);
     if (!type) continue;
 
     const payload = {
@@ -144,7 +127,6 @@ export async function reconcileReverseTrackingOutbox() {
       motoboyName: str(route?.motoboy_name) || null,
       stopGroupId: key,
       stopPosition: stopIndex >= 0 ? stopIndex + 1 : null,
-      // Rota vinculada/recuperada ainda é planejamento, não posição do cliente.
       stopsAhead: started && pendingIndex >= 0 ? pendingIndex : null,
       totalStops: stopGroups.length || null,
       nextStop: started && pendingIndex === 0,
@@ -152,43 +134,47 @@ export async function reconcileReverseTrackingOutbox() {
       failedReason: null,
     };
 
-    // O ID deriva do snapshot operacional relevante. Reconciliar o mesmo estado
-    // produz o mesmo event_id; mudar posição/rota/conclusão produz outro evento.
     const fingerprint = stableHash({ type, payload });
     const eventId = `evt-v1__${type}__${encodeURIComponent(item.id)}__snapshot-${fingerprint}`;
-    const event = buildIntegrationEvent({
-      event_id: eventId,
-      event_type: type,
-      occurred_at: occurredAt(item.data, route),
-      source_system: 'dfl_entregas',
-      entity_type: 'delivery',
-      entity_id: item.id,
-      correlation_id: str(item.data.external_order_id),
-      payload,
+    candidates.push({
+      eventId,
+      event: buildIntegrationEvent({
+        event_id: eventId, event_type: type, occurred_at: occurredAt(item.data, route),
+        source_system: 'dfl_entregas', entity_type: 'delivery', entity_id: item.id,
+        correlation_id: str(item.data.external_order_id), payload,
+      }),
     });
-    candidates.push({ eventId, event });
   }
 
   let created = 0;
   let existing = 0;
 
-  // Admin transaction torna a criação do outbox idempotente. Não precisamos
-  // acoplar o cliente PWA às regras de integration_outbox.
+  // O event_id é determinístico. Uma leitura direta é suficiente para snapshots
+  // já existentes; create() preserva atomicamente a proteção contra corrida.
   for (const candidate of candidates) {
     const ref = adminDb.collection('integration_outbox').doc(encodeURIComponent(candidate.eventId));
-    const wasCreated = await adminDb.runTransaction(async (tx: Transaction) => {
-      const snap = await tx.get(ref);
-      if (snap.exists) return false;
-      tx.set(ref, buildOutboxRecord(candidate.event));
-      return true;
-    });
-    if (wasCreated) created += 1;
-    else existing += 1;
+    const snap = await ref.get();
+    if (snap.exists) {
+      existing += 1;
+      continue;
+    }
+    try {
+      await ref.create(buildOutboxRecord(candidate.event));
+      created += 1;
+    } catch (error) {
+      const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code) : '';
+      if (code === '6' || code === 'already-exists' || code === 'ALREADY_EXISTS') {
+        existing += 1;
+        continue;
+      }
+      throw error;
+    }
   }
 
   return {
     ok: true,
-    siteDeliveries: all.filter((item) => isSiteDelivery(item.data)).length,
+    siteDeliveries: siteDeliveries.length,
+    routesRead: routeIds.length,
     candidates: candidates.length,
     created,
     existing,
