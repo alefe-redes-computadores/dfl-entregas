@@ -1,5 +1,6 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
+import type { QueryDocumentSnapshot, Transaction } from 'firebase-admin/firestore';
 import { adminDb } from './admin';
 import { buildIntegrationEvent, buildOutboxRecord } from '../contracts';
 
@@ -88,8 +89,16 @@ export async function reconcileReverseTrackingOutbox() {
     adminDb.collection('routes').get(),
   ]);
 
-  const routes = new Map(routeSnap.docs.map((doc) => [doc.id, doc.data() as Raw]));
-  const all = deliverySnap.docs.map((doc) => ({ id: doc.id, data: doc.data() as Raw }));
+  const routes = new Map(
+    routeSnap.docs.map((doc: QueryDocumentSnapshot) => [
+      doc.id,
+      doc.data() as Raw,
+    ]),
+  );
+  const all = deliverySnap.docs.map((doc: QueryDocumentSnapshot) => ({
+    id: doc.id,
+    data: doc.data() as Raw,
+  }));
   const byRoute = new Map<string, Array<{ id: string; data: Raw }>>();
 
   for (const item of all) {
@@ -160,7 +169,7 @@ export async function reconcileReverseTrackingOutbox() {
   // acoplar o cliente PWA às regras de integration_outbox.
   for (const candidate of candidates) {
     const ref = adminDb.collection('integration_outbox').doc(encodeURIComponent(candidate.eventId));
-    const wasCreated = await adminDb.runTransaction(async (tx) => {
+    const wasCreated = await adminDb.runTransaction(async (tx: Transaction) => {
       const snap = await tx.get(ref);
       if (snap.exists) return false;
       tx.set(ref, buildOutboxRecord(candidate.event));

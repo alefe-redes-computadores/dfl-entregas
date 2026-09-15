@@ -6,6 +6,12 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html,
 body {
   min-height: 100%;
@@ -61,6 +67,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .dfl-shell {
   min-height: 100dvh;
+  width: min(100%, 28rem);
 }
 
 .dfl-main {
