@@ -130,6 +130,7 @@ export async function reconcileReverseTrackingOutbox() {
     const stopIndex = stopGroups.findIndex((group) => group.key === key);
     const pendingGroups = stopGroups.filter((group) => group.pending.length > 0);
     const pendingIndex = pendingGroups.findIndex((group) => group.key === key);
+    const started = routeStarted(route);
     const type = eventType({ delivery: item.data, route, pendingIndex });
     if (!type) continue;
 
@@ -143,9 +144,10 @@ export async function reconcileReverseTrackingOutbox() {
       motoboyName: str(route?.motoboy_name) || null,
       stopGroupId: key,
       stopPosition: stopIndex >= 0 ? stopIndex + 1 : null,
-      stopsAhead: pendingIndex >= 0 ? pendingIndex : null,
+      // Rota vinculada/recuperada ainda é planejamento, não posição do cliente.
+      stopsAhead: started && pendingIndex >= 0 ? pendingIndex : null,
       totalStops: stopGroups.length || null,
-      nextStop: routeStarted(route) && pendingIndex === 0,
+      nextStop: started && pendingIndex === 0,
       completedAt: str(item.data.completed_at) || null,
       failedReason: null,
     };

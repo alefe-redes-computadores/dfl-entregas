@@ -48,6 +48,7 @@ export function routeTrackingSnapshot(
   const stopIndex = groups.findIndex((group) => group.key === key);
   const pendingGroups = groups.filter((group) => group.pending.length > 0);
   const pendingIndex = pendingGroups.findIndex((group) => group.key === key);
+  const routeStarted = Boolean(route?.started_at || route?.departure_time);
 
   return {
     externalOrderId: String(delivery.external_order_id),
@@ -59,9 +60,10 @@ export function routeTrackingSnapshot(
     motoboyName: route?.motoboy_name || null,
     stopGroupId: key,
     stopPosition: stopIndex >= 0 ? stopIndex + 1 : null,
-    stopsAhead: pendingIndex >= 0 ? pendingIndex : null,
+    // A ordem só vira posição operacional depois da saída real da rota.
+    stopsAhead: routeStarted && pendingIndex >= 0 ? pendingIndex : null,
     totalStops: groups.length || null,
-    nextStop: pendingIndex === 0,
+    nextStop: routeStarted && pendingIndex === 0,
     completedAt: delivery.completed_at || null,
     failedReason: null,
   };
