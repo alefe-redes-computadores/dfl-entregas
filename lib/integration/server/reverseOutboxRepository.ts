@@ -1,5 +1,5 @@
 import 'server-only';
-import { FieldValue, type DocumentData, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { FieldValue, type DocumentData, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 import { adminDb } from './admin';
 import type { IntegrationEventEnvelope, IntegrationOutboxRecord } from '../contracts';
 
@@ -81,7 +81,7 @@ export async function claimReverseOutboxBatch(input: {
 
   for (const candidate of docs) {
     if (claimed.length >= input.limit) break;
-    const result = await adminDb.runTransaction(async (tx) => {
+    const result = await adminDb.runTransaction(async (tx: Transaction) => {
       const fresh = await tx.get(candidate.ref);
       if (!fresh.exists) return null;
       const data = fresh.data()!;
