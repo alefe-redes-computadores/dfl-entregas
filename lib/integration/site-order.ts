@@ -50,7 +50,10 @@ export interface DflSiteOrderEventPayloadV1 {
   trocoPara: number | null;
   status: string;
   isAgendamento: boolean;
-  statusUpdatedAt: string;
+
+  // order.created nasce antes de qualquer transição administrativa de status.
+  // Nesse caso o Site envia null; order.updated poderá trazer timestamp.
+  statusUpdatedAt: string | null;
 }
 
 export type DflSiteOrderCreatedEvent =
@@ -141,7 +144,9 @@ export function isDflSiteOrderPayloadV1(
     (value.trocoPara === null || finiteNumber(value.trocoPara)) &&
     requiredText(value.status) &&
     typeof value.isAgendamento === 'boolean' &&
-    requiredText(value.statusUpdatedAt)
+    (value.statusUpdatedAt === null ||
+      (typeof value.statusUpdatedAt === 'string' &&
+        value.statusUpdatedAt.trim().length > 0))
   );
 }
 

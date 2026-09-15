@@ -19,6 +19,32 @@ function sameLink(link: ExternalIdentityLink, type: 'delivery' | 'customer', id:
   return link.local_entity_type === type && link.local_entity_id === id;
 }
 
+// Firestore Admin rejeita propriedades undefined por padrão.
+// Os drafts locais usam undefined legitimamente para campos opcionais;
+// removemos somente undefined antes de persistir, preservando null.
+function firestoreData<T>(value: T): FirebaseFirestore.DocumentData {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value as FirebaseFirestore.DocumentData;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, field]) => field !== undefined)
+      .map(([key, field]) => [
+        key,
+        field && typeof field === 'object' && !Array.isArray(field)
+          ? firestoreData(field)
+          : Array.isArray(field)
+            ? field.map((item) =>
+                item && typeof item === 'object'
+                  ? firestoreData(item)
+                  : item,
+              )
+            : field,
+      ]),
+  );
+}
+
 export interface PersistedSiteOrderResult {
   already_processed: boolean;
   event_id: string;
@@ -109,9 +135,9 @@ export async function consumeDflSiteOrderCreatedPersisted(rawEvent: unknown): Pr
     }
 
     // Nenhuma leitura abaixo deste ponto.
-    if (plan.create_customer) tx.create(customerRef, plan.customer as FirebaseFirestore.DocumentData);
+    if (plan.create_customer) tx.create(customerRef, firestoreData(plan.customer));
     if (deliverySnap.exists) throw new Error('Delivery externa apareceu durante criação; retry idempotente necessário.');
-    tx.create(deliveryRef, plan.delivery as FirebaseFirestore.DocumentData);
+    tx.create(deliveryRef, firestoreData(plan.delivery));
 
     if (!orderIdentity) {
       tx.create(orderIdentityRef, buildExternalIdentityLink({
