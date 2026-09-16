@@ -104,6 +104,17 @@ jobs:
           echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > ~/.android/debug.keystore
           test -s ~/.android/debug.keystore
 
+      - name: Exibir fingerprints da assinatura Android
+        shell: bash
+        run: |
+          echo "===== CERTIFICADO QUE ASSINARÁ O APK ====="
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -alias androiddebugkey \
+            -storepass android \
+            -keypass android | grep -E 'Alias name:|SHA1:|SHA256:'
+          echo "=========================================="
+
       - name: Compilar APK debug
         run: |
           cd android
