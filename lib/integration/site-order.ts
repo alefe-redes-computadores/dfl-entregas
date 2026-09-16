@@ -384,7 +384,38 @@ export function siteOrderItemsFromPayload(value:unknown):import('@/types').SiteO
   selectedAddons,
 }]});
 }
-export function isSiteOrderAwaitingConfirmation(delivery:Pick<Delivery,'source_system'|'site_order_status'>){return delivery.source_system==='dfl_site'&&(delivery.site_order_status||'').trim().toLocaleLowerCase('pt-BR')==='pendente'}
+export function normalizeSiteOrderStatus(value?: string | null): string {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[\s-]+/g, '_');
+}
+
+/**
+ * A única trava comercial conhecida pelo contrato atual é `pendente`.
+ * Qualquer transição posterior recebida do Site libera o pedido para a
+ * etapa logística sem inventar um status comercial no DFL Entregas.
+ */
+export function isSiteOrderAwaitingConfirmation(
+  delivery: Pick<Delivery, 'source_system' | 'site_order_status'>,
+): boolean {
+  return (
+    delivery.source_system === 'dfl_site' &&
+    normalizeSiteOrderStatus(delivery.site_order_status) === 'pendente'
+  );
+}
+
+export function isSiteOrderReleasedToLogistics(
+  delivery: Pick<Delivery, 'source_system' | 'site_order_status'>,
+): boolean {
+  return (
+    delivery.source_system === 'dfl_site' &&
+    Boolean(normalizeSiteOrderStatus(delivery.site_order_status)) &&
+    !isSiteOrderAwaitingConfirmation(delivery)
+  );
+}
 
 export function deliveryDraftFromSite(
   payload: DflSiteOrderEventPayloadV1,

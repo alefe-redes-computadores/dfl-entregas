@@ -99,6 +99,39 @@ function phoneCandidates(value?: string | null): string[] {
   return [...candidates];
 }
 
+function storedPhoneForms(value?: string | null): string[] {
+  const forms = new Set<string>();
+
+  for (const candidate of phoneCandidates(value)) {
+    forms.add(candidate);
+    forms.add(`+${candidate}`);
+
+    const local =
+      candidate.startsWith('55') && (candidate.length === 12 || candidate.length === 13)
+        ? candidate.slice(2)
+        : candidate;
+
+    if (local.length === 10 || local.length === 11) {
+      const ddd = local.slice(0, 2);
+      const number = local.slice(2);
+      const prefix = number.length === 9 ? number.slice(0, 5) : number.slice(0, 4);
+      const suffix = number.length === 9 ? number.slice(5) : number.slice(4);
+
+      forms.add(local);
+      forms.add(`${ddd}${number}`);
+      forms.add(`(${ddd}) ${prefix}-${suffix}`);
+      forms.add(`(${ddd})${prefix}-${suffix}`);
+      forms.add(`${ddd} ${prefix}-${suffix}`);
+      forms.add(`${ddd} ${number}`);
+      forms.add(`55${local}`);
+      forms.add(`+55${local}`);
+      forms.add(`+55 (${ddd}) ${prefix}-${suffix}`);
+    }
+  }
+
+  return [...forms].filter(Boolean);
+}
+
 function normalizeComparable(value?: string | null): string {
   return (value || '')
     .normalize('NFD')
@@ -140,27 +173,20 @@ async function findCustomerByPhone(
   tx: Transaction,
   phone?: string | null,
 ): Promise<Customer | null> {
-  const candidates = phoneCandidates(phone);
-  if (candidates.length === 0) return null;
+  const rawForms = storedPhoneForms(phone);
+  if (rawForms.length === 0) return null;
 
   const snapshots: Array<QueryDocumentSnapshot<DocumentData>> = [];
 
-  // Consultas pontuais e limitadas substituem o antigo full scan.
-  // Buscamos as formas reais mais comuns armazenadas: E.164 e dígitos locais.
-  for (const candidate of candidates) {
-    const rawForms = new Set<string>([
-      candidate,
-      `+${candidate}`,
-    ]);
-
-    for (const raw of rawForms) {
-      const query = adminDb
-        .collection('customers')
-        .where('phone', '==', raw)
-        .limit(2);
-      const snap = await tx.get(query);
-      snapshots.push(...snap.docs);
-    }
+  // Continua sem full scan: consultas pontuais cobrem E.164, somente dígitos
+  // e os formatos brasileiros que o app historicamente aceitou nos cadastros.
+  for (const raw of rawForms) {
+    const query = adminDb
+      .collection('customers')
+      .where('phone', '==', raw)
+      .limit(2);
+    const snap = await tx.get(query);
+    snapshots.push(...snap.docs);
   }
 
   const matches = uniqueCustomers(snapshots);
