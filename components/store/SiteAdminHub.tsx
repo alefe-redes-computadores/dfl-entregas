@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   ShoppingBag,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -18,8 +19,6 @@ import {
 } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 
-const SITE_ADMIN_URL = 'https://dafamilialanches.com.br/admin';
-
 const money = (value: number) =>
   value.toLocaleString('pt-BR', {
     style: 'currency',
@@ -27,6 +26,7 @@ const money = (value: number) =>
   });
 
 export function SiteAdminHub() {
+  const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
@@ -183,12 +183,13 @@ export function SiteAdminHub() {
             </strong>
           </div>
 
-          <a
-            href={SITE_ADMIN_URL}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(event) => event.stopPropagation()}
-            className="mt-2 flex h-11 w-full items-center justify-between rounded-2xl border border-amber-400/20 bg-amber-400/[.07] px-3 text-amber-300 active:scale-[.99]"
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              router.push('/site-admin');
+            }}
+            className="mt-2 flex h-11 w-full items-center justify-between rounded-2xl border border-amber-400/20 bg-amber-400/[.07] px-3 text-left text-amber-300 active:scale-[.99]"
           >
             <span>
               <strong className="block text-[11px] font-black">
@@ -199,7 +200,7 @@ export function SiteAdminHub() {
               </small>
             </span>
             <ExternalLink size={15} />
-          </a>
+          </button>
 
           <p className="mt-2 text-[9px] leading-relaxed text-zinc-700">
             O Entregas mostra o reflexo operacional. Confirmação, preços e

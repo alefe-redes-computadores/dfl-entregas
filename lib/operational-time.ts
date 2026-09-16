@@ -43,12 +43,39 @@ export const routeDate = (route: {
     route.departure_time,
   )?.toISOString() || '';
 
+export const SYNTHETIC_OPERATIONAL_ROUTE_IDS = [
+  'rota-site-aguardando-confirmacao',
+  'rota-aguardando-vinculo',
+  'rota-resgate-recuperada',
+] as const;
+
+export const isSyntheticOperationalRoute = (
+  routeOrId: { id?: string } | string | null | undefined,
+) => {
+  const id =
+    typeof routeOrId === 'string'
+      ? routeOrId
+      : routeOrId?.id;
+
+  return SYNTHETIC_OPERATIONAL_ROUTE_IDS.includes(
+    id as (typeof SYNTHETIC_OPERATIONAL_ROUTE_IDS)[number],
+  );
+};
+
 export const routeStartedAt = (route: {
+  id?: string;
   started_at?: string;
   departure_time?: string;
-}) =>
-  firstValidTimestamp(route.started_at, route.departure_time)?.toISOString() ||
-  '';
+}) => {
+  // Agrupadores da Home recebem departure_time apenas para pertencer ao dia.
+  // Isso NÃO representa saída real para a rua.
+  if (isSyntheticOperationalRoute(route)) return '';
+
+  return (
+    firstValidTimestamp(route.started_at, route.departure_time)?.toISOString() ||
+    ''
+  );
+};
 
 export const minutes = (time: string) => {
   const match = /^(\d{2}):(\d{2})$/.exec(time);

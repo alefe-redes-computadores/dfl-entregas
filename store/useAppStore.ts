@@ -18,7 +18,13 @@ import {
 } from '@/lib/native/notifications';
 import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, StockSupplier, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation, OperationalExpense } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
-import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
+import {
+  dateKey,
+  deliveryDate,
+  isSyntheticOperationalRoute,
+  routeDate,
+  routeStartedAt,
+} from '@/lib/operational-time';
 import { fuelingDate } from '@/lib/fueling-analytics';
 import { INITIAL_STOCK_PRODUCTS, INITIAL_STOCK_SUPPLIERS, STOCK_CATALOG_VERSION } from '@/lib/stock-catalog';
 import {
@@ -665,6 +671,9 @@ export const useAppStore = create<AppState>()(
         const previousRoutes = get().routes;
         const current = previousRoutes.find((route) => route.id === routeId);
         if (!current) throw new Error('Rota não encontrada.');
+        if (isSyntheticOperationalRoute(routeId)) {
+          throw new Error('Este agrupador operacional não é uma rota real. Vincule os pedidos a uma rota antes de iniciar.');
+        }
         if (current.status === 'fechada') throw new Error('Reabra a rota antes de iniciá-la.');
         const routeDeliveries = get().deliveries.filter((delivery) => delivery.route_id === routeId);
         if (routeDeliveries.length === 0) throw new Error('Adicione pelo menos uma entrega antes de iniciar a rota.');
@@ -1254,6 +1263,39 @@ export const useAppStore = create<AppState>()(
         const now = new Date().toISOString();
         const isCompleting = updatedData.completed === true && deliveryToUpdate.completed !== true;
         const isReopening = updatedData.completed === false && deliveryToUpdate.completed === true;
+
+        if (isCompleting && isDeliveryFulfillment(deliveryToUpdate)) {
+          const operationalRouteId = nextRouteId?.trim();
+
+          if (!operationalRouteId || isSyntheticOperationalRoute(operationalRouteId)) {
+            throw new Error(
+              'Vincule esta entrega a uma rota real antes de dar baixa.',
+            );
+          }
+
+          const operationalRoute = state.routes.find(
+            (route) => route.id === operationalRouteId,
+          );
+
+          if (!operationalRoute) {
+            throw new Error(
+              'A rota desta entrega não existe mais. Corrija o vínculo antes de dar baixa.',
+            );
+          }
+
+          if (operationalRoute.status !== 'aberta') {
+            throw new Error(
+              'A baixa só pode ser feita enquanto a rota operacional estiver aberta.',
+            );
+          }
+
+          if (!routeStartedAt(operationalRoute)) {
+            throw new Error(
+              'Inicie a rota antes de dar baixa nesta entrega.',
+            );
+          }
+        }
+
         const dataWithTimestamp: Partial<Delivery> = {
           ...updatedData,
           ...(isCompleting ? { completed_at: now } : {}),
@@ -1427,6 +1469,11 @@ export const useAppStore = create<AppState>()(
       },
 
       closeRoute: async (routeId) => {
+        if (isSyntheticOperationalRoute(routeId)) {
+          throw new Error(
+            'Este agrupador operacional não pode ser finalizado como rota.',
+          );
+        }
         const previousRoutes = get().routes;
         const routeBeforeClose = previousRoutes.find((route) => route.id === routeId);
 

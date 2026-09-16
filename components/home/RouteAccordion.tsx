@@ -110,7 +110,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
   const isAwaitingRoute = route.id === 'rota-aguardando-vinculo';
-  const isVirtualRoute = isRecoveryRoute || isAwaitingRoute;
+  const isSiteAwaitingConfirmation =
+    route.id === 'rota-site-aguardando-confirmacao';
+  const isVirtualRoute =
+    isRecoveryRoute || isAwaitingRoute || isSiteAwaitingConfirmation;
   const deliveries = getDeliveriesByRoute(route.id);
   const totalDeliveries = deliveries.length;
   const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
@@ -713,11 +716,32 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           </div>
 
           {isVirtualRoute && sortedDeliveries.length > 0 && (
-            <div className="mb-3 rounded-[20px] border border-amber-500/20 bg-amber-500/[.07] px-4 py-3">
-              <p className="text-xs font-black text-amber-300">Entregas aguardando correção</p>
+            <div
+              className={clsx(
+                'mb-3 rounded-[20px] border px-4 py-3',
+                isRecoveryRoute
+                  ? 'border-amber-500/20 bg-amber-500/[.07]'
+                  : 'border-sky-500/15 bg-sky-500/[.05]',
+              )}
+            >
+              <p
+                className={clsx(
+                  'text-xs font-black',
+                  isRecoveryRoute ? 'text-amber-300' : 'text-sky-300',
+                )}
+              >
+                {isRecoveryRoute
+                  ? 'Entregas em recuperação'
+                  : isSiteAwaitingConfirmation
+                    ? 'Aguardando confirmação da loja'
+                    : 'Aguardando vínculo com rota'}
+              </p>
               <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
-                Estes pedidos perderam o vínculo com uma rota válida. Abra o pedido e
-                edite a rota antes de continuar a operação logística.
+                {isRecoveryRoute
+                  ? 'A referência de rota destes pedidos não é mais válida. Abra o pedido e corrija o vínculo antes de continuar.'
+                  : isSiteAwaitingConfirmation
+                    ? 'Estes pedidos chegaram do Site e ainda estão no fluxo comercial. Confirme-os antes de vinculá-los a uma rota real.'
+                    : 'Estes pedidos estão válidos, mas ainda não pertencem a uma rota real. Vincule-os antes de iniciar a operação logística.'}
               </p>
             </div>
           )}
