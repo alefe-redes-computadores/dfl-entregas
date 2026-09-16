@@ -4,6 +4,7 @@ import type {
   Delivery,
   FulfillmentMode,
   PaymentMethod,
+  SiteOrderCommercialSnapshot,
 } from '@/types';
 
 import {
@@ -298,6 +299,93 @@ export function customerDraftFromSite(
   };
 }
 
+const recordValue = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const moneyValue = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
+
+const positiveQuantity = (value: unknown): number => {
+  const parsed = Math.floor(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+};
+
+const optionalString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const clean = value.trim();
+  return clean || undefined;
+};
+
+function normalizeSiteAddons(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index) => {
+    if (typeof item === 'string') {
+      const name = item.trim();
+      return name ? [{ id: `legacy-${index}`, name, price: 0 }] : [];
+    }
+    const raw = recordValue(item);
+    if (!raw) return [];
+    const name = optionalString(raw.name ?? raw.nome);
+    if (!name) return [];
+    return [{ id: optionalString(raw.id), name, price: moneyValue(raw.price ?? raw.preco) }];
+  });
+}
+
+export function commercialSnapshotFromSite(payload: DflSiteOrderEventPayloadV1): SiteOrderCommercialSnapshot {
+  const source = Array.isArray(payload.itens) ? payload.itens : [];
+  const items = source.flatMap((item) => {
+    const raw = recordValue(item);
+    if (!raw) return [];
+    const name = optionalString(raw.name ?? raw.nome);
+    if (!name) return [];
+    const quantity = positiveQuantity(raw.quantity ?? raw.qtd);
+    const unitPrice = moneyValue(raw.price ?? raw.preco);
+    return [{
+      id: optionalString(raw.id), name, quantity, unit_price: unitPrice, line_total: unitPrice * quantity,
+      selected_addons: normalizeSiteAddons(raw.selectedAddons ?? raw.adicionais),
+      observation: optionalString(raw.observation ?? raw.observacao),
+    }];
+  });
+  return {
+    schema_version: 1, items, subtotal: payload.subtotal, delivery_fee: payload.taxaEntrega,
+    discount: payload.desconto, coupon_code: optionalString(payload.cupom), reward_id: optionalString(payload.rewardId),
+    total: payload.total, payment_method_raw: payload.metodoPagamento, change_for: payload.trocoPara ?? undefined,
+    scheduled: payload.isAgendamento,
+  };
+}
+
+const siteRecord=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
+const siteText=(v:unknown)=>String(v??'').trim();
+const siteMoney=(v:unknown)=>{const n=Number(v);return Number.isFinite(n)?n:0};
+export function siteOrderItemsFromPayload(value:unknown):import('@/types').SiteOrderItemSnapshot[]{
+ if(!Array.isArray(value))return[];
+ return value.flatMap(raw=>{const i=siteRecord(raw),id=siteText(i.id),name=siteText(i.name);if(!id||!name)return[];const quantity=Math.max(1,Math.trunc(siteMoney(i.quantity)||1));const unitPrice=Math.max(0,siteMoney(i.unitPrice??i.price));const detailsItems=Array.isArray(i.detailsItems)?i.detailsItems.map(siteText).filter(Boolean):[];const selectedAddons=Array.isArray(i.selectedAddons)?i.selectedAddons.flatMap(a=>{const x=siteRecord(a),aid=siteText(x.id),an=siteText(x.name);return aid&&an?[{id:aid,name:an,price:Math.max(0,siteMoney(x.price))}]:[]}):[];return[{
+  id,
+  name,
+  quantity,
+
+  // Formato canônico V22.3R
+  unit_price: unitPrice,
+  line_total: Math.max(0, siteMoney(i.lineTotal) || unitPrice * quantity),
+  selected_addons: selectedAddons,
+  observation: siteText(i.observation) || undefined,
+  details_title: siteText(i.detailsTitle) || undefined,
+  details_items: detailsItems,
+  included_extras: siteText(i.includedExtras) || undefined,
+
+  // Compatibilidade temporária com V22.3
+  unitPrice,
+  lineTotal: Math.max(0, siteMoney(i.lineTotal) || unitPrice * quantity),
+  detailsTitle: siteText(i.detailsTitle) || null,
+  detailsItems,
+  includedExtras: siteText(i.includedExtras) || null,
+  selectedAddons,
+}]});
+}
+export function isSiteOrderAwaitingConfirmation(delivery:Pick<Delivery,'source_system'|'site_order_status'>){return delivery.source_system==='dfl_site'&&(delivery.site_order_status||'').trim().toLocaleLowerCase('pt-BR')==='pendente'}
+
 export function deliveryDraftFromSite(
   payload: DflSiteOrderEventPayloadV1,
   customerId: string,
@@ -326,8 +414,15 @@ export function deliveryDraftFromSite(
     source_system: 'dfl_site',
     external_order_id: payload.orderId,
     external_order_schema_version: payload.orderSchemaVersion,
+    site_order_commercial: commercialSnapshotFromSite(payload),
     site_order_status: payload.status,
     site_order_status_updated_at: payload.statusUpdatedAt,
+    site_order_items: siteOrderItemsFromPayload(payload.itens),
+    site_order_subtotal: payload.subtotal,
+    site_order_delivery_fee: payload.taxaEntrega,
+    site_order_discount: payload.desconto,
+    site_order_coupon: typeof payload.cupom === 'string' && payload.cupom.trim() ? payload.cupom.trim() : null,
+    site_order_reward_id: typeof payload.rewardId === 'string' && payload.rewardId.trim() ? payload.rewardId.trim() : null,
 
     customer_id: customerId,
     customer_name: customerName || undefined,

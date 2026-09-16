@@ -12,6 +12,7 @@ import { ShiftBriefing } from '@/components/home/ShiftBriefing';
 import { OperationalCommandCenter } from '@/components/home/OperationalCommandCenter';
 import { OperationalDatePicker } from '@/components/home/OperationalDatePicker';
 import { deliveryEconomicValue } from '@/lib/delivery-finance';
+import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
 
 function formatDateLabel(date: Date): string {
   const todayKey = saoPauloDateKey(new Date());
@@ -155,27 +156,20 @@ export default function HomePage() {
       },
     );
 
-    const orphanedDeliveries =
-      deliveriesDoDia.filter(
-        (delivery) =>
-          !delivery.route_id ||
-          !allRouteIds.has(delivery.route_id),
-      );
+    const awaitingConfirmationDeliveries = deliveriesDoDia.filter((delivery) => !delivery.route_id && isSiteOrderAwaitingConfirmation(delivery));
+    const awaitingRouteDeliveries = deliveriesDoDia.filter((delivery) => !delivery.route_id && !isSiteOrderAwaitingConfirmation(delivery));
+    const orphanedDeliveries = deliveriesDoDia.filter(
+      (delivery) => Boolean(delivery.route_id) && !allRouteIds.has(delivery.route_id),
+    );
 
-    if (
-      orphanedDeliveries.length > 0 &&
-      !globalMotoboy
-    ) {
-      routesDoDia.push({
-        id: 'rota-resgate-recuperada',
-        name: 'Rota Geral de Recuperação',
-        status: 'aberta',
-        motoboy_name: 'Sistema',
-        departure_time: selectedDate.toISOString(),
-        change_money: 0,
-        drinks_summary:
-          'Entregas sem rota válida — corrigir vínculo',
-      });
+    if (awaitingConfirmationDeliveries.length > 0 && !globalMotoboy) {
+      routesDoDia.push({ id: 'rota-site-aguardando-confirmacao', name: 'Site · aguardando confirmação', status: 'aberta', motoboy_name: 'Aguardando loja', departure_time: selectedDate.toISOString(), change_money: 0, drinks_summary: 'Pedido recebido do Site, ainda Pendente no fluxo comercial' });
+    }
+    if (awaitingRouteDeliveries.length > 0 && !globalMotoboy) {
+      routesDoDia.push({ id: 'rota-aguardando-vinculo', name: 'Pedidos aguardando rota', status: 'aberta', motoboy_name: 'Aguardando definição', departure_time: selectedDate.toISOString(), change_money: 0, drinks_summary: 'Pedidos recebidos e ainda não vinculados a uma rota' });
+    }
+    if (orphanedDeliveries.length > 0 && !globalMotoboy) {
+      routesDoDia.push({ id: 'rota-resgate-recuperada', name: 'Rota Geral de Recuperação', status: 'aberta', motoboy_name: 'Sistema', departure_time: selectedDate.toISOString(), change_money: 0, drinks_summary: 'Referência de rota inválida — corrigir vínculo' });
     }
 
     const deliveriesByRoute = new Map<string, typeof deliveriesDoDia>();
@@ -253,7 +247,9 @@ export default function HomePage() {
 
     const readyRoutes = openRoutes.filter((route) => {
       if (
-        route.id === 'rota-resgate-recuperada'
+        route.id === 'rota-resgate-recuperada' ||
+        route.id === 'rota-aguardando-vinculo' ||
+        route.id === 'rota-site-aguardando-confirmacao'
       ) {
         return false;
       }

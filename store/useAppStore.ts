@@ -29,6 +29,7 @@ import {
 import { stockProductCategory, suggestStockCategory } from '@/lib/stock-categories';
 import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop } from '@/lib/route-stops';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
+import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -594,21 +595,17 @@ export const useAppStore = create<AppState>()(
 
       getDeliveriesByRoute: (routeId) => {
         const state = get();
-        if (routeId === 'rota-resgate-recuperada') {
+        if (routeId === 'rota-site-aguardando-confirmacao' || routeId === 'rota-aguardando-vinculo' || routeId === 'rota-resgate-recuperada') {
           const selectedDateKey = dateKey(state.selectedDate);
           const validRouteIds = new Set(state.routes.map((route) => route.id));
-
           return state.deliveries.filter((delivery) => {
             if (!isDeliveryFulfillment(delivery)) return false;
-
             const value = deliveryDate(delivery);
-            const isSelectedDate =
-              Boolean(value) && dateKey(value) === selectedDateKey;
-            const hasValidRoute = Boolean(
-              delivery.route_id && validRouteIds.has(delivery.route_id),
-            );
-
-            return isSelectedDate && !hasValidRoute;
+            const isSelectedDate = Boolean(value) && dateKey(value) === selectedDateKey;
+            if (!isSelectedDate) return false;
+            if (routeId === 'rota-site-aguardando-confirmacao') return !delivery.route_id && isSiteOrderAwaitingConfirmation(delivery);
+            if (routeId === 'rota-aguardando-vinculo') return !delivery.route_id && !isSiteOrderAwaitingConfirmation(delivery);
+            return Boolean(delivery.route_id) && !validRouteIds.has(delivery.route_id);
           });
         }
         return state.deliveries.filter((d) => d.route_id === routeId);
@@ -649,9 +646,9 @@ export const useAppStore = create<AppState>()(
         const current = previousRoutes.find((route) => route.id === routeId);
         if (!current) throw new Error('Rota não encontrada.');
         if (current.status === 'fechada') throw new Error('Reabra a rota antes de iniciá-la.');
-        if (!get().deliveries.some((delivery) => delivery.route_id === routeId)) {
-          throw new Error('Adicione pelo menos uma entrega antes de iniciar a rota.');
-        }
+        const routeDeliveries = get().deliveries.filter((delivery) => delivery.route_id === routeId);
+        if (routeDeliveries.length === 0) throw new Error('Adicione pelo menos uma entrega antes de iniciar a rota.');
+        if (routeDeliveries.some(isSiteOrderAwaitingConfirmation)) throw new Error('Há pedido do Site aguardando confirmação da loja. Confirme no Admin antes de iniciar a rota.');
         if (routeStartedAt(current)) return;
         const now = new Date().toISOString();
         set((state) => ({

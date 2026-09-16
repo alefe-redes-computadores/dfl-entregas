@@ -109,6 +109,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const customers = useAppStore((state) => state.customers);
 
   const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
+  const isAwaitingRoute = route.id === 'rota-aguardando-vinculo';
+  const isVirtualRoute = isRecoveryRoute || isAwaitingRoute;
   const deliveries = getDeliveriesByRoute(route.id);
   const totalDeliveries = deliveries.length;
   const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
@@ -700,7 +702,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </span>
             )}
 
-            {!isRecoveryRoute && clientsWithPhone.length > 0 && (
+            {!isVirtualRoute && clientsWithPhone.length > 0 && (
               <button
                 onClick={() => setIsDispatchModalOpen(true)}
                 className="flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition-all shadow-sm"
@@ -710,7 +712,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             )}
           </div>
 
-          {isRecoveryRoute && sortedDeliveries.length > 0 && (
+          {isVirtualRoute && sortedDeliveries.length > 0 && (
             <div className="mb-3 rounded-[20px] border border-amber-500/20 bg-amber-500/[.07] px-4 py-3">
               <p className="text-xs font-black text-amber-300">Entregas aguardando correção</p>
               <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
@@ -758,12 +760,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           )}
 
           <div className="mt-2 flex flex-col gap-2">
-            {sortedDeliveries.length === 0 && isNotStarted && !isRecoveryRoute && (
+            {sortedDeliveries.length === 0 && isNotStarted && !isVirtualRoute && (
               <button onClick={handleDeleteEmptyRoute} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-red-500/10 border border-red-500/20 py-3.5 text-sm font-bold text-red-500 hover:bg-red-500/20 active:scale-95 transition-all">
                 <Trash2 size={18} /> Excluir Rota Vazia
               </button>
             )}
-            {sortedDeliveries.length > 0 && route.status === 'aberta' && !isRecoveryRoute && (
+            {sortedDeliveries.length > 0 && route.status === 'aberta' && !isVirtualRoute && (
               <div className="flex flex-col gap-2 rounded-[18px] border border-zinc-800 bg-zinc-950/55 p-2">
                 <button
                   onClick={buildOptimizerPreview}
@@ -804,7 +806,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 )}
               </div>
             )}
-            {!isRecoveryRoute && route.status === 'aberta' && totalDeliveries > 0 ? (
+            {!isVirtualRoute && route.status === 'aberta' && totalDeliveries > 0 ? (
               !startedAt ? (
                 <button
                   onClick={handleStartRoute}
@@ -832,7 +834,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 </button>
               )
             ) : null}
-            {!isRecoveryRoute && route.status === 'fechada' && (
+            {!isVirtualRoute && route.status === 'fechada' && (
               <button
                 onClick={() => setIsReopenModalOpen(true)}
                 disabled={actionBusy}
@@ -841,7 +843,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 <RotateCcw size={16} /> Reabrir rota para correções
               </button>
             )}
-            {!isRecoveryRoute && (
+            {!isVirtualRoute && (
               <button
                 onClick={() => router.push(routeDetailsHref)}
                 className="flex w-full items-center justify-center rounded-[18px] border border-zinc-800 py-3 text-xs font-bold text-zinc-400 active:scale-95"

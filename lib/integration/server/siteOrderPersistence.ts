@@ -1,28 +1,60 @@
 import 'server-only';
-import type { DocumentData, QueryDocumentSnapshot, Transaction } from 'firebase-admin/firestore';
+import type {
+  DocumentData,
+  DocumentReference,
+  DocumentSnapshot,
+  QueryDocumentSnapshot,
+  Transaction,
+} from 'firebase-admin/firestore';
 import type { Customer, Delivery } from '@/types';
-import type { ExternalIdentityLink, IntegrationInboxReceipt } from '../contracts';
-import { planDflSiteOrderCreated } from '../consumer';
-import { assertDflSiteOrderCreatedEvent, assertDflSiteOrderUpdatedEvent, siteDeliveryId, type DflSiteOrderCreatedEvent, type DflSiteOrderUpdatedEvent } from '../site-order';
-import { buildExternalIdentityLink, externalIdentityLinkId, INTEGRATION_COLLECTIONS } from '../identity';
+import type {
+  ExternalIdentityLink,
+  IntegrationInboxReceipt,
+} from '../contracts';
+import {
+  assertDflSiteOrderCreatedEvent,
+  assertDflSiteOrderUpdatedEvent,
+  customerDraftFromSite,
+  commercialSnapshotFromSite,
+  deliveryDraftFromSite,
+  dflSiteAddressString,
+  normalizeSitePaymentMethod,
+  siteDeliveryId,
+  siteGuestCustomerId,
+  siteOrderItemsFromPayload,
+  type DflSiteOrderCreatedEvent,
+  type DflSiteOrderUpdatedEvent,
+} from '../site-order';
+import {
+  buildExternalIdentityLink,
+  externalIdentityLinkId,
+  INTEGRATION_COLLECTIONS,
+} from '../identity';
 import { adminDb } from './admin';
 
 const encodeDocId = (value: string) => {
   const id = encodeURIComponent(value.trim());
-  if (!id || id.length > 1400) throw new Error('event_id inválido para inbox.');
+  if (!id || id.length > 1400) {
+    throw new Error('event_id inválido para inbox.');
+  }
   return id;
 };
 
-const asCustomer = (id: string, data: DocumentData): Customer => ({ id, ...data } as Customer);
-const asDelivery = (id: string, data: DocumentData): Delivery => ({ id, ...data } as Delivery);
+const asCustomer = (id: string, data: DocumentData): Customer =>
+  ({ id, ...data }) as Customer;
 
-function sameLink(link: ExternalIdentityLink, type: 'delivery' | 'customer', id: string) {
+const asDelivery = (id: string, data: DocumentData): Delivery =>
+  ({ id, ...data }) as Delivery;
+
+function sameLink(
+  link: ExternalIdentityLink,
+  type: 'delivery' | 'customer',
+  id: string,
+) {
   return link.local_entity_type === type && link.local_entity_id === id;
 }
 
 // Firestore Admin rejeita propriedades undefined por padrão.
-// Os drafts locais usam undefined legitimamente para campos opcionais;
-// removemos somente undefined antes de persistir, preservando null.
 function firestoreData<T>(value: T): DocumentData {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return value as DocumentData;
@@ -46,6 +78,137 @@ function firestoreData<T>(value: T): DocumentData {
   );
 }
 
+function normalizeDigits(value?: string | null): string {
+  return (value || '').replace(/\D/g, '');
+}
+
+function phoneCandidates(value?: string | null): string[] {
+  const digits = normalizeDigits(value);
+  if (!digits) return [];
+
+  const candidates = new Set<string>([digits]);
+
+  // Site pode mandar E.164 (+55...) enquanto cadastros antigos do Entregas
+  // podem ter sido salvos somente com DDD+número.
+  if (digits.startsWith('55') && digits.length >= 12) {
+    candidates.add(digits.slice(2));
+  } else if (digits.length === 10 || digits.length === 11) {
+    candidates.add(`55${digits}`);
+  }
+
+  return [...candidates];
+}
+
+function normalizeComparable(value?: string | null): string {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function incomingAddress(event: DflSiteOrderCreatedEvent): string {
+  if (event.payload.tipoEntrega !== 'delivery') return '';
+  return dflSiteAddressString(event.payload.deliverySnapshot);
+}
+
+function customerMatchesAddress(
+  customer: Customer,
+  address: string,
+): boolean {
+  if (!address) return false;
+
+  const local = normalizeComparable(customer.address);
+  const incoming = normalizeComparable(address);
+  if (!local || !incoming) return false;
+
+  return local === incoming;
+}
+
+function uniqueCustomers(
+  snapshots: Array<QueryDocumentSnapshot<DocumentData>>,
+): Customer[] {
+  const byId = new Map<string, Customer>();
+  for (const snapshot of snapshots) {
+    byId.set(snapshot.id, asCustomer(snapshot.id, snapshot.data()));
+  }
+  return [...byId.values()];
+}
+
+async function findCustomerByPhone(
+  tx: Transaction,
+  phone?: string | null,
+): Promise<Customer | null> {
+  const candidates = phoneCandidates(phone);
+  if (candidates.length === 0) return null;
+
+  const snapshots: Array<QueryDocumentSnapshot<DocumentData>> = [];
+
+  // Consultas pontuais e limitadas substituem o antigo full scan.
+  // Buscamos as formas reais mais comuns armazenadas: E.164 e dígitos locais.
+  for (const candidate of candidates) {
+    const rawForms = new Set<string>([
+      candidate,
+      `+${candidate}`,
+    ]);
+
+    for (const raw of rawForms) {
+      const query = adminDb
+        .collection('customers')
+        .where('phone', '==', raw)
+        .limit(2);
+      const snap = await tx.get(query);
+      snapshots.push(...snap.docs);
+    }
+  }
+
+  const matches = uniqueCustomers(snapshots);
+  if (matches.length === 0) return null;
+  if (matches.length > 1) {
+    throw new Error(
+      'Mais de um Customer local possui o mesmo telefone; associação automática recusada.',
+    );
+  }
+
+  return matches[0];
+}
+
+function assertCustomerIdentity(
+  identity: ExternalIdentityLink,
+  externalCustomerId: string,
+) {
+  if (
+    identity.source_system !== 'dfl_site' ||
+    identity.external_entity_type !== 'customer' ||
+    identity.external_entity_id !== externalCustomerId ||
+    identity.local_entity_type !== 'customer'
+  ) {
+    throw new Error('ExternalIdentityLink de Customer inconsistente.');
+  }
+}
+
+function createdInbox(
+  event: DflSiteOrderCreatedEvent,
+  deliveryId: string,
+  now: string,
+): IntegrationInboxReceipt {
+  return {
+    event_id: event.event_id,
+    event_type: event.event_type,
+    source_system: event.source_system,
+    entity_type: event.entity_type,
+    entity_id: event.entity_id,
+    schema_version: event.schema_version,
+    received_at: now,
+    processed_at: now,
+    status: 'processed',
+    local_entity_type: 'delivery',
+    local_entity_id: deliveryId,
+    updated_at: now,
+  };
+}
+
 export interface PersistedSiteOrderResult {
   already_processed: boolean;
   event_id: string;
@@ -53,125 +216,306 @@ export interface PersistedSiteOrderResult {
   customer_id: string;
 }
 
-export async function consumeDflSiteOrderCreatedPersisted(rawEvent: unknown): Promise<PersistedSiteOrderResult> {
+export async function consumeDflSiteOrderCreatedPersisted(
+  rawEvent: unknown,
+): Promise<PersistedSiteOrderResult> {
   assertDflSiteOrderCreatedEvent(rawEvent);
   const event: DflSiteOrderCreatedEvent = rawEvent;
-  const externalCustomerId = event.payload.customerSnapshot?.id?.trim() || undefined;
+  const externalCustomerId =
+    event.payload.customerSnapshot?.id?.trim() || undefined;
+  const deterministicDeliveryId = siteDeliveryId(event.payload.orderId);
 
   return adminDb.runTransaction(async (tx: Transaction) => {
-    const inboxRef = adminDb.collection(INTEGRATION_COLLECTIONS.inbox).doc(encodeDocId(event.event_id));
-    const orderIdentityRef = adminDb.collection(INTEGRATION_COLLECTIONS.identities).doc(externalIdentityLinkId({
-      source_system: 'dfl_site', external_entity_type: 'order', external_entity_id: event.payload.orderId,
-    }));
-    const deliveryRef = adminDb.collection('deliveries').doc(siteDeliveryId(event.payload.orderId));
+    const inboxRef = adminDb
+      .collection(INTEGRATION_COLLECTIONS.inbox)
+      .doc(encodeDocId(event.event_id));
+
+    const orderIdentityRef = adminDb
+      .collection(INTEGRATION_COLLECTIONS.identities)
+      .doc(
+        externalIdentityLinkId({
+          source_system: 'dfl_site',
+          external_entity_type: 'order',
+          external_entity_id: event.payload.orderId,
+        }),
+      );
+
+    const deliveryRef = adminDb
+      .collection('deliveries')
+      .doc(deterministicDeliveryId);
+
     const customerIdentityRef = externalCustomerId
-      ? adminDb.collection(INTEGRATION_COLLECTIONS.identities).doc(externalIdentityLinkId({
-          source_system: 'dfl_site', external_entity_type: 'customer', external_entity_id: externalCustomerId,
-        }))
+      ? adminDb
+          .collection(INTEGRATION_COLLECTIONS.identities)
+          .doc(
+            externalIdentityLinkId({
+              source_system: 'dfl_site',
+              external_entity_type: 'customer',
+              external_entity_id: externalCustomerId,
+            }),
+          )
       : null;
 
-    // Firestore exige todas as leituras antes das escritas na transação.
-    const [inboxSnap, orderIdentitySnap, deliverySnap, customerIdentitySnap, customersSnap] = await Promise.all([
+    // Fase 1: somente documentos determinísticos.
+    const [
+      inboxSnap,
+      orderIdentitySnap,
+      deliverySnap,
+      customerIdentitySnap,
+    ] = await Promise.all([
       tx.get(inboxRef),
       tx.get(orderIdentityRef),
       tx.get(deliveryRef),
-      customerIdentityRef ? tx.get(customerIdentityRef) : Promise.resolve(null),
-      tx.get(adminDb.collection('customers')),
+      customerIdentityRef
+        ? tx.get(customerIdentityRef)
+        : Promise.resolve(null),
     ]);
 
-    const inbox = inboxSnap.exists ? (inboxSnap.data() as IntegrationInboxReceipt) : null;
-    const orderIdentity = orderIdentitySnap.exists ? (orderIdentitySnap.data() as ExternalIdentityLink) : null;
-    const customerIdentity = customerIdentitySnap?.exists ? (customerIdentitySnap.data() as ExternalIdentityLink) : null;
+    const inbox = inboxSnap.exists
+      ? (inboxSnap.data() as IntegrationInboxReceipt)
+      : null;
+    const orderIdentity = orderIdentitySnap.exists
+      ? (orderIdentitySnap.data() as ExternalIdentityLink)
+      : null;
+    const customerIdentity = customerIdentitySnap?.exists
+      ? (customerIdentitySnap.data() as ExternalIdentityLink)
+      : null;
     const deterministicDelivery: Delivery | null = deliverySnap.exists
       ? asDelivery(deliverySnap.id, deliverySnap.data()!)
       : null;
-    const customers: Customer[] = customersSnap.docs.map(
-      (snap: QueryDocumentSnapshot<DocumentData>): Customer =>
-        asCustomer(snap.id, snap.data()),
-    );
 
-    if (orderIdentity && !sameLink(orderIdentity, 'delivery', siteDeliveryId(event.payload.orderId))) {
-      throw new Error('Conflito: pedido externo já aponta para outra entidade local.');
+    if (
+      orderIdentity &&
+      !sameLink(orderIdentity, 'delivery', deterministicDeliveryId)
+    ) {
+      throw new Error(
+        'Conflito: pedido externo já aponta para outra entidade local.',
+      );
     }
 
-    if (inbox?.status === 'processed' && inbox.local_entity_type === 'delivery' && inbox.local_entity_id) {
-      const knownDelivery = deterministicDelivery;
-      if (!knownDelivery || knownDelivery.id !== inbox.local_entity_id) {
-        throw new Error('Inbox processada aponta para Delivery inexistente/divergente.');
+    if (
+      inbox?.status === 'processed' &&
+      inbox.local_entity_type === 'delivery' &&
+      inbox.local_entity_id
+    ) {
+      if (
+        !deterministicDelivery ||
+        deterministicDelivery.id !== inbox.local_entity_id
+      ) {
+        throw new Error(
+          'Inbox processada aponta para Delivery inexistente/divergente.',
+        );
       }
-      return { already_processed: true, event_id: event.event_id, delivery_id: knownDelivery.id, customer_id: knownDelivery.customer_id };
+
+      return {
+        already_processed: true,
+        event_id: event.event_id,
+        delivery_id: deterministicDelivery.id,
+        customer_id: deterministicDelivery.customer_id,
+      };
     }
 
-    const plan = planDflSiteOrderCreated(event, {
-      customers,
-      deliveries: deterministicDelivery ? [deterministicDelivery] : [],
-      inboxReceipt: inbox,
-      orderIdentity,
-      customerIdentity,
-      now: new Date().toISOString(),
-    });
+    // Delivery determinística já existente = retry/recuperação.
+    if (deterministicDelivery) {
+      if (
+        deterministicDelivery.source_system !== 'dfl_site' ||
+        deterministicDelivery.external_order_id !== event.payload.orderId
+      ) {
+        throw new Error(
+          'Delivery determinística existente diverge do pedido externo.',
+        );
+      }
 
-    if (plan.kind === 'already_processed') {
-      if (!deterministicDelivery) throw new Error('Evento marcado como processado sem Delivery determinística.');
       const now = new Date().toISOString();
+
       if (!orderIdentity) {
-        tx.create(orderIdentityRef, buildExternalIdentityLink({
-          source_system: 'dfl_site', external_entity_type: 'order', external_entity_id: event.payload.orderId,
-          local_entity_type: 'delivery', local_entity_id: deterministicDelivery.id, now,
-        }));
+        tx.create(
+          orderIdentityRef,
+          buildExternalIdentityLink({
+            source_system: 'dfl_site',
+            external_entity_type: 'order',
+            external_entity_id: event.payload.orderId,
+            local_entity_type: 'delivery',
+            local_entity_id: deterministicDelivery.id,
+            now,
+          }),
+        );
       }
+
       if (!inboxSnap.exists) {
-        tx.create(inboxRef, {
-          event_id: event.event_id, event_type: event.event_type, source_system: event.source_system,
-          entity_type: event.entity_type, entity_id: event.entity_id, schema_version: event.schema_version,
-          received_at: now, processed_at: now, status: 'processed', local_entity_type: 'delivery',
-          local_entity_id: deterministicDelivery.id, updated_at: now,
-        } satisfies IntegrationInboxReceipt);
+        tx.create(
+          inboxRef,
+          createdInbox(event, deterministicDelivery.id, now),
+        );
       }
-      return { already_processed: true, event_id: event.event_id, delivery_id: deterministicDelivery.id, customer_id: deterministicDelivery.customer_id };
+
+      return {
+        already_processed: true,
+        event_id: event.event_id,
+        delivery_id: deterministicDelivery.id,
+        customer_id: deterministicDelivery.customer_id,
+      };
     }
 
-    const customerRef = adminDb.collection('customers').doc(plan.customer.id);
-    const customerExists: boolean = customers.some(
-      (customer: Customer): boolean => customer.id === plan.customer.id,
+    let customer: Customer | null = null;
+    let createCustomer = false;
+    let createCustomerIdentity = false;
+    let customerRef: DocumentReference<DocumentData> | null = null;
+
+    // Vínculo externo já criado é a autoridade.
+    if (externalCustomerId && customerIdentity) {
+      assertCustomerIdentity(customerIdentity, externalCustomerId);
+
+      customerRef = adminDb
+        .collection('customers')
+        .doc(customerIdentity.local_entity_id);
+
+      const linkedSnap = await tx.get(customerRef);
+      if (!linkedSnap.exists) {
+        throw new Error(
+          'Identidade externa aponta para Customer local inexistente.',
+        );
+      }
+
+      customer = asCustomer(linkedSnap.id, linkedSnap.data()!);
+    }
+
+    // Primeira associação: telefone é o identificador conservador disponível
+    // no contrato atual. Nome sozinho nunca é usado.
+    if (!customer && event.payload.customerSnapshot) {
+      const phone =
+        event.payload.customerSnapshot.phoneE164 ||
+        event.payload.customerSnapshot.phone ||
+        undefined;
+
+      const byPhone = await findCustomerByPhone(tx, phone);
+
+      if (byPhone) {
+        const address = incomingAddress(event);
+
+        // Telefone identifica; endereço, quando existe dos dois lados,
+        // funciona como trava contra associação contraditória.
+        if (
+          address &&
+          byPhone.address &&
+          !customerMatchesAddress(byPhone, address)
+        ) {
+          throw new Error(
+            'Customer com mesmo telefone possui endereço divergente; associação automática recusada.',
+          );
+        }
+
+        customer = byPhone;
+        customerRef = adminDb.collection('customers').doc(byPhone.id);
+        createCustomerIdentity = Boolean(externalCustomerId);
+      }
+    }
+
+    if (!customer) {
+      const newId = externalCustomerId
+        ? `site-customer-v1__${encodeURIComponent(externalCustomerId)}`
+        : siteGuestCustomerId(event.payload.orderId);
+
+      customerRef = adminDb.collection('customers').doc(newId);
+
+      // Leitura pontual protege contra colisão do ID determinístico.
+      const deterministicCustomerSnap: DocumentSnapshot<DocumentData> =
+        await tx.get(customerRef);
+
+      if (deterministicCustomerSnap.exists) {
+        customer = asCustomer(
+          deterministicCustomerSnap.id,
+          deterministicCustomerSnap.data()!,
+        );
+
+        if (!externalCustomerId) {
+          throw new Error(
+            'Customer guest determinístico já existe sem Delivery; revisão manual necessária.',
+          );
+        }
+
+        createCustomerIdentity = true;
+      } else {
+        const now = new Date().toISOString();
+        customer = customerDraftFromSite(event.payload, newId, now);
+        createCustomer = true;
+        createCustomerIdentity = Boolean(externalCustomerId);
+      }
+    }
+
+    if (!customer || !customerRef) {
+      throw new Error('Falha ao resolver Customer do pedido externo.');
+    }
+
+    const now = new Date().toISOString();
+    const delivery = deliveryDraftFromSite(
+      event.payload,
+      customer.id,
+      now,
     );
-    if (plan.create_customer && customerExists) {
-      throw new Error('Customer determinístico já existe sem vínculo esperado; revisão manual necessária.');
-    }
-    if (!plan.create_customer && !customerExists) {
-      throw new Error('Customer planejado não existe no snapshot transacional.');
+    const inboxReceipt = createdInbox(event, delivery.id, now);
+
+    // Todas as leituras terminaram acima. A partir daqui, somente escritas.
+    if (createCustomer) {
+      tx.create(customerRef, firestoreData(customer));
     }
 
-    // Nenhuma leitura abaixo deste ponto.
-    if (plan.create_customer) tx.create(customerRef, firestoreData(plan.customer));
-    if (deliverySnap.exists) throw new Error('Delivery externa apareceu durante criação; retry idempotente necessário.');
-    tx.create(deliveryRef, firestoreData(plan.delivery));
+    tx.create(deliveryRef, firestoreData(delivery));
 
     if (!orderIdentity) {
-      tx.create(orderIdentityRef, buildExternalIdentityLink({
-        source_system: 'dfl_site', external_entity_type: 'order', external_entity_id: event.payload.orderId,
-        local_entity_type: 'delivery', local_entity_id: plan.delivery.id, now: plan.inbox.updated_at,
-      }));
+      tx.create(
+        orderIdentityRef,
+        buildExternalIdentityLink({
+          source_system: 'dfl_site',
+          external_entity_type: 'order',
+          external_entity_id: event.payload.orderId,
+          local_entity_type: 'delivery',
+          local_entity_id: delivery.id,
+          now,
+        }),
+      );
     }
 
-    if (plan.create_customer_identity && plan.external_customer_id && customerIdentityRef) {
+    if (
+      createCustomerIdentity &&
+      externalCustomerId &&
+      customerIdentityRef
+    ) {
       if (customerIdentity) {
-        if (!sameLink(customerIdentity, 'customer', plan.customer.id)) throw new Error('Conflito de identidade externa do Customer.');
+        if (!sameLink(customerIdentity, 'customer', customer.id)) {
+          throw new Error(
+            'Conflito de identidade externa do Customer.',
+          );
+        }
       } else {
-        tx.create(customerIdentityRef, buildExternalIdentityLink({
-          source_system: 'dfl_site', external_entity_type: 'customer', external_entity_id: plan.external_customer_id,
-          local_entity_type: 'customer', local_entity_id: plan.customer.id, now: plan.inbox.updated_at,
-        }));
+        tx.create(
+          customerIdentityRef,
+          buildExternalIdentityLink({
+            source_system: 'dfl_site',
+            external_entity_type: 'customer',
+            external_entity_id: externalCustomerId,
+            local_entity_type: 'customer',
+            local_entity_id: customer.id,
+            now,
+          }),
+        );
       }
     }
 
-    if (inboxSnap.exists) tx.set(inboxRef, plan.inbox, { merge: true });
-    else tx.create(inboxRef, plan.inbox);
+    if (inboxSnap.exists) {
+      tx.set(inboxRef, inboxReceipt, { merge: true });
+    } else {
+      tx.create(inboxRef, inboxReceipt);
+    }
 
-    return { already_processed: false, event_id: event.event_id, delivery_id: plan.delivery.id, customer_id: plan.customer.id };
+    return {
+      already_processed: false,
+      event_id: event.event_id,
+      delivery_id: delivery.id,
+      customer_id: customer.id,
+    };
   });
 }
-
 
 export interface PersistedSiteOrderUpdatedResult {
   already_processed: boolean;
@@ -185,61 +529,133 @@ export interface PersistedSiteOrderUpdatedResult {
 function eventClock(event: DflSiteOrderUpdatedEvent) {
   const timestamp = event.payload.statusUpdatedAt || event.occurred_at;
   const time = Date.parse(timestamp);
-  if (!Number.isFinite(time)) throw new Error('Timestamp comercial inválido em order.updated.');
-  return { timestamp: new Date(time).toISOString(), time, eventId: event.event_id };
+  if (!Number.isFinite(time)) {
+    throw new Error('Timestamp comercial inválido em order.updated.');
+  }
+  return {
+    timestamp: new Date(time).toISOString(),
+    time,
+    eventId: event.event_id,
+  };
 }
 
 function storedCommercialClock(delivery: Delivery) {
-  const raw = delivery.site_order_last_event_at || delivery.site_order_status_updated_at || null;
+  const raw =
+    delivery.site_order_last_event_at ||
+    delivery.site_order_status_updated_at ||
+    null;
+
   if (!raw) return null;
+
   const time = Date.parse(raw);
-  if (!Number.isFinite(time)) throw new Error('Delivery possui timestamp comercial inválido.');
-  return { timestamp: new Date(time).toISOString(), time, eventId: delivery.site_order_last_event_id || '' };
+  if (!Number.isFinite(time)) {
+    throw new Error('Delivery possui timestamp comercial inválido.');
+  }
+
+  return {
+    timestamp: new Date(time).toISOString(),
+    time,
+    eventId: delivery.site_order_last_event_id || '',
+  };
 }
 
-function incomingWins(incoming: ReturnType<typeof eventClock>, current: ReturnType<typeof storedCommercialClock>) {
+function incomingWins(
+  incoming: ReturnType<typeof eventClock>,
+  current: ReturnType<typeof storedCommercialClock>,
+) {
   if (!current) return true;
   if (incoming.time !== current.time) return incoming.time > current.time;
   return incoming.eventId.localeCompare(current.eventId) > 0;
 }
 
-export async function consumeDflSiteOrderUpdatedPersisted(rawEvent: unknown): Promise<PersistedSiteOrderUpdatedResult> {
+export async function consumeDflSiteOrderUpdatedPersisted(
+  rawEvent: unknown,
+): Promise<PersistedSiteOrderUpdatedResult> {
   assertDflSiteOrderUpdatedEvent(rawEvent);
   const event: DflSiteOrderUpdatedEvent = rawEvent;
 
   return adminDb.runTransaction(async (tx: Transaction) => {
-    const inboxRef = adminDb.collection(INTEGRATION_COLLECTIONS.inbox).doc(encodeDocId(event.event_id));
-    const orderIdentityRef = adminDb.collection(INTEGRATION_COLLECTIONS.identities).doc(externalIdentityLinkId({
-      source_system: 'dfl_site', external_entity_type: 'order', external_entity_id: event.payload.orderId,
-    }));
-    const deliveryRef = adminDb.collection('deliveries').doc(siteDeliveryId(event.payload.orderId));
+    const inboxRef = adminDb
+      .collection(INTEGRATION_COLLECTIONS.inbox)
+      .doc(encodeDocId(event.event_id));
 
-    // Todas as leituras acontecem antes de qualquer escrita.
+    const orderIdentityRef = adminDb
+      .collection(INTEGRATION_COLLECTIONS.identities)
+      .doc(
+        externalIdentityLinkId({
+          source_system: 'dfl_site',
+          external_entity_type: 'order',
+          external_entity_id: event.payload.orderId,
+        }),
+      );
+
+    const deliveryRef = adminDb
+      .collection('deliveries')
+      .doc(siteDeliveryId(event.payload.orderId));
+
     const [inboxSnap, identitySnap, deliverySnap] = await Promise.all([
-      tx.get(inboxRef), tx.get(orderIdentityRef), tx.get(deliveryRef),
+      tx.get(inboxRef),
+      tx.get(orderIdentityRef),
+      tx.get(deliveryRef),
     ]);
 
     const delivery: Delivery | null = deliverySnap.exists
       ? asDelivery(deliverySnap.id, deliverySnap.data()!)
       : null;
+
     if (inboxSnap.exists) {
       const receipt = inboxSnap.data() as IntegrationInboxReceipt;
-      if (receipt.status === 'processed' && receipt.event_id === event.event_id &&
-          receipt.local_entity_type === 'delivery' && receipt.local_entity_id === deliveryRef.id && delivery) {
-        return { already_processed: true, stale_ignored: false, event_id: event.event_id, delivery_id: delivery.id,
-          customer_id: delivery.customer_id, site_order_status: delivery.site_order_status || event.payload.status };
+
+      if (
+        receipt.status === 'processed' &&
+        receipt.event_id === event.event_id &&
+        receipt.local_entity_type === 'delivery' &&
+        receipt.local_entity_id === deliveryRef.id &&
+        delivery
+      ) {
+        return {
+          already_processed: true,
+          stale_ignored: false,
+          event_id: event.event_id,
+          delivery_id: delivery.id,
+          customer_id: delivery.customer_id,
+          site_order_status:
+            delivery.site_order_status || event.payload.status,
+        };
       }
-      throw new Error('event_id já existe no inbox em estado incompatível.');
+
+      throw new Error(
+        'event_id já existe no inbox em estado incompatível.',
+      );
     }
 
-    if (!identitySnap.exists) throw new Error('order.updated recebido antes de order.created/ExternalIdentity.');
+    if (!identitySnap.exists) {
+      throw new Error(
+        'order.updated recebido antes de order.created/ExternalIdentity.',
+      );
+    }
+
     const identity = identitySnap.data() as ExternalIdentityLink;
-    if (!sameLink(identity, 'delivery', deliveryRef.id) || identity.source_system !== 'dfl_site' ||
-        identity.external_entity_type !== 'order' || identity.external_entity_id !== event.payload.orderId) {
+
+    if (
+      !sameLink(identity, 'delivery', deliveryRef.id) ||
+      identity.source_system !== 'dfl_site' ||
+      identity.external_entity_type !== 'order' ||
+      identity.external_entity_id !== event.payload.orderId
+    ) {
       throw new Error('ExternalIdentity do pedido está inconsistente.');
     }
-    if (!delivery) throw new Error('ExternalIdentity do pedido aponta para Delivery inexistente.');
-    if (delivery.source_system !== 'dfl_site' || delivery.external_order_id !== event.payload.orderId) {
+
+    if (!delivery) {
+      throw new Error(
+        'ExternalIdentity do pedido aponta para Delivery inexistente.',
+      );
+    }
+
+    if (
+      delivery.source_system !== 'dfl_site' ||
+      delivery.external_order_id !== event.payload.orderId
+    ) {
       throw new Error('Delivery vinculada diverge do pedido externo.');
     }
 
@@ -248,28 +664,52 @@ export async function consumeDflSiteOrderUpdatedPersisted(rawEvent: unknown): Pr
     const current = storedCommercialClock(delivery);
     const applyIncoming = incomingWins(incoming, current);
 
-    // Evento atrasado é consumido/auditado, mas NÃO pode regredir o snapshot comercial.
     if (applyIncoming) {
-      tx.update(deliveryRef, firestoreData({
-        site_order_status: event.payload.status,
-        site_order_status_updated_at: event.payload.statusUpdatedAt,
-        site_order_last_event_at: incoming.timestamp,
-        site_order_last_event_id: event.event_id,
-        external_order_schema_version: event.payload.orderSchemaVersion,
-        updated_at: now,
-      }));
+      tx.update(
+        deliveryRef,
+        firestoreData({
+          site_order_status: event.payload.status,
+          site_order_status_updated_at: event.payload.statusUpdatedAt,
+          site_order_last_event_at: incoming.timestamp,
+          site_order_last_event_id: event.event_id,
+          external_order_schema_version: event.payload.orderSchemaVersion,
+          site_order_items: siteOrderItemsFromPayload(event.payload.itens),
+          site_order_subtotal: event.payload.subtotal,
+          site_order_delivery_fee: event.payload.taxaEntrega,
+          site_order_discount: event.payload.desconto,
+          site_order_coupon: typeof event.payload.cupom === 'string' && event.payload.cupom.trim() ? event.payload.cupom.trim() : null,
+          site_order_reward_id: typeof event.payload.rewardId === 'string' && event.payload.rewardId.trim() ? event.payload.rewardId.trim() : null,
+          site_order_commercial: commercialSnapshotFromSite(event.payload),
+          value: event.payload.total,
+          customer_charge: event.payload.total,
+          payment_method: normalizeSitePaymentMethod(event.payload.metodoPagamento),
+          change_for: event.payload.trocoPara ?? null,
+          updated_at: now,
+        }),
+      );
     }
 
     const receipt = {
-      event_id: event.event_id, event_type: event.event_type, source_system: event.source_system,
-      entity_type: event.entity_type, entity_id: event.entity_id, schema_version: event.schema_version,
-      received_at: now, processed_at: now, status: 'processed' as const,
-      local_entity_type: 'delivery' as const, local_entity_id: delivery.id, updated_at: now,
+      event_id: event.event_id,
+      event_type: event.event_type,
+      source_system: event.source_system,
+      entity_type: event.entity_type,
+      entity_id: event.entity_id,
+      schema_version: event.schema_version,
+      received_at: now,
+      processed_at: now,
+      status: 'processed' as const,
+      local_entity_type: 'delivery' as const,
+      local_entity_id: delivery.id,
+      updated_at: now,
       processing_outcome: applyIncoming ? 'applied' : 'ignored_stale',
       incoming_event_at: incoming.timestamp,
       ...(current ? { previous_event_at: current.timestamp } : {}),
-      ...(current?.eventId ? { previous_event_id: current.eventId } : {}),
+      ...(current?.eventId
+        ? { previous_event_id: current.eventId }
+        : {}),
     };
+
     tx.create(inboxRef, firestoreData(receipt));
 
     return {
@@ -278,7 +718,9 @@ export async function consumeDflSiteOrderUpdatedPersisted(rawEvent: unknown): Pr
       event_id: event.event_id,
       delivery_id: delivery.id,
       customer_id: delivery.customer_id,
-      site_order_status: applyIncoming ? event.payload.status : (delivery.site_order_status || event.payload.status),
+      site_order_status: applyIncoming
+        ? event.payload.status
+        : delivery.site_order_status || event.payload.status,
     };
   });
 }

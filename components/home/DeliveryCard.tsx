@@ -17,6 +17,7 @@ import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { dateKey, deliveryDate, routeStartedAt } from '@/lib/operational-time';
 import { compactAddressForCard, hasHouseNumber } from "@/lib/operational-address";
+import { SiteOrderSnapshot } from '@/components/home/SiteOrderSnapshot';
 
 interface DeliveryCardProps {
   delivery: Delivery & { is_expanded?: boolean };
@@ -66,6 +67,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
+  const isSiteOrder = delivery.source_system === 'dfl_site';
+  const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
   const isUrgent = delivery.is_urgent;
   const isVIP = (customer?.orderCount || 0) >= 5;
 
@@ -404,6 +407,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                 {/* Linha dos Identificadores com Press & Hold */}
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                  {isSiteOrder && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-sky-300">Site</span>}
+                  {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
                   {isIfood && delivery.order_id && (
                     <span className="bg-red-500/15 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0">
                       #{delivery.order_id}
@@ -631,6 +636,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   )}
                 </div>
               </div>
+
+              <SiteOrderSnapshot delivery={delivery} privacy={isPrivacyMode} />
 
               {delivery.observation && (
                 <div className="ml-14 mr-4 mb-3 rounded-2xl bg-amber-500/5 border border-amber-500/15 px-3.5 py-2.5">

@@ -197,6 +197,44 @@ export interface Route {
   updated_at?: string;
 }
 
+export interface SiteOrderAddonSnapshot {
+  id?: string;
+  name: string;
+  price: number;
+}
+
+export interface SiteOrderItemSnapshot {
+  id?: string;
+  name: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  selected_addons: SiteOrderAddonSnapshot[];
+  observation?: string;
+
+  // Snapshot rico preservado do pedido do DFL Site.
+  unitPrice?: number;
+  lineTotal?: number;
+  detailsTitle?: string | null;
+  detailsItems?: string[];
+  includedExtras?: string | null;
+  selectedAddons?: SiteOrderAddonSnapshot[];
+}
+
+export interface SiteOrderCommercialSnapshot {
+  schema_version: 1;
+  items: SiteOrderItemSnapshot[];
+  subtotal: number;
+  delivery_fee: number;
+  discount: number;
+  coupon_code?: string;
+  reward_id?: string;
+  total: number;
+  payment_method_raw: string;
+  change_for?: number;
+  scheduled: boolean;
+}
+
 export interface Delivery {
   id: string;
   route_id: string;
@@ -234,10 +272,18 @@ export interface Delivery {
    * Ex.: orderSchemaVersion do DFL Site.
    */
   external_order_schema_version?: number;
+  /** Snapshot comercial somente-leitura recebido do DFL Site. */
+  site_order_commercial?: SiteOrderCommercialSnapshot;
   site_order_status?: string;
   site_order_status_updated_at?: string | null;
   site_order_last_event_at?: string;
   site_order_last_event_id?: string;
+  site_order_items?: SiteOrderItemSnapshot[];
+  site_order_subtotal?: number;
+  site_order_delivery_fee?: number;
+  site_order_discount?: number;
+  site_order_coupon?: string | null;
+  site_order_reward_id?: string | null;
 
   origin: OrderOrigin;
   confirmation_code?: string;

@@ -22,6 +22,7 @@ import { validateSchedule } from '@/lib/operational-time';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
 import { requestDeviceLocation } from '@/lib/device-location';
 import { extractLatLngFromMapsUrl, parseCoordinateString } from '@/lib/maps';
+import { SiteAdminHub } from '@/components/store/SiteAdminHub';
 
 const DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
@@ -283,6 +284,8 @@ export default function LojaPage() {
   return (
     <div className="flex flex-col gap-6 pb-32 animate-in fade-in duration-300 relative">
       <PageHeader title="Minha Loja" subtitle="Central de operação da Da Família Lanches" to="/" />
+
+      <SiteAdminHub />
 
       <section className={`rounded-[22px] border ${isStoreOpen ? 'border-emerald-500/25 bg-emerald-500/[.055]' : 'border-zinc-800 bg-zinc-900/55'}`}>
         <button
