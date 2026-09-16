@@ -544,7 +544,16 @@ const [routeId, setRouteId] = useState('');
         }
       }
 
-      let customerId: string | undefined = undefined;
+      // V23.1 — editar a logística de uma Delivery existente não pode trocar
+      // sua identidade de cliente. O store já possui preferredCustomerId:
+      // usamos o vínculo atual como autoridade e apenas enriquecemos esse cadastro.
+      const linkedCustomerId =
+        currentDelivery?.customer_id &&
+        getCustomerById(currentDelivery.customer_id)
+          ? currentDelivery.customer_id
+          : undefined;
+
+      let customerId: string | undefined = linkedCustomerId;
       if (customerName.trim()) {
         customerId = await findOrCreateCustomer(customerName, {
           address: fulfillmentMode === 'delivery' ? cleanStreet : undefined,
@@ -552,7 +561,8 @@ const [routeId, setRouteId] = useState('');
           mapsLink: fulfillmentMode === 'delivery' ? resolvedMapsLink : undefined,
           confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
           observation,
-          origin
+          origin,
+          preferredCustomerId: linkedCustomerId,
         });
       }
 
@@ -563,7 +573,8 @@ const [routeId, setRouteId] = useState('');
         order_id: origin === 'ifood' ? (orderId || undefined) : undefined,
         ifood_id: origin === 'ifood' ? (ifoodId || undefined) : undefined,
         confirmation_code: origin === 'ifood' ? (confirmationCode || undefined) : undefined,
-        customer_id: customerId || '',
+        // Nunca apaga um vínculo existente só porque o nome não foi resolvido.
+        customer_id: customerId || currentDelivery?.customer_id || '',
         customer_name: customerName.trim() || undefined,
         value: cleanValue,
         customer_charge: Math.max(0, customerCharge),

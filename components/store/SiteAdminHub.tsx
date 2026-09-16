@@ -1,14 +1,16 @@
 'use client';
 
 import {
+  Banknote,
   Bike,
   CheckCircle2,
+  ChevronDown,
   ExternalLink,
   PackageCheck,
   ShieldCheck,
   ShoppingBag,
 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import {
   isSiteOrderAwaitingConfirmation,
@@ -18,7 +20,14 @@ import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 
 const SITE_ADMIN_URL = 'https://dafamilialanches.com.br/admin';
 
+const money = (value: number) =>
+  value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
+
 export function SiteAdminHub() {
+  const [expanded, setExpanded] = useState(false);
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
 
@@ -51,88 +60,153 @@ export function SiteAdminHub() {
     ).length;
 
     const completed = site.filter((delivery) => delivery.completed).length;
+    const active = site.length - completed;
+    const totalValue = site.reduce((sum, delivery) => {
+      const commercialTotal = delivery.site_order_commercial?.total;
+      const value =
+        typeof commercialTotal === 'number'
+          ? commercialTotal
+          : typeof delivery.customer_charge === 'number'
+            ? delivery.customer_charge
+            : delivery.value || 0;
+      return sum + Math.max(0, value);
+    }, 0);
 
     return {
       total: site.length,
+      active,
       awaitingConfirmation,
       awaitingRoute,
       routed,
       completed,
+      totalValue,
     };
   }, [deliveries, routes]);
 
+  const hasAttention = stats.awaitingConfirmation > 0 || stats.awaitingRoute > 0;
+
   return (
-    <section className="overflow-hidden rounded-[24px] border border-amber-400/20 bg-gradient-to-br from-amber-500/[.08] via-zinc-950 to-zinc-950">
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-amber-400 text-zinc-950">
-            <ShoppingBag size={20} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-black text-zinc-100">
-                Administração do Site
-              </h2>
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-black text-emerald-300">
-                DFL SITE
-              </span>
-            </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-              O Site continua sendo a autoridade comercial; aqui aparece apenas
-              o reflexo operacional necessário para expedição e entrega.
-            </p>
-          </div>
-        </div>
+    <section
+      className={`overflow-hidden rounded-[24px] border bg-zinc-900/45 transition-colors ${
+        hasAttention
+          ? 'border-amber-400/25'
+          : 'border-zinc-800'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-3 p-4 text-left active:scale-[.99]"
+      >
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-amber-400/10 text-amber-300">
+          <ShoppingBag size={20} />
+        </span>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <Metric
-            icon={<ShieldCheck size={15} />}
-            value={stats.awaitingConfirmation}
-            label="Confirmar"
-            detail="Ainda travado no Site"
-          />
-          <Metric
-            icon={<PackageCheck size={15} />}
-            value={stats.awaitingRoute}
-            label="Sem rota"
-            detail="Liberado para logística"
-          />
-          <Metric
-            icon={<Bike size={15} />}
-            value={stats.routed}
-            label="Em rota"
-            detail="Vinculado à operação"
-          />
-          <Metric
-            icon={<CheckCircle2 size={15} />}
-            value={stats.completed}
-            label="Concluídos"
-            detail={`${stats.total} recebidos no total`}
-          />
-        </div>
-
-        <a
-          href={SITE_ADMIN_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-4 flex w-full items-center justify-between rounded-2xl bg-amber-400 px-4 py-3.5 text-zinc-950 active:scale-[.99]"
-        >
-          <span>
-            <strong className="block text-sm font-black">
-              Abrir administração completa
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <strong className="truncate text-sm font-black text-zinc-100">
+              Pedidos do Site
             </strong>
-            <small className="block text-[10px] font-bold text-zinc-800/70">
-              Admin oficial do Site · autoridade comercial
-            </small>
+            <span className="shrink-0 rounded-md bg-amber-400/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-amber-300">
+              DFL Site
+            </span>
           </span>
-          <ExternalLink size={18} />
-        </a>
 
-        <p className="mt-3 text-[10px] leading-relaxed text-zinc-600">
-          Confirmar no Site libera a entrega para “Pedidos aguardando rota”.
-          Vincular uma rota continua sendo uma decisão operacional do Entregas.
-        </p>
-      </div>
+          <span className="mt-1 block text-[11px] text-zinc-500">
+            {stats.total === 0
+              ? 'Nenhum pedido recebido'
+              : `${stats.active} ativo${stats.active === 1 ? '' : 's'} · ${stats.completed} concluído${stats.completed === 1 ? '' : 's'}`}
+          </span>
+
+          {hasAttention && (
+            <span className="mt-1 block text-[10px] font-bold text-amber-300">
+              {[
+                stats.awaitingConfirmation
+                  ? `${stats.awaitingConfirmation} para confirmar`
+                  : '',
+                stats.awaitingRoute ? `${stats.awaitingRoute} sem rota` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
+          )}
+        </span>
+
+        <span className="text-right">
+          <span className="block text-xs font-black text-zinc-200">
+            {money(stats.totalValue)}
+          </span>
+          <ChevronDown
+            size={17}
+            className={`ml-auto mt-1 text-zinc-600 transition-transform ${
+              expanded ? 'rotate-180' : ''
+            }`}
+          />
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-zinc-800/80 px-4 pb-4 pt-3">
+          <div className="grid grid-cols-4 gap-1.5">
+            <Metric
+              icon={<ShieldCheck size={13} />}
+              value={stats.awaitingConfirmation}
+              label="Confirmar"
+              attention={stats.awaitingConfirmation > 0}
+            />
+            <Metric
+              icon={<PackageCheck size={13} />}
+              value={stats.awaitingRoute}
+              label="Sem rota"
+              attention={stats.awaitingRoute > 0}
+            />
+            <Metric
+              icon={<Bike size={13} />}
+              value={stats.routed}
+              label="Em rota"
+            />
+            <Metric
+              icon={<CheckCircle2 size={13} />}
+              value={stats.completed}
+              label="Concluídos"
+            />
+          </div>
+
+          <div className="mt-3 flex items-center justify-between rounded-2xl border border-zinc-800 bg-black/20 px-3 py-2.5">
+            <span className="flex min-w-0 items-center gap-2 text-[10px] text-zinc-500">
+              <Banknote size={14} className="shrink-0 text-emerald-400" />
+              Valor dos pedidos recebidos
+            </span>
+            <strong className="ml-2 shrink-0 text-xs font-black text-zinc-200">
+              {money(stats.totalValue)}
+            </strong>
+          </div>
+
+          <a
+            href={SITE_ADMIN_URL}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(event) => event.stopPropagation()}
+            className="mt-2 flex h-11 w-full items-center justify-between rounded-2xl border border-amber-400/20 bg-amber-400/[.07] px-3 text-amber-300 active:scale-[.99]"
+          >
+            <span>
+              <strong className="block text-[11px] font-black">
+                Abrir Admin do Site
+              </strong>
+              <small className="block text-[9px] text-zinc-600">
+                Administração comercial oficial
+              </small>
+            </span>
+            <ExternalLink size={15} />
+          </a>
+
+          <p className="mt-2 text-[9px] leading-relaxed text-zinc-700">
+            O Entregas mostra o reflexo operacional. Confirmação, preços e
+            demais regras comerciais continuam no DFL Site.
+          </p>
+        </div>
+      )}
     </section>
   );
 }
@@ -141,23 +215,34 @@ function Metric({
   icon,
   value,
   label,
-  detail,
+  attention = false,
 }: {
   icon: React.ReactNode;
   value: number;
   label: string;
-  detail: string;
+  attention?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-800/80 bg-black/20 p-3">
-      <span className="text-amber-400">{icon}</span>
-      <strong className="mt-2 block text-lg font-black text-zinc-100">
+    <div
+      className={`min-w-0 rounded-xl border px-1.5 py-2 text-center ${
+        attention
+          ? 'border-amber-400/20 bg-amber-400/[.06]'
+          : 'border-zinc-800 bg-black/20'
+      }`}
+    >
+      <span
+        className={`mx-auto flex justify-center ${
+          attention ? 'text-amber-300' : 'text-zinc-600'
+        }`}
+      >
+        {icon}
+      </span>
+      <strong className="mt-1 block text-sm font-black text-zinc-100">
         {value}
       </strong>
-      <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">
+      <span className="block truncate text-[8px] font-bold uppercase tracking-tight text-zinc-600">
         {label}
       </span>
-      <p className="mt-1 text-[9px] leading-snug text-zinc-700">{detail}</p>
     </div>
   );
 }
