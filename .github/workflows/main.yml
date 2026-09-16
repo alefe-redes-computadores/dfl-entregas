@@ -84,10 +84,20 @@ jobs:
       - name: Gerar ícones e splash Android
         run: |
           mkdir -p assets
+
+          # icon.png: ícone legado/fallback Android.
           cp public/icon-512.png assets/icon.png
-          cp public/icon-maskable-512.png assets/icon-only.png
+
+          # O adaptive icon precisa receber foreground transparente.
+          # NÃO usar icon-maskable aqui: ele já possui fundo #09090b
+          # e safe-zone própria do PWA, o que causaria dupla moldura.
+          cp dfl-entregas-icon-master.png assets/icon-only.png
+
           cp public/icon-512.png assets/splash.png
-          npx @capacitor/assets generate --android
+
+          npx @capacitor/assets generate --android \
+            --iconBackgroundColor '#09090b' \
+            --iconBackgroundColorDark '#09090b'
           test -d android/app/src/main/res/mipmap-mdpi
           test -d android/app/src/main/res/mipmap-xxxhdpi
 
@@ -120,6 +130,21 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew clean assembleDebug
+
+      - name: Exibir certificado do APK gerado
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          APKSIGNER="$(find "$SDK/build-tools" -type f -name apksigner 2>/dev/null | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+
+          echo "===== CERTIFICADO DO APK REAL ====="
+          "$APKSIGNER" verify --print-certs "$APK"
+          echo "==================================="
 
       - name: Validar APK
         run: |

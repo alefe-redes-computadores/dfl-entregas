@@ -17,6 +17,8 @@ function safeInternalHref(value: unknown) {
 
 async function configureStatusBar() {
   try {
+    // Fundo escuro do DFL + conteúdo claro.
+    // No Capacitor/Android, Style.Light significa ícones claros.
     await StatusBar.setOverlaysWebView({ overlay: false });
     await StatusBar.setBackgroundColor({ color: '#09090b' });
     await StatusBar.setStyle({ style: Style.Light });
@@ -54,7 +56,13 @@ export function NativeRuntime() {
 
       try {
         const stateListener = await App.addListener('appStateChange', ({ isActive }) => {
-          if (isActive) void configureStatusBar();
+          if (isActive) {
+            // Algumas Activities externas (ex.: seletor Google) podem devolver
+            // flags de system bars diferentes. Reaplicamos após o resume.
+            window.setTimeout(() => {
+              void configureStatusBar();
+            }, 80);
+          }
         });
         removers.push(() => stateListener.remove());
       } catch (error) {

@@ -304,14 +304,34 @@ export const useAppStore = create<AppState>()(
       loginWithGoogle: async () => {
         try {
           if (Capacitor.isNativePlatform()) {
+            /*
+             * O DFL usa o Google apenas para obter o ID token e autenticar
+             * no Firebase. Não precisamos de serverAuthCode/offline access.
+             *
+             * No CapacitorGoogleAuth 3.4.x o clientId passado aqui tem
+             * prioridade sobre as demais fontes de configuração.
+             */
             GoogleAuth.initialize({
               clientId: '773967662232-pjodqa7f4c4drrhl80439amdp27u31ha.apps.googleusercontent.com',
               scopes: ['profile', 'email'],
-              grantOfflineAccess: true,
+              grantOfflineAccess: false,
             });
+
             const googleUser = await GoogleAuth.signIn();
-            const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
-            await signInWithCredential(auth, credential);
+            const idToken = googleUser?.authentication?.idToken;
+
+            if (!idToken) {
+              throw new Error(
+                'O Google retornou a conta, mas não retornou um ID token válido.',
+              );
+            }
+
+            const credential = GoogleAuthProvider.credential(idToken);
+            const result = await signInWithCredential(auth, credential);
+
+            if (!result.user) {
+              throw new Error('O Firebase não concluiu a autenticação do usuário.');
+            }
           } else {
             await signInWithPopup(auth, googleProvider);
           }
