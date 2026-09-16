@@ -31,6 +31,9 @@ export function nativeBackTarget(pathname: string, search = ''): string | null {
   // Raízes operacionais: botão Android minimiza o app.
   if (path === '/' || path === '/loja') return null;
 
+  // Ponte do Admin comercial: retorno canônico para Minha Loja.
+  if (path === '/site-admin') return '/loja';
+
   // Fluxo externo de confirmação: respeita o retorno explícito do próprio fluxo.
   if (path === '/confirmar') {
     return safeInternalPath(params.get('returnTo')) || '/confirmacoes';

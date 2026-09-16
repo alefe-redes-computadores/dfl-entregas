@@ -89,13 +89,26 @@ export default function SiteAdminPage() {
         </div>
       </header>
 
-      <main className="relative min-h-0 flex-1 bg-white">
-        <iframe
-          src={SITE_ADMIN_URL}
-          title="Admin do DFL Site"
-          className="absolute inset-0 h-full w-full border-none bg-white"
-          allow="clipboard-read; clipboard-write"
-        />
+      <main className="flex min-h-0 flex-1 items-center justify-center px-5 py-8">
+        <section className="w-full max-w-md rounded-[28px] border border-zinc-800 bg-zinc-900/55 p-5 text-center shadow-2xl">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-amber-400/15 bg-amber-400/10 text-amber-300">
+            <Store size={24} />
+          </div>
+          <p className="mt-4 text-[10px] font-black uppercase tracking-[0.16em] text-amber-400">Administração comercial</p>
+          <h2 className="mt-1 font-heading text-xl font-black text-zinc-50">Abrir no DFL Site</h2>
+          <p className="mx-auto mt-2 max-w-xs text-[11px] leading-relaxed text-zinc-500">
+            O Admin usa a sessão própria do DFL Site. Abra fora do DFL Entregas para continuar com o login já existente no navegador.
+          </p>
+          <button type="button" onClick={openExternal} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 font-black text-zinc-950 active:scale-[.99]">
+            <ExternalLink size={17} /> Abrir Admin do Site
+          </button>
+          <button type="button" onClick={leave} className="mt-2 h-11 w-full rounded-2xl border border-zinc-800 bg-zinc-950/40 text-[11px] font-black text-zinc-400 active:scale-[.99]">
+            Voltar para Minha Loja
+          </button>
+          <p className="mt-5 border-t border-zinc-800 pt-4 text-left text-[9px] leading-relaxed text-zinc-600">
+            O Entregas mantém a operação logística. Pedidos, cozinha, expedição, cardápio, cupons e fidelidade continuam sob autoridade comercial do DFL Site.
+          </p>
+        </section>
       </main>
     </div>
   );
