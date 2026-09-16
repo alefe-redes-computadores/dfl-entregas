@@ -39,6 +39,23 @@ jobs:
           test -s public/apple-touch-icon.png
           test -s public/favicon.ico
 
+      # O APK Capacitor é um cliente estático. As Route Handlers abaixo
+      # pertencem exclusivamente ao deploy servidor e importam firebase-admin.
+      # O checkout deste job é descartável, então isolamos app/api somente
+      # durante a geração do APK sem alterar/remover as APIs do repositório.
+      - name: Isolar APIs server-only do APK
+        shell: bash
+        run: |
+          if [ -d app/api ]; then
+            mkdir -p .dfl-apk-server-only
+            mv app/api .dfl-apk-server-only/api
+          fi
+          test ! -d app/api
+          test -f .dfl-apk-server-only/api/integration/events/route.ts
+          test -f .dfl-apk-server-only/api/integration/outbox/drain/route.ts
+          test -f .dfl-apk-server-only/api/integration/worker/route.ts
+          echo "APIs server-only isoladas do build estático do APK."
+
       - name: Build estático do Next.js
         run: npm run build
         env:
