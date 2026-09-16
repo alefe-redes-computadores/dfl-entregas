@@ -341,10 +341,16 @@ export function commercialSnapshotFromSite(payload: DflSiteOrderEventPayloadV1):
     const name = optionalString(raw.name ?? raw.nome);
     if (!name) return [];
     const quantity = positiveQuantity(raw.quantity ?? raw.qtd);
-    const unitPrice = moneyValue(raw.price ?? raw.preco);
+    // O Site V22.3R usa unitPrice/lineTotal; price/preco permanecem como compatibilidade.
+    const unitPrice = moneyValue(raw.unitPrice ?? raw.unit_price ?? raw.price ?? raw.preco);
+    const explicitLineTotal = moneyValue(raw.lineTotal ?? raw.line_total);
     return [{
-      id: optionalString(raw.id), name, quantity, unit_price: unitPrice, line_total: unitPrice * quantity,
-      selected_addons: normalizeSiteAddons(raw.selectedAddons ?? raw.adicionais),
+      id: optionalString(raw.id),
+      name,
+      quantity,
+      unit_price: unitPrice,
+      line_total: explicitLineTotal > 0 ? explicitLineTotal : unitPrice * quantity,
+      selected_addons: normalizeSiteAddons(raw.selectedAddons ?? raw.selected_addons ?? raw.adicionais),
       observation: optionalString(raw.observation ?? raw.observacao),
     }];
   });
@@ -361,14 +367,14 @@ const siteText=(v:unknown)=>String(v??'').trim();
 const siteMoney=(v:unknown)=>{const n=Number(v);return Number.isFinite(n)?n:0};
 export function siteOrderItemsFromPayload(value:unknown):import('@/types').SiteOrderItemSnapshot[]{
  if(!Array.isArray(value))return[];
- return value.flatMap(raw=>{const i=siteRecord(raw),id=siteText(i.id),name=siteText(i.name);if(!id||!name)return[];const quantity=Math.max(1,Math.trunc(siteMoney(i.quantity)||1));const unitPrice=Math.max(0,siteMoney(i.unitPrice??i.price));const detailsItems=Array.isArray(i.detailsItems)?i.detailsItems.map(siteText).filter(Boolean):[];const selectedAddons=Array.isArray(i.selectedAddons)?i.selectedAddons.flatMap(a=>{const x=siteRecord(a),aid=siteText(x.id),an=siteText(x.name);return aid&&an?[{id:aid,name:an,price:Math.max(0,siteMoney(x.price))}]:[]}):[];return[{
+ return value.flatMap(raw=>{const i=siteRecord(raw),id=siteText(i.id),name=siteText(i.name);if(!id||!name)return[];const quantity=Math.max(1,Math.trunc(siteMoney(i.quantity)||1));const unitPrice=Math.max(0,siteMoney(i.unitPrice??i.unit_price??i.price??i.preco));const detailsItems=Array.isArray(i.detailsItems)?i.detailsItems.map(siteText).filter(Boolean):[];const selectedAddons=Array.isArray(i.selectedAddons)?i.selectedAddons.flatMap(a=>{const x=siteRecord(a),aid=siteText(x.id),an=siteText(x.name);return aid&&an?[{id:aid,name:an,price:Math.max(0,siteMoney(x.price))}]:[]}):[];return[{
   id,
   name,
   quantity,
 
   // Formato canônico V22.3R
   unit_price: unitPrice,
-  line_total: Math.max(0, siteMoney(i.lineTotal) || unitPrice * quantity),
+  line_total: Math.max(0, siteMoney(i.lineTotal??i.line_total) || unitPrice * quantity),
   selected_addons: selectedAddons,
   observation: siteText(i.observation) || undefined,
   details_title: siteText(i.detailsTitle) || undefined,
@@ -377,7 +383,7 @@ export function siteOrderItemsFromPayload(value:unknown):import('@/types').SiteO
 
   // Compatibilidade temporária com V22.3
   unitPrice,
-  lineTotal: Math.max(0, siteMoney(i.lineTotal) || unitPrice * quantity),
+  lineTotal: Math.max(0, siteMoney(i.lineTotal??i.line_total) || unitPrice * quantity),
   detailsTitle: siteText(i.detailsTitle) || null,
   detailsItems,
   includedExtras: siteText(i.includedExtras) || null,
