@@ -14,6 +14,10 @@ import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrdersText } from '@/lib/ifood-order-parser';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
+import {
+  auditOperationalAddress,
+  knownOperationalNeighborhoods,
+} from '@/lib/address-quality';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
@@ -44,6 +48,17 @@ export default function NovaEntregaPage() {
     const value = routeDate(route);
     return Boolean(value) && dateKey(value) === todayDateKey;
   });
+
+  const knownNeighborhoods = useMemo(
+    () =>
+      knownOperationalNeighborhoods(
+        customers.flatMap((customer) => [
+          customer.neighborhood,
+          customer.address,
+        ]),
+      ),
+    [customers],
+  );
 
   const [magicText, setMagicText] = useState('');
   const [isParserOpen, setIsParserOpen] = useState(true);
@@ -223,8 +238,21 @@ const [routeId, setRouteId] = useState('');
     try{
       const normalizedAddress=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(streetAddress):{address:'',neighborhood:undefined,phone:undefined,observations:[] as string[]};
       const cleanStreet=fulfillmentMode==='delivery'?normalizedAddress.address:'';
+      const addressQuality=fulfillmentMode==='delivery'
+        ? auditOperationalAddress(streetAddress,{
+            fallbackNeighborhood: normalizedAddress.neighborhood,
+            knownNeighborhoods,
+          })
+        : null;
       const rawPhone=phone.replace(/\D/g,'')||normalizedAddress.phone||'';
       const cleanObservation=Array.from(new Set([observation.trim(),...normalizedAddress.observations].filter(Boolean))).join(' - ');
+
+      if(addressQuality?.needsReview){
+        toast.warning(addressQuality.label||'Confira o endereço',{
+          description:`${addressQuality.description||'Revise os dados antes da saída.'} O pedido será salvo e ficará sinalizado no card.`,
+          duration:5200,
+        });
+      }
       let resolvedMapsLink=mapsLink.trim();
       if(fulfillmentMode==='delivery'&&cleanStreet&&!resolvedMapsLink){try{const point=await geocodeAddress(cleanStreet);if(point)resolvedMapsLink=`https://www.google.com/maps?q=${point.lat},${point.lng}`}catch(error){console.warn('Não foi possível resolver coordenadas automaticamente:',error)}}
       const now=new Date().toISOString();

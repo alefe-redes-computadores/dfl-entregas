@@ -17,6 +17,7 @@ import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { dateKey, deliveryDate, routeStartedAt } from '@/lib/operational-time';
 import { compactAddressForCard, hasHouseNumber } from "@/lib/operational-address";
+import { auditOperationalAddress } from '@/lib/address-quality';
 import { SiteOrderSnapshot } from '@/components/home/SiteOrderSnapshot';
 
 interface DeliveryCardProps {
@@ -75,6 +76,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const shortAddress = compactAddressForCard(delivery.address_string, customer?.address, customer?.neighborhood);
   const hasCoordinatesOrLink = !!(customer?.maps_link || delivery.maps_link);
   const hasStreetNumber = hasHouseNumber(shortAddress);
+  const addressQuality = auditOperationalAddress(
+    delivery.address_string || customer?.address,
+    { fallbackNeighborhood: customer?.neighborhood },
+  );
   const activePhone = delivery.phone || customer?.phone;
   const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
   const operationalDate = deliveryDate(delivery);
@@ -170,6 +175,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
 
     if (actionType === 'complete') {
+      if (
+        !delivery.completed &&
+        addressQuality.needsReview
+      ) {
+        toast.warning(addressQuality.label || 'Confira o endereço', {
+          description:
+            addressQuality.description ||
+            'Há dados de endereço que merecem revisão antes da baixa.',
+          duration: 4200,
+        });
+      }
+
       if (isRecoveryRoute) {
         toast.error('Corrija a rota desta entrega antes de dar baixa.', {
           description:
@@ -441,6 +458,26 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   <span className="truncate">{shortAddress}</span>
                   {isUrgent && <span className="ml-1 rounded bg-red-500/20 text-red-400 text-[9px] px-1 font-bold uppercase">Urgente</span>}
                 </div>
+
+                {!delivery.completed && addressQuality.needsReview && (
+                  <button
+                    type="button"
+                    data-no-card-swipe="true"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      router.push(
+                        `/entregas/editar?id=${encodeURIComponent(delivery.id)}${operationalDateQuery}`,
+                      );
+                    }}
+                    className="mt-1 flex w-fit max-w-full items-center gap-1 rounded-lg border border-amber-500/25 bg-amber-500/[0.08] px-2 py-1 text-left text-[9px] font-black text-amber-300 active:scale-[0.98]"
+                    title={addressQuality.description}
+                  >
+                    <AlertTriangle size={10} className="shrink-0" />
+                    <span className="truncate">
+                      {addressQuality.label || 'Revisar endereço'}
+                    </span>
+                  </button>
+                )}
 
                 {/* VISUALIZAÇÃO COMPACTA */}
                 {!isExpanded && (
