@@ -55,13 +55,24 @@ function occurredAt(delivery: Raw, route: Raw | undefined) {
   return valid[0]?.value || new Date().toISOString();
 }
 
-function eventType(delivery: Raw, route: Raw | undefined, pendingIndex: number) {
-  if (bool(delivery.completed)) return 'delivery.completed' as const;
-  if (routeClosed(route)) return 'route.completed' as const;
-  if (routeStarted(route) && pendingIndex === 0) return 'delivery.next_stop' as const;
-  if (routeStarted(route)) return 'delivery.position_changed' as const;
-  if (str(delivery.route_id)) return 'delivery.assigned' as const;
-  return null;
+function eventTypes(delivery: Raw, route: Raw | undefined, pendingIndex: number) {
+  if (bool(delivery.completed)) return ['delivery.completed'] as const;
+  if (routeClosed(route)) return ['route.completed'] as const;
+
+  // Estar apenas alocado em uma rota NÃO significa estar na rua.
+  // A saída real exige started_at/departure_time da rota.
+  if (!routeStarted(route)) {
+    return str(delivery.route_id) ? ['delivery.assigned'] as const : [] as const;
+  }
+
+  // Ao iniciar a rota existem duas informações diferentes:
+  // 1) o pedido saiu para entrega;
+  // 2) a posição operacional atual.
+  // Mantemos ambas no outbox, mas somente next_stop deve significar
+  // "você é o próximo".
+  return pendingIndex === 0
+    ? ['delivery.out_for_delivery', 'delivery.next_stop'] as const
+    : ['delivery.out_for_delivery', 'delivery.position_changed'] as const;
 }
 
 async function loadRoute(routeId: string): Promise<Raw | undefined> {
@@ -114,8 +125,8 @@ export async function reconcileReverseTrackingOutbox() {
     const pendingGroups = stopGroups.filter((group) => group.pending.length > 0);
     const pendingIndex = pendingGroups.findIndex((group) => group.key === key);
     const started = routeStarted(route);
-    const type = eventType(item.data, route, pendingIndex);
-    if (!type) continue;
+    const types = eventTypes(item.data, route, pendingIndex);
+    if (!types.length) continue;
 
     const payload = {
       externalOrderId: str(item.data.external_order_id),
@@ -134,16 +145,30 @@ export async function reconcileReverseTrackingOutbox() {
       failedReason: null,
     };
 
-    const fingerprint = stableHash({ type, payload });
-    const eventId = `evt-v1__${type}__${encodeURIComponent(item.id)}__snapshot-${fingerprint}`;
-    candidates.push({
-      eventId,
-      event: buildIntegrationEvent({
-        event_id: eventId, event_type: type, occurred_at: occurredAt(item.data, route),
-        source_system: 'dfl_entregas', entity_type: 'delivery', entity_id: item.id,
-        correlation_id: str(item.data.external_order_id), payload,
-      }),
-    });
+    for (const type of types) {
+      // delivery.out_for_delivery representa a SAÍDA da rota, não cada
+      // alteração posterior de posição. Sua identidade precisa permanecer
+      // estável enquanto a rota estiver na rua para não gerar WhatsApp repetido.
+      const identity = type === 'delivery.out_for_delivery'
+        ? {
+            type,
+            deliveryId: item.id,
+            routeId: routeId || null,
+            startedAt: str(route?.started_at) || str(route?.departure_time),
+          }
+        : { type, payload };
+
+      const fingerprint = stableHash(identity);
+      const eventId = `evt-v1__${type}__${encodeURIComponent(item.id)}__snapshot-${fingerprint}`;
+      candidates.push({
+        eventId,
+        event: buildIntegrationEvent({
+          event_id: eventId, event_type: type, occurred_at: occurredAt(item.data, route),
+          source_system: 'dfl_entregas', entity_type: 'delivery', entity_id: item.id,
+          correlation_id: str(item.data.external_order_id), payload,
+        }),
+      });
+    }
   }
 
   let created = 0;
