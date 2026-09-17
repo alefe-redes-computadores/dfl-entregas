@@ -13,7 +13,7 @@
       "forceCodeForRefreshToken": false
     },
     "StatusBar": {
-      "overlaysWebView": false,
+      "overlaysWebView": true,
       "backgroundColor": "#09090b",
       "style": "LIGHT"
     },

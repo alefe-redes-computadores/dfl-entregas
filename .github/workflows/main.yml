@@ -81,6 +81,16 @@ jobs:
           npx cap sync android
           npx cap doctor android || true
 
+      # O Android é recriado acima em todo build.
+      # Portanto este patch PRECISA acontecer depois do último cap sync
+      # e antes de qualquer etapa Gradle.
+      - name: Aplicar contrato nativo de System Bars
+        shell: bash
+        run: |
+          node scripts/patch-android-system-bars.mjs
+          grep -F 'WindowCompat.setDecorFitsSystemWindows' android/app/src/main/java/com/dfl/entregas/MainActivity.java
+          grep -F 'setAppearanceLightStatusBars(false)' android/app/src/main/java/com/dfl/entregas/MainActivity.java
+
       - name: Gerar ícones e splash Android
         run: |
           mkdir -p assets

@@ -18,10 +18,14 @@ function safeInternalHref(value: unknown) {
 async function configureStatusBar() {
   try {
     // Fundo escuro do DFL + conteúdo claro.
-    // No Capacitor/Android, Style.Light significa ícones claros.
-    await StatusBar.setOverlaysWebView({ overlay: false });
-    await StatusBar.setBackgroundColor({ color: '#09090b' });
-    await StatusBar.setStyle({ style: Style.Light });
+    // Android possui um único owner das System Bars: MainActivity.
+    // Não permitir que o runtime React/@capacitor/status-bar sobrescreva
+    // WindowCompat/WindowInsetsController depois que a Activity configurou a janela.
+    if (Capacitor.getPlatform() !== 'android') {
+      await StatusBar.setOverlaysWebView({ overlay: true });
+      await StatusBar.setBackgroundColor({ color: '#09090b' });
+      await StatusBar.setStyle({ style: Style.Light });
+    }
   } catch (error) {
     console.warn('[NATIVE] Status bar:', error);
   }
