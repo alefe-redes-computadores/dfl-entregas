@@ -18,6 +18,7 @@ import {
   isSiteOrderReleasedToLogistics,
 } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import type { Delivery } from '@/types';
 
 const money = (value: number) =>
   value.toLocaleString('pt-BR', {
@@ -25,7 +26,13 @@ const money = (value: number) =>
     currency: 'BRL',
   });
 
-export function SiteAdminHub() {
+export function SiteAdminHub({
+  selectedDateOrders,
+  selectedDateLabel,
+}: {
+  selectedDateOrders: Delivery[];
+  selectedDateLabel: string;
+}) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const deliveries = useAppStore((state) => state.deliveries);
@@ -34,6 +41,12 @@ export function SiteAdminHub() {
   const stats = useMemo(() => {
     const routeIds = new Set(routes.map((route) => route.id));
     const site = deliveries.filter(
+      (delivery) => delivery.source_system === 'dfl_site',
+    );
+
+    // O dashboard já aplica o contrato temporal canônico da Loja.
+    // Usamos a projeção pronta para não criar uma segunda regra de data.
+    const selectedDateSite = selectedDateOrders.filter(
       (delivery) => delivery.source_system === 'dfl_site',
     );
 
@@ -59,9 +72,13 @@ export function SiteAdminHub() {
         routeIds.has(delivery.route_id),
     ).length;
 
-    const completed = site.filter((delivery) => delivery.completed).length;
-    const active = site.length - completed;
-    const totalValue = site.reduce((sum, delivery) => {
+    const completed = selectedDateSite.filter(
+      (delivery) => delivery.completed,
+    ).length;
+    const active = selectedDateSite.filter(
+      (delivery) => !delivery.completed,
+    ).length;
+    const totalValue = selectedDateSite.reduce((sum, delivery) => {
       const commercialTotal = delivery.site_order_commercial?.total;
       const value =
         typeof commercialTotal === 'number'
@@ -73,7 +90,7 @@ export function SiteAdminHub() {
     }, 0);
 
     return {
-      total: site.length,
+      total: selectedDateSite.length,
       active,
       awaitingConfirmation,
       awaitingRoute,
@@ -81,7 +98,7 @@ export function SiteAdminHub() {
       completed,
       totalValue,
     };
-  }, [deliveries, routes]);
+  }, [deliveries, routes, selectedDateOrders]);
 
   const hasAttention = stats.awaitingConfirmation > 0 || stats.awaitingRoute > 0;
 
@@ -137,6 +154,9 @@ export function SiteAdminHub() {
           <span className="block text-xs font-black text-zinc-200">
             {money(stats.totalValue)}
           </span>
+          <span className="mt-0.5 block text-[8px] font-bold text-zinc-600">
+            {selectedDateLabel}
+          </span>
           <ChevronDown
             size={17}
             className={`ml-auto mt-1 text-zinc-600 transition-transform ${
@@ -176,7 +196,7 @@ export function SiteAdminHub() {
           <div className="mt-3 flex items-center justify-between rounded-2xl border border-zinc-800 bg-black/20 px-3 py-2.5">
             <span className="flex min-w-0 items-center gap-2 text-[10px] text-zinc-500">
               <Banknote size={14} className="shrink-0 text-emerald-400" />
-              Valor dos pedidos recebidos
+              Valor dos pedidos · {selectedDateLabel}
             </span>
             <strong className="ml-2 shrink-0 text-xs font-black text-zinc-200">
               {money(stats.totalValue)}

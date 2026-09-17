@@ -285,7 +285,10 @@ export default function LojaPage() {
     <div className="dfl-page flex flex-col gap-3.5 pb-32 animate-in fade-in duration-300 relative">
       <PageHeader title="Minha Loja" subtitle="Central de operação da Da Família Lanches" to="/" />
 
-      <SiteAdminHub />
+      <SiteAdminHub
+        selectedDateOrders={dashboardData.selectedDateOrders}
+        selectedDateLabel={dashboardData.formattedDateLabel}
+      />
 
       <section className={`rounded-[22px] border ${isStoreOpen ? 'border-emerald-500/25 bg-emerald-500/[.055]' : 'border-zinc-800 bg-zinc-900/55'}`}>
         <button
