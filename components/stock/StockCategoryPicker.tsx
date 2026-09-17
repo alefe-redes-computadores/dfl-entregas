@@ -1,9 +1,12 @@
 'use client';
 
 import {
+  useEffect,
   useMemo,
   useState,
 } from 'react';
+
+import { createPortal } from 'react-dom';
 
 import {
   Beef,
@@ -12,6 +15,7 @@ import {
   Sandwich,
   Wheat,
   Check,
+  ChevronRight,
   CupSoda,
   Flame,
   Leaf,
@@ -85,6 +89,14 @@ export function StockCategoryPicker({
   const [query, setQuery] =
     useState('');
 
+  const [mounted, setMounted] =
+    useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
   const categories = useMemo(() => {
     const map =
       new Map<string, string>();
@@ -153,21 +165,30 @@ export function StockCategoryPicker({
           />
         </span>
 
-        <span
-          className={
-            selected
-              ? 'flex-1 text-sm font-bold text-zinc-100'
-              : 'flex-1 text-sm text-zinc-600'
-          }
-        >
-          {selected ||
-            'Selecionar categoria'}
+        <span className="min-w-0 flex-1">
+          <span
+            className={
+              selected
+                ? 'block truncate text-sm font-bold text-zinc-100'
+                : 'block truncate text-sm text-zinc-600'
+            }
+          >
+            {selected || 'Selecionar categoria'}
+          </span>
+          <span className="mt-0.5 block text-[9px] font-medium text-zinc-600">
+            Toque para alterar
+          </span>
         </span>
+
+        <ChevronRight
+          size={17}
+          className="shrink-0 text-zinc-600"
+        />
       </button>
 
-      {open && (
+      {mounted && open && createPortal(
         <div
-          className="fixed inset-0 z-[150] flex items-end bg-black/85 px-3 pt-3 backdrop-blur-md sm:items-center sm:justify-center"
+          className="fixed inset-0 z-[1000] flex items-end bg-black/85 px-3 pt-3 backdrop-blur-md sm:items-center sm:justify-center"
           onMouseDown={(event) => {
             if (
               event.target ===
@@ -281,7 +302,8 @@ export function StockCategoryPicker({
               </div>
             </div>
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

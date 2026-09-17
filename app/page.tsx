@@ -390,21 +390,56 @@ export default function HomePage() {
           </div>
           <p className="text-[10px] font-bold text-zinc-600">{completedDeliveries}/{totalEntregas} entregas</p>
         </div>
-        <div className="grid grid-cols-[1.15fr_.85fr] gap-2">
-          <a href={`/entregas?date=${encodeURIComponent(selectedDateKey)}`} className="dfl-card-interactive min-w-0 p-4">
-            <div className="flex items-center justify-between gap-1"><Package size={14} className="shrink-0 text-sky-400" />{pendingDeliveries > 0 && <span className="truncate text-[8px] font-black text-amber-400">{pendingDeliveries} pend.</span>}</div>
-            <p className="mt-3 font-heading text-2xl font-black leading-none text-zinc-50">{totalEntregas}</p>
-            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Entregas</p>
+        <div className="grid grid-cols-3 overflow-hidden rounded-[22px] border border-zinc-800 bg-zinc-900/40">
+          <a
+            href={`/entregas?date=${encodeURIComponent(selectedDateKey)}`}
+            className="min-w-0 p-3.5 transition active:bg-zinc-900"
+          >
+            <Package size={14} className="text-sky-400" />
+            <p className="mt-2 font-heading text-xl font-black leading-none text-zinc-50">
+              {totalEntregas}
+            </p>
+            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">
+              Entregas{pendingDeliveries > 0 ? ` · ${pendingDeliveries} pend.` : ''}
+            </p>
           </a>
-          <a href={`/rotas?date=${encodeURIComponent(selectedDateKey)}`} className={`min-w-0 rounded-[22px] border p-4 shadow-[0_10px_26px_rgba(0,0,0,.12)] transition active:scale-[0.985] ${readyRoutes.length > 0 ? 'border-emerald-500/25 bg-emerald-500/[.055]' : 'border-zinc-800 bg-zinc-900/45'}`}>
-            <div className="flex items-center justify-between gap-1"><Bike size={14} className="shrink-0 text-emerald-400" />{readyRoutes.length > 0 && <span className="truncate text-[8px] font-black text-emerald-400">{readyRoutes.length} pronta</span>}</div>
-            <p className="mt-3 font-heading text-2xl font-black leading-none text-zinc-50">{openRoutes.length}</p>
-            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Rotas abertas</p>
+
+          <a
+            href={`/rotas?date=${encodeURIComponent(selectedDateKey)}`}
+            className="min-w-0 border-x border-zinc-800 p-3.5 transition active:bg-zinc-900"
+          >
+            <Bike size={14} className="text-emerald-400" />
+            <p className="mt-2 font-heading text-xl font-black leading-none text-zinc-50">
+              {openRoutes.length}
+            </p>
+            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">
+              Rotas abertas
+            </p>
           </a>
-          <div className="dfl-card col-span-2 min-w-0 p-4">
-            <div className="flex items-center justify-between gap-1"><TrendingUp size={14} className="shrink-0 text-emerald-400" /><button type="button" onClick={togglePrivacyMode} aria-label={isPrivacyMode ? 'Mostrar valor dos pedidos' : 'Ocultar valor dos pedidos'} className="shrink-0 text-zinc-600 active:scale-90">{isPrivacyMode ? <EyeOff size={13} /> : <Eye size={13} />}</button></div>
-            <p className="mt-3 truncate font-heading text-[15px] font-black leading-none text-zinc-50">{isPrivacyMode ? 'R$ •••' : `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p>
-            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">Valor dos pedidos</p>
+
+          <div className="min-w-0 p-3.5">
+            <div className="flex items-center justify-between gap-1">
+              <TrendingUp size={14} className="text-emerald-400" />
+              <button
+                type="button"
+                onClick={togglePrivacyMode}
+                aria-label={isPrivacyMode ? 'Mostrar valor dos pedidos' : 'Ocultar valor dos pedidos'}
+                className="text-zinc-600 active:scale-90"
+              >
+                {isPrivacyMode ? <EyeOff size={12} /> : <Eye size={12} />}
+              </button>
+            </div>
+            <p className="mt-2 truncate font-heading text-sm font-black leading-none text-zinc-50">
+              {isPrivacyMode
+                ? 'R$ •••'
+                : `R$ ${faturamentoTotal.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}`}
+            </p>
+            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">
+              Pedidos
+            </p>
           </div>
         </div>
       </section>

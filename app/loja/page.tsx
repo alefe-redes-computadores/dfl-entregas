@@ -282,7 +282,7 @@ export default function LojaPage() {
   if (!isMounted || !hasHydrated) return null;
 
   return (
-    <div className="dfl-page flex flex-col gap-4 pb-32 animate-in fade-in duration-300 relative">
+    <div className="dfl-page flex flex-col gap-3.5 pb-32 animate-in fade-in duration-300 relative">
       <PageHeader title="Minha Loja" subtitle="Central de operação da Da Família Lanches" to="/" />
 
       <SiteAdminHub />
