@@ -1,6 +1,11 @@
 import type { Delivery } from '@/types';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 
+export interface IfoodParserContext {
+  knownNeighborhoods?: string[];
+  knownCustomerNames?: string[];
+}
+
 export interface ParsedIfoodOrder {
   orderId: string;
   ifoodId: string;
@@ -79,6 +84,98 @@ const normalized = (value: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('pt-BR');
 
+const normalizedComparable = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const digitsOnly = (value: string) =>
+  value.replace(/\D/g, '');
+
+const looksLikeBrazilianPostal = (value: string) => {
+  const digits = digitsOnly(value);
+  return digits.length === 8 && POSTAL.test(value);
+};
+
+function longestKnownMatch(
+  source: string,
+  values: string[] = [],
+) {
+  const haystack = ` ${normalizedComparable(source)} `;
+
+  return [...values]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+    .find((candidate) => {
+      const needle = normalizedComparable(candidate);
+      return needle.length >= 3 && haystack.includes(` ${needle} `);
+    }) || '';
+}
+
+function explicitIfoodId(line: string) {
+  if (POSTAL.test(line)) return '';
+
+  const patterns = [
+    /\b(?:id\s*(?:ifood|do\s+ifood|do\s+pedido)?|ifood\s+id)\s*[:#-]?\s*(\d{8})\b/i,
+    /\b(?:identificador)\s*[:#-]?\s*(\d{8})\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = line.match(pattern);
+    if (match) return match[1];
+  }
+
+  return '';
+}
+
+function explicitOrderNumber(line: string) {
+  if (POSTAL.test(line)) return '';
+
+  const patterns = [
+    /\b(?:n[º°o.]?\s*(?:do\s+)?pedido|pedido|order)\s*[:#-]?\s*#?\s*(\d{3,6})\b/i,
+    /(?:^|\s)#(\d{3,6})\b/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = line.match(pattern);
+    if (match) return match[1];
+  }
+
+  return '';
+}
+
+function explicitConfirmationCode(line: string) {
+  if (POSTAL.test(line)) return '';
+
+  const match = line.match(
+    /\b(?:c[oó]d(?:igo)?(?:\s+de\s+confirma[cç][aã]o)?|confirma[cç][aã]o)\s*[:#-]?\s*(\d{4})\b/i,
+  );
+
+  return match?.[1] || '';
+}
+
+function safeEightDigitCandidate(line: string) {
+  if (
+    STREET.test(line) ||
+    POSTAL.test(line) ||
+    /\bcep\b/i.test(line) ||
+    /\b(?:telefone|celular|whats?app|zap)\b/i.test(line) ||
+    /\btotal\b|r\$/i.test(line)
+  ) {
+    return '';
+  }
+
+  const candidates =
+    line.match(/\b\d{8}\b/g) || [];
+
+  return candidates.length === 1
+    ? candidates[0]
+    : '';
+}
+
 const numberValue = (value: string) => {
   const clean = value.replace(/\s/g, '');
   return Number(
@@ -133,12 +230,16 @@ function idTokens(line: string) {
 function cleanAddress(
   source: string,
   observations: string[],
+  fallbackNeighborhood?: string,
 ) {
   const value = source
     .replace(/^end(?:ere[cç]o)?\s*:\s*/i, '')
     .trim();
 
-  const result = canonicalizeOperationalAddress(value);
+  const result = canonicalizeOperationalAddress(
+    value,
+    fallbackNeighborhood,
+  );
 
   result.observations.forEach((item) =>
     addUnique(observations, item),
@@ -409,6 +510,7 @@ function parseFinancial(
 
 export function parseIfoodOrderText(
   text: string,
+  context: IfoodParserContext = {},
 ): ParsedIfoodOrder {
   const result = emptyResult();
 
@@ -418,38 +520,91 @@ export function parseIfoodOrderText(
     .filter(Boolean);
 
   let idLine = -1;
-  let neighborhood = '';
 
-  // Primeira passada: IDs e link do Maps.
+  /*
+   * Memória operacional:
+   * bairros e clientes já cadastrados são evidência, não hardcode.
+   * Um cadastro novo passa a ajudar o parser automaticamente.
+   */
+  let neighborhood =
+    longestKnownMatch(
+      text,
+      context.knownNeighborhoods,
+    );
+
+  const knownCustomer =
+    longestKnownMatch(
+      text,
+      context.knownCustomerNames,
+    );
+
+  if (knownCustomer) {
+    result.customerName = knownCustomer;
+  }
+
+  // Primeira passada: IDs reservados e link do Maps.
   lines.forEach((line, index) => {
     const url = mapUrl(line);
 
     if (url) result.mapsLink = url;
 
-    const tokens = idTokens(line);
+    const explicitId = explicitIfoodId(line);
+    const explicitOrder = explicitOrderNumber(line);
+    const explicitCode = explicitConfirmationCode(line);
 
-    if (!tokens.some((token) => token.length === 8)) {
-      return;
+    if (explicitId) {
+      result.ifoodId ||= explicitId;
+      if (idLine < 0) idLine = index;
     }
 
-    if (idLine < 0) idLine = index;
+    if (explicitOrder) {
+      result.orderId ||= explicitOrder;
+    }
 
-    result.ifoodId ||=
-      tokens.find((token) => token.length === 8) ?? '';
+    if (explicitCode) {
+      result.confirmationCode ||= explicitCode;
+    }
 
-    const short = tokens.filter(
-      (token) =>
-        token.length === 4 || token.length === 5,
-    );
+    /*
+     * Fallback legado, agora protegido:
+     * um número de 8 dígitos só concorre a ID se a linha não
+     * for CEP/endereço/telefone/financeiro.
+     */
+    const fallbackId =
+      !result.ifoodId
+        ? safeEightDigitCandidate(line)
+        : '';
 
-    result.orderId ||= short[0] ?? '';
+    if (fallbackId) {
+      result.ifoodId = fallbackId;
+      if (idLine < 0) idLine = index;
+    }
 
-    result.confirmationCode ||=
-      short.find(
+    if (!result.orderId || !result.confirmationCode) {
+      const tokens = idTokens(line);
+      const short = tokens.filter(
         (token) =>
-          token.length === 4 &&
-          token !== result.orderId,
-      ) ?? '';
+          token.length === 4 ||
+          token.length === 5,
+      );
+
+      if (!result.orderId && idLine === index) {
+        result.orderId =
+          short.find(
+            (token) =>
+              token !== result.confirmationCode,
+          ) ?? '';
+      }
+
+      if (!result.confirmationCode && idLine === index) {
+        result.confirmationCode =
+          short.find(
+            (token) =>
+              token.length === 4 &&
+              token !== result.orderId,
+          ) ?? '';
+      }
+    }
   });
 
   lines.forEach((original, index) => {
@@ -485,6 +640,7 @@ export function parseIfoodOrderText(
       const parsedAddress = cleanAddress(
         original,
         result.observations,
+        neighborhood || undefined,
       );
 
       if (parsedAddress) {
@@ -581,6 +737,7 @@ export function parseIfoodOrderText(
     result.address = cleanAddress(
       `${result.address} - ${neighborhood}`,
       result.observations,
+      neighborhood,
     );
   }
 
@@ -610,6 +767,7 @@ export function parseIfoodOrderText(
 
 export function parseIfoodOrdersText(
   text: string,
+  context: IfoodParserContext = {},
 ): ParsedIfoodOrder[] {
   const lines = text.split(/\r?\n/);
 
@@ -626,10 +784,10 @@ export function parseIfoodOrdersText(
     .map((item) => item.index);
 
   if (headers.length <= 1) {
-    return [parseIfoodOrderText(text)];
+    return [parseIfoodOrderText(text, context)];
   }
 
-  const shared = parseIfoodOrderText(text);
+  const shared = parseIfoodOrderText(text, context);
 
   return headers.map((start, position) => {
     const end =
@@ -637,6 +795,7 @@ export function parseIfoodOrdersText(
 
     const parsed = parseIfoodOrderText(
       lines.slice(start, end).join('\n'),
+      context,
     );
 
     return {

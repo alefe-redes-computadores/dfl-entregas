@@ -567,8 +567,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         expandedOrder,
         {
           metadata: {
-            // Organizar a rota NÃO significa travar todas as paradas.
-            // Travas explícitas já existentes são preservadas pelo store.
+            /*
+             * Depois que o usuário confirma a organização, a sequência
+             * vira contrato operacional. Persistimos a ordem e travamos
+             * as paradas para que outra interação não desfaça silenciosamente
+             * o resultado. O algoritmo buildSmartRouteOrder não é alterado.
+             */
+            order_locked: true,
             order_source:
               optimizerEdited
                 ? 'manual'
@@ -584,8 +589,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         await Haptics.notification({ type: NotificationType.Success });
       }
 
-      toast.success('Ordem sugerida aplicada.', {
-        description: 'Você pode desfazer enquanto a rota continuar aberta.',
+      toast.success('Ordem aplicada e travada.', {
+        description: 'A sequência foi persistida. Você ainda pode desfazer enquanto a rota estiver aberta.',
       });
     } catch {
       toast.error('Não foi possível aplicar a ordem sugerida.');
@@ -598,7 +603,17 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (!lastAppliedOrder?.length) return;
 
     try {
-      await setDeliveryOrder(route.id, lastAppliedOrder);
+      await setDeliveryOrder(
+        route.id,
+        lastAppliedOrder,
+        {
+          metadata: {
+            order_locked: false,
+            order_source: 'manual',
+            order_updated_at: new Date().toISOString(),
+          },
+        },
+      );
       setLastAppliedOrder(null);
 
       if (Capacitor.isNativePlatform()) {

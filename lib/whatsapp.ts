@@ -3,7 +3,7 @@ import type { Delivery, Route, Customer } from '@/types';
 import { resolveStopLocation, buildGoogleMapsRouteUrl, cleanAddressForMaps } from '@/lib/maps';
 import { routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
-import { bestOperationalAddress, hasHouseNumber } from "@/lib/operational-address";
+import { canonicalizeOperationalAddress, bestOperationalAddress, hasHouseNumber } from "@/lib/operational-address";
 import { deliveryStopKey, stopNumberMap } from '@/lib/route-stops';
 
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -150,6 +150,62 @@ const formatDuration = (startTimeStr?: string, endTimeStr?: string): string | nu
   return `${mins}min`;
 };
 
+function routeAddressParts(
+  deliveryAddress?: string,
+  customerAddress?: string,
+  customerNeighborhood?: string,
+) {
+  const best =
+    bestOperationalAddress(
+      deliveryAddress,
+      customerAddress,
+    ) || '';
+
+  const canonical =
+    canonicalizeOperationalAddress(
+      best,
+      customerNeighborhood,
+    );
+
+  const neighborhood =
+    canonical.neighborhood ||
+    customerNeighborhood ||
+    'Bairro não inf.';
+
+  const normalizedNeighborhood =
+    neighborhood
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR')
+      .trim();
+
+  const segments = canonical.address
+    .split(/\s+-\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const street =
+    segments.find((part) => {
+      const normalizedPart = part
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase('pt-BR')
+        .trim();
+
+      return normalizedPart !== normalizedNeighborhood;
+    }) ||
+    canonical.address ||
+    'Endereço não informado';
+
+  return {
+    neighborhood,
+    street,
+    fullAddress:
+      canonical.address ||
+      'Endereço não informado',
+  };
+}
+
 export async function generateRouteMessages(
   route: Route,
   deliveries: Delivery[],
@@ -215,8 +271,12 @@ export async function generateRouteMessages(
 
     const neighborhoodCounts = deliveries.reduce((acc: Record<string, number>, d) => {
       const cust = getCustomerById(d.customer_id);
-      const nb = cust?.neighborhood || d.address_string.split('-').pop()?.trim() || 'Bairro';
-      acc[nb] = (acc[nb] || 0) + 1;
+      const parts = routeAddressParts(
+        d.address_string,
+        cust?.address,
+        cust?.neighborhood,
+      );
+      acc[parts.neighborhood] = (acc[parts.neighborhood] || 0) + 1;
       return acc;
     }, {});
 
@@ -228,8 +288,14 @@ export async function generateRouteMessages(
       const stopNumber = firstStopNumber.get(groupKey) || seenStopGroups.size;
       const emojiNum = getNumberEmoji(stopNumber);
       const customer = getCustomerById(delivery.customer_id);
-      const neighborhood = customer?.neighborhood || delivery.address_string.split('-').pop()?.trim() || 'Bairro não inf.';
-      const street = bestOperationalAddress(delivery.address_string, customer?.address) || "Endereço não informado";
+      const addressParts = routeAddressParts(
+        delivery.address_string,
+        customer?.address,
+        customer?.neighborhood,
+      );
+      const neighborhood = addressParts.neighborhood;
+      const street = addressParts.fullAddress;
+      const streetOnly = addressParts.street;
       const shortId = delivery.order_id ? `#${delivery.order_id}` : '';
       const isIfood = delivery.origin === 'ifood';
       const originLabel = getOriginLabel(delivery);
@@ -271,7 +337,7 @@ export async function generateRouteMessages(
             seenCodesByGroup.set(groupKey, seenCodes);
           }
         } else {
-          stopsNeedingCode.push({ num: stopNumber, neighborhood, street });
+          stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly });
         }
       }
 
@@ -378,8 +444,13 @@ export async function generateRouteMessages(
     deliveries.forEach((delivery, index) => {
       const num = index + 1;
       const customer = getCustomerById(delivery.customer_id);
-      const neighborhood = customer?.neighborhood || delivery.address_string.split('-').pop()?.trim() || 'Bairro';
-      const street = bestOperationalAddress(delivery.address_string, customer?.address) || "Endereço não informado";
+      const addressParts = routeAddressParts(
+        delivery.address_string,
+        customer?.address,
+        customer?.neighborhood,
+      );
+      const neighborhood = addressParts.neighborhood;
+      const street = addressParts.street;
       const isDuplicate = neighborhoodCounts[neighborhood] > 1;
       const clientPhone = delivery.phone || customer?.phone;
 

@@ -150,7 +150,10 @@ const [routeId, setRouteId] = useState('');
   const handleExecuteMagicParse = async () => {
     if (!magicText.trim()) { toast.error('Cole o texto do pedido antes de processar.'); return; }
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-    const parsedOrders=parseIfoodOrdersText(magicText); const parsed=parsedOrders[0]; const identified:string[]=[];
+    const parsedOrders=parseIfoodOrdersText(magicText,{
+      knownNeighborhoods,
+      knownCustomerNames:customers.map(customer=>customer.name),
+    }); const parsed=parsedOrders[0]; const identified:string[]=[];
     if(parsed.orderId){setOrderId(parsed.orderId);identified.push(`Nº #${parsed.orderId}`)}
     if(parsed.ifoodId){setIfoodId(parsed.ifoodId);identified.push(`ID ${parsed.ifoodId}`)}
     if(parsed.confirmationCode){setConfirmationCode(parsed.confirmationCode);identified.push(`Cód. ${parsed.confirmationCode}`)}
@@ -194,8 +197,12 @@ const [routeId, setRouteId] = useState('');
         desc: 'A entrega possui uma referência direta do Google Maps.'
       };
     }
-    const hasNumber = /\d+/.test(streetAddress);
-    if (streetAddress.trim().length > 3 && hasNumber) {
+    const liveAddressQuality = auditOperationalAddress(
+      streetAddress,
+      { knownNeighborhoods },
+    );
+    const hasNumber = !liveAddressQuality.issues.includes('missing-house-number');
+    if (streetAddress.trim().length > 3 && hasNumber && !liveAddressQuality.needsReview) {
       return {
         status: 'good' as const,
         title: 'Rua e número informados',
@@ -210,7 +217,7 @@ const [routeId, setRouteId] = useState('');
       };
     }
     return null;
-  }, [streetAddress, mapsLink]);
+  }, [streetAddress, mapsLink, knownNeighborhoods]);
 
   const handleCustomerSelect = (c: Customer) => {
     setSelectedCustomerId(c.id);
