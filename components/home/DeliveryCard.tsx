@@ -375,12 +375,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           style={{ transform: `translateX(${swipeOffset}px)` }}
-          className={clsx("relative z-10 flex flex-col bg-zinc-900 h-full w-full", !isSwiping && "transition-transform duration-200")}
+          className={clsx("relative z-10 flex w-full flex-col bg-zinc-900", !isSwiping && "transition-transform duration-200")}
         >
-          <div className={clsx("flex flex-col", isExpanded ? "p-4" : "p-3")}>
+          <div className={clsx("flex flex-col", isExpanded ? "p-4" : "px-3 py-2.5")}>
             <div className="flex items-start gap-3">
               <div className="relative shrink-0 mt-0.5">
-                <span className={clsx("flex items-center justify-center h-10 w-10 rounded-xl border", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
+                <span className={clsx("flex items-center justify-center rounded-xl border", isExpanded ? "h-10 w-10" : "h-9 w-9", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
                   {isIfood ? <Smartphone size={19} /> : <Store size={19} />}
                 </span>
                 {position !== undefined && (
@@ -444,7 +444,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                 {/* VISUALIZAÇÃO COMPACTA */}
                 {!isExpanded && (
-                  <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-zinc-800/60 w-full">
+                  <div className="mt-1.5 flex w-full flex-col gap-1.5 border-t border-zinc-800/50 pt-1.5">
 
                     <div className="flex items-center gap-2.5">
                       <a
@@ -503,7 +503,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 gap-2 pt-2 border-t border-zinc-800/40 min-[390px]:grid-cols-[minmax(0,1fr)_auto] min-[390px]:items-center">
+                    <div className="grid grid-cols-1 gap-1.5 border-t border-zinc-800/40 pt-1.5 min-[390px]:grid-cols-[minmax(0,1fr)_auto] min-[390px]:items-center">
                       <div className="flex min-w-0 items-center gap-1.5">
                         <button
                           type="button"
