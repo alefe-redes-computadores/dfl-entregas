@@ -1,6 +1,7 @@
 // lib/delivery-intelligence/buildOperationalIntelligence.ts
 import type { Customer, Delivery, Route, StockSupply } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { isInternalOperationalCustomer, isInternalOperationalRoute } from '@/lib/operational-exclusions';
 import {
   compareDateKeys,
   saoPauloDateKey,
@@ -427,8 +428,21 @@ export function buildOperationalIntelligence(
     input.customers.map((item) => [item.id, item]),
   );
 
-  const logistics = deliveries.filter(isDeliveryFulfillment);
-  const datedDeliveries = deliveries.filter((item) =>
+  const internalCustomerIds = new Set(
+    input.customers
+      .filter(isInternalOperationalCustomer)
+      .map((customer) => customer.id),
+  );
+
+  const operationalDeliveries = deliveries.filter(
+    (delivery) => !internalCustomerIds.has(delivery.customer_id),
+  );
+  const operationalRoutes = routes.filter(
+    (route) => !isInternalOperationalRoute(route, input.motoboys),
+  );
+
+  const logistics = operationalDeliveries.filter(isDeliveryFulfillment);
+  const datedDeliveries = operationalDeliveries.filter((item) =>
     Boolean(deliveryOperationalTimestamp(item)),
   ).length;
   const structuredNeighborhoods = logistics.filter((item) =>
@@ -440,11 +454,11 @@ export function buildOperationalIntelligence(
 
   // A nova régua operacional começa nesta implantação. Rotas históricas continuam
   // nos relatórios, mas não geram alertas de duração na inteligência nova.
-  const intelligenceRoutes = routes.filter((route) =>
+  const intelligenceRoutes = operationalRoutes.filter((route) =>
     (routeOperationalTimestamp(route)?.getTime() || 0) >= new Date('2026-09-09T00:00:00-03:00').getTime(),
   );
   const memory = buildOperationalMemory({
-    deliveries,
+    deliveries: operationalDeliveries,
     routes: intelligenceRoutes,
     customers: input.customers,
     motoboys: input.motoboys,
@@ -466,14 +480,18 @@ export function buildOperationalIntelligence(
 
   const insights = [
     ...qualityInsights({
-      deliveries,
-      undatedDeliveries: includeUndatedQuality ? undatedDeliveries : [],
+      deliveries: operationalDeliveries,
+      undatedDeliveries: includeUndatedQuality
+        ? undatedDeliveries.filter(
+            (delivery) => !internalCustomerIds.has(delivery.customer_id),
+          )
+        : [],
       customers: input.customers,
       minimumSample,
     }),
-    ...demandInsights(deliveries, minimumSample),
+    ...demandInsights(operationalDeliveries, minimumSample),
     ...geographyInsights({
-      deliveries,
+      deliveries: operationalDeliveries,
       customers: input.customers,
       minimumSample,
     }),
@@ -544,7 +562,7 @@ export function buildOperationalIntelligence(
     coverage: {
       datedDeliveries,
       undatedDeliveries: includeUndatedQuality ? undatedDeliveries.length : 0,
-      deliveryRecords: deliveries.length,
+      deliveryRecords: operationalDeliveries.length,
       structuredNeighborhoods,
       routedDeliveries,
       stockSupplyRecords: stockSupplies.length,

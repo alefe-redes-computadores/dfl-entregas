@@ -1,6 +1,7 @@
 import type { Customer, Delivery, Route, StockSupply } from '@/types';
 import { SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { isInternalOperationalCustomer, isInternalOperationalRoute } from '@/lib/operational-exclusions';
 import { deliveryCustomerCharge, deliveryEconomicValue, deliveryIfoodSubsidy } from '@/lib/delivery-finance';
 import {
   deliveryOperationalTimestamp,
@@ -587,17 +588,32 @@ export function buildReportModel(input: {
 
   const logisticsCurrent = current.filter((delivery) => isDeliveryFulfillment(delivery));
 
+  // Comercial permanece íntegro; apenas os recortes operacionais ignoram
+  // pedidos do perfil interno.
+  const customerOperationalCurrent = logisticsCurrent.filter(
+    (delivery) => !isInternalOperationalCustomer(delivery.customer),
+  );
+
+  const motoboyOperationalCurrent = customerOperationalCurrent.filter(
+    (delivery) =>
+      !delivery.route ||
+      !isInternalOperationalRoute(delivery.route),
+  );
+
   const neighborhoods = aggregate(
-    logisticsCurrent,
+    customerOperationalCurrent,
     (delivery) => delivery.neighborhood,
   ).sort((a, b) => b.count - a.count);
 
   const motoboys = aggregate(
-    logisticsCurrent,
+    motoboyOperationalCurrent,
     (delivery) => delivery.route?.motoboy_name?.trim() || 'Não atribuído',
   ).sort((a, b) => b.count - a.count);
 
-  const routeTiming = buildRouteTimings(input.routes, logisticsCurrent);
+  const operationalRoutes = input.routes.filter(
+    (route) => !isInternalOperationalRoute(route),
+  );
+  const routeTiming = buildRouteTimings(operationalRoutes, motoboyOperationalCurrent);
   const stock = buildStockReport(input.stockSupplies, period);
 
   return {
@@ -634,6 +650,6 @@ export function buildReportModel(input: {
     motoboys,
     routeTimings: routeTiming.trusted,
     stock,
-    quality: buildQuality(logisticsCurrent, routeTiming.suspicious),
+    quality: buildQuality(customerOperationalCurrent, routeTiming.suspicious),
   };
 }

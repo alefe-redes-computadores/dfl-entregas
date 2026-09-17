@@ -4,6 +4,7 @@ import {
   routeBelongsToMotoboy,
   routeOperationalDate,
 } from '@/lib/motoboy-analytics';
+import { isInternalOperationalMotoboy } from '@/lib/operational-exclusions';
 
 export function buildPendingMotoboySettlements(input:{
   motoboys:Motoboy[];
@@ -15,7 +16,7 @@ export function buildPendingMotoboySettlements(input:{
   const date=input.dateKey||operationalDateKey(new Date());
 
   return input.motoboys
-    .filter((motoboy)=>motoboy.active)
+    .filter((motoboy)=>motoboy.active && !isInternalOperationalMotoboy(motoboy))
     .flatMap((motoboy)=>{
       const dayRoutes=input.routes.filter((route)=>{
         if(!routeBelongsToMotoboy(route,motoboy))return false;
