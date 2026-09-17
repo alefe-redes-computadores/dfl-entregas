@@ -785,7 +785,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
           <div className="mt-2 flex flex-col gap-2">
             {sortedDeliveries.length === 0 && isNotStarted && !isVirtualRoute && (
-              <button onClick={handleDeleteEmptyRoute} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-red-500/10 border border-red-500/20 py-3.5 text-sm font-bold text-red-500 hover:bg-red-500/20 active:scale-95 transition-all">
+              <button onClick={handleDeleteEmptyRoute} className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-red-500/10 border border-red-500/20 py-3.5 text-sm font-bold text-red-500 hover:bg-red-500/20 active:scale-95 transition-all dfl-v26-panel-press">
                 <Trash2 size={18} /> Excluir Rota Vazia
               </button>
             )}

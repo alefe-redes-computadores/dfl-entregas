@@ -139,3 +139,123 @@ h1, h2, h3, h4, h5, h6 {
   .dfl-empty { @apply rounded-[24px] border border-dashed border-zinc-800/80 bg-zinc-900/20 px-5 py-12 text-center; }
   .dfl-bottom-sheet { @apply rounded-t-[30px] border-t border-zinc-800 bg-zinc-950 shadow-[0_-24px_70px_rgba(0,0,0,0.48)]; }
 }
+
+/* ==========================================================
+   DFL V26 — POLIMENTO OPERACIONAL MOBILE
+   Camada opt-in; não altera contratos de domínio.
+   ========================================================== */
+@layer components {
+  .dfl-v26-shell {
+    @apply mx-auto w-full max-w-3xl space-y-4 px-3 pb-28 pt-3 sm:px-4;
+  }
+
+  .dfl-v26-hero {
+    @apply relative overflow-hidden rounded-[24px] border border-zinc-800/90 bg-zinc-950/75 p-4 shadow-2xl shadow-black/20;
+  }
+
+  .dfl-v26-hero::after {
+    content: "";
+    @apply pointer-events-none absolute -right-10 -top-14 h-32 w-32 rounded-full bg-emerald-500/[.07] blur-3xl;
+  }
+
+  .dfl-v26-kicker {
+    @apply text-[9px] font-black uppercase tracking-[.18em] text-zinc-500;
+  }
+
+  .dfl-v26-title {
+    @apply mt-1 text-xl font-black tracking-[-.025em] text-zinc-100;
+  }
+
+  .dfl-v26-subtitle {
+    @apply mt-1 text-[11px] font-medium leading-relaxed text-zinc-500;
+  }
+
+  .dfl-v26-panel {
+    @apply rounded-[20px] border border-zinc-800/80 bg-zinc-900/45 shadow-lg shadow-black/10;
+  }
+
+  .dfl-v26-panel-press {
+    @apply dfl-v26-panel transition duration-150 active:scale-[.985] active:border-zinc-700;
+  }
+
+  .dfl-v26-toolbar {
+    @apply flex items-center gap-2 rounded-[18px] border border-zinc-800 bg-zinc-950/60 p-2;
+  }
+
+  .dfl-v26-chip {
+    @apply inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/80 px-2.5 text-[9px] font-black uppercase tracking-wide text-zinc-400;
+  }
+
+  .dfl-v26-chip-active {
+    @apply border-emerald-500/25 bg-emerald-500/[.08] text-emerald-400;
+  }
+
+  .dfl-v26-status-zero {
+    @apply border-red-500/25 bg-red-500/[.07] text-red-400;
+  }
+
+  .dfl-v26-status-low {
+    @apply border-amber-500/25 bg-amber-500/[.07] text-amber-400;
+  }
+
+  .dfl-v26-status-ok {
+    @apply border-emerald-500/20 bg-emerald-500/[.055] text-emerald-400;
+  }
+
+  .dfl-v26-site {
+    @apply relative overflow-hidden rounded-[22px] border border-sky-500/15 bg-gradient-to-br from-sky-500/[.055] via-zinc-950/80 to-zinc-950/80;
+  }
+
+  .dfl-v26-site-awaiting {
+    @apply border-amber-500/25 from-amber-500/[.07];
+  }
+
+  .dfl-v26-site-road {
+    @apply border-emerald-500/20 from-emerald-500/[.06];
+  }
+
+  .dfl-v26-row {
+    @apply flex min-h-[58px] items-center gap-3 rounded-[17px] border border-zinc-800/80 bg-zinc-950/45 px-3 py-2.5;
+  }
+
+  .dfl-v26-icon {
+    @apply grid h-10 w-10 shrink-0 place-items-center rounded-[14px] border border-zinc-800 bg-zinc-900 text-zinc-400;
+  }
+
+  .dfl-v26-section-title {
+    @apply flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-[.14em] text-zinc-500;
+  }
+
+  .dfl-v26-metric {
+    @apply min-w-0 rounded-[16px] border border-zinc-800/80 bg-zinc-950/45 px-3 py-2.5;
+  }
+
+  .dfl-v26-metric-label {
+    @apply text-[8px] font-black uppercase tracking-[.12em] text-zinc-600;
+  }
+
+  .dfl-v26-metric-value {
+    @apply mt-1 truncate text-sm font-black tracking-tight text-zinc-200;
+  }
+
+  .dfl-v26-primary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-[15px] border border-emerald-500/20 bg-emerald-500/[.09] px-4 text-[10px] font-black uppercase tracking-wide text-emerald-400 transition active:scale-[.97];
+  }
+
+  .dfl-v26-secondary {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-[14px] border border-zinc-800 bg-zinc-900/75 px-3 text-[10px] font-black text-zinc-400 transition active:scale-[.97];
+  }
+
+  .dfl-v26-list {
+    @apply space-y-2;
+  }
+
+  .dfl-v26-divider {
+    @apply border-t border-zinc-800/70;
+  }
+}
+
+/* DFL V27 — POLIMENTO ESTRUTURAL */
+@layer components {
+  .dfl-v27-routes .dfl-search { @apply h-11; }
+}

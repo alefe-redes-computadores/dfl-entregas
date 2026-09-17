@@ -92,8 +92,8 @@ export default function MaisPage() {
         </p>
       </header>
 
-      <section className="flex flex-col items-center justify-center gap-3 rounded-[26px] border border-emerald-500/15 bg-gradient-to-br from-emerald-500/[.07] via-zinc-900/55 to-zinc-950 p-6 shadow-[0_18px_40px_rgba(0,0,0,.18)]">
-        <div className="relative h-20 w-20 overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 ring-4 ring-zinc-800">
+      <section className="flex items-center gap-3 rounded-[22px] border border-emerald-500/15 bg-gradient-to-br from-emerald-500/[.055] via-zinc-900/45 to-zinc-950 p-4 shadow-[0_14px_32px_rgba(0,0,0,.14)]">
+        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-[18px] bg-gradient-to-br from-emerald-500 to-emerald-700 ring-2 ring-zinc-800">
           {user?.photoURL ? (
             <img
               src={user.photoURL}
@@ -107,7 +107,7 @@ export default function MaisPage() {
           )}
         </div>
 
-        <div className="text-center">
+        <div className="min-w-0 flex-1 text-left">
           <h2 className="font-heading text-lg font-bold text-zinc-50">
             {fullName}
           </h2>

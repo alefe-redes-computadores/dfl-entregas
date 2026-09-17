@@ -732,7 +732,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       {/* Modal Redirecionamento Direto para o Portal iFood */}
       {confirmRedirectModal.isOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-4">
+          <div className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-4 dfl-v26-panel-press">
             <div className="flex flex-col items-center justify-center text-center gap-3">
               <div className="h-16 w-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center border border-red-500/20 mb-2">
                 <CheckSquare size={28} />

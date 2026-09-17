@@ -988,6 +988,21 @@ export const useAppStore = create<AppState>()(
 
       updateStockProduct: async (id, data) => {
         const previous = get().stockProducts;
+        const current = previous.find((item) => item.id === id);
+        if (!current) throw new Error('Produto de estoque não encontrado.');
+
+        const hasHistory = get().stockMovements.some(
+          (movement) => movement.product_id === id,
+        );
+
+        // Categoria é classificação atual e pode evoluir sem reescrever o histórico.
+        // Unidade é contrato quantitativo e fica imutável após a primeira movimentação.
+        if (hasHistory && data.unit && data.unit !== current.unit) {
+          throw new Error(
+            'A unidade de controle não pode ser alterada porque este produto já possui histórico.',
+          );
+        }
+
         const next = { ...data, updated_at: new Date().toISOString() };
         set({ stockProducts: previous.map((item) => item.id === id ? { ...item, ...next } : item) });
         try { await updateDoc(doc(db, 'stock_products', id), sanitizeForFirebase(next)); }

@@ -335,6 +335,12 @@ export function StockSupplyForm({
 
   const itemErrors = useMemo<Record<string, ItemErrors>>(() => {
     const errors: Record<string, ItemErrors> = {};
+    const productCounts = items.reduce<Record<string, number>>((all, item) => {
+      if (item.stock_product_id) {
+        all[item.stock_product_id] = (all[item.stock_product_id] || 0) + 1;
+      }
+      return all;
+    }, {});
 
     for (const item of items) {
       const current: ItemErrors = {};
@@ -344,6 +350,12 @@ export function StockSupplyForm({
       if (!item.name.trim()) {
         current.product =
           'Selecione um produto ou informe o nome do item.';
+      } else if (
+        item.stock_product_id &&
+        (productCounts[item.stock_product_id] || 0) > 1
+      ) {
+        current.product =
+          'Este produto já foi adicionado nesta compra. Ajuste a quantidade no item existente.';
       }
       if (!(bought > 0)) {
         current.quantity = 'Informe uma quantidade maior que zero.';
@@ -627,7 +639,15 @@ export function StockSupplyForm({
               <label className="mt-3 block text-[10px] font-bold text-zinc-500">
                 Produto*
                 <StockProductPicker
-                  products={products}
+                  products={products.filter(
+                    (candidate) =>
+                      candidate.id === item.stock_product_id ||
+                      !items.some(
+                        (other) =>
+                          other.id !== item.id &&
+                          other.stock_product_id === candidate.id,
+                      ),
+                  )}
                   draftIncoming={draftIncoming}
                   preferredProductIds={preferredProductIds}
                   supplierLabel={supplierText || undefined}

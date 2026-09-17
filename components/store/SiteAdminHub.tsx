@@ -87,7 +87,7 @@ export function SiteAdminHub() {
 
   return (
     <section
-      className={`overflow-hidden rounded-[24px] border bg-zinc-900/45 transition-colors ${
+      className={`dfl-v26-site overflow-hidden rounded-[24px] border bg-zinc-900/45 transition-colors ${
         hasAttention
           ? 'border-amber-400/25'
           : 'border-zinc-800'

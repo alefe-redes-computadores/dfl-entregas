@@ -232,7 +232,7 @@ export default function DeliveriesPage() {
 
       </header>
 
-      <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2">
+      <div className="flex items-center gap-1.5 rounded-[18px] border border-zinc-800 bg-zinc-900/40 p-1.5">
         <button
           onClick={() => setSelectedDate((value) => shiftOperationalDateKey(value, -1))}
           className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"
@@ -261,7 +261,7 @@ export default function DeliveriesPage() {
         </button>
       </div>
 
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 px-3.5 py-3">
+      <section className="rounded-[18px] border border-zinc-800 bg-zinc-900/35 px-3 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-4">
             <div>
@@ -458,7 +458,7 @@ export default function DeliveriesPage() {
             <button
               key={delivery.id}
               onClick={() => router.push(`/entregas/details?id=${delivery.id}&date=${encodeURIComponent(selectedDate)}`)}
-              className={`w-full rounded-[24px] border p-4 text-left active:scale-[0.99] ${
+              className={`w-full rounded-[20px] border p-3.5 text-left active:scale-[0.99] ${
                 incomplete
                   ? 'border-amber-500/30 bg-amber-500/[.045]'
                   : delivery.completed

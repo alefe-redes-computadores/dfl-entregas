@@ -155,7 +155,7 @@ export default function RoutesPage() {
   );
   const selectDate = (key: string) => { setSelectedDate(key); setFilter('todas'); setCalendarOpen(false); };
 
-  return <div className="dfl-page">
+  return <div className="dfl-page dfl-v27-routes">
     <header className="flex items-center justify-between">
       <div className="flex min-w-0 items-center gap-3"><button onClick={() => router.replace('/loja')} aria-label="Voltar para Minha Loja" className="dfl-icon-button"><ChevronLeft size={20}/></button><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Operação diária</p><h1 className="font-heading text-2xl font-bold text-zinc-50">Rotas</h1></div></div>
     </header>
