@@ -17,9 +17,9 @@ function Content() {
   const [busy, setBusy] = useState(false); const [confirmAction,setConfirmAction]=useState<'delete'|'reverse'|null>(null);
   if (!supply) return <PageHeader title="Compra não encontrada" to="/abastecimentos"/>;
   const advance = async () => {
-    const next = supply.status === 'solicitado' ? 'em_compra' : supply.status === 'em_compra' ? 'recebido' : supply.status === 'recebido' ? 'conferido' : null;
+    const next = supply.status === 'solicitado' ? 'em_compra' : supply.status === 'em_compra' ? 'recebido' : null;
     if (!next) return; setBusy(true);
-    try { const now = new Date().toISOString(); await update(supply.id, { status: next, shopping_started_at:next==='em_compra'?now:supply.shopping_started_at, received_at: next === 'recebido' ? now : supply.received_at, checked_at: next === 'conferido' ? now : supply.checked_at }); toast.success(`Status: ${SUPPLY_STATUS_LABELS[next]}.`); } finally { setBusy(false); }
+    try { const now = new Date().toISOString(); await update(supply.id, { status: next, shopping_started_at:next==='em_compra'?now:supply.shopping_started_at, received_at: next === 'recebido' ? now : supply.received_at }); toast.success(`Status: ${SUPPLY_STATUS_LABELS[next]}.`); } finally { setBusy(false); }
   };
   const deleteRecord = async () => { setBusy(true); try { await remove(supply.id); setConfirmAction(null); toast.success('Registro excluído.'); router.replace('/abastecimentos'); } catch { toast.error('Não foi possível excluir.'); setBusy(false); } };
   const checkIn = async () => { setBusy(true); try { await integrate(supply.id); toast.success('Compra conferida e estoque atualizado.'); } catch (error) { toast.error(error instanceof Error ? error.message : 'Não foi possível integrar ao estoque.'); } finally { setBusy(false); } };

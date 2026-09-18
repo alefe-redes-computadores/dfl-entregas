@@ -205,6 +205,17 @@ const defaultSchedule = Object.fromEntries(
  */
 const pendingStockSupplyWrites = new Map<string, Promise<void>>();
 
+/**
+ * V38A — orçamento de leituras Firestore.
+ *
+ * initData() ainda é uma sincronização completa e cara. Enquanto a camada
+ * incremental não existe, uma sessão do app só pode executá-la uma vez.
+ * Escritas continuam otimistas e persistidas normalmente; o botão manual
+ * pode ganhar uma API de refresh dedicada numa etapa posterior sem voltar
+ * a baixar todo o histórico por remontagem de AuthGuard/Header.
+ */
+let fullCloudSyncCompletedThisSession = false;
+
 const trackStockSupplyWrite = (
   id: string,
   operation: Promise<void>,
@@ -357,9 +368,9 @@ export const useAppStore = create<AppState>()(
       initData: async () => {
         if (!get().hasHydrated) return;
 
-        // Header/AuthGuard ou duas montagens React não podem iniciar
-        // duas tomografias completas do Firestore ao mesmo tempo.
-        if (get().isSyncing) return;
+        // V38A: uma tomografia completa por sessão é o teto temporário.
+        // Evita que remontagens/navegação repitam todas as coleções.
+        if (get().isSyncing || fullCloudSyncCompletedThisSession) return;
 
         set({ isSyncing: true, syncError: false });
         try {
@@ -597,6 +608,7 @@ export const useAppStore = create<AppState>()(
             isSyncing: false,
             syncError: false
           });
+          fullCloudSyncCompletedThisSession = true;
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false, syncError: true });

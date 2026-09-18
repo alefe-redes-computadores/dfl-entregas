@@ -35,6 +35,14 @@ const POSTAL =
 const POSTAL_ONLY =
   /^\s*(?:cep\s*:?\s*)?\d{5}-?\d{3}\s*$/i;
 
+const stripPostalResidue = (value: string) =>
+  spaces(value)
+    .replace(/(?:^|\s[-–—,]?\s*)\bcep\s*:?\s*\d{5}-?\d{3}\b/gi, ' ')
+    .replace(/(?:^|\s[-–—,]?\s*)\b\d{5}-\d{3}\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*[-–—,]\s*$/g, '')
+    .trim();
+
 const URL = /https?:\/\/[^\s<>()]+/gi;
 
 /*
@@ -771,6 +779,13 @@ export function parseIfoodOrderText(
       result.observations,
       neighborhood,
     );
+  }
+
+  // Invariante final: CEP completo nunca pertence ao endereço operacional.
+  // O formato sem hífen só é removido quando veio rotulado como CEP; assim
+  // um identificador numérico de 8 dígitos não é apagado por acidente.
+  if (result.address) {
+    result.address = stripPostalResidue(result.address);
   }
 
   if (!result.customerCharge && result.value) {
