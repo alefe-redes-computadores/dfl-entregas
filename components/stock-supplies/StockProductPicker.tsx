@@ -67,12 +67,12 @@ export function StockProductPicker({
     allProducts.find((product) => product.id === value) ||
     products.find((product) => product.id === value);
 
+  const preferredSectionLabel = supplierLabel
+    ? `Comprados em ${supplierLabel}`
+    : 'Comprados neste fornecedor';
+
   const projectedQuantity = (product: StockProduct) =>
     product.current_quantity + (draftIncoming[product.id] || 0);
-
-  const preferredCount = preferredProductIds.filter((id) =>
-    products.some((product) => product.id === id),
-  ).length;
 
   const preferredRank = useMemo(
     () =>
@@ -157,7 +157,7 @@ export function StockProductPicker({
     return [
       {
         key: 'preferred' as const,
-        label: 'Comprados neste fornecedor',
+        label: preferredSectionLabel,
         groups: groupByCategory(preferred),
       },
       ...(others.length
@@ -173,6 +173,7 @@ export function StockProductPicker({
   }, [
     filtered,
     preferredRank,
+    preferredSectionLabel,
   ]);
 
   const canCreate =
@@ -360,19 +361,6 @@ export function StockProductPicker({
                   encontrar um item, você pode cadastrá-lo aqui.
                 </p>
 
-                {preferredCount > 0 && !query.trim() && (
-                  <div className="mt-3 rounded-xl border border-emerald-500/15 bg-emerald-500/[.04] px-3 py-2">
-                    <p className="text-[10px] font-bold text-emerald-300">
-                      Sugestões pelo histórico de compras
-                    </p>
-                    <p className="mt-0.5 text-[9px] leading-relaxed text-zinc-600">
-                      {supplierLabel
-                        ? `Priorizando produtos já comprados em ${supplierLabel}.`
-                        : 'Priorizando produtos já comprados deste fornecedor.'}
-                    </p>
-                  </div>
-                )}
-
                 {filtered.length === 0 ? (
                   <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 text-center">
                     <p className="text-sm font-bold text-zinc-400">
@@ -437,7 +425,7 @@ export function StockProductPicker({
                             ) : (
                               <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.04] px-3 py-2.5">
                                 <p className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
-                                  Comprados neste fornecedor
+                                  {section.label}
                                 </p>
                                 <p className="mt-0.5 text-[9px] text-zinc-600">
                                   {sectionCount}{' '}

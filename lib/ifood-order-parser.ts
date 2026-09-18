@@ -37,6 +37,27 @@ const POSTAL_ONLY =
 
 const URL = /https?:\/\/[^\s<>()]+/gi;
 
+/*
+ * Contrato operacional real do texto copiado do iFood:
+ *   1234 12345678
+ * primeiro token = número do pedido; segundo = ID iFood.
+ *
+ * A linha inteira é reservada antes dos fallbacks genéricos para impedir
+ * que o ID concorra com CEP/código e para manter múltiplos pedidos estáveis.
+ */
+const IFOOD_HEADER =
+  /^\s*#?(\d{4})\s+(\d{8})\s*$/;
+
+function explicitIfoodHeader(line: string) {
+  const match = line.match(IFOOD_HEADER);
+  if (!match) return null;
+
+  return {
+    orderId: match[1],
+    ifoodId: match[2],
+  };
+}
+
 const MAP_HOST =
   /(?:google\.[^/]+\/(?:maps|url)|maps\.google\.[^/]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i;
 
@@ -534,21 +555,23 @@ export function parseIfoodOrderText(
       context.knownNeighborhoods,
     );
 
-  const knownCustomer =
-    longestKnownMatch(
-      text,
-      context.knownCustomerNames,
-    );
-
-  if (knownCustomer) {
-    result.customerName = knownCustomer;
-  }
+  // Cliente conhecido não é inferido do texto inteiro.
+  // O nome só ganha autoridade em linha explícita ou na posição esperada
+  // depois do cabeçalho do pedido.
 
   // Primeira passada: IDs reservados e link do Maps.
   lines.forEach((line, index) => {
     const url = mapUrl(line);
 
     if (url) result.mapsLink = url;
+
+    const header = explicitIfoodHeader(line);
+    if (header) {
+      result.orderId ||= header.orderId;
+      result.ifoodId ||= header.ifoodId;
+      if (idLine < 0) idLine = index;
+      return;
+    }
 
     const explicitId = explicitIfoodId(line);
     const explicitOrder = explicitOrderNumber(line);
@@ -665,9 +688,16 @@ export function parseIfoodOrderText(
       !DRINK_WORD.test(line) &&
       !/\d+[.,]\d{2}/.test(line)
     ) {
-      result.customerName = line
+      const cleanedCandidate = line
         .replace(/^[-•*]\s*/, '')
         .trim();
+      const knownCandidate =
+        longestKnownMatch(
+          cleanedCandidate,
+          context.knownCustomerNames,
+        );
+
+      result.customerName = knownCandidate || cleanedCandidate;
       return;
     }
 
@@ -783,12 +813,17 @@ export function parseIfoodOrdersText(
    * safeEightDigitCandidate() já o rejeitam antes daqui.
    */
   const headers = lines
-    .map((line, index) => ({
-      index,
-      ifoodId:
-        explicitIfoodId(line) ||
-        safeEightDigitCandidate(line),
-    }))
+    .map((line, index) => {
+      const header = explicitIfoodHeader(line);
+
+      return {
+        index,
+        ifoodId:
+          header?.ifoodId ||
+          explicitIfoodId(line) ||
+          safeEightDigitCandidate(line),
+      };
+    })
     .filter((item) => Boolean(item.ifoodId))
     .map((item) => item.index);
 

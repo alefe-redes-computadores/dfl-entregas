@@ -12,6 +12,7 @@ import type { Delivery, Route } from '@/types';
 import { extractLatLngFromMapsUrl } from '@/lib/maps';
 import { useAppStore } from '@/store/useAppStore';
 import { buildPendingMotoboySettlements } from '@/lib/motoboy-settlement-tasks';
+import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
 
 type ActionRow = {
   key: string;
@@ -35,11 +36,30 @@ export function OperationalCommandCenter({
   const confirmationBacklog = useAppStore(
     (state) => state.ifoodPendingConfirmations,
   );
+  const allDeliveries = useAppStore((state) => state.deliveries);
   const motoboys = useAppStore((state) => state.motoboys);
   const operationalExpenses = useAppStore((state) => state.operationalExpenses);
 
   const openRoutes = routes.filter((route) => route.status === 'aberta');
   const pending = deliveries.filter((delivery) => !delivery.completed);
+
+  // Backlog comercial global: não depende do dia, rota ou completed.
+  // Enquanto o Site continuar dizendo Pendente, a Home continua cobrando ação.
+  const pendingSiteOrders = allDeliveries
+    .filter(isSiteOrderAwaitingConfirmation)
+    .sort((a, b) => {
+      const aTime = Date.parse(a.site_order_status_updated_at || a.createdAt || '');
+      const bTime = Date.parse(b.site_order_status_updated_at || b.createdAt || '');
+      return (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
+    });
+
+  const oldestPendingSiteOrder = pendingSiteOrders[0];
+  const oldestPendingSiteOrderLabel =
+    oldestPendingSiteOrder?.external_order_id?.trim() ||
+    oldestPendingSiteOrder?.order_id?.trim() ||
+    '';
+  const oldestPendingSiteCustomer =
+    oldestPendingSiteOrder?.customer_name?.trim() || '';
 
   const noAddress = pending.filter(
     (delivery) => !delivery.address_string?.trim(),
@@ -62,15 +82,27 @@ export function OperationalCommandCenter({
   );
 
   const routeSpecificPending = externalPending.filter((item) => item.route_id);
+  const standalonePending = externalPending.filter((item) => !item.route_id);
+  const pendingRouteIds = Array.from(
+    new Set(
+      routeSpecificPending
+        .map((item) => item.route_id)
+        .filter((routeId): routeId is string => Boolean(routeId)),
+    ),
+  );
   const firstPendingRoute = routeSpecificPending[0];
 
-  const confirmationHref = firstPendingRoute?.route_id
-    ? `/confirmacoes?route=${encodeURIComponent(
-        firstPendingRoute.route_id,
-      )}&routeName=${encodeURIComponent(
-        firstPendingRoute.route_name || 'Rota finalizada',
-      )}`
-    : '/confirmacoes';
+  // Deep-link só quando toda a fila pertence à mesma rota.
+  const confirmationHref =
+    pendingRouteIds.length === 1 &&
+    standalonePending.length === 0 &&
+    firstPendingRoute?.route_id
+      ? `/confirmacoes?route=${encodeURIComponent(
+          firstPendingRoute.route_id,
+        )}&routeName=${encodeURIComponent(
+          firstPendingRoute.route_name || 'Rota finalizada',
+        )}`
+      : '/confirmacoes';
 
   const settlementTasks = buildPendingMotoboySettlements({
     motoboys,
@@ -81,6 +113,29 @@ export function OperationalCommandCenter({
   const firstSettlementTask = settlementTasks[0];
 
   const rows = [
+    {
+      key: 'site-order-pending',
+      label:
+        pendingSiteOrders.length === 1
+          ? 'Confirmar pedido do Site'
+          : 'Confirmar pedidos do Site',
+      description:
+        pendingSiteOrders.length === 1
+          ? [
+              oldestPendingSiteOrderLabel
+                ? `Pedido #${oldestPendingSiteOrderLabel}`
+                : 'Pedido recebido pelo Site',
+              oldestPendingSiteCustomer || '',
+            ]
+              .filter(Boolean)
+              .join(' · ')
+          : `${pendingSiteOrders.length} pedidos continuam Pendentes no fluxo comercial`,
+      count: pendingSiteOrders.length,
+      href: '/loja',
+      icon: ShieldAlert,
+      tone: 'red',
+      priority: 110,
+    },
     {
       key: 'address',
       label: 'Completar endereço',
@@ -94,7 +149,10 @@ export function OperationalCommandCenter({
     {
       key: 'ifood-external',
       label: 'Confirmar pedidos no iFood',
-      description: 'Entrega concluída não confirma o pedido no portal',
+      description:
+        pendingRouteIds.length > 1 || standalonePending.length > 0
+          ? `${routeSpecificPending.length} de rota · ${standalonePending.length} avulso${standalonePending.length === 1 ? '' : 's'}`
+          : 'Entrega concluída não confirma o pedido no portal',
       count: externalPending.length,
       href: confirmationHref,
       icon: ShieldAlert,

@@ -77,11 +77,12 @@ export async function copyDeliveryToClipboard(
       parts.push(`🛒 *Origem:* ${getOriginLabel(delivery)}`);
     }
 
-    parts.push(`🏠 *Endereço:* ${delivery.address_string}`);
-    if (delivery.observation) parts.push(`⚠️ *Observação:* ${delivery.observation}`);
+    const individualAddress = routeAddressParts(delivery.address_string);
+    parts.push(`📍 *Destino:* ${individualAddress.neighborhood} · ${individualAddress.streetWithNumber}`);
+    if (delivery.observation) parts.push(`⚠️ *ATENÇÃO:* ${delivery.observation}`);
 
     if (clientPhone && delivery.notify_whatsapp) {
-      const gateMsg = encodeURIComponent('Olá! Sou o entregador da Da Família Lanches, cheguei no portão com seu pedido!');
+      const gateMsg = encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.');
       parts.push(`📲 *Chamar no portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
     }
 
@@ -214,6 +215,7 @@ function routeAddressParts(
   return {
     neighborhood,
     street,
+    streetWithNumber,
     fullAddress:
       canonical.address ||
       'Endereço não informado',
@@ -263,7 +265,7 @@ export async function generateRouteMessages(
     }
 
     msg1.push(`──────────────`);
-    msg1.push(`📍 *PARADAS*`);
+    msg1.push(`📍 *PARADAS · ORDEM DE ENTREGA*`);
     const ifoodCount = deliveries.filter((delivery) => delivery.origin === 'ifood').length;
     const storeCount = deliveries.filter((delivery) => delivery.origin === 'loja').length;
     const unknownOriginCount = deliveries.length - ifoodCount - storeCount;
@@ -283,16 +285,27 @@ export async function generateRouteMessages(
     const firstStopNumber = new Map<string, number>();
     const seenCodesByGroup = new Map<string, Set<string>>();
 
-    const neighborhoodCounts = deliveries.reduce((acc: Record<string, number>, d) => {
-      const cust = getCustomerById(d.customer_id);
-      const parts = routeAddressParts(
-        d.address_string,
-        cust?.address,
-        cust?.neighborhood,
-      );
-      acc[parts.neighborhood] = (acc[parts.neighborhood] || 0) + 1;
-      return acc;
-    }, {});
+    const neighborhoodCounts = (() => {
+      const counts: Record<string, number> = {};
+      const seenGroups = new Set<string>();
+
+      deliveries.forEach((delivery) => {
+        const groupKey = deliveryGroupKey(delivery);
+        if (seenGroups.has(groupKey)) return;
+        seenGroups.add(groupKey);
+
+        const customer = getCustomerById(delivery.customer_id);
+        const parts = routeAddressParts(
+          delivery.address_string,
+          customer?.address,
+          customer?.neighborhood,
+        );
+
+        counts[parts.neighborhood] = (counts[parts.neighborhood] || 0) + 1;
+      });
+
+      return counts;
+    })();
 
     deliveries.forEach((delivery, index) => {
       const num = index + 1;
@@ -356,19 +369,18 @@ export async function generateRouteMessages(
       }
 
       if (firstInGroup) {
-        msg1.push(`🏠 Endereço: ${street}`);
-        msg1.push(`- Bairro: \`${neighborhood}\``);
+        msg1.push(`📍 *${neighborhood}* · ${addressParts.streetWithNumber}`);
       } else {
-        msg1.push(`↳ *Mesmo endereço da parada ${stopNumber}*`);
+        msg1.push(`↳ Mesmo destino da parada ${stopNumber}`);
       }
 
       if (delivery.observation) {
-        msg1.push(`⚠️ *Observação:* ${delivery.observation}`);
+        msg1.push(`⚠️ *ATENÇÃO:* ${delivery.observation}`);
       }
 
       if (clientPhone && delivery.notify_whatsapp) {
         stopsNeedingCall.push({ num: stopNumber, name: clientName });
-        const gateMsg = encodeURIComponent('Olá! Sou o entregador da Da Família Lanches, cheguei no portão com seu pedido!');
+        const gateMsg = encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.');
         msg1.push(`📲 *Chamar no portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
       }
 
@@ -452,11 +464,19 @@ export async function generateRouteMessages(
     }
 
     msg2.push(`──────────────`);
-    msg2.push(`*Antes de sair*`);
+    msg2.push(`*CHECKLIST ANTES DE SAIR*`);
     msg2.push('');
 
-    deliveries.forEach((delivery, index) => {
-      const num = index + 1;
+    const summarySeenGroups = new Set<string>();
+    deliveries.forEach((delivery) => {
+      const groupKey = deliveryGroupKey(delivery);
+      if (summarySeenGroups.has(groupKey)) return;
+      summarySeenGroups.add(groupKey);
+
+      const num = physicalStopNumbers.get(groupKey) || summarySeenGroups.size;
+      const groupedDeliveries = deliveries.filter(
+        (candidate) => deliveryGroupKey(candidate) === groupKey,
+      );
       const customer = getCustomerById(delivery.customer_id);
       const addressParts = routeAddressParts(
         delivery.address_string,
@@ -464,15 +484,17 @@ export async function generateRouteMessages(
         customer?.neighborhood,
       );
       const neighborhood = addressParts.neighborhood;
-      const street = addressParts.street;
       const isDuplicate = neighborhoodCounts[neighborhood] > 1;
       const clientPhone = delivery.phone || customer?.phone;
 
-      const streetLabel = isDuplicate ? ` (${street})` : '';
-      const drinkInfo = delivery.drinks?.trim() ? ` — 🥤 *(${delivery.drinks.trim()})*` : '';
-      const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` 📲 *[ZAP]*` : '';
+      const streetLabel = isDuplicate ? ` (${addressParts.street})` : '';
+      const groupDrinks = groupedDeliveries
+        .map((candidate) => candidate.drinks?.trim())
+        .filter(Boolean)
+        .join(' + ');
+      const drinkInfo = groupDrinks ? ` · 🥤 ${groupDrinks}` : '';
+      const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` · 📲 chamar` : '';
 
-      // Removemos o aviso sujo de [CÓDIGO] daqui para deixar a lista limpa
       msg2.push(`${num}. *${neighborhood}*${streetLabel}${drinkInfo}${zapWarning}`);
     });
 

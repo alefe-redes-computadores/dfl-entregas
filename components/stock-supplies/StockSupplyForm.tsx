@@ -30,6 +30,10 @@ import { useAppStore } from '@/store/useAppStore';
 import { buildStockRecommendation } from '@/lib/stock-intelligence';
 import { stockProductValue } from '@/lib/stock';
 import { formatStockQuantity, parseStockQuantityInput } from '@/lib/stock-quantity';
+import {
+  committedStockQuantityMap,
+  netStockPurchaseQuantity,
+} from '@/lib/stock-shopping';
 
 export type StockSupplyFormValue = Omit<
   StockSupply,
@@ -114,6 +118,14 @@ export function StockSupplyForm({
 
   const movements = useAppStore((state) => state.stockMovements);
   const historicalSupplies = useAppStore((state) => state.stockSupplies);
+
+  const committedIncoming = useMemo(
+    () =>
+      committedStockQuantityMap(historicalSupplies, {
+        excludeSupplyId: initial?.id,
+      }),
+    [historicalSupplies, initial?.id],
+  );
 
   const [occurredAt, setOccurredAt] = useState(local(initial?.occurred_at));
   const [status, setStatus] = useState<StockSupplyStatus>(
@@ -713,6 +725,15 @@ export function StockSupplyForm({
                         product,
                         movements,
                       );
+                    const committed =
+                      committedIncoming.get(product.id) || 0;
+                    const currentDraft =
+                      draftIncoming[product.id] || 0;
+                    const netRecommendation =
+                      netStockPurchaseQuantity(
+                        recommendation.recommendedQuantity,
+                        committed,
+                      );
 
                     return (
                       <>
@@ -721,21 +742,17 @@ export function StockSupplyForm({
                             Estoque atual
                             <b className="block text-zinc-300">
                               {formatStockQuantity(
-                                product.current_quantity + (draftIncoming[product.id] || 0),
+                                product.current_quantity,
                                 product.unit,
-                              )}
-                              {(draftIncoming[product.id] || 0) > 0 && (
-                                <span className="ml-1 text-[8px] text-emerald-400">
-                                  (+{formatStockQuantity(draftIncoming[product.id] || 0, product.unit)} nesta compra)
-                                </span>
                               )}
                             </b>
                           </span>
                           <span className="text-zinc-600">
-                            Valor em estoque
-                            <b className="block text-emerald-400">
-                              {brl(
-                                stockProductValue(product),
+                            Já a caminho
+                            <b className="block text-sky-400">
+                              {formatStockQuantity(
+                                committed,
+                                product.unit,
                               )}
                             </b>
                           </span>
@@ -754,18 +771,45 @@ export function StockSupplyForm({
                             </b>
                           </span>
                           <span className="text-zinc-600">
-                            Sugestão agora
+                            Sugestão líquida
                             <b className="block text-amber-400">
                               {formatStockQuantity(
-                                recommendation.recommendedQuantity,
+                                netRecommendation,
                                 product.unit,
                               )}
                             </b>
                           </span>
                         </div>
 
+                        {currentDraft > 0 && (
+                          <p className="mt-2 text-[9px] font-bold text-emerald-400">
+                            Nesta compra: +{formatStockQuantity(
+                              currentDraft,
+                              product.unit,
+                            )} · cobertura planejada{' '}
+                            {formatStockQuantity(
+                              product.current_quantity +
+                                committed +
+                                currentDraft,
+                              product.unit,
+                            )}
+                          </p>
+                        )}
+
                         <p className="mt-2 text-[9px] leading-relaxed text-zinc-600">
                           {recommendation.explanation}
+                          {committed > 0
+                            ? ` A sugestão líquida desconta ${formatStockQuantity(
+                                committed,
+                                product.unit,
+                              )} já comprometido em compras abertas.`
+                            : ''}
+                        </p>
+
+                        <p className="mt-2 text-[9px] text-zinc-700">
+                          Valor atual em estoque: {brl(
+                            stockProductValue(product),
+                          )}
                         </p>
                       </>
                     );

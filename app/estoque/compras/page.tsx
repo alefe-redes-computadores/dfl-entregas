@@ -21,6 +21,10 @@ import {
   buildStockRecommendations,
 } from '@/lib/stock-intelligence';
 import { formatStockQuantity, parseStockQuantityInput } from '@/lib/stock-quantity';
+import {
+  committedStockQuantityMap,
+  netStockPurchaseQuantity,
+} from '@/lib/stock-shopping';
 import type {
   StockProduct,
   StockSupply,
@@ -56,6 +60,10 @@ export default function ShoppingList() {
     (state) => state.stockMovements,
   );
 
+  const supplies = useAppStore(
+    (state) => state.stockSupplies,
+  );
+
   const addStockSupply = useAppStore(
     (state) => state.addStockSupply,
   );
@@ -76,16 +84,54 @@ export default function ShoppingList() {
     [products, movements],
   );
 
+  const committedMap = useMemo(
+    () => committedStockQuantityMap(supplies),
+    [supplies],
+  );
+
+  const netRecommendationMap = useMemo(
+    () =>
+      new Map(
+        products.map((product) => {
+          const gross =
+            recommendationMap.get(product.id)
+              ?.recommendedQuantity || 0;
+
+          const committed =
+            committedMap.get(product.id) || 0;
+
+          return [
+            product.id,
+            {
+              gross,
+              committed,
+              net: netStockPurchaseQuantity(
+                gross,
+                committed,
+              ),
+            },
+          ] as const;
+        }),
+      ),
+    [
+      committedMap,
+      products,
+      recommendationMap,
+    ],
+  );
+
   const suggested = useMemo(
     () =>
       products
         .filter(
           (product) =>
-            (recommendationMap.get(product.id)
-              ?.recommendedQuantity || 0) > 0,
+            (
+              netRecommendationMap.get(product.id)
+                ?.net || 0
+            ) > 0,
         )
         .sort(prioritySort),
-    [products, recommendationMap],
+    [products, netRecommendationMap],
   );
 
   const [showAll, setShowAll] = useState(false);
@@ -110,8 +156,8 @@ export default function ShoppingList() {
         String(
           Number(
             (
-              recommendationMap.get(product.id)
-                ?.recommendedQuantity || 0
+              netRecommendationMap.get(product.id)
+                ?.net || 0
             ).toFixed(3),
           ),
         ),
@@ -239,9 +285,11 @@ export default function ShoppingList() {
           const recommendation =
             recommendationMap.get(product.id);
 
+          const purchasePlan =
+            netRecommendationMap.get(product.id);
+
           const suggestedQuantity =
-            recommendation?.recommendedQuantity ||
-            0;
+            purchasePlan?.net || 0;
 
           return (
             <article
@@ -320,6 +368,16 @@ export default function ShoppingList() {
                       {recommendation?.confidence}
                     </p>
                   )}
+
+                  {(purchasePlan?.committed || 0) > 0 && (
+                    <p className="mt-1 text-[9px] font-bold text-emerald-400">
+                      {formatStockQuantity(
+                        purchasePlan?.committed || 0,
+                        product.unit,
+                      )}{' '}
+                      já comprometido em compra aberta
+                    </p>
+                  )}
                 </div>
 
                 <input
@@ -351,6 +409,12 @@ export default function ShoppingList() {
               {recommendation && (
                 <p className="mt-2 border-t border-zinc-800/70 pt-2 text-[9px] leading-relaxed text-zinc-600">
                   {recommendation.explanation}
+                  {(purchasePlan?.committed || 0) > 0
+                    ? ` A sugestão líquida já desconta ${formatStockQuantity(
+                        purchasePlan?.committed || 0,
+                        product.unit,
+                      )} de compras solicitadas/em andamento.`
+                    : ''}
                 </p>
               )}
             </article>

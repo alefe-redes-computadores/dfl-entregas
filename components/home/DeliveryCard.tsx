@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, ArrowUp, ArrowDown, GripVertical, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, ExternalLink, Map as MapIcon, CheckSquare
+  Smartphone, Store, ArrowUp, ArrowDown, GripVertical, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, ExternalLink, Map as MapIcon, CheckSquare, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
@@ -42,6 +42,7 @@ const PAYMENT_CONFIG = {
 export function DeliveryCard({ delivery, customer, route, isNeighbor = false, position, pendingCount = 0, neighborPosition, neighborTotal }: DeliveryCardProps) {
   const router = useRouter();
   const updateDelivery = useAppStore((state) => state.updateDelivery);
+  const deleteDelivery = useAppStore((state) => state.deleteDelivery);
   const reorderDelivery = useAppStore((state) => state.reorderDelivery);
   const moveDeliveryToIndex = useAppStore((state) => state.moveDeliveryToIndex);
   const toggleDeliveryExpansion = useAppStore((state) => state.toggleDeliveryExpansion);
@@ -53,7 +54,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
   const touchCurrentX = useRef(0);
+  const touchCurrentY = useRef(0);
+  const swipeAxis = useRef<'pending' | 'horizontal' | 'vertical' | null>(null);
+  const completionBusyRef = useRef(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [isHandleDragging, setIsHandleDragging] = useState(false);
@@ -63,6 +68,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [confirmRedirectModal, setConfirmRedirectModal] = useState<{isOpen: boolean, copiedText: string}>({ isOpen: false, copiedText: '' });
 
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
@@ -146,7 +153,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   };
 
   const executeCompletion = async (codeToSave?: string) => {
-    if (delivery.completed) return;
+    if (delivery.completed || completionBusyRef.current) return;
+    completionBusyRef.current = true;
 
     const updatePayload: Partial<Delivery> = { completed: true };
     if (codeToSave) {
@@ -174,6 +182,24 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       toast.error('Não foi possível dar baixa na entrega.', {
         description: 'O estado anterior foi restaurado. Tente novamente.',
       });
+    } finally {
+      completionBusyRef.current = false;
+    }
+  };
+
+  const confirmDeleteDelivery = async () => {
+    if (deleteBusy || delivery.completed) return;
+    setDeleteBusy(true);
+    try {
+      await deleteDelivery(delivery.id);
+      setDeleteOpen(false);
+      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+      toast.success('Entrega excluída.', { description: 'A rota foi reconciliada e o cadastro do cliente foi preservado.' });
+    } catch (error) {
+      console.error('Erro ao excluir entrega:', error);
+      toast.error('Não foi possível excluir a entrega.', { description: error instanceof Error ? error.message : 'A entrega foi preservada.' });
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -347,49 +373,38 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
   };
 
+  const resetCardSwipe = () => {
+    setSwipeOffset(0); setIsSwiping(false);
+    touchStartX.current = 0; touchStartY.current = 0; touchCurrentX.current = 0; touchCurrentY.current = 0; swipeAxis.current = null;
+  };
+
   const handleTouchStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, textarea, select, [data-no-card-swipe="true"]')) {
-      setIsSwiping(false);
-      touchStartX.current = 0;
-      touchCurrentX.current = 0;
-      return;
-    }
-
-    touchStartX.current = e.touches[0].clientX;
-    touchCurrentX.current = e.touches[0].clientX;
-    setIsSwiping(true);
+    if (target.closest('button, a, input, textarea, select, [data-no-card-swipe=\"true\"]')) { resetCardSwipe(); return; }
+    const touch=e.touches[0]; touchStartX.current=touch.clientX; touchStartY.current=touch.clientY; touchCurrentX.current=touch.clientX; touchCurrentY.current=touch.clientY; swipeAxis.current='pending'; setIsSwiping(false);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isSwiping || touchStartX.current === 0) return;
-    touchCurrentX.current = e.touches[0].clientX;
-    const diff = touchCurrentX.current - touchStartX.current;
-    if (diff > 120) setSwipeOffset(120);
-    else if (diff < -120) setSwipeOffset(-120);
-    else setSwipeOffset(diff);
+    if (!touchStartX.current || swipeAxis.current === 'vertical') return;
+    const touch=e.touches[0]; touchCurrentX.current=touch.clientX; touchCurrentY.current=touch.clientY;
+    const dx=touchCurrentX.current-touchStartX.current; const dy=touchCurrentY.current-touchStartY.current;
+    if (swipeAxis.current === 'pending') {
+      if (Math.hypot(dx,dy) < 9) return;
+      if (Math.abs(dy) >= Math.abs(dx) * 0.8) { swipeAxis.current='vertical'; setSwipeOffset(0); setIsSwiping(false); return; }
+      swipeAxis.current='horizontal'; setIsSwiping(true);
+    }
+    if (swipeAxis.current !== 'horizontal') return;
+    setSwipeOffset(Math.max(-112,Math.min(112,dx*0.82)));
   };
 
   const handleTouchEnd = async () => {
-    if (!isSwiping || touchStartX.current === 0) {
-      setSwipeOffset(0);
-      setIsSwiping(false);
-      return;
-    }
-
-    const diff = touchCurrentX.current - touchStartX.current;
-    const finalOffset = swipeOffset;
-    setSwipeOffset(0);
-    setIsSwiping(false);
-    touchStartX.current = 0;
-    touchCurrentX.current = 0;
-
-    if (diff < -60 || finalOffset < -50) {
-      handleTriggerAction('complete');
-    } else if (diff > 60 || finalOffset > 50) {
-      handleTriggerAction('expand');
-    }
+    if (swipeAxis.current !== 'horizontal') { resetCardSwipe(); return; }
+    const dx=touchCurrentX.current-touchStartX.current; const finalOffset=swipeOffset; resetCardSwipe();
+    if (dx <= -76 || finalOffset <= -62) await handleTriggerAction('complete');
+    else if (dx >= 76 || finalOffset >= 62) await handleTriggerAction('expand');
   };
+
+  const handleTouchCancel = () => resetCardSwipe();
 
   const isDraggingRight = swipeOffset > 15;
   const isDraggingLeft = swipeOffset < -15;
@@ -428,7 +443,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          style={{ transform: `translateX(${swipeOffset}px)` }}
+          onTouchCancel={handleTouchCancel}
+          style={{ transform: `translateX(${swipeOffset}px)`, touchAction: 'pan-y' }}
           className={clsx("relative z-10 flex w-full flex-col bg-zinc-900", !isSwiping && "transition-transform duration-200")}
         >
           <div className={clsx("flex flex-col", isExpanded ? "p-4" : "px-3 py-2.5")}>
@@ -594,7 +610,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                         {activePhone && (
                           <a
-                            href={`https://wa.me/55${activePhone.replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e cheguei no portão com seu pedido.')}`}
+                            href={`https://wa.me/55${activePhone.replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`}
                             target="_blank"
                             rel="noreferrer"
                             className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 active:scale-90 transition-transform"
@@ -781,7 +797,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                   {activePhone && (
                     <a
-                      href={`https://wa.me/55${activePhone.replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e cheguei com seu pedido no portão.')}`}
+                      href={`https://wa.me/55${activePhone.replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`}
                       target="_blank"
                       rel="noreferrer"
                       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 active:scale-90 transition-all"
@@ -809,12 +825,33 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   >
                     <Share2 size={16} strokeWidth={2.5} />
                   </button>
+
+                  {!delivery.completed && !isRecoveryRoute && (
+                    <button type="button" data-no-card-swipe="true" onClick={async (event) => { event.stopPropagation(); if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); setDeleteOpen(true); }} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 active:scale-90 transition-all" aria-label="Excluir entrega" title="Excluir entrega">
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {deleteOpen && (
+        <div className="fixed inset-0 z-[140] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center" onClick={() => { if (!deleteBusy) setDeleteOpen(false); }} role="presentation">
+          <section className="w-full max-w-sm rounded-[28px] border border-red-500/20 bg-zinc-950 p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="grid h-11 w-11 place-items-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-400"><Trash2 size={19} /></div>
+            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.16em] text-red-400">Excluir entrega</p>
+            <h3 className="mt-1 font-heading text-lg font-black text-zinc-100">Remover {customer?.name || delivery.customer_name || 'esta entrega'}?</h3>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-500">A entrega será removida da operação. O cadastro do cliente não será apagado. Entregas concluídas continuam protegidas e exigem desfazer a baixa primeiro.</p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button type="button" disabled={deleteBusy} onClick={() => setDeleteOpen(false)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900 text-sm font-bold text-zinc-400 disabled:opacity-50">Cancelar</button>
+              <button type="button" disabled={deleteBusy} onClick={() => void confirmDeleteDelivery()} className="h-12 rounded-xl bg-red-500 text-sm font-black text-white disabled:opacity-50">{deleteBusy ? 'Excluindo...' : 'Excluir'}</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* Modal Redirecionamento Direto para o Portal iFood */}
       {confirmRedirectModal.isOpen && (

@@ -75,13 +75,19 @@ export function BottomNav() {
                             label: 'Adicionar',
                             options: [
                               {
-                                href: '/rotas/nova',
+                                href:
+                                  pathname === '/'
+                                    ? '/rotas/nova?returnTo=%2F'
+                                    : '/rotas/nova?returnTo=%2Floja',
                                 label: 'Adicionar rota',
                                 description: 'Abrir uma nova rota de entrega',
                                 icon: Bike,
                               },
                               {
-                                href: '/entregas/nova',
+                                href:
+                                  pathname === '/'
+                                    ? '/entregas/nova?returnTo=%2F'
+                                    : '/entregas/nova?returnTo=%2Floja',
                                 label: 'Adicionar entrega',
                                 description: 'Lançar um pedido em uma rota aberta',
                                 icon: PackagePlus,

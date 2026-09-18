@@ -26,6 +26,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { Beef as CategoryBeef, Sandwich as CategorySandwich, Snowflake as CategorySnowflake, ShoppingBasket as CategoryBasket, Wheat as CategoryWheat, Leaf as CategoryLeaf, CupSoda as CategoryDrink, CookingPot as CategorySauce, Package as CategoryPackage, Sparkles as CategoryClean, Flame as CategoryGas, Shapes as CategoryOther } from 'lucide-react';
 
 import { useAppStore } from '@/store/useAppStore';
 
@@ -34,6 +35,7 @@ import {
   canonicalStockCategory,
   stockCategoryIconKey,
   stockCategoryOrder,
+  stockCategoryVisualClasses,
   type StockCategoryIconKey,
 } from '@/lib/stock-categories';
 
@@ -66,8 +68,21 @@ export function StockCategoryIcon({
   category?: string;
   size?: number;
 }) {
+  const canonical = canonicalStockCategory(category);
+
   const Icon =
-    ICONS[stockCategoryIconKey(category)];
+    canonical === 'Açougue' ? CategoryBeef
+    : canonical === 'Frios' ? CategorySandwich
+    : canonical === 'Congelados' ? CategorySnowflake
+    : canonical === 'Mercearia' ? CategoryBasket
+    : canonical === 'Padaria / Panificação' ? CategoryWheat
+    : canonical === 'Hortifrúti' ? CategoryLeaf
+    : canonical === 'Bebidas' ? CategoryDrink
+    : canonical === 'Molhos e condimentos' ? CategorySauce
+    : canonical === 'Embalagens' ? CategoryPackage
+    : canonical === 'Limpeza e higiene' ? CategoryClean
+    : canonical === 'Gás' ? CategoryGas
+    : CategoryOther;
 
   return <Icon size={size} />;
 }
@@ -158,7 +173,7 @@ export function StockCategoryPicker({
         onClick={() => setOpen(true)}
         className="mt-2 flex h-14 w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-left active:scale-[.99]"
       >
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400">
+        <span className={`grid h-9 w-9 place-items-center rounded-xl border ${stockCategoryVisualClasses(selected)}`}>
           <StockCategoryIcon
             category={selected}
             size={17}

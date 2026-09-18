@@ -114,3 +114,46 @@ export function stockCategoryOrder(category?:string){
   const index=DEFAULT_STOCK_CATEGORIES.findIndex((item)=>item===canonical);
   return index===-1?DEFAULT_STOCK_CATEGORIES.length:index;
 }
+
+
+export type StockCategoryVisualTone =
+  | 'rose' | 'sky' | 'cyan' | 'amber' | 'lime' | 'emerald'
+  | 'orange' | 'violet' | 'fuchsia' | 'teal' | 'yellow' | 'slate';
+
+/** Identidade visual canônica. Não altera o valor persistido da categoria. */
+export function stockCategoryVisualTone(category?: string): StockCategoryVisualTone {
+  const value = canonicalStockCategory(category);
+
+  if (value === 'Açougue') return 'rose';
+  if (value === 'Frios') return 'sky';
+  if (value === 'Congelados') return 'cyan';
+  if (value === 'Mercearia') return 'amber';
+  if (value === 'Padaria / Panificação') return 'orange';
+  if (value === 'Hortifrúti') return 'emerald';
+  if (value === 'Bebidas') return 'violet';
+  if (value === 'Molhos e condimentos') return 'fuchsia';
+  if (value === 'Embalagens') return 'teal';
+  if (value === 'Limpeza e higiene') return 'sky';
+  if (value === 'Gás') return 'yellow';
+
+  return 'slate';
+}
+
+export function stockCategoryVisualClasses(category?: string): string {
+  const tone = stockCategoryVisualTone(category);
+
+  return {
+    rose: 'border-rose-500/20 bg-rose-500/10 text-rose-400',
+    sky: 'border-sky-500/20 bg-sky-500/10 text-sky-400',
+    cyan: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-400',
+    amber: 'border-amber-500/20 bg-amber-500/10 text-amber-400',
+    lime: 'border-lime-500/20 bg-lime-500/10 text-lime-400',
+    emerald: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+    orange: 'border-orange-500/20 bg-orange-500/10 text-orange-400',
+    violet: 'border-violet-500/20 bg-violet-500/10 text-violet-400',
+    fuchsia: 'border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-400',
+    teal: 'border-teal-500/20 bg-teal-500/10 text-teal-400',
+    yellow: 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400',
+    slate: 'border-slate-500/20 bg-slate-500/10 text-slate-400',
+  }[tone];
+}

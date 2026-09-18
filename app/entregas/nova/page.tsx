@@ -1,12 +1,12 @@
 'use client';
 
 import {
-  useState, useMemo } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store, Smartphone, Banknote, QrCode,
+  useEffect, useRef, useState, useMemo } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store, Smartphone, Banknote, QrCode,
   CreditCard, ChevronDown, AlertTriangle, Navigation, CheckCircle2, Link2,
   MessageCircle, Info, Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, Trash2, UsersRound, TicketPercent,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { dateKey, routeDate } from '@/lib/operational-time';
+import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
@@ -43,11 +43,15 @@ export default function NovaEntregaPage() {
   const addDeliveries = useAppStore((state) => state.addDeliveries);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
 
-  const openRoutes = routes.filter((route) => {
-    if (route.status !== 'aberta') return false;
-    const value = routeDate(route);
-    return Boolean(value) && dateKey(value) === todayDateKey;
-  });
+  const openRoutes = useMemo(
+    () =>
+      routes.filter((route) => {
+        if (route.status !== 'aberta') return false;
+        const value = routeDate(route);
+        return Boolean(value) && dateKey(value) === todayDateKey;
+      }),
+    [routes, todayDateKey],
+  );
 
   const knownNeighborhoods = useMemo(
     () =>
@@ -66,6 +70,7 @@ export default function NovaEntregaPage() {
   const [origin, setOrigin] = useState<OrderOrigin>('ifood');
     const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>('delivery');
 const [routeId, setRouteId] = useState('');
+  const routeSelectionTouched = useRef(false);
   const [isRouteDropdownOpen, setIsRouteDropdownOpen] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [ifoodId, setIfoodId] = useState('');
@@ -92,6 +97,33 @@ const [routeId, setRouteId] = useState('');
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (fulfillmentMode !== 'delivery' || routeSelectionTouched.current) return;
+
+    const currentStillEligible =
+      routeId && openRoutes.some((route) => route.id === routeId);
+
+    if (currentStillEligible) return;
+
+    if (openRoutes.length === 1) {
+      setRouteId(openRoutes[0].id);
+      return;
+    }
+
+    /*
+     * Contrato operacional real:
+     * - aberta sem started_at/departure_time = Montando
+     * - aberta com routeStartedAt()          = Na rua
+     *
+     * Só automatizamos quando existe uma única resposta inequívoca.
+     */
+    const assemblingRoutes = openRoutes.filter((route) => !routeStartedAt(route));
+
+    if (assemblingRoutes.length === 1) {
+      setRouteId(assemblingRoutes[0].id);
+    }
+  }, [fulfillmentMode, openRoutes, routeId]);
 
   const formatCurrencyInput = (inputValue: string) => {
     const onlyDigits = inputValue.replace(/\D/g, '');
@@ -182,7 +214,7 @@ const [routeId, setRouteId] = useState('');
     if(parsed.changeFor){setChangeFor(formatCurrencyInput(parsed.changeFor.replace(/\D/g,'')));identified.push(`Troco p/ ${parsed.changeFor}`)}
     if(parsed.drinks.length){setDrinks(parsed.drinks.join(', '));identified.push('Bebidas')}
     if(parsed.observations.length){setObservation(current=>{const incoming=parsed.observations.join(' - ');return current&&!current.includes(incoming)?`${current} - ${incoming}`:current||incoming});identified.push('Obs')}
-    const routeResolution=resolveParsedRoute(parsed.routeNumber,parsed.motoboyHint);if(routeResolution.routeId){setRouteId(routeResolution.routeId);identified.push(`Rota ${routeResolution.candidates[0].name}`)}
+    const routeResolution=resolveParsedRoute(parsed.routeNumber,parsed.motoboyHint);if(routeResolution.routeId&&!routeSelectionTouched.current){setRouteId(routeResolution.routeId);identified.push(`Rota ${routeResolution.candidates[0].name}`)}
     if(parsedOrders.length>1){setExtraIfoodOrders(parsedOrders.slice(1).map((item,index)=>({id:`extra-${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,orderId:item.orderId,ifoodId:item.ifoodId,confirmationCode:item.confirmationCode||parsed.confirmationCode,customerName:item.customerName||parsed.customerName,customerCharge:item.customerCharge||item.value||charge,subsidy:item.subsidy})));setMultiOrderReviewOpen(true);identified.push(`${parsedOrders.length} pedidos no mesmo destino`)}else setExtraIfoodOrders([]);
     if(!identified.length){toast.error('Nenhum dado reconhecido no texto.');return}
     if(Capacitor.isNativePlatform())await Haptics.impact({style:ImpactStyle.Heavy});
@@ -240,7 +272,7 @@ const [routeId, setRouteId] = useState('');
     if (c.phone) setPhone(formatPhoneInput(c.phone));
     if (c.observation) setObservation(c.observation);
     if (c.maps_link) setMapsLink(c.maps_link);
-    if (c.last_confirmation_code) setConfirmationCode(c.last_confirmation_code);
+    if (c.last_confirmation_code && !confirmationCode) setConfirmationCode(c.last_confirmation_code);
     toast.success('Cliente carregado.');
   };
 
@@ -457,7 +489,7 @@ const [routeId, setRouteId] = useState('');
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => { setRouteId(r.id); setIsRouteDropdownOpen(false); }}
+                  onClick={() => { routeSelectionTouched.current = true; setRouteId(r.id); setIsRouteDropdownOpen(false); }}
                   className="flex items-center justify-between px-4 py-4 text-left text-sm active:bg-zinc-800 border-b border-zinc-800/50 last:border-0"
                 >
                   <span className={`font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>
@@ -488,7 +520,7 @@ const [routeId, setRouteId] = useState('');
                 placeholder="Ex: 5463"
                 maxLength={5}
                 value={orderId}
-                onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => setOrderId(e.target.value.replace(/\D/g, '').slice(0, 5))}
                 className="h-12 rounded-xl border-2 border-emerald-500/50 bg-zinc-900/80 px-3 text-base font-bold text-zinc-50 focus:border-emerald-500 focus:outline-none"
                 required
               />
@@ -504,7 +536,7 @@ const [routeId, setRouteId] = useState('');
                 placeholder="Ex: 60873228"
                 maxLength={8}
                 value={ifoodId}
-                onChange={(e) => setIfoodId(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => setIfoodId(e.target.value.replace(/\D/g, '').slice(0, 8))}
                 className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 focus:outline-none ${ifoodId.length > 0 && ifoodId.length < 8 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`}
               />
             </div>
@@ -519,7 +551,7 @@ const [routeId, setRouteId] = useState('');
                 placeholder="Ex: 1234"
                 maxLength={4}
                 value={confirmationCode}
-                onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 font-mono font-bold tracking-widest focus:outline-none ${confirmationCode.length > 0 && confirmationCode.length < 4 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`}
               />
             </div>

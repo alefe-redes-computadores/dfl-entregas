@@ -442,35 +442,70 @@ export default function ConfirmacoesPage() {
       return;
     }
 
+    // A fila externa é o contrato de deduplicação da confirmação.
+    // Uma Delivery já existente NÃO pode impedir o cadastro de uma
+    // confirmação esquecida: esse é justamente um dos usos do lote manual.
     const existingIds = new Set(
-      [
-        ...deliveries.map((item) => item.ifood_id),
-        ...ifoodPendingConfirmations.map((item) => item.ifood_id),
-      ]
+      ifoodPendingConfirmations
+        .map((item) => item.ifood_id)
         .filter(Boolean)
         .map((value) => normalizePendingKey(value)),
     );
 
     const existingOrders = new Set(
-      [
-        ...deliveries.map((item) => item.order_id),
-        ...ifoodPendingConfirmations.map((item) => item.order_id),
-      ]
+      ifoodPendingConfirmations
+        .map((item) => item.order_id)
         .filter(Boolean)
         .map((value) => normalizePendingKey(value)),
     );
 
-    const unique = parsed.filter((item) => {
-      const idKey = normalizePendingKey(item.ifood_id);
-      const orderKey = normalizePendingKey(item.order_id);
+    const unique = parsed
+      .filter((item) => {
+        const idKey = normalizePendingKey(item.ifood_id);
+        const orderKey = normalizePendingKey(item.order_id);
 
-      if (idKey && existingIds.has(idKey)) return false;
-      if (orderKey && existingOrders.has(orderKey)) return false;
+        if (idKey && existingIds.has(idKey)) return false;
+        if (orderKey && existingOrders.has(orderKey)) return false;
 
-      if (idKey) existingIds.add(idKey);
-      if (orderKey) existingOrders.add(orderKey);
-      return true;
-    });
+        if (idKey) existingIds.add(idKey);
+        if (orderKey) existingOrders.add(orderKey);
+        return true;
+      })
+      .map((item) => {
+        const idKey = normalizePendingKey(item.ifood_id);
+        const orderKey = normalizePendingKey(item.order_id);
+
+        const linkedDelivery = deliveries.find((delivery) => {
+          const deliveryIfoodId = normalizePendingKey(delivery.ifood_id);
+          const deliveryOrderId = normalizePendingKey(delivery.order_id);
+
+          return Boolean(
+            (idKey && deliveryIfoodId === idKey) ||
+              (orderKey && deliveryOrderId === orderKey),
+          );
+        });
+
+        if (!linkedDelivery) return item;
+
+        const linkedRoute = linkedDelivery.route_id
+          ? routes.find((route) => route.id === linkedDelivery.route_id)
+          : undefined;
+        const linkedCustomer = customers.find(
+          (customer) => customer.id === linkedDelivery.customer_id,
+        );
+
+        return {
+          ...item,
+          delivery_id: linkedDelivery.id,
+          route_id: linkedRoute?.id,
+          route_name: linkedRoute?.name,
+          customer_name:
+            item.customer_name ||
+            linkedDelivery.customer_name ||
+            linkedCustomer?.name,
+          source_kind: linkedRoute ? 'route' : 'manual',
+        } satisfies IfoodPendingConfirmation;
+      });
 
     if (!unique.length) {
       toast.info('Essas pendências já estão cadastradas.');

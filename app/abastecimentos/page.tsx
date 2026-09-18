@@ -77,6 +77,7 @@ export default function StockSuppliesPage() {
   const [buyer, setBuyer] = useState('todos');
   const [supplierFilter, setSupplierFilter] = useState('todos');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [actionOnly, setActionOnly] = useState(false);
   const [expandedDays, setExpandedDays] = useState<
     Record<string, boolean>
   >(() => ({ [todayKey()]: true }));
@@ -106,6 +107,7 @@ export default function StockSuppliesPage() {
 
           return (
             (status === 'todos' || item.status === status) &&
+            (!actionOnly || item.status !== 'conferido') &&
             (buyer === 'todos' || item.purchaser_name === buyer) &&
             (supplierFilter === 'todos' || item.supplier === supplierFilter) &&
             haystack.includes(normalizedQuery)
@@ -116,7 +118,7 @@ export default function StockSuppliesPage() {
             supplyDate(b).getTime() -
             supplyDate(a).getTime(),
         ),
-    [buyer, monthly, normalizedQuery, status, supplierFilter],
+    [actionOnly, buyer, monthly, normalizedQuery, status, supplierFilter],
   );
 
   const days = useMemo(
@@ -160,7 +162,10 @@ export default function StockSuppliesPage() {
     Number(status !== 'todos') +
     Number(buyer !== 'todos') +
     Number(supplierFilter !== 'todos');
-  const hasActiveSearch = Boolean(normalizedQuery) || activeFilterCount > 0;
+  const hasActiveSearch =
+    Boolean(normalizedQuery) ||
+    activeFilterCount > 0 ||
+    actionOnly;
 
   return (
     <div className="dfl-page">
@@ -220,10 +225,50 @@ export default function StockSuppliesPage() {
       </section>
 
       <section className="grid grid-cols-2 gap-2 rounded-[24px] border border-zinc-800/70 bg-zinc-900/25 p-2">
-        <CompactMetric label="Gasto no mês" value={money(metrics.totalAmount)} />
-        <CompactMetric label="Compras" value={String(metrics.count)} />
-        <CompactMetric label="Itens" value={String(metrics.itemCount)} />
-        <CompactMetric label="Aguardando ação" value={String(metrics.pendingCount + metrics.uncheckedCount)} alert={metrics.pendingCount + metrics.uncheckedCount > 0} />
+        <CompactMetric
+          label="Gasto no mês"
+          value={money(metrics.totalAmount)}
+          onClick={() => {
+            setActionOnly(false);
+            setStatus('todos');
+          }}
+        />
+
+        <CompactMetric
+          label="Compras"
+          value={String(metrics.count)}
+          onClick={() => {
+            setActionOnly(false);
+            setStatus('todos');
+          }}
+        />
+
+        <CompactMetric
+          label="Itens"
+          value={String(metrics.itemCount)}
+          onClick={() => {
+            setActionOnly(false);
+            setStatus('todos');
+          }}
+        />
+
+        <CompactMetric
+          label="Aguardando ação"
+          value={String(
+            metrics.pendingCount +
+            metrics.uncheckedCount
+          )}
+          alert={
+            metrics.pendingCount +
+              metrics.uncheckedCount >
+            0
+          }
+          active={actionOnly}
+          onClick={() => {
+            setActionOnly((value) => !value);
+            setStatus('todos');
+          }}
+        />
       </section>
 
       <div className="relative">
@@ -257,10 +302,15 @@ export default function StockSuppliesPage() {
             </span>
           )}
         </button>
-        {activeFilterCount > 0 && (
+        {(activeFilterCount > 0 || actionOnly) && (
           <button
             type="button"
-            onClick={() => { setStatus('todos'); setBuyer('todos'); setSupplierFilter('todos'); }}
+            onClick={() => {
+              setStatus('todos');
+              setBuyer('todos');
+              setSupplierFilter('todos');
+              setActionOnly(false);
+            }}
             className="h-11 rounded-[14px] px-3 text-[10px] font-black text-zinc-600"
           >
             Limpar
@@ -449,7 +499,47 @@ export default function StockSuppliesPage() {
   );
 }
 
-function CompactMetric({label,value,alert=false}:{label:string;value:string;alert?:boolean}){return <div className={`rounded-2xl border px-3.5 py-3 ${alert?'border-amber-500/25 bg-amber-500/[.055]':'border-zinc-800 bg-zinc-900/45'}`}><p className={`text-[9px] font-bold ${alert?'text-amber-400':'text-zinc-600'}`}>{label}</p><p className="mt-1 truncate text-base font-black text-zinc-100">{value}</p></div>}
+function CompactMetric({
+  label,
+  value,
+  alert = false,
+  active = false,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  alert?: boolean;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl border px-3.5 py-3 text-left transition active:scale-[.98] ${
+        active
+          ? 'border-amber-500/50 bg-amber-500/10'
+          : alert
+            ? 'border-amber-500/25 bg-amber-500/[.055]'
+            : 'border-zinc-800 bg-zinc-900/45'
+      }`}
+    >
+      <p
+        className={`text-[9px] font-bold ${
+          alert || active
+            ? 'text-amber-400'
+            : 'text-zinc-600'
+        }`}
+      >
+        {label}
+      </p>
+
+      <p className="mt-1 truncate text-base font-black text-zinc-100">
+        {value}
+      </p>
+    </button>
+  );
+}
 function Metric({
   label,
   value,

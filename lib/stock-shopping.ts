@@ -3,6 +3,67 @@ import type {
   StockSupply,
 } from '@/types';
 
+export interface StockCommittedQuantity {
+  productId: string;
+  quantity: number;
+}
+
+const OPEN_SUPPLY_STATUSES = new Set<StockSupply['status']>([
+  'solicitado',
+  'em_compra',
+]);
+
+export function committedStockQuantityMap(
+  supplies: StockSupply[],
+  options: { excludeSupplyId?: string } = {},
+) {
+  const committed = new Map<string, number>();
+
+  supplies.forEach((supply) => {
+    if (
+      options.excludeSupplyId &&
+      supply.id === options.excludeSupplyId
+    ) {
+      return;
+    }
+
+    if (!OPEN_SUPPLY_STATUSES.has(supply.status)) return;
+    if (supply.stock_reversed_at) return;
+
+    supply.items.forEach((item) => {
+      if (!item.stock_product_id) return;
+
+      const quantity = Number(item.quantity);
+
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return;
+      }
+
+      committed.set(
+        item.stock_product_id,
+        (committed.get(item.stock_product_id) || 0) + quantity,
+      );
+    });
+  });
+
+  return committed;
+}
+
+export function netStockPurchaseQuantity(
+  recommendedQuantity: number,
+  committedQuantity: number,
+) {
+  return Math.max(
+    0,
+    Number(
+      (
+        Math.max(0, recommendedQuantity) -
+        Math.max(0, committedQuantity)
+      ).toFixed(4),
+    ),
+  );
+}
+
 export interface ShoppingPriceSignal {
   samples: number;
   median: number | null;

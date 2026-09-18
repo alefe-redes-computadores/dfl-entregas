@@ -69,6 +69,9 @@ function DeliveryDetailsContent() {
     state.customers.find((item) => item.id === delivery?.customer_id),
   );
   const updateDelivery = useAppStore((state) => state.updateDelivery);
+  const ifoodPendingConfirmations = useAppStore(
+    (state) => state.ifoodPendingConfirmations,
+  );
   const [isCompleting, setIsCompleting] = useState(false);
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -123,6 +126,16 @@ function DeliveryDetailsContent() {
     delivery.confirmation_code || customer?.last_confirmation_code || '';
   const normalizedIfoodId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
   const normalizedConfirmationCode = savedConfirmationCode.replace(/\D/g, '').slice(0, 4);
+  const externalPending = isIfood
+    ? ifoodPendingConfirmations.find(
+        (item) =>
+          (item.status || 'pending') === 'pending' &&
+          (item.delivery_id === delivery.id ||
+            (normalizedIfoodId.length === 8 &&
+              (item.ifood_id || '').replace(/\D/g, '').slice(0, 8) ===
+                normalizedIfoodId)),
+      )
+    : undefined;
   const confirmationReturn =
     `/entregas/details?id=${encodeURIComponent(delivery.id)}${dateSuffix}`;
   const routeIsClosed = logistics && route?.status === 'fechada';
@@ -171,10 +184,14 @@ function DeliveryDetailsContent() {
       }
     }
 
+    const pendingSuffix = externalPending
+      ? `&pendingId=${encodeURIComponent(externalPending.id)}`
+      : '';
+
     router.replace(
       `/confirmar?orderId=${encodeURIComponent(normalizedIfoodId)}&code=${encodeURIComponent(
         normalizedConfirmationCode,
-      )}&returnTo=${encodeURIComponent(confirmationReturn)}`,
+      )}${pendingSuffix}&returnTo=${encodeURIComponent(confirmationReturn)}`,
     );
   };
 
@@ -391,7 +408,11 @@ function DeliveryDetailsContent() {
                 Confirmação iFood
               </p>
               <p className="mt-1 text-sm font-black text-zinc-100">
-                Dados prontos para o portal
+                {externalPending
+                  ? 'Confirmação externa ainda pendente'
+                  : delivery.completed
+                    ? 'Sem pendência externa registrada'
+                    : 'Dados prontos para o portal'}
               </p>
             </div>
             <span
