@@ -691,10 +691,27 @@ export async function consumeDflSiteOrderUpdatedPersisted(
     const applyIncoming = incomingWins(incoming, current);
 
     if (applyIncoming) {
+      const normalizedIncomingStatus = event.payload.status
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase('pt-BR')
+        .trim();
+      const siteFinalized =
+        normalizedIncomingStatus.includes('final') ||
+        normalizedIncomingStatus.includes('conclu');
+
       tx.update(
         deliveryRef,
         firestoreData({
           site_order_status: event.payload.status,
+          // Sem rota real, a conclusao comercial pode encerrar a pendencia
+          // operacional sem fabricar rota/saida/next-stop.
+          ...(siteFinalized && !delivery.route_id && !delivery.completed ? {
+            completed: true,
+            completed_at: incoming.timestamp,
+            operational_completion_source: 'dfl_site',
+            operational_completion_pending_route: false,
+          } : {}),
           site_order_status_updated_at: event.payload.statusUpdatedAt,
           site_order_last_event_at: incoming.timestamp,
           site_order_last_event_id: event.event_id,
