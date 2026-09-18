@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
 import { TrendingUp, Package, Eye, EyeOff, Filter, Users, UserRound, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
@@ -156,9 +157,14 @@ export default function HomePage() {
       },
     );
 
-    const awaitingConfirmationDeliveries = deliveriesDoDia.filter((delivery) => !delivery.route_id && isSiteOrderAwaitingConfirmation(delivery));
-    const awaitingRouteDeliveries = deliveriesDoDia.filter((delivery) => !delivery.route_id && !isSiteOrderAwaitingConfirmation(delivery));
-    const orphanedDeliveries = deliveriesDoDia.filter(
+    const operationalDeliveriesDoDia = deliveriesDoDia.filter(
+      (delivery) =>
+        !delivery.operational_dismissed_at &&
+        !isFutureScheduledDelivery(delivery),
+    );
+    const awaitingConfirmationDeliveries = operationalDeliveriesDoDia.filter((delivery) => !delivery.route_id && isSiteOrderAwaitingConfirmation(delivery));
+    const awaitingRouteDeliveries = operationalDeliveriesDoDia.filter((delivery) => !delivery.route_id && !isSiteOrderAwaitingConfirmation(delivery));
+    const orphanedDeliveries = operationalDeliveriesDoDia.filter(
       (delivery) => Boolean(delivery.route_id) && !allRouteIds.has(delivery.route_id),
     );
 

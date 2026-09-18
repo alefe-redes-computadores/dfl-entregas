@@ -308,6 +308,19 @@ export interface Delivery {
   createdAt?: string; // Campo legado ainda lido pelos relatórios atuais
   created_at?: string;
   completed_at?: string;
+  /**
+   * Retirada excepcional da fila operacional.
+   * Não significa entrega concluída e não apaga o histórico comercial.
+   */
+  operational_dismissed_at?: string;
+  operational_dismissal_reason?: string;
+  operational_dismissal_source?: 'manual';
+  operational_completion_source?: 'dfl_site' | 'dfl_entregas';
+  operational_completion_pending_route?: boolean;
+  scheduled_for?: string | null;
+  scheduled_label?: string | null;
+  schedule_window_minutes?: number | null;
+  schedule_release_at?: string | null;
   updated_at?: string;
 }
 

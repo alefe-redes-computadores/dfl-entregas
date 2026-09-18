@@ -55,6 +55,9 @@ export interface DflSiteOrderEventPayloadV1 {
   // order.created nasce antes de qualquer transição administrativa de status.
   // Nesse caso o Site envia null; order.updated poderá trazer timestamp.
   statusUpdatedAt: string | null;
+  scheduledFor?: string | null;
+  scheduledLabel?: string | null;
+  scheduleWindowMinutes?: number | null;
 }
 
 export type DflSiteOrderCreatedEvent =
@@ -454,6 +457,9 @@ export function deliveryDraftFromSite(
     site_order_commercial: commercialSnapshotFromSite(payload),
     site_order_status: payload.status,
     site_order_status_updated_at: payload.statusUpdatedAt,
+    scheduled_for: typeof payload.scheduledFor === 'string' ? payload.scheduledFor : null,
+    scheduled_label: typeof payload.scheduledLabel === 'string' ? payload.scheduledLabel : null,
+    schedule_window_minutes: typeof payload.scheduleWindowMinutes === 'number' ? payload.scheduleWindowMinutes : null,
     site_order_items: siteOrderItemsFromPayload(payload.itens),
     site_order_subtotal: payload.subtotal,
     site_order_delivery_fee: payload.taxaEntrega,

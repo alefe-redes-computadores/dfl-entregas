@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
 import { toast } from 'sonner';
 import { persist } from 'zustand/middleware';
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField, runTransaction } from 'firebase/firestore';
@@ -626,6 +627,7 @@ export const useAppStore = create<AppState>()(
           const validRouteIds = new Set(state.routes.map((route) => route.id));
           return state.deliveries.filter((delivery) => {
             if (!isDeliveryFulfillment(delivery)) return false;
+            if (delivery.operational_dismissed_at) return false;
             const value = deliveryDate(delivery);
             const isSelectedDate = Boolean(value) && dateKey(value) === selectedDateKey;
             if (!isSelectedDate) return false;
@@ -678,6 +680,9 @@ export const useAppStore = create<AppState>()(
         const routeDeliveries = get().deliveries.filter((delivery) => delivery.route_id === routeId);
         if (routeDeliveries.length === 0) throw new Error('Adicione pelo menos uma entrega antes de iniciar a rota.');
         if (routeDeliveries.some(isSiteOrderAwaitingConfirmation)) throw new Error('Há pedido do Site aguardando confirmação da loja. Confirme no Admin antes de iniciar a rota.');
+        if (routeDeliveries.some((delivery) => isFutureScheduledDelivery(delivery))) {
+          throw new Error('Há pedido agendado nesta rota que ainda não foi liberado para operação.');
+        }
         if (routeStartedAt(current)) return;
         const now = new Date().toISOString();
         set((state) => ({

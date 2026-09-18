@@ -704,15 +704,19 @@ export async function consumeDflSiteOrderUpdatedPersisted(
         deliveryRef,
         firestoreData({
           site_order_status: event.payload.status,
-          // Sem rota real, a conclusao comercial pode encerrar a pendencia
-          // operacional sem fabricar rota/saida/next-stop.
+          // Finalização comercial e baixa logística são estados diferentes.
+          // Sem rota real, preservamos o pedido para vínculo ou baixa excepcional.
           ...(siteFinalized && !delivery.route_id && !delivery.completed ? {
-            completed: true,
-            completed_at: incoming.timestamp,
             operational_completion_source: 'dfl_site',
+            operational_completion_pending_route: true,
+          } : {}),
+          ...(siteFinalized && delivery.route_id && !delivery.completed ? {
             operational_completion_pending_route: false,
           } : {}),
           site_order_status_updated_at: event.payload.statusUpdatedAt,
+          scheduled_for: typeof event.payload.scheduledFor === 'string' ? event.payload.scheduledFor : null,
+          scheduled_label: typeof event.payload.scheduledLabel === 'string' ? event.payload.scheduledLabel : null,
+          schedule_window_minutes: typeof event.payload.scheduleWindowMinutes === 'number' ? event.payload.scheduleWindowMinutes : null,
           site_order_last_event_at: incoming.timestamp,
           site_order_last_event_id: event.event_id,
           external_order_schema_version: event.payload.orderSchemaVersion,

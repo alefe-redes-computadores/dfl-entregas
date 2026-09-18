@@ -82,6 +82,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   );
   const activePhone = delivery.phone || customer?.phone;
   const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
+  const isAwaitingRoute = route.id === 'rota-aguardando-vinculo';
+  const canDismissFromOperation =
+    isAwaitingRoute &&
+    !delivery.route_id &&
+    !delivery.completed &&
+    !delivery.operational_dismissed_at;
   const operationalDate = deliveryDate(delivery);
   const operationalDateKey = operationalDate ? dateKey(operationalDate) : '';
   const operationalDateQuery = operationalDateKey
@@ -168,6 +174,37 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       toast.error('Não foi possível dar baixa na entrega.', {
         description: 'O estado anterior foi restaurado. Tente novamente.',
       });
+    }
+  };
+
+  const handleDismissFromOperation = async () => {
+    if (!canDismissFromOperation) return;
+
+    const reason = window.prompt(
+      'Motivo para remover este pedido da operação:',
+      'Pedido encerrado fora da operação',
+    )?.trim();
+
+    if (!reason) return;
+
+    const confirmed = window.confirm(
+      'Remover este pedido da fila operacional? O histórico comercial será preservado e ele NÃO será marcado como entregue.',
+    );
+    if (!confirmed) return;
+
+    try {
+      await updateDelivery(delivery.id, {
+        operational_dismissed_at: new Date().toISOString(),
+        operational_dismissal_reason: reason,
+        operational_dismissal_source: 'manual',
+        operational_completion_pending_route: false,
+      });
+      toast.success('Pedido removido da operação.', {
+        description: 'Histórico preservado; nenhuma entrega foi registrada.',
+      });
+    } catch (error) {
+      console.error('Erro ao remover pedido da operação:', error);
+      toast.error('Não foi possível remover o pedido da operação.');
     }
   };
 
@@ -674,7 +711,20 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 </div>
               </div>
 
-              <SiteOrderSnapshot delivery={delivery} privacy={isPrivacyMode} />
+              {canDismissFromOperation && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            void handleDismissFromOperation();
+          }}
+          className="mt-2 w-full rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-300 transition active:scale-[0.99]"
+        >
+          Remover da operação
+        </button>
+      )}
+
+      <SiteOrderSnapshot delivery={delivery} privacy={isPrivacyMode} />
 
               {delivery.observation && (
                 <div className="ml-14 mr-4 mb-3 rounded-2xl bg-amber-500/5 border border-amber-500/15 px-3.5 py-2.5">
