@@ -215,6 +215,8 @@ function idTokens(line: string) {
   if (
     STREET.test(line) ||
     POSTAL.test(line) ||
+    /\bcep\b/i.test(line) ||
+    /\b(?:telefone|celular|whats?app|zap)\b/i.test(line) ||
     /\btotal\b|r\$/i.test(line)
   ) {
     return [];
@@ -771,16 +773,23 @@ export function parseIfoodOrdersText(
 ): ParsedIfoodOrder[] {
   const lines = text.split(/\r?\n/);
 
+  /*
+   * V31.2 — um bloco de pedido só pode começar por um ID iFood
+   * plausível. O detector antigo aceitava qualquer token de 8
+   * dígitos retornado por idTokens(), permitindo que números
+   * estranhos partissem o texto em pedidos falsos.
+   *
+   * CEP continua sendo domínio reservado: explicitIfoodId() e
+   * safeEightDigitCandidate() já o rejeitam antes daqui.
+   */
   const headers = lines
     .map((line, index) => ({
       index,
-      tokens: idTokens(line),
+      ifoodId:
+        explicitIfoodId(line) ||
+        safeEightDigitCandidate(line),
     }))
-    .filter((item) =>
-      item.tokens.some(
-        (token) => token.length === 8,
-      ),
-    )
+    .filter((item) => Boolean(item.ifoodId))
     .map((item) => item.index);
 
   if (headers.length <= 1) {

@@ -184,7 +184,7 @@ function routeAddressParts(
     .map((part) => part.trim())
     .filter(Boolean);
 
-  const street =
+  const streetWithNumber =
     segments.find((part) => {
       const normalizedPart = part
         .normalize('NFD')
@@ -196,6 +196,20 @@ function routeAddressParts(
     }) ||
     canonical.address ||
     'Endereço não informado';
+
+  /*
+   * Para desempatar duas paradas do mesmo bairro no WhatsApp,
+   * mostramos somente a via. O endereço operacional completo
+   * continua intacto em fullAddress.
+   *
+   * Ex.: "Rua Major Gote, 123" -> "Rua Major Gote".
+   */
+  const street =
+    streetWithNumber
+      .replace(/,\s*\d{1,6}[A-Za-z]?\b.*$/i, '')
+      .replace(/\s+-\s*\d{1,6}[A-Za-z]?\b.*$/i, '')
+      .trim() ||
+    streetWithNumber;
 
   return {
     neighborhood,

@@ -157,7 +157,21 @@ const [routeId, setRouteId] = useState('');
     if(parsed.orderId){setOrderId(parsed.orderId);identified.push(`Nº #${parsed.orderId}`)}
     if(parsed.ifoodId){setIfoodId(parsed.ifoodId);identified.push(`ID ${parsed.ifoodId}`)}
     if(parsed.confirmationCode){setConfirmationCode(parsed.confirmationCode);identified.push(`Cód. ${parsed.confirmationCode}`)}
-    if(parsed.customerName){setCustomerName(parsed.customerName);setSelectedCustomerId('');identified.push('Cliente')}
+    if(parsed.customerName){
+      setCustomerName(parsed.customerName);
+      const normalizedParsedName=parsed.customerName.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g,' ').trim();
+      const matchedCustomers=customers.filter(customer=>customer.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g,' ').trim()===normalizedParsedName);
+      const matchedCustomer=matchedCustomers.length===1?matchedCustomers[0]:undefined;
+      setSelectedCustomerId(matchedCustomer?.id||'');
+      if(matchedCustomer){
+        if(!parsed.phone&&matchedCustomer.phone)setPhone(formatPhoneInput(matchedCustomer.phone));
+        if(!parsed.mapsLink&&matchedCustomer.maps_link)setMapsLink(matchedCustomer.maps_link);
+        if(!parsed.address&&matchedCustomer.address)setStreetAddress(matchedCustomer.address);
+        identified.push('Cliente vinculado');
+      }else{
+        identified.push('Cliente');
+      }
+    }
     if(parsed.phone){setPhone(formatPhoneInput(parsed.phone));identified.push('Zap')}
     if(parsed.address){setStreetAddress(parsed.address);identified.push('Endereço')}
     if(parsed.mapsLink){setMapsLink(parsed.mapsLink);identified.push('Link Maps')}

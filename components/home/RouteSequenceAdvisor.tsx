@@ -214,7 +214,22 @@ export function RouteSequenceAdvisor({
     setApplying(true);
 
     try {
-      await setDeliveryOrder(route.id, suggestion.proposedIds);
+      await setDeliveryOrder(
+        route.id,
+        suggestion.proposedIds,
+        {
+          metadata: {
+            /*
+             * A sugestão só vira sequência operacional depois da
+             * confirmação do usuário. Nesse momento persistimos a
+             * mesma trava usada pelo Organizador principal.
+             */
+            order_locked: true,
+            order_source: 'smart',
+            order_updated_at: new Date().toISOString(),
+          },
+        },
+      );
 
       toast.success('Sugestão aplicada.', {
         description:
