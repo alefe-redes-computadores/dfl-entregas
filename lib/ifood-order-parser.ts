@@ -411,6 +411,40 @@ function parseFinancial(
   line: string,
   result: ParsedIfoodOrder,
 ) {
+  // V42 — contrato explícito de dinheiro/troco.
+  // "50 troco para 100": 100 é o valor entregue pelo cliente.
+  // "50 troco 50": 50 é o troco pedido; portanto cliente entrega 100.
+  const directChangeFor = line.match(
+    /(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:[,;|()\-]\s*)*(?:em\s+)?(?:dinheiro\s*)?(?:[,;|()\-]\s*)*troco\s+(?:para|p\/?|de)\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i,
+  );
+
+  const directReturnedChange = !directChangeFor
+    ? line.match(
+        /(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:[,;|()\-]\s*)*(?:em\s+)?(?:dinheiro\s*)?(?:[,;|()\-]\s*)*troco\s*(?:de\s*)?(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i,
+      )
+    : null;
+
+  if (directChangeFor) {
+    const base = numberValue(directChangeFor[1]);
+    const tendered = numberValue(directChangeFor[2]);
+    if (Number.isFinite(base) && Number.isFinite(tendered)) {
+      result.paymentMethod = 'dinheiro';
+      result.isPaid = false;
+      result.customerCharge = currency(base);
+      result.value ||= currency(base);
+      result.changeFor = currency(tendered);
+    }
+  } else if (directReturnedChange) {
+    const base = numberValue(directReturnedChange[1]);
+    const returnedChange = numberValue(directReturnedChange[2]);
+    if (Number.isFinite(base) && Number.isFinite(returnedChange)) {
+      result.paymentMethod = 'dinheiro';
+      result.isPaid = false;
+      result.customerCharge = currency(base);
+      result.value ||= currency(base);
+      result.changeFor = currency(base + returnedChange);
+    }
+  }
   const explicit = line.match(
     /(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:[,;|-]\s*)?(?:em\s+)?(?:dinheiro\s*)?(?:com\s+)?troco\s+(?:para|p\/?|de)\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i,
   );

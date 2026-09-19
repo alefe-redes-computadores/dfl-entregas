@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, ArrowUp, ArrowDown, GripVertical, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, ExternalLink, Map as MapIcon, CheckSquare, Trash2
+  Smartphone, Store, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, ExternalLink, Map as MapIcon, CheckSquare, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
@@ -51,6 +51,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   const isExpanded = delivery.is_expanded || false;
 
+  // V42: expansão é apenas estado transitório de conferência.
+  // Ao entrar/recarregar a tela, o padrão volta a ser compacto.
+  useEffect(() => {
+    if (delivery.is_expanded) toggleDeliveryExpansion(delivery.id, false);
+    // Executa somente na montagem deste card.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const touchStartX = useRef(0);
@@ -60,11 +68,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const swipeAxis = useRef<'pending' | 'horizontal' | 'vertical' | null>(null);
   const completionBusyRef = useRef(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-  const [dragOffsetY, setDragOffsetY] = useState(0);
-  const [isHandleDragging, setIsHandleDragging] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
-  const dragStartY = useRef(0);
-  const dragCurrentY = useRef(0);
 
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -310,69 +314,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     pendingCount > 1 &&
     !orderLocked;
 
-  const handleDragStart = async (e: React.TouchEvent<HTMLButtonElement>) => {
-    if (!canReorder) return;
-    e.stopPropagation();
-    dragStartY.current = e.touches[0].clientY;
-    dragCurrentY.current = e.touches[0].clientY;
-    setDragOffsetY(0);
-    setIsHandleDragging(true);
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-  };
-
-  const handleDragMove = (e: React.TouchEvent<HTMLButtonElement>) => {
-    if (!isHandleDragging || !canReorder) return;
-    e.stopPropagation();
-    dragCurrentY.current = e.touches[0].clientY;
-    const diff = dragCurrentY.current - dragStartY.current;
-    setDragOffsetY(Math.max(-150, Math.min(150, diff * 0.72)));
-  };
-
-  const handleDragEnd = async (e: React.TouchEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    if (!isHandleDragging || !canReorder || position === undefined) {
-      setDragOffsetY(0);
-      setIsHandleDragging(false);
-      return;
-    }
-
-    const diff = dragCurrentY.current - dragStartY.current;
-    // Touch V3: gesto curto já move uma parada e o deslocamento
-    // continua previsível mesmo em telas pequenas.
-    const absDiff = Math.abs(diff);
-    const requestedSteps =
-      absDiff < 28
-        ? 0
-        : Math.sign(diff) * Math.min(
-            6,
-            1 + Math.floor((absDiff - 28) / 72),
-          );
-    setDragOffsetY(0);
-    setIsHandleDragging(false);
-    dragStartY.current = 0;
-    dragCurrentY.current = 0;
-
-    if (requestedSteps === 0) return;
-
-    const currentIndex = position - 1;
-    const targetIndex = Math.max(0, Math.min(currentIndex + requestedSteps, pendingCount - 1));
-    if (targetIndex === currentIndex) return;
-
-    try {
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
-      await moveDeliveryToIndex(delivery.route_id, delivery.id, targetIndex);
-      toast.success(`Parada movida para a posição ${targetIndex + 1}.`, { duration: 1300 });
-    } catch (error) {
-      console.error('Erro ao reordenar parada:', error);
-      toast.error('Não foi possível salvar a nova posição.', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'A ordem anterior foi preservada.',
-      });
-    }
-  };
-
   const resetCardSwipe = () => {
     setSwipeOffset(0); setIsSwiping(false);
     touchStartX.current = 0; touchStartY.current = 0; touchCurrentX.current = 0; touchCurrentY.current = 0; swipeAxis.current = null;
@@ -416,14 +357,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           delivery.completed ? "opacity-80" : "shadow-sm",
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
           isNeighbor && !delivery.completed && "border-sky-500/30",
-          isHandleDragging && "z-20 scale-[1.015] border-sky-400/60 shadow-[0_18px_45px_rgba(0,0,0,0.45)]",
           isExpanded
             ? "bg-zinc-900 border border-sky-500/30 shadow-[0_14px_34px_rgba(0,0,0,0.32)]"
             : delivery.completed
               ? "bg-zinc-900/24 border border-emerald-500/12"
               : "bg-zinc-900/35 border border-zinc-800/70"
         )}
-        style={{ transform: isHandleDragging ? `translateY(${dragOffsetY}px)` : undefined }}
       >
         <div className={clsx(
           "absolute inset-0 flex items-center justify-between px-6 transition-colors duration-150",
@@ -588,7 +527,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                     {isExpanded && (delivery.completed || route.status === 'fechada') && (
                       <div className="flex items-center gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 px-3 py-2 text-[10px] font-bold text-zinc-500">
-                        <GripVertical size={13} />
                         {delivery.completed ? 'Entrega concluída — posição preservada' : 'Rota fechada — ordem bloqueada'}
                       </div>
                     )}
@@ -621,10 +559,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         )}
                       </div>
 
-                      {!delivery.completed && route.status === 'aberta' && (
+                      {!isExpanded && !delivery.completed && route.status === 'aberta' && (
                         <div className="flex min-w-0 items-center justify-end gap-1.5">
                           <button type="button" onClick={async(e)=>{e.stopPropagation();try{await updateDelivery(delivery.id,{order_locked:!orderLocked,order_source:'manual',order_updated_at:new Date().toISOString()});toast.success(orderLocked?'Parada destravada.':'Parada travada na sequência.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{orderLocked?'Destravar':'Travar'}</button>
-                          <div className="hidden sm:flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
+                          <div className="flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
                             <button
                               type="button"
                               disabled={orderLocked}
@@ -656,26 +594,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             </button>
                           </div>
 
-                          <button
-                            type="button"
-                            data-no-card-swipe="true"
-                            disabled={!canReorder || orderLocked}
-                            onTouchStart={handleDragStart}
-                            onTouchMove={handleDragMove}
-                            onTouchEnd={handleDragEnd}
-                            onTouchCancel={handleDragEnd}
-                            style={{ touchAction: 'none' }}
-                            className={clsx(
-                              "flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-[10px] font-black transition-all",
-                              isHandleDragging ? "border-sky-400/60 bg-sky-500/15 text-sky-300" : "border-zinc-800 bg-zinc-950 text-zinc-400",
-                              (!canReorder || orderLocked) && "opacity-40"
-                            )}
-                            aria-label={position ? `Arrastar parada ${position}` : 'Arrastar parada'}
-                            title="Segure e arraste para reordenar"
-                          >
-                            <GripVertical size={14} />
-                            <span className="sm:hidden">Mover</span>
-                          </button>
                         </div>
                       )}
                     </div>

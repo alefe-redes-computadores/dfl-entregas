@@ -56,7 +56,7 @@ export async function copyDeliveryToClipboard(
     const currentCode = delivery.confirmation_code || savedCustomerCode;
     const clientPhone = delivery.phone?.replace(/\D/g, '');
 
-    parts.push(`📦 *Entrega*`);
+    parts.push(`📦 *ENTREGA*`);
     if (isUrgent) parts.push(`🚨 *ATENÇÃO: ENTREGA URGENTE* 🚨`);
     parts.push('');
 
@@ -64,14 +64,14 @@ export async function copyDeliveryToClipboard(
 
     if (isIfood) {
       let ifoodInfo = `🛒 *Origem:* iFood`;
-      if (delivery.order_id) ifoodInfo += ` (#${delivery.order_id})`;
-      if (delivery.ifood_id) ifoodInfo += ` - ID: ${delivery.ifood_id}`;
+      if (delivery.order_id) ifoodInfo += ` #${delivery.order_id}`;
+      if (delivery.ifood_id) ifoodInfo += ` · ID ${delivery.ifood_id}`;
       parts.push(ifoodInfo);
 
       if (currentCode) {
-        parts.push(`🔑 *Código iFood:* ${currentCode} ✅`);
+        parts.push(`🔑 *Código iFood:* \`${currentCode}\` ✅`);
       } else {
-        parts.push(`🚨 *ATENÇÃO: PEGAR CÓDIGO DE 4 DÍGITOS COM O CLIENTE!*`);
+        parts.push(`🚨 *PEGAR O CÓDIGO DE 4 DÍGITOS COM O CLIENTE!*`);
       }
     } else {
       parts.push(`🛒 *Origem:* ${getOriginLabel(delivery)}`);
@@ -87,20 +87,24 @@ export async function copyDeliveryToClipboard(
     }
 
     if (delivery.is_paid) {
-      parts.push(`📱 *Pagamento:* Pago no App ✅`);
+      parts.push(isIfood ? `📱 *Pagamento:* Pago no app ✅` : `📱 *Pagamento:* PIX confirmado ✅`);
     } else {
       const pMethod = delivery.payment_method?.toUpperCase().replace('_', ' ') || 'PAGAMENTO';
       if (delivery.payment_method === 'dinheiro') {
         if (delivery.change_for) {
           const troco = Math.max(0, delivery.change_for - deliveryCharge(delivery));
-          parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Cliente paga com R$ ${formatMoney(delivery.change_for)} | Troco: R$ ${formatMoney(troco)})`);
+          parts.push(`💵 *Pagamento:* DINHEIRO · *R$ ${valueStr}*`);
+          parts.push(`↳ Cliente paga com R$ ${formatMoney(delivery.change_for)}`);
+          parts.push(`↳ 🔁 *Troco: R$ ${formatMoney(troco)}*`);
         } else {
-          parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr} (Valor exato)`);
+          parts.push(`💵 *Pagamento:* DINHEIRO · *R$ ${valueStr}*`);
         }
       } else if (delivery.payment_method?.includes('cartao') || (delivery.payment_method as string) === 'cartao') {
-        parts.push(`💳 *Pagamento:* CARTÃO - R$ ${valueStr} (Levar maquininha)`);
+        parts.push(`💳 *Pagamento:* CARTÃO · *R$ ${valueStr}*`);
+        parts.push(`⚠️ *Levar maquininha*`);
       } else if (delivery.payment_method === 'pix') {
-        parts.push(`💠 *Pagamento:* PIX QR Code - R$ ${valueStr} (Na maquininha)`);
+        parts.push(`📱 *Pagamento:* PIX · *R$ ${valueStr}*`);
+        parts.push(`⚠️ *Cobrar na maquininha*`);
       } else {
         parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr}`);
       }
@@ -110,10 +114,10 @@ export async function copyDeliveryToClipboard(
     parts.push('');
 
     if (delivery.maps_link) {
-      parts.push(`🗺️ *Mapa:* ${delivery.maps_link}`);
+      parts.push(`🗺️ *Mapa:*`); parts.push(delivery.maps_link);
     } else {
       const cleanAddress = cleanAddressForMaps(delivery.address_string);
-      parts.push(`🗺️ *Mapa:* https://maps.google.com/?q=${encodeURIComponent(cleanAddress)}`);
+      parts.push(`🗺️ *Mapa:*`); parts.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanAddress)}`);
     }
 
     const textToCopy = parts.join('\n');
@@ -365,6 +369,7 @@ export async function generateRouteMessages(
           }
         } else {
           stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly });
+          msg1.push(`🚨 *PEGAR CÓDIGO COM O CLIENTE!*`);
         }
       }
 
@@ -387,34 +392,34 @@ export async function generateRouteMessages(
       const valueStr = formatMoney(deliveryCharge(delivery));
 
       if (delivery.value === 1) {
-        msg1.push(`- 💵 *Pagamento:* R$ 1,00 (Cartão)`);
-        msg1.push(`- ⚠️ *UM REAL mesmo* (pedido proporcional)`);
+        msg1.push(`💵 *Pagamento:* R$ 1,00 (Cartão)`);
+        msg1.push(`⚠️ *UM REAL mesmo* (pedido proporcional)`);
         stopsNeedingPosMachine.push(stopNumber);
       } else if (delivery.is_paid) {
         if (delivery.payment_method === 'pix') {
-          msg1.push(`- 📱 *Pagamento:* PIX Confirmado ✅`);
+          msg1.push(`📱 *Pagamento:* PIX confirmado ✅`);
         } else {
-          msg1.push(`- 📱 *Pagamento:* Pago ✅`);
+          msg1.push(`📱 *Pagamento:* Pago no app ✅`);
         }
       } else {
         if (delivery.payment_method === 'pix') {
-          msg1.push(`- 📱 *Pagamento:* *R$ ${valueStr} (PIX QR)*`);
-          msg1.push(`- ❌ *Ainda não pagou, cobrar na maquininha!*`);
+          msg1.push(`📱 *Pagamento:* *R$ ${valueStr} (PIX QR)*`);
+          msg1.push(`⚠️ *Cobrar na maquininha*`);
           stopsNeedingPosMachine.push(stopNumber);
         } else if (delivery.payment_method?.includes('cartao')) {
-          msg1.push(`- 💳 *Pagamento:* *R$ ${valueStr} (CARTÃO)*`);
+          msg1.push(`💳 *Pagamento:* CARTÃO · *R$ ${valueStr}*`);
           stopsNeedingPosMachine.push(stopNumber);
         } else if (delivery.payment_method === 'dinheiro' && delivery.change_for) {
           const troco = Math.max(0, delivery.change_for - deliveryCharge(delivery));
-          msg1.push(`- 💵 *Pagamento:* R$ ${valueStr} *(Paga c/ R$ ${formatMoney(delivery.change_for)} | Troco: R$ ${formatMoney(troco)})*`);
+          msg1.push(`💵 *R$ ${valueStr}* · paga c/ R$ ${formatMoney(delivery.change_for)} · *troco R$ ${formatMoney(troco)}*`);
         } else {
-          msg1.push(`- 💵 *Pagamento:* *R$ ${valueStr} (${delivery.payment_method?.toUpperCase() || 'DINHEIRO'})*`);
+          msg1.push(`💵 *Pagamento:* *R$ ${valueStr} (${delivery.payment_method?.toUpperCase() || 'DINHEIRO'})*`);
         }
       }
 
       if (delivery.drinks?.trim()) {
         const rawDrinkStr = delivery.drinks.trim();
-        msg1.push(`- 🥤 *Bebida:* ${rawDrinkStr}`);
+        msg1.push(`🥤 ${rawDrinkStr}`);
 
         parseDrinkItems(rawDrinkStr).forEach(({ qty, name }) => {
           const key = name.toLowerCase();
@@ -442,7 +447,7 @@ export async function generateRouteMessages(
     }
     msg1.push(`──────────────`);
 
-    // MENSAGEM 2: ACERTO FINANCEIRO, BAG E RECOLHIMENTO
+    // MENSAGEM 2: CONFERÊNCIA DA ROTA — BAG, CÓDIGOS, TROCO E CAIXA
     const now = new Date();
     const timeString = `${String(now.getHours()).padStart(2, '0')}h${String(now.getMinutes()).padStart(2, '0')}m`;
 
@@ -464,7 +469,7 @@ export async function generateRouteMessages(
     }
 
     msg2.push(`──────────────`);
-    msg2.push(`*CHECKLIST ANTES DE SAIR*`);
+    msg2.push(`✅ *CHECKLIST ANTES DE SAIR*`);
     msg2.push('');
 
     const summarySeenGroups = new Set<string>();
@@ -494,8 +499,19 @@ export async function generateRouteMessages(
         .join(' + ');
       const drinkInfo = groupDrinks ? ` · 🥤 ${groupDrinks}` : '';
       const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` · 📲 chamar` : '';
+      const needsCode = groupedDeliveries.some((candidate) => {
+        if (candidate.origin !== 'ifood') return false;
+        const candidateCustomer = getCustomerById(candidate.customer_id);
+        return !(candidate.confirmation_code || candidateCustomer?.last_confirmation_code);
+      });
+      const needsCashChange = groupedDeliveries.some((candidate) =>
+        !candidate.is_paid &&
+        candidate.payment_method === 'dinheiro' &&
+        Boolean(candidate.change_for && candidate.change_for > deliveryCharge(candidate))
+      );
+      const flags = `${needsCode ? ' · 🔑 código' : ''}${needsCashChange ? ' · 💵 troco' : ''}`;
 
-      msg2.push(`${num}. *${neighborhood}*${streetLabel}${drinkInfo}${zapWarning}`);
+      msg2.push(`${getNumberEmoji(num)} *${neighborhood}*${streetLabel}${drinkInfo}${flags}${zapWarning}`);
     });
 
     msg2.push(`──────────────`);
@@ -511,11 +527,14 @@ export async function generateRouteMessages(
       msg2.push(`──────────────`);
     }
 
+    msg2.push(`💳 *MAQUININHA*`);
     if (stopsNeedingPosMachine.length > 0) {
-      msg2.push(`💳 *Levar maquininha*`);
-      msg2.push(`⚠️ *Cobrança nas paradas: ${stopsNeedingPosMachine.join(', ')}*`);
-      msg2.push(`──────────────`);
+      msg2.push(`⚠️ *Levar maquininha*`);
+      msg2.push(`Cobrança nas paradas: ${stopsNeedingPosMachine.map(getNumberEmoji).join(', ')}`);
+    } else {
+      msg2.push(`Não precisa levar nesta rota.`);
     }
+    msg2.push(`──────────────`);
 
     // LISTA ORGANIZADA DE CÓDIGOS NO FINAL
     if (stopsNeedingCode.length > 0) {
@@ -536,29 +555,47 @@ export async function generateRouteMessages(
       msg2.push(`──────────────`);
     }
 
-    // CÁLCULO EXATO DO DINHEIRO RECOLHIDO
-    const pendingMoney = deliveries.filter(d => !d.is_paid && d.payment_method === 'dinheiro');
-    if (pendingMoney.length > 0) {
-      msg2.push(`💵 *Dinheiro para o caixa*`);
-      msg2.push('');
-      let totalDinheiroAReceber = 0;
+    // V42 — FLUXO FÍSICO DE DINHEIRO.
+    // change_for = quanto o cliente pretende entregar (dado do pedido).
+    // route.change_money = dinheiro físico que SAIU do caixa e foi para a bag.
+    // Portanto, o esperado fisicamente na volta é:
+    // troco que saiu do caixa + soma das vendas em dinheiro.
+    const pendingMoney = deliveries.filter(
+      d => !d.is_paid && d.payment_method === 'dinheiro'
+    );
+    const cashSalesTotal = pendingMoney.reduce(
+      (sum, d) => sum + deliveryCharge(d),
+      0,
+    );
+    const changeMoneyOut = Math.max(0, Number(route.change_money || 0));
+    const expectedCashBack = changeMoneyOut + cashSalesTotal;
 
+    if (changeMoneyOut > 0) {
+      msg2.push(`🪙 *TROCO (SAI DO CAIXA)*`);
+      const changeNeeds = pendingMoney.filter(
+        d => d.change_for && d.change_for > deliveryCharge(d)
+      );
+      changeNeeds.forEach((d) => {
+        const num = physicalStopNumbers.get(deliveryGroupKey(d)) || 1;
+        const customer = getCustomerById(d.customer_id);
+        const needed = Math.max(0, Number(d.change_for || 0) - deliveryCharge(d));
+        msg2.push(`• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · precisa R$ ${formatMoney(needed)}`);
+      });
+      msg2.push(`*Total de troco na bag:* \`R$ ${formatMoney(changeMoneyOut)}\``);
+      msg2.push(`──────────────`);
+    }
+
+    if (pendingMoney.length > 0 || changeMoneyOut > 0) {
+      msg2.push(`💵 *DINHEIRO PRA ENTREGAR NO CAIXA*`);
       pendingMoney.forEach((d) => {
         const num = physicalStopNumbers.get(deliveryGroupKey(d)) || 1;
-        const pedidoVal = deliveryCharge(d);
-        const dinheiroEmMaos = d.change_for ? d.change_for : pedidoVal;
-        totalDinheiroAReceber += dinheiroEmMaos;
-
-        if (d.change_for) {
-          const troco = d.change_for - pedidoVal;
-          msg2.push(`- Parada ${num}: \`R$ ${formatMoney(dinheiroEmMaos)}\` *(Pedido R$ ${formatMoney(pedidoVal)} | Levou R$ ${formatMoney(troco)} de troco)*`);
-        } else {
-          msg2.push(`- Parada ${num}: \`R$ ${formatMoney(dinheiroEmMaos)}\` *(Valor exato do pedido)*`);
-        }
+        const customer = getCustomerById(d.customer_id);
+        msg2.push(`• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · venda R$ ${formatMoney(deliveryCharge(d))}`);
       });
-
-      msg2.push('');
-      msg2.push(`*Total para o caixa:* \`R$ ${formatMoney(totalDinheiroAReceber)}\``);
+      if (changeMoneyOut > 0) {
+        msg2.push(`Troco que saiu: R$ ${formatMoney(changeMoneyOut)}`);
+      }
+      msg2.push(`*Total na volta:* \`R$ ${formatMoney(expectedCashBack)}\``);
       msg2.push(`──────────────`);
     }
 

@@ -50,9 +50,28 @@ function Content(){
 
   const summary=()=>{
     const [year,monthValue,day]=date.split('-');
-    const lines=[`ACERTO DFL ENTREGAS`,`Entregador: ${motoboy.name}`,`Data: ${day}/${monthValue}/${year}`,'',`${data.deliveries.length} entregas concluídas`,`${data.completedRoutes} rotas finalizadas`,data.fee.description,`Acerto bruto: R$ ${money(data.fee.amount)}`];
-    if(adjustments.length){lines.push('','AJUSTES');adjustments.forEach(item=>lines.push(`- ${item.description}: R$ ${money(item.amount)}`));}
-    lines.push(`Ajustes: R$ ${money(data.totalVales)}`,`Líquido a pagar: R$ ${money(data.liquidFee)}`,'',`Dinheiro líquido recolhido: R$ ${money(data.cashCollected)}`,`${data.mustReturn?'MOTOBOY DEVOLVE À LOJA':'LOJA PAGA AO MOTOBOY'}: R$ ${money(data.balance)}`);
+    const lines=[
+      `🧾 *ACERTO · DFL ENTREGAS*`,
+      `🏍️ *Entregador:* ${motoboy.name}`,
+      `📅 *Data:* ${day}/${monthValue}/${year}`,
+      '',
+      `📦 *${data.deliveries.length} entregas* · 🔁 *${data.completedRoutes} rotas*`,
+      '',
+      `💰 *DIÁRIA*`,
+      data.fee.description,
+      `*Acerto bruto: R$ ${money(data.fee.amount)}*`,
+    ];
+    if(adjustments.length){
+      lines.push('','➖ *ABATIMENTOS*');
+      adjustments.forEach(item=>lines.push(`• ${item.description}: R$ ${money(item.amount)}`));
+      lines.push(`*Total de abatimentos: R$ ${money(data.totalVales)}*`);
+    }
+    lines.push(
+      '',
+      `💵 *Vendas em dinheiro:* R$ ${money(data.cashCollected)}`,
+      '',
+      `🏪 *${data.mustReturn?'MOTOBOY DEVOLVE À LOJA':'LOJA PAGA AO MOTOBOY'}: R$ ${money(data.balance)}*`
+    );
     return lines.join('\n');
   };
 
@@ -112,7 +131,7 @@ function Content(){
   };
 
   return <div className="flex flex-col gap-5 pb-28">
-    <PageHeader title="Acerto de caixa" subtitle={motoboy.name} to={`/motoboys/details?id=${motoboy.id}`}/>
+    <PageHeader title="Acerto do motoboy" subtitle={motoboy.name} to={`/motoboys/details?id=${motoboy.id}`}/>
     <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2"><button onClick={()=>setDate(value=>shift(value,-1))} className="date-button"><ChevronLeft/></button><button onClick={()=>{setMonth(fromKey(date));setCalendar(true)}} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-800 text-sm font-black"><CalendarDays size={17} className="text-emerald-400"/>{fromKey(date).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).replaceAll('.','')}</button><button onClick={()=>setDate(value=>shift(value,1))} className="date-button"><ChevronRight/></button></div>
 
     {existing&&<section className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.05] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-emerald-400">Acerto registrado</p><p className="mt-2 text-xl font-black text-emerald-300">R$ {money(existing.settlement_gross_amount ?? existing.amount)}</p><p className="mt-1 text-[10px] text-zinc-500">Custo operacional do motoboy. O dinheiro recebido de clientes fica separado como liquidação de caixa.</p></section>}
