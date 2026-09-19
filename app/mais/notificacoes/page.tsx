@@ -25,6 +25,7 @@ import { useAppStore } from '@/store/useAppStore';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   notificationPermissionStatus,
+  cancelAllOperationalNotifications,
   requestNotificationPermission,
   resolveNotificationPreferences,
   sendTestNotification,
@@ -153,11 +154,25 @@ export default function NotificationSettingsPage() {
     });
   };
 
-  const toggleMaster = () => {
-    void save({
-      ...preferences,
-      enabled: !preferences.enabled,
-    });
+  const toggleMaster = async () => {
+    if (preferences.enabled) {
+      await save({ ...preferences, enabled: false });
+      await cancelAllOperationalNotifications();
+      toast.success('Notificações pausadas.');
+      return;
+    }
+
+    if (isNative) {
+      const granted = await requestNotificationPermission();
+      setPermissionState(await notificationPermissionStatus());
+      if (!granted) {
+        toast.error('Autorize as notificações no Android para ativá-las.');
+        return;
+      }
+    }
+
+    await save({ ...preferences, enabled: true });
+    toast.success('Notificações ativadas.');
   };
 
   const enableAll = () => {
@@ -264,7 +279,7 @@ export default function NotificationSettingsPage() {
           </div>
           <button
             type="button"
-            onClick={toggleMaster}
+            onClick={() => void toggleMaster()}
             className={`relative h-8 w-14 shrink-0 rounded-full transition ${
               preferences.enabled ? 'bg-emerald-500' : 'bg-zinc-700'
             }`}
@@ -332,6 +347,13 @@ export default function NotificationSettingsPage() {
             description="Lembra de revisar rotas, iFood e pendências."
             checked={preferences.shiftPreClose}
             onChange={() => toggle('shiftPreClose')}
+            disabled={masterDisabled}
+          />
+          <ToggleRow
+            title="Revisão de estoque no fechamento"
+            description="No fechamento operacional, lembra de registrar saídas, ajustes e conferir o estoque do dia."
+            checked={preferences.closingReview}
+            onChange={() => toggle('closingReview')}
             disabled={masterDisabled}
           />
           <ToggleRow

@@ -116,7 +116,11 @@ jobs:
           python3 -m pip install --disable-pip-version-check --quiet Pillow
           python3 scripts/generate-notification-icon.py public/icon-512.png android/app/src/main/res ic_stat_dfl
           test -s android/app/src/main/res/drawable-mdpi/ic_stat_dfl.png
+          test -s android/app/src/main/res/drawable-hdpi/ic_stat_dfl.png
+          test -s android/app/src/main/res/drawable-xhdpi/ic_stat_dfl.png
+          test -s android/app/src/main/res/drawable-xxhdpi/ic_stat_dfl.png
           test -s android/app/src/main/res/drawable-xxxhdpi/ic_stat_dfl.png
+          grep -F '"smallIcon": "ic_stat_dfl"' capacitor.config.json
 
       - name: Restaurar assinatura de teste
         run: |

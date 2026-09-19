@@ -39,6 +39,7 @@ export type NotificationPreferences = {
   stockLow: boolean;
   stockZero: boolean;
   supplyCheck: boolean;
+  closingReview: boolean;
   syncFailure: boolean;
 };
 
@@ -54,6 +55,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   stockLow: true,
   stockZero: true,
   supplyCheck: true,
+  closingReview: true,
   syncFailure: true,
 };
 
@@ -106,12 +108,20 @@ function isNative() {
   return Capacitor.isNativePlatform();
 }
 
-async function ensurePermission() {
+async function hasPermission() {
   if (!isNative()) return false;
+  try {
+    const current = await LocalNotifications.checkPermissions();
+    return current.display === 'granted';
+  } catch {
+    return false;
+  }
+}
 
+async function requestPermissionExplicitly() {
+  if (!isNative()) return false;
   const current = await LocalNotifications.checkPermissions();
   if (current.display === 'granted') return true;
-
   const requested = await LocalNotifications.requestPermissions();
   return requested.display === 'granted';
 }
@@ -194,7 +204,7 @@ export async function notifyOperational(
   if (now - persistentLastSent(key) < cooldown) return false;
 
   try {
-    if (!(await ensurePermission())) return false;
+    if (!(await hasPermission())) return false;
 
     await LocalNotifications.schedule({
       notifications: [
@@ -277,7 +287,7 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
     settings.notificationPreferences,
   );
   if (!preferences.enabled || !settings.schedule) return;
-  if (!(await ensurePermission())) return;
+  if (!(await hasPermission())) return;
 
   const now = new Date();
   const today = dateKey(now);
@@ -343,6 +353,14 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
       );
 
       push(
+        `shift:closing-review:${key}:${index}`,
+        'Revisão de estoque do dia',
+        'Antes de encerrar, registre saídas ou ajustes pendentes e confira o estoque da operação.',
+        close,
+        'closingReview',
+      );
+
+      push(
         `shift:close:${key}:${index}`,
         'Fim do expediente',
         'Horário programado encerrado. Confira se restou alguma pendência operacional.',
@@ -400,7 +418,7 @@ export async function syncOpenRouteReminderNotifications(
       : new Date(now.getTime() + 5_000);
 
   if (at.getTime() >= closing.getTime()) return;
-  if (!(await ensurePermission())) return;
+  if (!(await hasPermission())) return;
 
   const count = active.length;
   const names = active.slice(0, 2).map((route) => route.name).join(', ');
@@ -496,7 +514,7 @@ export async function scheduleStockSupplyCheckReminder(
   await cancelId(id);
 
   try {
-    if (!(await ensurePermission())) return false;
+    if (!(await hasPermission())) return false;
 
     const detail = supplier?.trim() || 'Compra recebida';
     const countText =
@@ -532,6 +550,15 @@ export async function cancelStockSupplyCheckReminder(supplyId: string) {
   await cancelId(notificationIdFromKey(`stock-supply:${supplyId}`));
 }
 
+export async function cancelAllOperationalNotifications() {
+  if (!isNative()) return;
+  await Promise.all([
+    cancelOwner('shift'),
+    cancelOwner('route-reminder'),
+    cancelOwner('stock-supply'),
+  ]);
+}
+
 export async function notificationPermissionStatus() {
   if (!isNative()) return 'web' as const;
   try {
@@ -543,7 +570,7 @@ export async function notificationPermissionStatus() {
 }
 
 export async function requestNotificationPermission() {
-  return ensurePermission();
+  return requestPermissionExplicitly();
 }
 
 export async function sendTestNotification() {
