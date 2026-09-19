@@ -74,12 +74,16 @@ function Content(){
         occurred_at:`${date}T12:00:00-03:00`,
         type:'motoboy',
         description:`Acerto de motoboy · ${motoboy.name}`,
-        amount:data.liquidFee,
+        // Custo operacional não diminui porque o motoboy está com dinheiro
+        // recebido de clientes. A compensação pertence ao acerto de caixa.
+        amount:data.fee.amount,
         motoboy_id:motoboy.id,
         motoboy_name:motoboy.name,
         source_kind:'motoboy_settlement',
         source_id:sourceId,
         settlement_gross_amount:data.fee.amount,
+        settlement_net_payable:data.liquidFee,
+        settlement_cash_balance:data.balance,
         settlement_adjustments:adjustments,
         settlement_delivery_count:data.deliveries.length,
         settlement_route_count:data.completedRoutes,
@@ -111,7 +115,7 @@ function Content(){
     <PageHeader title="Acerto de caixa" subtitle={motoboy.name} to={`/motoboys/details?id=${motoboy.id}`}/>
     <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2"><button onClick={()=>setDate(value=>shift(value,-1))} className="date-button"><ChevronLeft/></button><button onClick={()=>{setMonth(fromKey(date));setCalendar(true)}} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-800 text-sm font-black"><CalendarDays size={17} className="text-emerald-400"/>{fromKey(date).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).replaceAll('.','')}</button><button onClick={()=>setDate(value=>shift(value,1))} className="date-button"><ChevronRight/></button></div>
 
-    {existing&&<section className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.05] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-emerald-400">Acerto registrado</p><p className="mt-2 text-xl font-black text-emerald-300">R$ {money(existing.amount)}</p><p className="mt-1 text-[10px] text-zinc-500">Este dia já alimenta Despesas e o histórico financeiro.</p></section>}
+    {existing&&<section className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.05] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-emerald-400">Acerto registrado</p><p className="mt-2 text-xl font-black text-emerald-300">R$ {money(existing.settlement_gross_amount ?? existing.amount)}</p><p className="mt-1 text-[10px] text-zinc-500">Custo operacional do motoboy. O dinheiro recebido de clientes fica separado como liquidação de caixa.</p></section>}
 
     <div className="grid grid-cols-2 gap-3"><Card icon={Package} label="Entregas concluídas" value={String(data.deliveries.length)} tone="sky"/><Card icon={Banknote} label="Dinheiro líquido" value={`R$ ${money(data.cashCollected)}`} tone="amber"/></div>
 

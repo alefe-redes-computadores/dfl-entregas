@@ -182,7 +182,7 @@ export default function MaisPage() {
               <p className="text-xs text-zinc-500">
                 {syncing
                   ? 'Aguarde a atualização terminar'
-                  : 'Forçar atualização dos dados na nuvem'}
+                  : 'Buscar mudanças recentes na nuvem'}
               </p>
             </div>
           </button>

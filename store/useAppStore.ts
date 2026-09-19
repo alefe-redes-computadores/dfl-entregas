@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
 import { toast } from 'sonner';
 import { persist } from 'zustand/middleware';
-import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField, runTransaction } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField, runTransaction, query, where } from 'firebase/firestore';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
@@ -206,15 +206,50 @@ const defaultSchedule = Object.fromEntries(
 const pendingStockSupplyWrites = new Map<string, Promise<void>>();
 
 /**
- * V38A — orçamento de leituras Firestore.
+ * V39 — orçamento de leituras Firestore.
  *
- * initData() ainda é uma sincronização completa e cara. Enquanto a camada
- * incremental não existe, uma sessão do app só pode executá-la uma vez.
- * Escritas continuam otimistas e persistidas normalmente; o botão manual
- * pode ganhar uma API de refresh dedicada numa etapa posterior sem voltar
- * a baixar todo o histórico por remontagem de AuthGuard/Header.
+ * As três coleções historicamente mais pesadas deixam de ser baixadas por
+ * inteiro em toda abertura. O estado persistido do Zustand vira o checkpoint:
+ * buscamos somente documentos posteriores ao item local mais recente.
+ *
+ * O overlap curto protege contra diferenças de relógio/retries e o merge por
+ * id mantém a versão da nuvem soberana quando o mesmo registro reaparece.
+ *
+ * Sem cache local válido, o comportamento continua sendo bootstrap completo,
+ * portanto instalação nova / storage limpo não perde histórico.
  */
-let fullCloudSyncCompletedThisSession = false;
+const FIRESTORE_INCREMENTAL_OVERLAP_MS = 5 * 60 * 1000;
+
+const incrementalCollection = <T>(
+  collectionName: string,
+  localItems: T[],
+  timestampField: string,
+  timestampOf: (item: T) => string | undefined | null,
+) => {
+  if (!localItems.length) {
+    return collection(db, collectionName);
+  }
+
+  const newestLocalMs = localItems.reduce((latest, item) => {
+    const raw = timestampOf(item);
+    if (!raw) return latest;
+    const value = Date.parse(raw);
+    return Number.isFinite(value) ? Math.max(latest, value) : latest;
+  }, 0);
+
+  if (!newestLocalMs) {
+    return collection(db, collectionName);
+  }
+
+  const since = new Date(
+    Math.max(0, newestLocalMs - FIRESTORE_INCREMENTAL_OVERLAP_MS),
+  ).toISOString();
+
+  return query(
+    collection(db, collectionName),
+    where(timestampField, '>', since),
+  );
+};
 
 const trackStockSupplyWrite = (
   id: string,
@@ -368,25 +403,55 @@ export const useAppStore = create<AppState>()(
       initData: async () => {
         if (!get().hasHydrated) return;
 
-        // V38A: uma tomografia completa por sessão é o teto temporário.
-        // Evita que remontagens/navegação repitam todas as coleções.
-        if (get().isSyncing || fullCloudSyncCompletedThisSession) return;
+        // AuthGuard já inicializa uma única vez por montagem/login.
+        // Chamadas explícitas posteriores são permitidas, mas nunca concorrentes.
+        if (get().isSyncing) return;
 
         set({ isSyncing: true, syncError: false });
         try {
           const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, stockSuppliersSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, operationalExpensesSnap, storeSnap] = await Promise.all([
             getDocs(collection(db, 'routes')),
-            getDocs(collection(db, 'deliveries')),
-            getDocs(collection(db, 'customers')),
+            getDocs(incrementalCollection(
+              'deliveries',
+              get().deliveries,
+              'updated_at',
+              (item) => item.updated_at || item.created_at || item.createdAt,
+            )),
+            getDocs(incrementalCollection(
+              'customers',
+              get().customers,
+              'updated_at',
+              (item) => item.updated_at,
+            )),
             getDocs(collection(db, 'motoboys')),
-            getDocs(collection(db, 'fuelings')),
-            getDocs(collection(db, 'stock_supplies')),
+            getDocs(incrementalCollection(
+              'fuelings',
+              get().fuelings,
+              'updated_at',
+              (item) => item.updated_at || item.created_at || item.occurred_at,
+            )),
+            getDocs(incrementalCollection(
+              'stock_supplies',
+              get().stockSupplies,
+              'updated_at',
+              (item) => item.updated_at || item.created_at || item.occurred_at,
+            )),
             getDocs(collection(db, 'stock_suppliers')),
             getDocs(collection(db, 'team_members')),
             getDocs(collection(db, 'stock_products')),
-            getDocs(collection(db, 'stock_movements')),
+            getDocs(incrementalCollection(
+              'stock_movements',
+              get().stockMovements,
+              'created_at',
+              (item) => item.created_at || item.occurred_at,
+            )),
             getDocs(collection(db, 'ifood_pending_confirmations')),
-            getDocs(collection(db, 'operational_expenses')),
+            getDocs(incrementalCollection(
+              'operational_expenses',
+              get().operationalExpenses,
+              'updated_at',
+              (item) => item.updated_at || item.created_at || item.occurred_at,
+            )),
             getDoc(doc(db, 'store', 'store_settings'))
           ]);
 
@@ -608,7 +673,6 @@ export const useAppStore = create<AppState>()(
             isSyncing: false,
             syncError: false
           });
-          fullCloudSyncCompletedThisSession = true;
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false, syncError: true });
@@ -890,6 +954,15 @@ export const useAppStore = create<AppState>()(
           );
         }
 
+        if (
+          updatedData.status === 'conferido' &&
+          !current.stock_integrated_at
+        ) {
+          throw new Error(
+            'Conferido é resultado da integração real com o estoque. Marque como recebido e use Conferir e lançar no estoque.',
+          );
+        }
+
         const next: Partial<StockSupply> = {
           ...updatedData,
           updated_at: new Date().toISOString(),
@@ -1089,7 +1162,12 @@ export const useAppStore = create<AppState>()(
             if (!supplySnap.exists()) throw new Error('Compra não encontrada.');
             const supply = supplySnap.data() as StockSupply;
             if (supply.stock_integrated_at) return null;
-            if (supply.status !== 'recebido' && supply.status !== 'conferido') throw new Error('Marque a compra como recebida antes de conferir.');
+            if (supply.status !== 'recebido') {
+              if (supply.status === 'conferido' && !supply.stock_integrated_at) {
+                throw new Error('Compra legada marcada como conferida sem integração. Volte para Recebido antes de lançar no estoque.');
+              }
+              throw new Error('Marque a compra como recebida antes de conferir.');
+            }
             const missing = supply.items.find((item) => !item.stock_product_id);
             if (missing) throw new Error(`Vincule todos os itens ao estoque. Pendente: ${missing.name}.`);
             const refs = supply.items.map((item) => doc(db, 'stock_products', item.stock_product_id!));

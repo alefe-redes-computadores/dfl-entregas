@@ -111,6 +111,10 @@ export interface OperationalExpense {
   source_kind?: 'motoboy_settlement' | 'manual';
   source_id?: string;
   settlement_gross_amount?: number;
+  /** Valor financeiro do acerto depois de ajustes reais, sem compensar dinheiro das entregas. */
+  settlement_net_payable?: number;
+  /** Valor efetivamente transferido entre loja e motoboy no fechamento de caixa. */
+  settlement_cash_balance?: number;
   settlement_adjustments?: MotoboySettlementAdjustment[];
   settlement_delivery_count?: number;
   settlement_route_count?: number;

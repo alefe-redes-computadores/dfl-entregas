@@ -764,36 +764,64 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           {sortedDeliveries.length === 0 ? (
             <p className="py-4 text-center text-sm text-zinc-600">Nenhuma entrega nesta rota ainda.</p>
           ) : (
-            sortedDeliveries.map((delivery) => {
-              const cust = getCustomerById(delivery.customer_id);
-              const physicalStop = stopMeta.get(delivery.id);
-              const addressKey = normalizedAddress(delivery.address_string || cust?.address);
-              const isNeighbor = addressKey ? (addressCounts[addressKey] > 1) : false;
-              const nearby = neighborMeta.get(delivery.id);
+            groupDeliveriesByStop(sortedDeliveries).map((stopGroup) => {
+              const first = stopGroup.representative;
+              const physicalStop = stopMeta.get(first.id);
+              const multipleOrders = stopGroup.deliveries.length > 1;
+
               return (
-                <div key={delivery.id}>
-                  {physicalStop?.first && physicalStop.totalOrders > 1 && (
-                    <div className="mb-1.5 mt-1 flex items-center justify-between rounded-xl border border-violet-500/15 bg-violet-500/[.045] px-3 py-2">
-                      <span className="text-[9px] font-black uppercase tracking-[.12em] text-violet-300">
-                        Parada {physicalStop.stopNumber}
-                      </span>
-                      <span className="text-[9px] font-bold text-zinc-500">
-                        {physicalStop.totalOrders} pedidos no mesmo endereço
+                <section
+                  key={stopGroup.key}
+                  className={
+                    multipleOrders
+                      ? 'overflow-hidden rounded-[22px] border border-violet-500/20 bg-violet-500/[.035] p-2'
+                      : ''
+                  }
+                >
+                  {multipleOrders && (
+                    <div className="mb-2 flex items-center justify-between gap-3 rounded-[16px] bg-violet-500/[.07] px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-black uppercase tracking-[.12em] text-violet-300">
+                          Parada {physicalStop?.stopNumber ?? '—'}
+                        </p>
+                        <p className="mt-0.5 text-[10px] font-bold text-zinc-300">
+                          {stopGroup.deliveries.length} pedidos neste endereço
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-violet-500/10 px-2 py-1 text-[9px] font-black text-violet-300">
+                        {stopGroup.pending.length} pendente{stopGroup.pending.length === 1 ? '' : 's'}
                       </span>
                     </div>
                   )}
-                  <DeliveryCard
-                  key={delivery.id}
-                  delivery={delivery}
-                  customer={cust}
-                  route={route}
-                  isNeighbor={Boolean(isNeighbor || nearby)}
-                  neighborPosition={nearby?.position}
-                  neighborTotal={nearby?.total}
-                  position={!delivery.completed ? physicalStop?.stopNumber : undefined}
-                  pendingCount={pendingStopGroups.length}
-                />
-                </div>
+
+                  <div className={multipleOrders ? 'space-y-2' : ''}>
+                    {stopGroup.deliveries.map((delivery) => {
+                      const cust = getCustomerById(delivery.customer_id);
+                      const deliveryStop = stopMeta.get(delivery.id);
+                      const addressKey = normalizedAddress(delivery.address_string || cust?.address);
+                      const isNeighbor = addressKey ? (addressCounts[addressKey] > 1) : false;
+                      const nearby = neighborMeta.get(delivery.id);
+
+                      return (
+                        <DeliveryCard
+                          key={delivery.id}
+                          delivery={delivery}
+                          customer={cust}
+                          route={route}
+                          isNeighbor={Boolean(isNeighbor || nearby)}
+                          neighborPosition={nearby?.position}
+                          neighborTotal={nearby?.total}
+                          position={
+                            !multipleOrders && !delivery.completed
+                              ? deliveryStop?.stopNumber
+                              : undefined
+                          }
+                          pendingCount={pendingStopGroups.length}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
               );
             })
           )}
