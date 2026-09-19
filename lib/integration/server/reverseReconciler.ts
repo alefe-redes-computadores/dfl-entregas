@@ -90,12 +90,33 @@ async function loadRouteDeliveries(routeId: string, fallback: Item): Promise<Ite
 export async function reconcileReverseTrackingOutbox() {
   // O worker reverso só precisa partir de deliveries pertencentes ao Site.
   // A versão anterior lia TODAS as deliveries e TODAS as routes a cada minuto.
-  const siteSnap = await adminDb.collection('deliveries')
+  // V42: reconciliation is a bounded recovery path, not a full-history scanner.
+  const activeSnap = await adminDb.collection('deliveries')
     .where('source_system', '==', 'dfl_site')
+    .where('completed', '==', false)
     .get();
 
-  const siteDeliveries: Item[] = (siteSnap.docs as QueryDocumentSnapshot[])
-    .map((doc) => ({ id: doc.id, data: doc.data() as Raw }))
+  const recentCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  let recentCompletedDocs: QueryDocumentSnapshot[] = [];
+  try {
+    const recentCompletedSnap = await adminDb.collection('deliveries')
+      .where('source_system', '==', 'dfl_site')
+      .where('completed', '==', true)
+      .where('updated_at', '>=', recentCutoff)
+      .get();
+    recentCompletedDocs = recentCompletedSnap.docs as QueryDocumentSnapshot[];
+  } catch (error) {
+    // Missing composite index must not stop active delivery reconciliation.
+    console.warn('[integration/reverse-reconciler] recent recovery skipped', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const byId = new Map<string, Item>();
+  for (const doc of [...(activeSnap.docs as QueryDocumentSnapshot[]), ...recentCompletedDocs]) {
+    byId.set(doc.id, { id: doc.id, data: doc.data() as Raw });
+  }
+  const siteDeliveries: Item[] = [...byId.values()]
     .filter((item) => str(item.data.external_order_id).trim().length > 0);
 
   const routeIds = [...new Set(siteDeliveries.map((item) => str(item.data.route_id).trim()).filter(Boolean))];
@@ -174,15 +195,11 @@ export async function reconcileReverseTrackingOutbox() {
   let created = 0;
   let existing = 0;
 
-  // O event_id é determinístico. Uma leitura direta é suficiente para snapshots
-  // já existentes; create() preserva atomicamente a proteção contra corrida.
+  // O event_id é determinístico e create() já é atômico. Evitamos uma leitura
+  // Firestore por candidato antes de cada create: ALREADY_EXISTS é o caminho
+  // idempotente normal para snapshots já materializados.
   for (const candidate of candidates) {
     const ref = adminDb.collection('integration_outbox').doc(encodeURIComponent(candidate.eventId));
-    const snap = await ref.get();
-    if (snap.exists) {
-      existing += 1;
-      continue;
-    }
     try {
       await ref.create(buildOutboxRecord(candidate.event));
       created += 1;
@@ -199,6 +216,9 @@ export async function reconcileReverseTrackingOutbox() {
   return {
     ok: true,
     siteDeliveries: siteDeliveries.length,
+    activeSiteDeliveries: activeSnap.size,
+    recentCompletedRecoveries: recentCompletedDocs.length,
+    recoveryWindowHours: 48,
     routesRead: routeIds.length,
     candidates: candidates.length,
     created,
