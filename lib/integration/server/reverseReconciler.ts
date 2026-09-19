@@ -1,3 +1,4 @@
+// READ-GUARD V45B: preservar ativos dfl_site + recuperação limitada; nunca reintroduzir scan histórico completo.
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
