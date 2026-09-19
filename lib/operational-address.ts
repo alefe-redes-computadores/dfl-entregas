@@ -21,7 +21,8 @@ const normalizeToken = (value?: string) =>
     .trim();
 
 const PHONE = /(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4,5}[-\s]?\d{4}/;
-const POSTAL = /\b(?:CEP\s*:?\s*)?(\d{5})-?(\d{3})\b/i;
+// Aceita também CEP copiado como "38701 - 860".
+const POSTAL = /\b(?:CEP\s*:?\s*)?(\d{5})\s*-?\s*(\d{3})\b/i;
 
 const STRONG_COMPLEMENT =
   /^(?:obs(?:erva(?:ç|c)[aã]o)?|refer[eê]ncia|complemento|instru(?:ç|c)[aã]o)\s*:|^(?:ap(?:to|artamento)?\.?\s*\w*|bloco\s+\w+|fundos\b|andar\b|sala\b|port[aã]o\b|interfone\b|entrada\b|casa\b|casa\s+de\s+esquina\b|em frente\b|ao lado\b|pr[oó]ximo\b|tocar\b|buzinar\b|ligar\b|chamar\b)/i;
@@ -186,6 +187,8 @@ export function canonicalizeOperationalAddress(
   }
 
   let neighborhood = fallback;
+  const neighborhoodCandidates: string[] = [];
+  const operationalTrailing: string[] = [];
 
   for (const part of trailing) {
     if (STRONG_COMPLEMENT.test(part)) {
@@ -194,16 +197,29 @@ export function canonicalizeOperationalAddress(
     }
 
     const explicitNeighborhood = /^bairro\s+/i.test(part);
-    const clean = part.replace(/^bairro\s+/i, '').trim();
+    const clean = stripKnownGeoNoise(
+      part.replace(/^bairro\s+/i, '').trim(),
+    );
 
-    if (!neighborhood && (explicitNeighborhood || isStrongNeighborhood(clean))) {
-      neighborhood = clean;
+    if (!clean || GEO_NOISE_EXACT.test(normalizeToken(clean))) continue;
+
+    if (explicitNeighborhood || isStrongNeighborhood(clean)) {
+      neighborhoodCandidates.push(clean);
       continue;
     }
 
-    // Se já existe bairro conhecido, um fragmento desconhecido NÃO vira
-    // observação automaticamente. Preservamos no endereço.
-    if (clean && !GEO_NOISE_EXACT.test(normalizeToken(clean))) {
+    operationalTrailing.push(clean);
+  }
+
+  if (!neighborhood && neighborhoodCandidates.length) {
+    neighborhood = neighborhoodCandidates[neighborhoodCandidates.length - 1];
+  }
+
+  for (const clean of [...neighborhoodCandidates, ...operationalTrailing]) {
+    if (
+      clean &&
+      (!neighborhood || normalizeToken(clean) !== normalizeToken(neighborhood))
+    ) {
       street = street ? `${street} - ${clean}` : clean;
     }
   }
