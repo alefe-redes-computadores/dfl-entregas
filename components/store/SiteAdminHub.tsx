@@ -53,9 +53,7 @@ export function SiteAdminHub({
     );
 
     const awaitingConfirmation = site.filter(
-      (delivery) =>
-        !delivery.completed &&
-        isSiteOrderAwaitingConfirmation(delivery),
+      isSiteOrderAwaitingConfirmation,
     ).length;
 
     const awaitingRoute = site.filter(

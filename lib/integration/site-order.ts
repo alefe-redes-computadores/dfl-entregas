@@ -403,15 +403,20 @@ export function normalizeSiteOrderStatus(value?: string | null): string {
 }
 
 /**
- * A única trava comercial conhecida pelo contrato atual é `pendente`.
- * Qualquer transição posterior recebida do Site libera o pedido para a
- * etapa logística sem inventar um status comercial no DFL Entregas.
+ * Pendência de confirmação é uma ação comercial ainda executável:
+ * pedido do Site + status `pendente` + delivery ainda não concluída.
+ *
+ * `completed` faz parte do contrato porque integrações/reparos históricos podem
+ * já ter concluído operacionalmente a delivery enquanto o último snapshot
+ * textual ainda permanece `pendente`. Esse resíduo não pode gerar alerta,
+ * rota sintética ou contador fantasma.
  */
 export function isSiteOrderAwaitingConfirmation(
-  delivery: Pick<Delivery, 'source_system' | 'site_order_status'>,
+  delivery: Pick<Delivery, 'source_system' | 'site_order_status' | 'completed'>,
 ): boolean {
   return (
     delivery.source_system === 'dfl_site' &&
+    delivery.completed !== true &&
     normalizeSiteOrderStatus(delivery.site_order_status) === 'pendente'
   );
 }

@@ -43,8 +43,9 @@ export function OperationalCommandCenter({
   const openRoutes = routes.filter((route) => route.status === 'aberta');
   const pending = deliveries.filter((delivery) => !delivery.completed);
 
-  // Backlog comercial global: não depende do dia, rota ou completed.
-  // Enquanto o Site continuar dizendo Pendente, a Home continua cobrando ação.
+  // Backlog comercial global: não depende do dia nem da rota.
+  // A regra canônica também exige pedido operacionalmente não concluído:
+  // snapshot comercial "Pendente" em pedido já finalizado não gera ação fantasma.
   const pendingSiteOrders = allDeliveries
     .filter(isSiteOrderAwaitingConfirmation)
     .sort((a, b) => {
