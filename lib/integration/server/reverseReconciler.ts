@@ -95,6 +95,7 @@ export async function reconcileReverseTrackingOutbox() {
   const activeSnap = await adminDb.collection('deliveries')
     .where('source_system', '==', 'dfl_site')
     .where('completed', '==', false)
+    .limit(200)
     .get();
 
   const recentCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
@@ -104,6 +105,7 @@ export async function reconcileReverseTrackingOutbox() {
       .where('source_system', '==', 'dfl_site')
       .where('completed', '==', true)
       .where('updated_at', '>=', recentCutoff)
+      .limit(120)
       .get();
     recentCompletedDocs = recentCompletedSnap.docs as QueryDocumentSnapshot[];
   } catch (error) {

@@ -704,13 +704,17 @@ export async function consumeDflSiteOrderUpdatedPersisted(
         deliveryRef,
         firestoreData({
           site_order_status: event.payload.status,
-          // Finalização comercial e baixa logística são estados diferentes.
-          // Sem rota real, preservamos o pedido para vínculo ou baixa excepcional.
-          ...(siteFinalized && !delivery.route_id && !delivery.completed ? {
+          // V49: o DFL Site é o owner do estado comercial do pedido.
+          // Se o Site informa Finalizado/Concluído, a delivery correspondente
+          // não pode permanecer operacionalmente ativa só por não ter route_id.
+          //
+          // route_id continua determinando o fluxo logístico (alocação, saída,
+          // posição etc.), mas não bloqueia a baixa de um pedido já finalizado
+          // pelo sistema de origem.
+          ...(siteFinalized && !delivery.completed ? {
+            completed: true,
+            completed_at: event.payload.statusUpdatedAt || now,
             operational_completion_source: 'dfl_site',
-            operational_completion_pending_route: true,
-          } : {}),
-          ...(siteFinalized && delivery.route_id && !delivery.completed ? {
             operational_completion_pending_route: false,
           } : {}),
           site_order_status_updated_at: event.payload.statusUpdatedAt,

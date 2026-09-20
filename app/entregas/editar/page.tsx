@@ -122,9 +122,15 @@ const [routeId, setRouteId] = useState('');
   };
 
   const formatPhoneInput = (val: string) => {
-    const digits = val.replace(/\D/g, '').slice(0, 11);
+    const rawDigits = val.replace(/\D/g, '');
+    const localDigits =
+      rawDigits.startsWith('55') && (rawDigits.length === 12 || rawDigits.length === 13)
+        ? rawDigits.slice(2)
+        : rawDigits;
+    const digits = localDigits.slice(0, 11);
     if (digits.length <= 2) return digits;
-    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   };
 
