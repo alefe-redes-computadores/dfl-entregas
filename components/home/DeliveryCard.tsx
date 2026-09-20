@@ -306,13 +306,15 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   }
 
   const orderLocked = delivery.order_locked === true;
+  const smartLocked = orderLocked && delivery.order_source === 'smart';
+  const manualLocked = orderLocked && delivery.order_source !== 'smart';
   const canReorder =
     !isRecoveryRoute &&
     route.status === 'aberta' &&
     !delivery.completed &&
     position !== undefined &&
     pendingCount > 1 &&
-    !orderLocked;
+    !manualLocked;
 
   const resetCardSwipe = () => {
     setSwipeOffset(0); setIsSwiping(false);
@@ -561,7 +563,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                       {!isExpanded && !delivery.completed && route.status === 'aberta' && (
                         <div className="flex min-w-0 items-center justify-end gap-1.5">
-                          <button type="button" onClick={async(e)=>{e.stopPropagation();try{await updateDelivery(delivery.id,{order_locked:!orderLocked,order_source:'manual',order_updated_at:new Date().toISOString()});toast.success(orderLocked?'Parada destravada.':'Parada travada na sequência.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{orderLocked?'Destravar':'Travar'}</button>
+                          <button type="button" onClick={async(e)=>{e.stopPropagation();try{await updateDelivery(delivery.id,{order_locked:!orderLocked,order_source:'manual',order_updated_at:new Date().toISOString()});toast.success(orderLocked?'Parada destravada.':'Parada travada na sequência.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Ordem inteligente':'Travar'}</button>
                           <div className="flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
                             <button
                               type="button"

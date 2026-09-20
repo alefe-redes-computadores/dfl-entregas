@@ -131,7 +131,7 @@ export function OperationalCommandCenter({
               .join(' · ')
           : `${pendingSiteOrders.length} pedidos continuam Pendentes no fluxo comercial`,
       count: pendingSiteOrders.length,
-      href: '/loja',
+      href: '/loja?site=pending',
       icon: ShieldAlert,
       tone: 'red',
       priority: 110,

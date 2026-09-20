@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   ShoppingBag,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -34,7 +34,9 @@ export function SiteAdminHub({
   selectedDateLabel: string;
 }) {
   const router = useRouter();
-  const [expanded, setExpanded] = useState(false);
+  const searchParams = useSearchParams();
+  const focusPending = searchParams.get('site') === 'pending';
+  const [expanded, setExpanded] = useState(focusPending);
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
 
@@ -222,6 +224,11 @@ export function SiteAdminHub({
             <ExternalLink size={15} />
           </button>
 
+          {focusPending && stats.awaitingConfirmation > 0 && (
+            <p className="mt-2 rounded-xl border border-amber-400/15 bg-amber-400/[.05] px-3 py-2 text-[9px] font-bold leading-relaxed text-amber-200/80">
+              Há {stats.awaitingConfirmation} pedido{stats.awaitingConfirmation === 1 ? '' : 's'} aguardando confirmação comercial. Abra o Admin do Site para confirmar; o Entregas atualiza o reflexo operacional pela integração.
+            </p>
+          )}
           <p className="mt-2 text-[9px] leading-relaxed text-zinc-700">
             O Entregas mostra o reflexo operacional. Confirmação, preços e
             demais regras comerciais continuam no DFL Site.

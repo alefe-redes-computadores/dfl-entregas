@@ -1747,7 +1747,10 @@ export const useAppStore = create<AppState>()(
           (group) => group.key === deliveryStopKey(selected),
         );
         if (currentIndex < 0) return;
-        if (groups[currentIndex].locked) {
+        const currentManuallyLocked = groups[currentIndex].deliveries.some(
+          (delivery) => delivery.order_locked === true && delivery.order_source !== 'smart',
+        );
+        if (currentManuallyLocked) {
           throw new Error('Destrave a parada antes de reordenar.');
         }
 
@@ -1755,8 +1758,11 @@ export const useAppStore = create<AppState>()(
           direction === 'up' ? currentIndex - 1 : currentIndex + 1;
 
         if (targetIndex < 0 || targetIndex >= groups.length) return;
-        if (groups[targetIndex].locked) {
-          throw new Error('A parada vizinha está travada na sequência.');
+        const targetManuallyLocked = groups[targetIndex].deliveries.some(
+          (delivery) => delivery.order_locked === true && delivery.order_source !== 'smart',
+        );
+        if (targetManuallyLocked) {
+          throw new Error('A parada vizinha está travada manualmente.');
         }
 
         [groups[currentIndex], groups[targetIndex]] = [
@@ -1771,6 +1777,7 @@ export const useAppStore = create<AppState>()(
           ),
           {
             metadata: {
+              order_locked: false,
               order_source: 'manual',
               order_updated_at: new Date().toISOString(),
             },

@@ -68,7 +68,8 @@ function Content(){
     }
     lines.push(
       '',
-      `💵 *Vendas em dinheiro:* R$ ${money(data.cashCollected)}`,
+      `💵 *Dinheiro das entregas:* R$ ${money(data.cashCollected)}`,
+      cashHandedOver ? `↳ Caixa das entregas já conferido na loja` : `↳ Compensado no fechamento de caixa`,
       '',
       `🏪 *${data.mustReturn?'MOTOBOY DEVOLVE À LOJA':'LOJA PAGA AO MOTOBOY'}: R$ ${money(data.balance)}*`
     );
@@ -108,7 +109,7 @@ function Content(){
         settlement_route_count:data.completedRoutes,
         settlement_cash_collected:data.cashCollected,
         settlement_cash_handed_over:cashHandedOver,
-        observation:`${data.deliveries.length} entregas · ${data.completedRoutes} rotas · bruto R$ ${money(data.fee.amount)} · ajustes R$ ${money(data.totalVales)}`,
+        observation:`${data.deliveries.length} entregas · ${data.completedRoutes} rotas · custo bruto R$ ${money(data.fee.amount)} · abatimentos R$ ${money(data.totalVales)} · líquido do motoboy R$ ${money(data.liquidFee)} · caixa R$ ${money(data.balance)}`,
         created_at:now,
         updated_at:now,
       });

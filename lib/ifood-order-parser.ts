@@ -411,40 +411,40 @@ function parseFinancial(
   line: string,
   result: ParsedIfoodOrder,
 ) {
-  // V42 — contrato explícito de dinheiro/troco.
-  // "50 troco para 100": 100 é o valor entregue pelo cliente.
-  // "50 troco 50": 50 é o troco pedido; portanto cliente entrega 100.
-  const directChangeFor = line.match(
-    /(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:[,;|()\-]\s*)*(?:em\s+)?(?:dinheiro\s*)?(?:[,;|()\-]\s*)*troco\s+(?:para|p\/?|de)\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i,
+  // V43 — prioridade semântica do troco.
+  // "troco para 100" = cliente entrega 100.
+  // "50 troco 50" = pedido 50 + troco solicitado 50 => entrega 100.
+  const explicitChangeFor = line.match(
+    /\btroco\s*(?:para|p\/?|de)\s*:?\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i,
   );
 
-  const directReturnedChange = !directChangeFor
+  if (explicitChangeFor) {
+    const tendered = numberValue(explicitChangeFor[1]);
+    if (tendered > 0) {
+      result.paymentMethod = 'dinheiro';
+      result.isPaid = false;
+      result.changeFor = currency(tendered);
+    }
+  }
+
+  const directReturnedChange = !explicitChangeFor
     ? line.match(
-        /(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:[,;|()\-]\s*)*(?:em\s+)?(?:dinheiro\s*)?(?:[,;|()\-]\s*)*troco\s*(?:de\s*)?(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i,
+        /(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)[\s\S]{0,32}?\btroco\s*(?:de\s*)?(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)(?!\s*(?:para|p\/?))/i,
       )
     : null;
 
-  if (directChangeFor) {
-    const base = numberValue(directChangeFor[1]);
-    const tendered = numberValue(directChangeFor[2]);
-    if (Number.isFinite(base) && Number.isFinite(tendered)) {
-      result.paymentMethod = 'dinheiro';
-      result.isPaid = false;
-      result.customerCharge = currency(base);
-      result.value ||= currency(base);
-      result.changeFor = currency(tendered);
-    }
-  } else if (directReturnedChange) {
+  if (directReturnedChange && !result.changeFor) {
     const base = numberValue(directReturnedChange[1]);
     const returnedChange = numberValue(directReturnedChange[2]);
-    if (Number.isFinite(base) && Number.isFinite(returnedChange)) {
+    if (base > 0 && returnedChange >= 0) {
       result.paymentMethod = 'dinheiro';
       result.isPaid = false;
-      result.customerCharge = currency(base);
+      result.customerCharge ||= currency(base);
       result.value ||= currency(base);
       result.changeFor = currency(base + returnedChange);
     }
   }
+
   const explicit = line.match(
     /(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:[,;|-]\s*)?(?:em\s+)?(?:dinheiro\s*)?(?:com\s+)?troco\s+(?:para|p\/?|de)\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i,
   );
