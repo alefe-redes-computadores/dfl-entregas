@@ -584,6 +584,12 @@ export default function ExpensesPage() {
                             {item.observation}
                           </p>
                         )}
+                        {item.source_kind === 'motoboy_settlement' &&
+                          typeof item.settlement_gross_amount !== 'number' && (
+                            <p className="mt-2 rounded-xl border border-amber-500/15 bg-amber-500/[.05] px-2.5 py-2 text-[9px] leading-relaxed text-amber-200/70">
+                              Registro legado: este valor foi salvo antes da separação entre custo bruto, abatimentos e caixa. O histórico original foi preservado.
+                            </p>
+                          )}
 
                         <div className="mt-2 flex items-center justify-between gap-2">
                           <p className="min-w-0 flex-1 truncate text-[9px] text-zinc-700">
@@ -592,7 +598,9 @@ export default function ExpensesPage() {
                               minute: '2-digit',
                             })}
                             {item.source_kind === 'motoboy_settlement'
-                              ? ' · acerto'
+                              ? typeof item.settlement_gross_amount === 'number'
+                                ? ' · acerto'
+                                : ' · acerto legado'
                               : ' · manual'}
                           </p>
 
