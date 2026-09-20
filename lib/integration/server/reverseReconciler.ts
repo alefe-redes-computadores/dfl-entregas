@@ -137,7 +137,23 @@ export async function reconcileReverseTrackingOutbox() {
     routeItemsMap.set(routeId, items);
   }));
 
+  const analyticsCheckpointRef=adminDb.collection('integration_checkpoints').doc('analytics_native_deliveries_v1');
+  const analyticsCheckpointSnap=await analyticsCheckpointRef.get();
+  const analyticsCursor=str(analyticsCheckpointSnap.data()?.updated_at).trim();
+  let analyticsQuery=adminDb.collection('deliveries').orderBy('updated_at','asc').limit(80);
+  if(analyticsCursor)analyticsQuery=analyticsQuery.startAfter(analyticsCursor);
+  const analyticsPage=await analyticsQuery.get();
+  const nativeAnalyticsItems:Item[]=(analyticsPage.docs as QueryDocumentSnapshot[]).map(doc=>({id:doc.id,data:doc.data() as Raw})).filter(item=>bool(item.data.completed)&&str(item.data.source_system).trim()!=='dfl_site'&&!str(item.data.external_order_id).trim());
+
   const candidates: Array<{ eventId: string; event: ReturnType<typeof buildIntegrationEvent> }> = [];
+
+  for(const item of nativeAnalyticsItems){
+    const updatedAt=str(item.data.updated_at).trim(),completedAt=str(item.data.completed_at).trim();
+    const customerCharge=Number(item.data.customer_charge??item.data.value),value=Number(item.data.value),paymentMethod=str(item.data.payment_method).trim()||'nao_informado',occurred=completedAt||updatedAt||new Date().toISOString();
+    const fingerprint=stableHash({deliveryId:item.id,completed:true,occurred,customerCharge:Number.isFinite(customerCharge)?customerCharge:0,value:Number.isFinite(value)?value:0,paymentMethod});
+    const eventId=`evt-v1__delivery.completed__${encodeURIComponent(item.id)}__analytics-${fingerprint}`;
+    candidates.push({eventId,event:buildIntegrationEvent({event_id:eventId,event_type:'delivery.completed',occurred_at:occurred,source_system:'dfl_entregas',entity_type:'delivery',entity_id:item.id,correlation_id:`dfl_entregas:delivery:${item.id}`,payload:{analyticsNativeDelivery:true,completed:true,completedAt:completedAt||null,updatedAt:updatedAt||null,externalOrderId:null,externalOrderSource:null,value:Number.isFinite(value)?value:0,customerCharge:Number.isFinite(customerCharge)?customerCharge:0,paymentMethod}})});
+  }
 
   for (const item of siteDeliveries) {
     const routeId = str(item.data.route_id).trim();
@@ -216,8 +232,13 @@ export async function reconcileReverseTrackingOutbox() {
     }
   }
 
+  if(!analyticsPage.empty){const last=analyticsPage.docs[analyticsPage.docs.length-1],u=str((last.data() as Raw).updated_at).trim();if(u)await analyticsCheckpointRef.set({updated_at:u,last_document_id:last.id,updatedAt:new Date().toISOString()},{merge:true});}
+
   return {
     ok: true,
+    analyticsNativePageRead: analyticsPage.size,
+    analyticsNativeCandidates: nativeAnalyticsItems.length,
+    analyticsNativeCheckpoint: analyticsCursor || null,
     siteDeliveries: siteDeliveries.length,
     activeSiteDeliveries: activeSnap.size,
     recentCompletedRecoveries: recentCompletedDocs.length,
