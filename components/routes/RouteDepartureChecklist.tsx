@@ -1,7 +1,7 @@
 // components/routes/RouteDepartureChecklist.tsx
 'use client';
 
-import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Wallet, X } from 'lucide-react';
 import type { Customer, Delivery, Route } from '@/types';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 
@@ -50,6 +50,9 @@ export function RouteDepartureChecklist({
   const warnings = checklist.filter(
     (item) => item.missingAddress || item.missingConfirmation,
   );
+  const requiredChange = change.reduce((sum, item) => sum + item.change, 0);
+  const routeCash = Math.max(0, Number(route.change_money || 0));
+  const routeCashShortage = Math.max(0, requiredChange - routeCash);
 
   return (
     <div
@@ -119,11 +122,12 @@ export function RouteDepartureChecklist({
           </section>
         )}
 
-        {change.length > 0 && (
+        {(change.length > 0 || routeCash > 0) && (
           <section className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/[.06] p-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-400">
-              Troco para levar
-            </p>
+            <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-400">Caixa da rota</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Necessidade dos pedidos é referência; “na bag” é o dinheiro físico realmente separado.</p></div><Wallet size={17} className="shrink-0 text-amber-400" /></div>
+            <div className="mt-3 grid grid-cols-2 gap-2"><div className="rounded-xl bg-zinc-950/50 p-3"><p className="text-[9px] font-bold uppercase text-zinc-600">Necessidade</p><p className="mt-1 text-sm font-black text-zinc-200">{isPrivacyMode ? 'R$ •••••' : `R$ ${requiredChange.toFixed(2).replace('.', ',')}`}</p></div><div className="rounded-xl bg-zinc-950/50 p-3"><p className="text-[9px] font-bold uppercase text-zinc-600">Na bag</p><p className="mt-1 text-sm font-black text-amber-300">{isPrivacyMode ? 'R$ •••••' : `R$ ${routeCash.toFixed(2).replace('.', ',')}`}</p></div></div>
+            {routeCashShortage > 0 && <div className="mt-3 flex gap-2 rounded-xl border border-red-500/20 bg-red-500/[.06] p-3"><AlertTriangle size={15} className="shrink-0 text-red-400"/><p className="text-[10px] text-red-300">Troco inicial {isPrivacyMode ? 'abaixo da necessidade calculada' : `R$ ${routeCashShortage.toFixed(2).replace('.', ',')} abaixo da necessidade calculada`}. Confirme o valor físico antes da saída.</p></div>}
+            {change.length > 0 && <p className="mt-4 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">Pedidos que pedem troco</p>}
             <div className="mt-3 space-y-2">
               {change.map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-3 text-xs">

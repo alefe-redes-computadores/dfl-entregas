@@ -420,7 +420,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       toast.success('Mensagem 1 copiada!', { description: 'Rota e mapas prontos para o WhatsApp.' });
     } else {
       await navigator.clipboard.writeText(msgsToCopy[1]);
-      toast.success('Mensagem 2 copiada!', { description: 'Resumo, bebidas e valor exato a passar pro caixa prontos.' });
+      toast.success('Mensagem 2 copiada!', { description: 'Conferência, troco físico da bag e dinheiro esperado na volta prontos.' });
     }
     setIsCopyMenuOpen(false);
   };
@@ -716,7 +716,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <div className="flex items-center justify-between gap-2 flex-wrap">
             {route.change_money > 0 && (
               <span className="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-500">
-                <Wallet size={13} /> Levar Troco: {isPrivacyMode ? 'R$ •••••' : `R$ ${route.change_money.toFixed(2).replace('.', ',')}`}
+                <Wallet size={13} /> Troco na bag: {isPrivacyMode ? 'R$ •••••' : `R$ ${route.change_money.toFixed(2).replace('.', ',')}`}
               </span>
             )}
 
@@ -1109,7 +1109,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   <div className="h-14 w-14 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0"><Receipt size={24}/></div>
                   <div className="flex flex-col">
                     <span className="font-black text-zinc-100 text-lg">Mensagem 2 (Acerto)</span>
-                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Bebidas, aviso de maquininha e o valor bruto real a recolher no caixa.</span>
+                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Bebidas, maquininha, troco físico da bag e dinheiro esperado na volta.</span>
                   </div>
                 </button>
              </div>

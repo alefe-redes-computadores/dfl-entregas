@@ -28,6 +28,11 @@ export default function EditRoutePage() {
   const [change, setChange] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const parseRouteCash = (raw: string) => {
+    const value = Number(raw.trim().replace(/\s/g, '').replace(',', '.') || 0);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  };
+
   useEffect(() => {
     if (!route) return;
 
@@ -37,7 +42,7 @@ export default function EditRoutePage() {
         motoboys.find((item) => item.name === route.motoboy_name)?.id ||
         '',
     );
-    setChange(String(route.change_money || ''));
+    setChange(route.change_money > 0 ? String(route.change_money).replace('.', ',') : '');
   }, [motoboys, route]);
 
   if (!route) {
@@ -74,7 +79,7 @@ export default function EditRoutePage() {
         name: name.trim(),
         motoboy_id: motoboy.id,
         motoboy_name: motoboy.name,
-        change_money: Number(change || 0),
+        change_money: parseRouteCash(change),
       });
       toast.success('Rota atualizada.');
       router.replace(
@@ -174,14 +179,16 @@ export default function EditRoutePage() {
               R$
             </span>
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
+              placeholder="0,00"
               value={change}
-              onChange={(event) => setChange(event.target.value)}
+              onChange={(event) => setChange(event.target.value.replace(/[^0-9,.]/g, ''))}
+              aria-label="Dinheiro físico entregue ao motoboy na saída"
               className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-950/45 pl-12 pr-4 text-zinc-100 outline-none focus:border-emerald-500"
             />
           </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">Valor físico colocado na bag. Não é o “troco para” informado pelo cliente.</p>
         </section>
 
         <button

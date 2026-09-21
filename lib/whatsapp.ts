@@ -507,7 +507,8 @@ export async function generateRouteMessages(
       0,
     );
     const changeMoneyOut = Math.max(0, Number(route.change_money || 0));
-    const expectedCashBack = changeMoneyOut + cashSalesTotal;
+    const expectedCashInBag = changeMoneyOut + cashSalesTotal;
+    const cashGeneratedForStore = cashSalesTotal;
 
     if (changeMoneyOut > 0) {
       msg2.push(`🪙 *TROCO (SAI DO CAIXA)*`);
@@ -532,9 +533,10 @@ export async function generateRouteMessages(
         msg2.push(`• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · venda R$ ${formatMoney(deliveryCharge(d))}`);
       });
       if (changeMoneyOut > 0) {
-        msg2.push(`Troco que saiu: R$ ${formatMoney(changeMoneyOut)}`);
+        msg2.push(`Troco inicial da bag: R$ ${formatMoney(changeMoneyOut)}`);
       }
-      msg2.push(`*Total na volta:* \`R$ ${formatMoney(expectedCashBack)}\``);
+      msg2.push(`*Esperado fisicamente na bag:* \`R$ ${formatMoney(expectedCashInBag)}\``);
+      msg2.push(`*Venda em dinheiro gerada para o caixa:* \`R$ ${formatMoney(cashGeneratedForStore)}\``);
       msg2.push(`──────────────`);
     }
 

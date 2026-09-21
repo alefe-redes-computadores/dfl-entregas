@@ -28,6 +28,11 @@ export default function NovaRotaPage() {
   const [name, setName] = useState('');
   const [motoboySelection, setMotoboySelection] = useState<string>('');
   const [changeMoney, setChangeMoney] = useState('');
+
+  const parseRouteCash = (raw: string) => {
+    const value = Number(raw.trim().replace(/\s/g, '').replace(',', '.') || 0);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  };
   const [isSavingRoute, setIsSavingRoute] = useState(false);
 
   // Estados do Modal de Novo Motoboy
@@ -89,7 +94,7 @@ export default function NovaRotaPage() {
         status: 'aberta',
         motoboy_id: selectedMotoboy.id,
         motoboy_name: selectedMotoboy.name,
-        change_money: changeMoney ? Number(changeMoney) : 0,
+        change_money: parseRouteCash(changeMoney),
         drinks_summary: '',
         created_at: now,
         updated_at: now,
@@ -236,12 +241,12 @@ export default function NovaRotaPage() {
               R$
             </span>
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               placeholder="0,00"
               value={changeMoney}
-              onChange={(e) => setChangeMoney(e.target.value)}
+              onChange={(e) => setChangeMoney(e.target.value.replace(/[^0-9,.]/g, ''))}
+              aria-label="Dinheiro físico entregue ao motoboy na saída"
               className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-950/45 pl-12 pr-4 text-zinc-100 placeholder:text-zinc-700 focus:border-emerald-500 focus:outline-none"
             />
           </div>
