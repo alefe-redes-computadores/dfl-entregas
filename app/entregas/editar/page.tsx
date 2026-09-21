@@ -5,7 +5,7 @@ import {
   useState, useEffect, useMemo, Suspense } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store,
   Smartphone, Trash2, Banknote, QrCode, CreditCard, ChevronDown,
   AlertTriangle, Navigation, CheckCircle2, Link2, MessageCircle, Info,
-  Sparkles, ClipboardPaste, Bike, ShoppingBag
+  Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, UsersRound
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
@@ -81,6 +81,11 @@ const [routeId, setRouteId] = useState('');
     () => deliveries.find((delivery) => delivery.id === deliveryId),
     [deliveries, deliveryId],
   );
+
+  const sameStopDeliveries = useMemo(() => {
+    if (!currentDelivery?.stop_group_id) return currentDelivery ? [currentDelivery] : [];
+    return deliveries.filter((delivery) => delivery.stop_group_id === currentDelivery.stop_group_id);
+  }, [currentDelivery, deliveries]);
 
   const deliveryOperationalDateKey = useMemo(() => {
     if (!currentDelivery) return '';
@@ -716,6 +721,20 @@ const [routeId, setRouteId] = useState('');
           <Store size={18} /> Loja Própria
         </button>
       </div></section>
+
+      {origin === 'ifood' && currentDelivery && (
+        <section className="rounded-[24px] border border-violet-500/20 bg-violet-500/[.045] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-400"><UsersRound size={13}/> Mesma parada</p>
+              <p className="mt-1 text-sm font-black text-zinc-100">{sameStopDeliveries.length} {sameStopDeliveries.length===1?'pedido':'pedidos'} neste endereço</p>
+              <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Cada pedido continua independente para valor, pagamento, ID e confirmação; a rota trata o conjunto como uma única parada física.</p>
+            </div>
+            <button type="button" onClick={()=>router.push(`/entregas/nova?sameStop=${encodeURIComponent(currentDelivery.id)}${returnDate?`&date=${encodeURIComponent(returnDate)}`:''}&returnTo=${encodeURIComponent(detailsReturn)}`)} className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 text-[10px] font-black text-violet-300"><Plus size={13}/> Pedido</button>
+          </div>
+          {sameStopDeliveries.length>1&&<div className="mt-3 flex flex-wrap gap-1.5">{sameStopDeliveries.map((item,index)=><button key={item.id} type="button" onClick={()=>item.id!==currentDelivery.id&&router.replace(`/entregas/editar?id=${encodeURIComponent(item.id)}${returnDate?`&date=${encodeURIComponent(returnDate)}`:''}`)} className={`rounded-lg border px-2.5 py-1.5 text-[9px] font-black ${item.id===currentDelivery.id?'border-violet-500/35 bg-violet-500/10 text-violet-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>#{item.order_id||index+1}</button>)}</div>}
+        </section>
+      )}
 
       {/* PARSER MÁGICO (APENAS QUANDO IFOOD) */}
       {origin === 'ifood' && (

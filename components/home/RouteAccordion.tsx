@@ -794,8 +794,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                     </div>
                   )}
 
-                  <div className={multipleOrders ? 'space-y-2' : ''}>
-                    {stopGroup.deliveries.map((delivery) => {
+                  <div>
+                    {(() => {
+                      const delivery = stopGroup.representative;
                       const cust = getCustomerById(delivery.customer_id);
                       const deliveryStop = stopMeta.get(delivery.id);
                       const addressKey = normalizedAddress(delivery.address_string || cust?.address);
@@ -804,22 +805,19 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
                       return (
                         <DeliveryCard
-                          key={delivery.id}
+                          key={stopGroup.key}
                           delivery={delivery}
+                          stopDeliveries={stopGroup.deliveries}
                           customer={cust}
                           route={route}
                           isNeighbor={Boolean(isNeighbor || nearby)}
                           neighborPosition={nearby?.position}
                           neighborTotal={nearby?.total}
-                          position={
-                            !multipleOrders && !delivery.completed
-                              ? deliveryStop?.stopNumber
-                              : undefined
-                          }
+                          position={!delivery.completed ? deliveryStop?.stopNumber : undefined}
                           pendingCount={pendingStopGroups.length}
                         />
                       );
-                    })}
+                    })()}
                   </div>
                 </section>
               );

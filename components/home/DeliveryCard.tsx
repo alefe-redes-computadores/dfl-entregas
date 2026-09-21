@@ -29,6 +29,7 @@ interface DeliveryCardProps {
   pendingCount?: number;
   neighborPosition?: number;
   neighborTotal?: number;
+  stopDeliveries?: (Delivery & { is_expanded?: boolean })[];
 }
 
 const PAYMENT_CONFIG = {
@@ -39,7 +40,7 @@ const PAYMENT_CONFIG = {
   cartao_debito: { label: 'Cartão', icon: CreditCard, className: 'text-sky-400 bg-sky-400/10 border-sky-400/20' },
 } as const;
 
-export function DeliveryCard({ delivery, customer, route, isNeighbor = false, position, pendingCount = 0, neighborPosition, neighborTotal }: DeliveryCardProps) {
+export function DeliveryCard({ delivery, customer, route, isNeighbor = false, position, pendingCount = 0, neighborPosition, neighborTotal, stopDeliveries }: DeliveryCardProps) {
   const router = useRouter();
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const deleteDelivery = useAppStore((state) => state.deleteDelivery);
@@ -50,6 +51,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
 
   const isExpanded = delivery.is_expanded || false;
+  const groupedDeliveries = stopDeliveries?.length ? stopDeliveries : [delivery];
+  const isGroupedStop = groupedDeliveries.length > 1;
+  const groupedTotal = groupedDeliveries.reduce((sum, item) => sum + (item.customer_charge ?? item.value ?? 0), 0);
+  const groupedPending = groupedDeliveries.filter((item) => !item.completed).length;
+  const groupedCodes = Array.from(new Set(groupedDeliveries.map((item) => item.confirmation_code?.replace(/\D/g, '').slice(0, 4)).filter((code): code is string => Boolean(code))));
+  const commonConfirmationCode = groupedCodes.length === 1 ? groupedCodes[0] : customer?.last_confirmation_code || '';
 
   // V42: expansão é apenas estado transitório de conferência.
   // Ao entrar/recarregar a tela, o padrão volta a ser compacto.
@@ -411,7 +418,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   </div>
                   <div className="flex flex-col items-end">
                     <p className="text-sm font-black text-emerald-400 tracking-tight shrink-0">
-                      {isPrivacyMode ? 'R$ •••••' : `R$ ${delivery.value ? delivery.value.toFixed(2).replace('.', ',') : '0,00'}`}
+                      {isPrivacyMode ? 'R$ •••••' : `R$ ${(isGroupedStop ? groupedTotal : (delivery.value || 0)).toFixed(2).replace('.', ',')}`}
                     </p>
                   </div>
                 </div>
@@ -420,12 +427,16 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {isSiteOrder && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-sky-300">Site</span>}
                   {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
-                  {isIfood && delivery.order_id && (
+                  {isGroupedStop ? (
+                    <span className="bg-violet-500/15 border border-violet-500/30 text-violet-300 px-2 py-0.5 rounded-md text-[10px] font-black shrink-0">
+                      {groupedDeliveries.length} pedidos iFood · {groupedPending} pendente{groupedPending === 1 ? '' : 's'}
+                    </span>
+                  ) : isIfood && delivery.order_id ? (
                     <span className="bg-red-500/15 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0">
                       #{delivery.order_id}
                     </span>
-                  )}
-                  {isIfood && delivery.ifood_id && (
+                  ) : null}
+                  {!isGroupedStop && isIfood && delivery.ifood_id && (
                     <button
                       onClick={() => triggerCopyAndRedirect(delivery.ifood_id!, { offerIfoodPortal: true })}
                       onTouchStart={() => handleTouchStartLongPress(delivery.ifood_id!, true)}
@@ -435,7 +446,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       ID: {delivery.ifood_id} <Copy size={9} className="text-sky-400"/>
                     </button>
                   )}
-                  {isIfood && (delivery.confirmation_code || customer?.last_confirmation_code) && (
+                  {!isGroupedStop && isIfood && (delivery.confirmation_code || customer?.last_confirmation_code) && (
                     <button
                       onClick={() => triggerCopyAndRedirect(delivery.confirmation_code || customer?.last_confirmation_code || '')}
                       onTouchStart={() => handleTouchStartLongPress(delivery.confirmation_code || customer?.last_confirmation_code || '')}
@@ -446,6 +457,46 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     </button>
                   )}
                 </div>
+
+                {isGroupedStop && (
+                  <div className="mt-2 rounded-xl border border-violet-500/20 bg-violet-500/[.04] p-2">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-[9px] font-black uppercase tracking-[.12em] text-violet-300">Pedidos desta parada</span>
+                      {commonConfirmationCode && (
+                        <button type="button" data-no-card-swipe="true" onClick={(event) => { event.stopPropagation(); void triggerCopyAndRedirect(commonConfirmationCode); }} className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-1 font-mono text-[9px] font-black text-amber-300">
+                          Cód. {commonConfirmationCode} <Copy size={8} className="inline" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      {groupedDeliveries.map((item, index) => {
+                        const charge = item.customer_charge ?? item.value ?? 0;
+                        const itemCode = item.confirmation_code?.replace(/\D/g, '').slice(0, 4);
+                        const paymentLabel = item.is_paid ? 'Pago app' : item.payment_method === 'dinheiro' ? (item.change_for ? `Dinheiro · p/ R$ ${item.change_for.toFixed(2).replace('.', ',')}` : 'Dinheiro') : item.payment_method?.includes('cartao') ? 'Cartão' : item.payment_method === 'pix' ? 'Pix' : 'Pagamento';
+                        return (
+                          <div key={item.id} className="flex items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/55 px-2.5 py-2">
+                            <span className={clsx("flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[9px] font-black", item.completed ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-300")}>{item.completed ? '✓' : index + 1}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-[10px] font-black text-zinc-200">#{item.order_id || '—'}</span>
+                                {item.ifood_id && <span className="truncate font-mono text-[9px] text-zinc-500">ID {item.ifood_id}</span>}
+                                {itemCode && groupedCodes.length > 1 && <span className="font-mono text-[9px] text-amber-400">Cód {itemCode}</span>}
+                              </div>
+                              <p className="mt-0.5 truncate text-[9px] font-bold text-zinc-500">{paymentLabel}</p>
+                            </div>
+                            <span className="shrink-0 text-[10px] font-black text-emerald-400">R$ {charge.toFixed(2).replace('.', ',')}</span>
+                            <Link href={`/entregas/editar?id=${item.id}${operationalDateQuery}`} onClick={(event) => event.stopPropagation()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400" title="Editar este pedido">
+                              <Pencil size={11} />
+                            </Link>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <Link href={`/entregas/nova?sameStop=${encodeURIComponent(delivery.id)}${operationalDateQuery}`} onClick={(event) => event.stopPropagation()} className="mt-2 flex h-9 w-full items-center justify-center rounded-lg border border-dashed border-violet-500/30 bg-violet-500/[.04] text-[9px] font-black uppercase tracking-wide text-violet-300">
+                      + Adicionar pedido nesta parada
+                    </Link>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 truncate w-full">
                   <MapPin size={12} className="shrink-0 text-zinc-500" />

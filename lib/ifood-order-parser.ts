@@ -573,6 +573,49 @@ function parseFinancial(
   }
 }
 
+function reconcileCashChangeFromWholeText(
+  text: string,
+  result: ParsedIfoodOrder,
+) {
+  const normalized = spaces(text.replace(/\r?\n/g, ' '));
+
+  // Contrato operacional:
+  // "27 troco para 30" => cliente paga 27 e entrega 30.
+  // "27 troco 3"      => cliente paga 27 e precisa receber 3; entrega 30.
+  const explicitTendered = normalized.match(
+    /(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:[,;|\-]\s*)?(?:em\s+)?(?:dinheiro\s*)?(?:com\s+)?troco\s*(?:para|p\/?|de)\s*:?\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i,
+  );
+
+  if (explicitTendered) {
+    const charge = numberValue(explicitTendered[1]);
+    const tendered = numberValue(explicitTendered[2]);
+    if (charge > 0 && tendered >= charge) {
+      result.paymentMethod = 'dinheiro';
+      result.isPaid = false;
+      result.customerCharge = currency(charge);
+      result.value ||= result.customerCharge;
+      result.changeFor = currency(tendered);
+      return;
+    }
+  }
+
+  const returnedChange = normalized.match(
+    /(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:[,;|\-]\s*)?(?:em\s+)?(?:dinheiro\s*)?(?:com\s+)?troco\s*(?!para\b|p\/?\b|de\b):?\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i,
+  );
+
+  if (returnedChange) {
+    const charge = numberValue(returnedChange[1]);
+    const change = numberValue(returnedChange[2]);
+    if (charge > 0 && change >= 0) {
+      result.paymentMethod = 'dinheiro';
+      result.isPaid = false;
+      result.customerCharge = currency(charge);
+      result.value ||= result.customerCharge;
+      result.changeFor = currency(charge + change);
+    }
+  }
+}
+
 export function parseIfoodOrderText(
   text: string,
   context: IfoodParserContext = {},
@@ -821,6 +864,10 @@ export function parseIfoodOrderText(
   if (result.address) {
     result.address = stripPostalResidue(result.address);
   }
+
+  // Última reconciliação sobre o texto inteiro. Isso impede que a ordem
+  // das linhas ou outro detector apague a semântica explícita do troco.
+  reconcileCashChangeFromWholeText(text, result);
 
   if (!result.customerCharge && result.value) {
     result.customerCharge = result.value;
