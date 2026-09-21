@@ -1,7 +1,7 @@
 // READ-GUARD V45B: preservar ativos dfl_site + recuperação limitada; nunca reintroduzir scan histórico completo.
 import 'server-only';
 import { createHash } from 'node:crypto';
-import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { FieldPath, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { adminDb } from './admin';
 import { buildIntegrationEvent, buildOutboxRecord } from '../contracts';
 
@@ -137,22 +137,27 @@ export async function reconcileReverseTrackingOutbox() {
     routeItemsMap.set(routeId, items);
   }));
 
-  const analyticsCheckpointRef=adminDb.collection('integration_checkpoints').doc('analytics_native_deliveries_v1');
+  const analyticsCheckpointRef=adminDb.collection('integration_checkpoints').doc('analytics_native_deliveries_v2');
   const analyticsCheckpointSnap=await analyticsCheckpointRef.get();
-  const analyticsCursor=str(analyticsCheckpointSnap.data()?.updated_at).trim();
-  let analyticsQuery=adminDb.collection('deliveries').orderBy('updated_at','asc').limit(80);
-  if(analyticsCursor)analyticsQuery=analyticsQuery.startAfter(analyticsCursor);
+  const analyticsState=analyticsCheckpointSnap.data()||{};
+  const analyticsCursor=str(analyticsState.updated_at).trim();
+  const analyticsCursorId=str(analyticsState.last_document_id).trim();
+  let analyticsQuery=adminDb.collection('deliveries').orderBy('updated_at','asc').orderBy(FieldPath.documentId(),'asc').limit(80);
+  if(analyticsCursor&&analyticsCursorId)analyticsQuery=analyticsQuery.startAfter(analyticsCursor,analyticsCursorId);
   const analyticsPage=await analyticsQuery.get();
-  const nativeAnalyticsItems:Item[]=(analyticsPage.docs as QueryDocumentSnapshot[]).map(doc=>({id:doc.id,data:doc.data() as Raw})).filter(item=>bool(item.data.completed)&&str(item.data.source_system).trim()!=='dfl_site'&&!str(item.data.external_order_id).trim());
+  const analyticsItems:Item[]=(analyticsPage.docs as QueryDocumentSnapshot[]).map(doc=>({id:doc.id,data:doc.data() as Raw}));
 
   const candidates: Array<{ eventId: string; event: ReturnType<typeof buildIntegrationEvent> }> = [];
 
-  for(const item of nativeAnalyticsItems){
-    const updatedAt=str(item.data.updated_at).trim(),completedAt=str(item.data.completed_at).trim();
-    const customerCharge=Number(item.data.customer_charge??item.data.value),value=Number(item.data.value),paymentMethod=str(item.data.payment_method).trim()||'nao_informado',occurred=completedAt||updatedAt||new Date().toISOString();
-    const fingerprint=stableHash({deliveryId:item.id,completed:true,occurred,customerCharge:Number.isFinite(customerCharge)?customerCharge:0,value:Number.isFinite(value)?value:0,paymentMethod});
-    const eventId=`evt-v1__delivery.completed__${encodeURIComponent(item.id)}__analytics-${fingerprint}`;
-    candidates.push({eventId,event:buildIntegrationEvent({event_id:eventId,event_type:'delivery.completed',occurred_at:occurred,source_system:'dfl_entregas',entity_type:'delivery',entity_id:item.id,correlation_id:`dfl_entregas:delivery:${item.id}`,payload:{analyticsNativeDelivery:true,completed:true,completedAt:completedAt||null,updatedAt:updatedAt||null,externalOrderId:null,externalOrderSource:null,value:Number.isFinite(value)?value:0,customerCharge:Number.isFinite(customerCharge)?customerCharge:0,paymentMethod}})});
+  for(const item of analyticsItems){
+    const updatedAt=str(item.data.updated_at).trim(),completedAt=str(item.data.completed_at).trim(),createdAt=str(item.data.created_at||item.data.createdAt).trim();
+    const sourceSystem=str(item.data.source_system).trim(),externalOrderId=str(item.data.external_order_id).trim();
+    const customerCharge=Number(item.data.customer_charge??item.data.value),value=Number(item.data.value),paymentMethod=str(item.data.payment_method).trim()||'nao_informado';
+    const completed=bool(item.data.completed),occurred=completedAt||createdAt||updatedAt||new Date().toISOString();
+    const fingerprint=stableHash({deliveryId:item.id,updatedAt,completed,sourceSystem,externalOrderId,customerCharge:Number.isFinite(customerCharge)?customerCharge:0,value:Number.isFinite(value)?value:0,paymentMethod,origin:str(item.data.origin),fulfillmentMode:str(item.data.fulfillment_mode)});
+    const eventType=completed?'delivery.completed':'delivery.created';
+    const eventId=`evt-v1__${eventType}__${encodeURIComponent(item.id)}__analytics-v2-${fingerprint}`;
+    candidates.push({eventId,event:buildIntegrationEvent({event_id:eventId,event_type:eventType,occurred_at:occurred,source_system:'dfl_entregas',entity_type:'delivery',entity_id:item.id,correlation_id:externalOrderId||`dfl_entregas:delivery:${item.id}`,payload:{analyticsNativeDelivery:true,completed,completedAt:completedAt||null,createdAt:createdAt||null,updatedAt:updatedAt||null,sourceSystem:sourceSystem||null,externalOrderId:externalOrderId||null,externalOrderSource:externalOrderId&&sourceSystem==='dfl_site'?'dfl_site':null,value:Number.isFinite(value)?value:0,customerCharge:Number.isFinite(customerCharge)?customerCharge:0,paymentMethod,origin:str(item.data.origin).trim()||'manual',fulfillmentMode:str(item.data.fulfillment_mode).trim()||'delivery'}})});
   }
 
   for (const item of siteDeliveries) {
@@ -237,7 +242,7 @@ export async function reconcileReverseTrackingOutbox() {
   return {
     ok: true,
     analyticsNativePageRead: analyticsPage.size,
-    analyticsNativeCandidates: nativeAnalyticsItems.length,
+    analyticsNativeCandidates: analyticsItems.length,
     analyticsNativeCheckpoint: analyticsCursor || null,
     siteDeliveries: siteDeliveries.length,
     activeSiteDeliveries: activeSnap.size,
