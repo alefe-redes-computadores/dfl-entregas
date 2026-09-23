@@ -19,6 +19,7 @@ const MAX_ID = 2147483647;
 const SHIFT_HORIZON_DAYS = 21;
 const SHIFT_NOTICE_MINUTES = 15;
 const SUPPLY_CHECK_DELAY_MINUTES = 10;
+const ANDROID_CHANNEL_ID = 'dfl-operational-v1';
 const lastSent = new Map<string, number>();
 
 type NotificationOwner =
@@ -108,11 +109,29 @@ function isNative() {
   return Capacitor.isNativePlatform();
 }
 
+export async function ensureNotificationChannel() {
+  if (!isNative() || Capacitor.getPlatform() !== 'android') return;
+  try {
+    await LocalNotifications.createChannel({
+      id: ANDROID_CHANNEL_ID,
+      name: 'Operação DFL',
+      description: 'Alertas operacionais do DFL Entregas',
+      importance: 4,
+      visibility: 1,
+      vibration: true,
+    });
+  } catch (error) {
+    console.warn('[NOTIFICATIONS] Falha ao garantir canal Android:', error);
+  }
+}
+
 async function hasPermission() {
   if (!isNative()) return false;
   try {
     const current = await LocalNotifications.checkPermissions();
-    return current.display === 'granted';
+    const granted = current.display === 'granted';
+    if (granted) await ensureNotificationChannel();
+    return granted;
   } catch {
     return false;
   }
@@ -121,9 +140,14 @@ async function hasPermission() {
 async function requestPermissionExplicitly() {
   if (!isNative()) return false;
   const current = await LocalNotifications.checkPermissions();
-  if (current.display === 'granted') return true;
+  if (current.display === 'granted') {
+    await ensureNotificationChannel();
+    return true;
+  }
   const requested = await LocalNotifications.requestPermissions();
-  return requested.display === 'granted';
+  const granted = requested.display === 'granted';
+  if (granted) await ensureNotificationChannel();
+  return granted;
 }
 
 function persistentLastSent(key: string) {
@@ -212,11 +236,15 @@ export async function notifyOperational(
           id: notificationIdFromKey(key),
           title,
           body,
+          channelId: ANDROID_CHANNEL_ID,
           schedule: {
             at: new Date(now + 500),
             allowWhileIdle: true,
           },
-          extra: ownerExtra('immediate', options?.extra),
+          extra: ownerExtra('immediate', {
+            ...options?.extra,
+            dflPreferenceKey: options?.preferenceKey,
+          }),
         },
       ],
     });
@@ -295,6 +323,7 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
     id: number;
     title: string;
     body: string;
+    channelId: string;
     schedule: { at: Date; allowWhileIdle: boolean };
     extra: Record<string, unknown>;
   }> = [];
@@ -313,8 +342,12 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
       id: notificationIdFromKey(key),
       title,
       body,
+      channelId: ANDROID_CHANNEL_ID,
       schedule: { at, allowWhileIdle: true },
-      extra: ownerExtra('shift', { href: '/loja' }),
+      extra: ownerExtra('shift', {
+        href: '/loja',
+        dflPreferenceKey: preferenceKey,
+      }),
     });
   };
 
@@ -429,13 +462,17 @@ export async function syncOpenRouteReminderNotifications(
       notifications: [
         {
           id: notificationIdFromKey(`route-reminder:${closing.toISOString()}`),
+          channelId: ANDROID_CHANNEL_ID,
           title: count === 1 ? 'Rota ainda aberta' : `${count} rotas ainda abertas`,
           body:
             count === 1
               ? `Finalize ${names} antes de encerrar o expediente.`
               : `Ainda estão abertas: ${names}${remaining}.`,
           schedule: { at, allowWhileIdle: true },
-          extra: ownerExtra('route-reminder', { href: '/rotas' }),
+          extra: ownerExtra('route-reminder', {
+            href: '/rotas',
+            dflPreferenceKey: 'routeOpenReminder',
+          }),
         },
       ],
     });
@@ -526,6 +563,7 @@ export async function scheduleStockSupplyCheckReminder(
       notifications: [
         {
           id,
+          channelId: ANDROID_CHANNEL_ID,
           title: 'Compra aguardando conferência',
           body: `${detail}: ${countText} conferência e lançamento no estoque.`,
           schedule: {
@@ -534,6 +572,7 @@ export async function scheduleStockSupplyCheckReminder(
           },
           extra: ownerExtra('stock-supply', {
             href: `/abastecimentos/detalhes?id=${encodeURIComponent(supplyId)}`,
+            dflPreferenceKey: 'supplyCheck',
           }),
         },
       ],
@@ -553,10 +592,41 @@ export async function cancelStockSupplyCheckReminder(supplyId: string) {
 export async function cancelAllOperationalNotifications() {
   if (!isNative()) return;
   await Promise.all([
+    cancelOwner('immediate'),
     cancelOwner('shift'),
     cancelOwner('route-reminder'),
     cancelOwner('stock-supply'),
   ]);
+}
+
+export async function reconcileNotificationPreferences(
+  previous: Partial<NotificationPreferences> | undefined,
+  next: Partial<NotificationPreferences> | undefined,
+) {
+  if (!isNative()) return;
+  const before = resolveNotificationPreferences(previous);
+  const after = resolveNotificationPreferences(next);
+
+  if (!after.enabled) {
+    await cancelAllOperationalNotifications();
+    return;
+  }
+
+  const disabled = (Object.keys(after) as Array<keyof NotificationPreferences>)
+    .filter((key) => key !== 'enabled' && before[key] && !after[key]);
+  if (!disabled.length) return;
+
+  try {
+    const pending = await LocalNotifications.getPending();
+    const disabledSet = new Set(disabled);
+    const notifications = pending.notifications.filter((item) => {
+      const extra = item.extra as { dflPreferenceKey?: NotificationPreferenceKey } | undefined;
+      return Boolean(extra?.dflPreferenceKey && disabledSet.has(extra.dflPreferenceKey));
+    });
+    if (notifications.length) await LocalNotifications.cancel({ notifications });
+  } catch (error) {
+    console.warn('[NOTIFICATIONS] Falha ao reconciliar categorias:', error);
+  }
 }
 
 export async function notificationPermissionStatus() {

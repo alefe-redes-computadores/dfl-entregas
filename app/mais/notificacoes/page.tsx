@@ -31,6 +31,7 @@ import {
   sendTestNotification,
   type NotificationPreferenceKey,
   type NotificationPreferences,
+  reconcileNotificationPreferences,
 } from '@/lib/native/notifications';
 
 type ToggleRowProps = {
@@ -133,6 +134,7 @@ export default function NotificationSettingsPage() {
   }, []);
 
   const save = async (next: NotificationPreferences) => {
+    const previous = preferences;
     try {
       await updateStoreSettings({
         notificationPreferences: next,
@@ -141,6 +143,7 @@ export default function NotificationSettingsPage() {
         alertsEnabled: next.enabled,
         routeReminderEnabled: next.routeOpenReminder,
       });
+      await reconcileNotificationPreferences(previous, next);
     } catch (error) {
       console.error(error);
       toast.error('Não foi possível salvar as notificações.');
