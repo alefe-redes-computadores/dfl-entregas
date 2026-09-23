@@ -213,18 +213,36 @@ jobs:
             -storepass android \
             -keypass android | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
 
-          CERTS="$($APKSIGNER verify --print-certs "$APK")"
-          ACTUAL_SHA1="$(printf '%s\n' "$CERTS" | sed -n 's/^Signer #1 certificate SHA-1 digest: //p' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
-          ACTUAL_SHA256="$(printf '%s\n' "$CERTS" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
-
-          test -n "$EXPECTED_SHA1"
-          test -n "$EXPECTED_SHA256"
-          test -n "$ACTUAL_SHA1"
-          test -n "$ACTUAL_SHA256"
+          set +e
+          CERTS="$("$APKSIGNER" verify --print-certs "$APK" 2>&1)"
+          VERIFY_STATUS=$?
+          set -e
 
           echo "===== CERTIFICADO DO APK REAL ====="
           printf '%s\n' "$CERTS"
           echo "==================================="
+
+          if [ "$VERIFY_STATUS" -ne 0 ]; then
+            echo "ERRO: apksigner não conseguiu validar o APK." >&2
+            exit "$VERIFY_STATUS"
+          fi
+
+          ACTUAL_SHA1="$(printf '%s\n' "$CERTS" | sed -nE '/[Ss][Hh][Aa]-1[[:space:]]+[Dd][Ii][Gg][Ee][Ss][Tt]:/ { s/^.*:[[:space:]]*//; p; q; }' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+          ACTUAL_SHA256="$(printf '%s\n' "$CERTS" | sed -nE '/[Ss][Hh][Aa]-256[[:space:]]+[Dd][Ii][Gg][Ee][Ss][Tt]:/ { s/^.*:[[:space:]]*//; p; q; }' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+
+          if [ -z "$EXPECTED_SHA1" ] || [ -z "$EXPECTED_SHA256" ]; then
+            echo "ERRO: não foi possível extrair SHA-1/SHA-256 do keystore estável." >&2
+            exit 1
+          fi
+          if [ -z "$ACTUAL_SHA1" ] || [ -z "$ACTUAL_SHA256" ]; then
+            echo "ERRO: não foi possível extrair SHA-1/SHA-256 da saída exibida acima." >&2
+            exit 1
+          fi
+
+          echo "SHA-1 esperado:  $EXPECTED_SHA1"
+          echo "SHA-1 do APK:    $ACTUAL_SHA1"
+          echo "SHA-256 esperado: $EXPECTED_SHA256"
+          echo "SHA-256 do APK:   $ACTUAL_SHA256"
 
           if [ "$EXPECTED_SHA1" != "$ACTUAL_SHA1" ]; then
             echo "ERRO: SHA-1 do APK diverge do keystore estável." >&2
