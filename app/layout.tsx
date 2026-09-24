@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import { Poppins, Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { Header } from '@/components/layout/Header';
 import { BottomNav } from '@/components/layout/BottomNav';
@@ -11,20 +10,6 @@ import { RouteOperations } from '@/components/RouteOperations';
 import { NativeRuntime } from '@/components/NativeRuntime';
 import { PwaRuntime } from '@/components/pwa/PwaRuntime';
 import './globals.css';
-
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['600', '700', '800'],
-  variable: '--font-poppins',
-  display: 'swap',
-});
-
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-inter',
-  display: 'swap',
-});
 
 export const metadata: Metadata = {
   title: {
@@ -76,7 +61,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className={`${poppins.variable} ${inter.variable} dark`} suppressHydrationWarning>
+    <html lang="pt-BR" className="dark" suppressHydrationWarning>
       <body>
         <ClientInit />
         <NativeRuntime />
