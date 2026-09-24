@@ -26,8 +26,7 @@ export function Header() {
     setGreeting(getGreeting());
   }, []);
 
-  // Pega o primeiro nome do usuário ou usa "Álefe" como fallback
-  const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Álefe';
+  const firstName = user?.displayName?.trim().split(/\s+/)[0] || 'Usuário';
 
   return (
     <>
@@ -35,7 +34,9 @@ export function Header() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* Avatar Clicável que abre o modal de perfil */}
-            <button 
+            <button
+              type="button"
+              aria-label="Abrir perfil"
               onClick={() => setIsProfileOpen(true)}
               className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 ring-2 ring-zinc-800 active:scale-95 transition-transform"
             >
@@ -82,7 +83,15 @@ export function Header() {
 
       {/* Modal de Edição / Visualização de Perfil */}
       {isProfileOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Perfil da conta"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsProfileOpen(false);
+          }}
+        >
           <div className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
             <div className="flex flex-col items-center text-center">
               <div className="relative h-20 w-20 overflow-hidden rounded-full ring-4 ring-emerald-500/20">
@@ -94,6 +103,7 @@ export function Header() {
 
             <div className="mt-6 flex flex-col gap-3">
               <button
+                type="button"
                 onClick={() => {
                   logout();
                   setIsProfileOpen(false);
@@ -104,6 +114,7 @@ export function Header() {
                 Sair da Conta
               </button>
               <button
+                type="button"
                 onClick={() => setIsProfileOpen(false)}
                 className="rounded-2xl bg-zinc-800 py-3.5 font-semibold text-zinc-200 active:scale-95"
               >

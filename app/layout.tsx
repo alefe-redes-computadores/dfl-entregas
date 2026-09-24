@@ -63,12 +63,12 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className="dark" suppressHydrationWarning>
       <body>
-        <ClientInit />
-        <NativeRuntime />
-        <PwaRuntime />
-        <StoreAutomation />
-        <RouteOperations />
         <ErrorBoundary>
+          <ClientInit />
+          <NativeRuntime />
+          <PwaRuntime />
+          <StoreAutomation />
+          <RouteOperations />
           <AuthGuard>
             <div className="dfl-shell relative mx-auto flex w-full flex-col overflow-x-hidden bg-zinc-950/95 text-zinc-100">
               <Header />

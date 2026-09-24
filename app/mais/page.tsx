@@ -26,8 +26,7 @@ export default function MaisPage() {
 
   const [syncChecking, setSyncChecking] = useState(false);
 
-  const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Álefe';
-  const fullName = user?.displayName || 'Álefe Jôhsefe';
+  const fullName = user?.displayName?.trim() || 'Usuário DFL';
 
   const handleSync = async () => {
     if (isSyncing || syncChecking) return;
