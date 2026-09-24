@@ -19,6 +19,7 @@ import {
   deliveryDraftFromSite,
   dflSiteAddressString,
   normalizeSitePaymentMethod,
+  normalizeSiteChangeFor,
   siteDeliveryId,
   siteGuestCustomerId,
   siteOrderItemsFromPayload,
@@ -734,7 +735,7 @@ export async function consumeDflSiteOrderUpdatedPersisted(
           value: event.payload.total,
           customer_charge: event.payload.total,
           payment_method: normalizeSitePaymentMethod(event.payload.metodoPagamento),
-          change_for: event.payload.trocoPara ?? null,
+          change_for: normalizeSiteChangeFor(event.payload.trocoPara) ?? null,
           updated_at: now,
         }),
       );

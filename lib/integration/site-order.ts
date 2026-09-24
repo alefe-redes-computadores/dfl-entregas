@@ -48,7 +48,7 @@ export interface DflSiteOrderEventPayloadV1 {
   rewardId: unknown;
   total: number;
   metodoPagamento: string;
-  trocoPara: number | null;
+  trocoPara: string | number | null;
   status: string;
   isAgendamento: boolean;
 
@@ -81,6 +81,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const finiteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
+
+export function normalizeSiteChangeFor(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined;
+  if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const clean = value.trim().replace(/R\$/gi, '').replace(/\s/g, '');
+  if (!clean) return undefined;
+  const normalized = clean.includes(',') ? clean.replace(/\./g, '').replace(',', '.') : clean;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
 
 const requiredText = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
@@ -153,7 +164,7 @@ export function isDflSiteOrderPayloadV1(
     finiteNumber(value.desconto) &&
     finiteNumber(value.total) &&
     requiredText(value.metodoPagamento) &&
-    (value.trocoPara === null || finiteNumber(value.trocoPara)) &&
+    (value.trocoPara === null || normalizeSiteChangeFor(value.trocoPara) !== undefined) &&
     requiredText(value.status) &&
     typeof value.isAgendamento === 'boolean' &&
     (value.statusUpdatedAt === null ||
@@ -360,7 +371,7 @@ export function commercialSnapshotFromSite(payload: DflSiteOrderEventPayloadV1):
   return {
     schema_version: 1, items, subtotal: payload.subtotal, delivery_fee: payload.taxaEntrega,
     discount: payload.desconto, coupon_code: optionalString(payload.cupom), reward_id: optionalString(payload.rewardId),
-    total: payload.total, payment_method_raw: payload.metodoPagamento, change_for: payload.trocoPara ?? undefined,
+    total: payload.total, payment_method_raw: payload.metodoPagamento, change_for: normalizeSiteChangeFor(payload.trocoPara),
     scheduled: payload.isAgendamento,
   };
 }
@@ -479,7 +490,7 @@ export function deliveryDraftFromSite(
     customer_charge: payload.total,
     is_paid: false,
     payment_method: normalizeSitePaymentMethod(payload.metodoPagamento),
-    change_for: payload.trocoPara ?? undefined,
+    change_for: normalizeSiteChangeFor(payload.trocoPara),
 
     address_string: address,
     maps_link: '',
