@@ -49,6 +49,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const toggleDeliveryExpansion = useAppStore((state) => state.toggleDeliveryExpansion);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
+  const getCustomerById = useAppStore((state) => state.getCustomerById);
 
   const isExpanded = delivery.is_expanded || false;
   const groupedDeliveries = stopDeliveries?.length ? stopDeliveries : [delivery];
@@ -88,7 +89,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const isSiteOrder = delivery.source_system === 'dfl_site';
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
-  const isUrgent = delivery.is_urgent;
+  const isUrgent = groupedDeliveries.some((item) => item.is_urgent);
   const isVIP = (customer?.orderCount || 0) >= 5;
 
   const shortAddress = compactAddressForCard(delivery.address_string, customer?.address, customer?.neighborhood);
@@ -312,9 +313,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
   }
 
-  const orderLocked = delivery.order_locked === true;
-  const smartLocked = orderLocked && delivery.order_source === 'smart';
-  const manualLocked = orderLocked && delivery.order_source !== 'smart';
+  const orderLocked = groupedDeliveries.some((item) => item.order_locked === true);
+  const manualLocked = groupedDeliveries.some(
+    (item) => item.order_locked === true && item.order_source !== 'smart',
+  );
+  const smartLocked = orderLocked && !manualLocked;
   const canReorder =
     !isRecoveryRoute &&
     route.status === 'aberta' &&
@@ -412,8 +415,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-1.5 truncate max-w-[170px]">
                     <p className="font-heading text-sm font-black tracking-tight text-zinc-50 truncate flex items-center gap-1">
-                      {customer?.name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
-                      {isVIP && <Crown size={12} className="text-amber-500 shrink-0" />}
+                      {isGroupedStop
+                        ? `${groupedDeliveries.length} pedidos · mesma parada`
+                        : customer?.name || delivery.customer_name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
+                      {!isGroupedStop && isVIP && <Crown size={12} className="text-amber-500 shrink-0" />}
                     </p>
                   </div>
                   <div className="flex flex-col items-end">
@@ -429,7 +434,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
                   {isGroupedStop ? (
                     <span className="bg-violet-500/15 border border-violet-500/30 text-violet-300 px-2 py-0.5 rounded-md text-[10px] font-black shrink-0">
-                      {groupedDeliveries.length} pedidos iFood · {groupedPending} pendente{groupedPending === 1 ? '' : 's'}
+                      1 parada · {groupedDeliveries.length} pedidos · {groupedPending} pendente{groupedPending === 1 ? '' : 's'}
                     </span>
                   ) : isIfood && delivery.order_id ? (
                     <span className="bg-red-500/15 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0">
@@ -470,6 +475,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     </div>
                     <div className="space-y-1.5">
                       {groupedDeliveries.map((item, index) => {
+                        const itemCustomer = getCustomerById(item.customer_id);
                         const charge = item.customer_charge ?? item.value ?? 0;
                         const itemCode = item.confirmation_code?.replace(/\D/g, '').slice(0, 4);
                         const paymentLabel = item.is_paid ? 'Pago app' : item.payment_method === 'dinheiro' ? (item.change_for ? `Dinheiro · p/ R$ ${item.change_for.toFixed(2).replace('.', ',')}` : 'Dinheiro') : item.payment_method?.includes('cartao') ? 'Cartão' : item.payment_method === 'pix' ? 'Pix' : 'Pagamento';
@@ -477,12 +483,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           <div key={item.id} className="flex items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/55 px-2.5 py-2">
                             <span className={clsx("flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[9px] font-black", item.completed ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-300")}>{item.completed ? '✓' : index + 1}</span>
                             <div className="min-w-0 flex-1">
+                              <p className="truncate text-[10px] font-black text-zinc-200">
+                                {itemCustomer?.name || item.customer_name || `Pedido ${index + 1}`}
+                              </p>
                               <div className="flex items-center gap-1.5">
                                 <span className="font-mono text-[10px] font-black text-zinc-200">#{item.order_id || '—'}</span>
                                 {item.ifood_id && <span className="truncate font-mono text-[9px] text-zinc-500">ID {item.ifood_id}</span>}
                                 {itemCode && groupedCodes.length > 1 && <span className="font-mono text-[9px] text-amber-400">Cód {itemCode}</span>}
                               </div>
-                              <p className="mt-0.5 truncate text-[9px] font-bold text-zinc-500">{paymentLabel}</p>
+                              <p className="mt-0.5 truncate text-[9px] font-bold text-zinc-500">
+                                {paymentLabel}
+                                {item.drinks?.trim() ? ` · ${item.drinks.trim()}` : ''}
+                              </p>
                             </div>
                             <span className="shrink-0 text-[10px] font-black text-emerald-400">R$ {charge.toFixed(2).replace('.', ',')}</span>
                             <Link href={`/entregas/editar?id=${item.id}${operationalDateQuery}`} onClick={(event) => event.stopPropagation()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400" title="Editar este pedido">
@@ -542,7 +554,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                       <div className="flex flex-col gap-1 truncate flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap truncate">
-                          {delivery.is_paid ? (
+                          {isGroupedStop ? (
+                            <span className="flex items-center gap-1 rounded border border-violet-500/20 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-black text-violet-300">
+                              <CheckSquare size={10} />
+                              Pagamentos por pedido
+                            </span>
+                          ) : delivery.is_paid ? (
                             <span className="flex items-center gap-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1.5 py-0.5 text-[10px] font-black shrink-0">
                               <CheckCircle2 size={10} /> Pago App
                             </span>
@@ -555,7 +572,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             </span>
                           )}
 
-                          {delivery.drinks && (
+                          {!isGroupedStop && delivery.drinks && (
                             <span className="flex items-center gap-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 px-1.5 py-0.5 text-[10px] font-black shrink-0 truncate max-w-[100px]">
                               <CupSoda size={10} /> {delivery.drinks}
                             </span>
@@ -599,7 +616,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           <Copy size={13} className="text-emerald-500" /> Copiar Dados
                         </button>
 
-                        {activePhone && (
+                        {!isGroupedStop && activePhone && (
                           <a
                             href={`https://wa.me/55${activePhone.replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`}
                             target="_blank"
@@ -614,7 +631,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                       {!isExpanded && !delivery.completed && route.status === 'aberta' && (
                         <div className="flex min-w-0 items-center justify-end gap-1.5">
-                          <button type="button" onClick={async(e)=>{e.stopPropagation();try{await updateDelivery(delivery.id,{order_locked:!orderLocked,order_source:'manual',order_updated_at:new Date().toISOString()});toast.success(orderLocked?'Parada destravada.':'Parada travada na sequência.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Ordem inteligente':'Travar'}</button>
+                          <button type="button" onClick={async(e)=>{e.stopPropagation();try{const nextLocked=!orderLocked;const changedAt=new Date().toISOString();await Promise.all(groupedDeliveries.map((item)=>updateDelivery(item.id,{order_locked:nextLocked,order_source:'manual',order_updated_at:changedAt})));toast.success(nextLocked?'Parada travada na sequência.':'Parada destravada.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Ordem inteligente':'Travar'}</button>
                           <div className="flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
                             <button
                               type="button"
@@ -763,7 +780,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       ? 'Corrigir rota primeiro'
                       : delivery.completed
                         ? 'Desfazer Baixa'
-                        : 'Dar Baixa'}
+                        : isGroupedStop
+                          ? `Dar baixa no próximo (${groupedPending})`
+                          : 'Dar Baixa'}
                   </button>
 
                   {activePhone && (

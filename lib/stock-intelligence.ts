@@ -17,6 +17,8 @@ export interface StockRecommendation {
   // Métrica operacional principal.
   daysUntilMinimum: number | null;
   minimumReached: boolean;
+  leadTimeDays: number;
+  reorderDue: boolean;
 
   consumptionEvents: number;
   distinctConsumptionDays: number;
@@ -30,6 +32,7 @@ export interface StockRecommendation {
 const DAY = 86_400_000;
 const LOOKBACK_DAYS = 30;
 const SAFETY_BUFFER_DAYS = 3;
+const DEFAULT_LEAD_TIME_DAYS = 2;
 
 const validDate = (value?: string) => {
   const date = value ? new Date(value) : null;
@@ -129,6 +132,12 @@ export function buildStockRecommendation(
 
   const minimumReached =
     product.current_quantity <= product.minimum_quantity;
+  const leadTimeDays = Math.max(
+    0,
+    Number.isFinite(product.lead_time_days)
+      ? Number(product.lead_time_days)
+      : DEFAULT_LEAD_TIME_DAYS,
+  );
 
   if (events.length === 0) {
     return {
@@ -140,6 +149,8 @@ export function buildStockRecommendation(
       coverageDays: null,
       daysUntilMinimum: minimumReached ? 0 : null,
       minimumReached,
+      leadTimeDays,
+      reorderDue: minimumReached,
       consumptionEvents: 0,
       distinctConsumptionDays: 0,
       observedDays: 0,
@@ -233,6 +244,11 @@ export function buildStockRecommendation(
               averageDailyConsumption,
           );
 
+  const reorderDue =
+    minimumReached ||
+    (daysUntilMinimum !== null &&
+      daysUntilMinimum <= leadTimeDays);
+
   const sampleText = `${events.length} saída${
     events.length === 1 ? '' : 's'
   } operacional${
@@ -250,6 +266,8 @@ export function buildStockRecommendation(
     coverageDays,
     daysUntilMinimum,
     minimumReached,
+    leadTimeDays,
+    reorderDue,
     consumptionEvents: events.length,
     distinctConsumptionDays,
     observedDays,
@@ -261,6 +279,14 @@ export function buildStockRecommendation(
         : 'ok',
     explanation: minimumReached
       ? `${sampleText}. O saldo já está no/abaixo do mínimo; a prioridade é recompor até a meta.`
+      : reorderDue
+        ? `${sampleText}. O mínimo deve ser alcançado em cerca de ${daysUntilMinimum?.toLocaleString(
+            'pt-BR',
+            { maximumFractionDigits: 1 },
+          )} dia(s), dentro do prazo de reposição de ${leadTimeDays.toLocaleString(
+            'pt-BR',
+            { maximumFractionDigits: 1 },
+          )} dia(s). Comprar agora reduz o risco de ruptura.`
       : usesHistory
         ? `${sampleText}. Consumo ponderado recente de ${averageDailyConsumption.toLocaleString(
             'pt-BR',
@@ -305,7 +331,7 @@ export function stockIntelligenceSummary(
     nearMinimum: recommendations.filter(
       (item) =>
         item.daysUntilMinimum !== null &&
-        item.daysUntilMinimum <= 2,
+        item.daysUntilMinimum <= item.leadTimeDays,
     ).length,
     minimumReached: recommendations.filter(
       (item) => item.minimumReached,

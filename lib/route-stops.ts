@@ -1,8 +1,29 @@
 // lib/route-stops.ts
 import type { Delivery } from '@/types';
+import { canonicalizeOperationalAddress } from '@/lib/operational-address';
+import { normalizeCustomerAddress } from '@/lib/customer-identity';
 
-export const deliveryStopKey = (delivery: Delivery) =>
-  delivery.stop_group_id?.trim() || delivery.id;
+const normalizeStopAddress = (value?: string) =>
+  normalizeCustomerAddress(
+    canonicalizeOperationalAddress(value).address,
+  );
+
+/**
+ * Uma parada é física, não comercial.
+ *
+ * `stop_group_id` continua sendo persistido para fluxos multi-pedido, mas o
+ * endereço canônico é a identidade operacional primária. Assim, dois pedidos
+ * cadastrados separadamente para o mesmo endereço e na mesma rota não viram
+ * duas paradas para o motoboy.
+ */
+export const deliveryStopKey = (delivery: Delivery) => {
+  const address = normalizeStopAddress(delivery.address_string);
+  if (delivery.route_id && address) {
+    return `address:${delivery.route_id}:${address}`;
+  }
+
+  return delivery.stop_group_id?.trim() || delivery.id;
+};
 
 const fallbackOrder = (delivery: Delivery) => {
   const value = new Date(

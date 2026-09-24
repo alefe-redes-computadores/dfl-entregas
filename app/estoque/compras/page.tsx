@@ -1,7 +1,9 @@
 'use client';
 
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useRouter } from 'next/navigation';
@@ -130,8 +132,12 @@ export default function ShoppingList() {
                 ?.net || 0
             ) > 0,
         )
-        .sort(prioritySort),
-    [products, netRecommendationMap],
+        .sort((a, b) => {
+          const aDue = recommendationMap.get(a.id)?.reorderDue ? 0 : 1;
+          const bDue = recommendationMap.get(b.id)?.reorderDue ? 0 : 1;
+          return aDue - bDue || prioritySort(a, b);
+        }),
+    [products, netRecommendationMap, recommendationMap],
   );
 
   const [showAll, setShowAll] = useState(false);
@@ -166,6 +172,47 @@ export default function ShoppingList() {
   );
 
   const [busy, setBusy] = useState(false);
+  const initializedSuggestions = useRef(new Set<string>());
+
+  /*
+   * O store hidrata depois da primeira renderização em alguns aparelhos.
+   * Seleciona apenas sugestões novas, sem reativar um item que o usuário
+   * tenha desmarcado manualmente.
+   */
+  useEffect(() => {
+    const freshSuggestions = suggested.filter(
+      (product) => !initializedSuggestions.current.has(product.id),
+    );
+
+    if (!freshSuggestions.length) return;
+
+    setSelected((current) => ({
+      ...current,
+      ...Object.fromEntries(
+        freshSuggestions.map((product) => [product.id, true]),
+      ),
+    }));
+
+    setQuantities((current) => ({
+      ...current,
+      ...Object.fromEntries(
+        freshSuggestions
+          .filter((product) => current[product.id] === undefined)
+          .map((product) => [
+            product.id,
+            String(
+              Number(
+                (netRecommendationMap.get(product.id)?.net || 0).toFixed(3),
+              ),
+            ),
+          ]),
+      ),
+    }));
+
+    freshSuggestions.forEach((product) =>
+      initializedSuggestions.current.add(product.id),
+    );
+  }, [netRecommendationMap, suggested]);
 
   const displayed = showAll
     ? products
@@ -358,15 +405,26 @@ export default function ShoppingList() {
                   </p>
 
                   {suggestedQuantity > 0 && (
-                    <p className="mt-1 text-[9px] font-black text-amber-400">
-                      Comprar{' '}
-                      {formatStockQuantity(
-                        suggestedQuantity,
-                        product.unit,
-                      )}{' '}
-                      · confiança{' '}
-                      {recommendation?.confidence}
-                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <p className="text-[9px] font-black text-amber-400">
+                        Comprar{' '}
+                        {formatStockQuantity(
+                          suggestedQuantity,
+                          product.unit,
+                        )}{' '}
+                        · confiança {recommendation?.confidence}
+                      </p>
+                      {recommendation?.reorderDue && (
+                        <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[8px] font-black uppercase text-red-300">
+                          Comprar agora
+                        </span>
+                      )}
+                      {recommendation && !recommendation.reorderDue && (
+                        <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[8px] font-black uppercase text-sky-300">
+                          Compra planejável
+                        </span>
+                      )}
+                    </div>
                   )}
 
                   {(purchasePlan?.committed || 0) > 0 && (
@@ -409,6 +467,10 @@ export default function ShoppingList() {
               {recommendation && (
                 <p className="mt-2 border-t border-zinc-800/70 pt-2 text-[9px] leading-relaxed text-zinc-600">
                   {recommendation.explanation}
+                  {` Prazo de reposição: ${recommendation.leadTimeDays.toLocaleString(
+                    'pt-BR',
+                    { maximumFractionDigits: 1 },
+                  )} dia(s).`}
                   {(purchasePlan?.committed || 0) > 0
                     ? ` A sugestão líquida já desconta ${formatStockQuantity(
                         purchasePlan?.committed || 0,

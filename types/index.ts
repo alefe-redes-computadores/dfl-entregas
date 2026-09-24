@@ -148,6 +148,8 @@ export interface StockProduct {
   current_quantity: number;
   minimum_quantity: number;
   ideal_quantity?: number;
+  /** Dias normalmente necessários entre decidir comprar e o item chegar. */
+  lead_time_days?: number;
   average_cost?: number;
   active: boolean;
   observation?: string;

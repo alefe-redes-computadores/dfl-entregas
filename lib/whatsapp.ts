@@ -320,7 +320,19 @@ export async function generateRouteMessages(
       const neighborhood = addressParts.neighborhood;
       const street = addressParts.fullAddress;
       const streetOnly = addressParts.street;
-      const clientName = customer?.name || representative.customer_name || 'Cliente';
+      const stopClientNames = Array.from(
+        new Set(
+          stopGroup.deliveries
+            .map((item) => {
+              const itemCustomer = getCustomerById(item.customer_id);
+              return itemCustomer?.name || item.customer_name || '';
+            })
+            .filter(Boolean),
+        ),
+      );
+      const clientName = stopClientNames.length > 1
+        ? stopClientNames.join(' + ')
+        : stopClientNames[0] || customer?.name || representative.customer_name || 'Cliente';
       const clientPhone = (representative.phone || customer?.phone || '').replace(/\D/g, '');
 
       if (!hasHouseNumber(street) && !customer?.maps_link) {
@@ -343,6 +355,8 @@ export async function generateRouteMessages(
       }
 
       stopGroup.deliveries.forEach((item) => {
+        const itemCustomer = getCustomerById(item.customer_id);
+        const itemCustomerName = itemCustomer?.name || item.customer_name || '';
         const valueStr = formatMoney(deliveryCharge(item));
         const shortId = item.order_id ? `#${item.order_id}` : '#—';
         const idText = item.ifood_id ? ` · ID ${item.ifood_id}` : '';
@@ -355,7 +369,10 @@ export async function generateRouteMessages(
         else if (item.payment_method === 'dinheiro' && item.change_for) { const troco=Math.max(0,item.change_for-deliveryCharge(item)); paymentText=`R$ ${valueStr} · paga c/ R$ ${formatMoney(item.change_for)} · troco R$ ${formatMoney(troco)}`; }
         else paymentText=`R$ ${valueStr} · ${(item.payment_method || 'dinheiro').toUpperCase()}`;
         const codeText = codes.length > 1 && specificCode ? ` · cód. ${specificCode}` : '';
-        msg1.push(`• *${shortId}*${idText} · ${paymentText}${codeText}`);
+        const customerText = stopGroup.deliveries.length > 1 && itemCustomerName
+          ? ` · ${itemCustomerName}`
+          : '';
+        msg1.push(`• *${shortId}*${idText}${customerText} · ${paymentText}${codeText}`);
 
         if (item.drinks?.trim()) parseDrinkItems(item.drinks.trim()).forEach(({ qty, name }) => { const key=name.toLowerCase(); if(!drinksSummary[key]) drinksSummary[key]={qty:0,name}; drinksSummary[key].qty+=qty; });
       });

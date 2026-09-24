@@ -767,59 +767,24 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             groupDeliveriesByStop(sortedDeliveries).map((stopGroup) => {
               const first = stopGroup.representative;
               const physicalStop = stopMeta.get(first.id);
-              const multipleOrders = stopGroup.deliveries.length > 1;
+              const cust = getCustomerById(first.customer_id);
+              const addressKey = normalizedAddress(first.address_string || cust?.address);
+              const isNeighbor = addressKey ? (addressCounts[addressKey] > 1) : false;
+              const nearby = neighborMeta.get(first.id);
 
               return (
-                <section
+                <DeliveryCard
                   key={stopGroup.key}
-                  className={
-                    multipleOrders
-                      ? 'overflow-hidden rounded-[22px] border border-violet-500/20 bg-violet-500/[.035] p-2'
-                      : ''
-                  }
-                >
-                  {multipleOrders && (
-                    <div className="mb-2 flex items-center justify-between gap-3 rounded-[16px] bg-violet-500/[.07] px-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="text-[9px] font-black uppercase tracking-[.12em] text-violet-300">
-                          Parada {physicalStop?.stopNumber ?? '—'}
-                        </p>
-                        <p className="mt-0.5 text-[10px] font-bold text-zinc-300">
-                          {stopGroup.deliveries.length} pedidos neste endereço
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-violet-500/10 px-2 py-1 text-[9px] font-black text-violet-300">
-                        {stopGroup.pending.length} pendente{stopGroup.pending.length === 1 ? '' : 's'}
-                      </span>
-                    </div>
-                  )}
-
-                  <div>
-                    {(() => {
-                      const delivery = stopGroup.representative;
-                      const cust = getCustomerById(delivery.customer_id);
-                      const deliveryStop = stopMeta.get(delivery.id);
-                      const addressKey = normalizedAddress(delivery.address_string || cust?.address);
-                      const isNeighbor = addressKey ? (addressCounts[addressKey] > 1) : false;
-                      const nearby = neighborMeta.get(delivery.id);
-
-                      return (
-                        <DeliveryCard
-                          key={stopGroup.key}
-                          delivery={delivery}
-                          stopDeliveries={stopGroup.deliveries}
-                          customer={cust}
-                          route={route}
-                          isNeighbor={Boolean(isNeighbor || nearby)}
-                          neighborPosition={nearby?.position}
-                          neighborTotal={nearby?.total}
-                          position={!delivery.completed ? deliveryStop?.stopNumber : undefined}
-                          pendingCount={pendingStopGroups.length}
-                        />
-                      );
-                    })()}
-                  </div>
-                </section>
+                  delivery={first}
+                  stopDeliveries={stopGroup.deliveries}
+                  customer={cust}
+                  route={route}
+                  isNeighbor={Boolean(isNeighbor || nearby)}
+                  neighborPosition={nearby?.position}
+                  neighborTotal={nearby?.total}
+                  position={!first.completed ? physicalStop?.stopNumber : undefined}
+                  pendingCount={pendingStopGroups.length}
+                />
               );
             })
           )}
