@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { PwaInstallPrompt } from '@/components/pwa/PwaInstallPrompt';
 import { User, LogOut } from 'lucide-react';
+import { UserAvatar } from '@/components/UserAvatar';
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -38,13 +39,7 @@ export function Header() {
               onClick={() => setIsProfileOpen(true)}
               className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 ring-2 ring-zinc-800 active:scale-95 transition-transform"
             >
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="Perfil" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center font-heading text-sm font-bold text-white">
-                  {firstName.charAt(0)}
-                </div>
-              )}
+              <UserAvatar photoURL={user?.photoURL} name={user?.displayName} fallbackClassName="text-sm" />
             </button>
 
             <div className="flex flex-col">
@@ -91,13 +86,7 @@ export function Header() {
           <div className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
             <div className="flex flex-col items-center text-center">
               <div className="relative h-20 w-20 overflow-hidden rounded-full ring-4 ring-emerald-500/20">
-                {user?.photoURL ? (
-                  <img src={user.photoURL} alt="Perfil" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-zinc-800 text-xl font-bold text-white">
-                    {firstName.charAt(0)}
-                  </div>
-                )}
+                <UserAvatar photoURL={user?.photoURL} name={user?.displayName} fallbackClassName="text-xl" />
               </div>
               <h2 className="mt-4 font-heading text-lg font-bold text-zinc-50">{user?.displayName || 'Usuário DFL'}</h2>
               <p className="text-xs text-zinc-400">{user?.email || 'Conectado via Google'}</p>

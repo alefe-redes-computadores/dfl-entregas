@@ -13,6 +13,7 @@ import { BellRing,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
+import { UserAvatar } from '@/components/UserAvatar';
 
 export default function MaisPage() {
   const router = useRouter();
@@ -94,17 +95,7 @@ export default function MaisPage() {
 
       <section className="flex items-center gap-3 rounded-[22px] border border-emerald-500/15 bg-gradient-to-br from-emerald-500/[.055] via-zinc-900/45 to-zinc-950 p-4 shadow-[0_14px_32px_rgba(0,0,0,.14)]">
         <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-[18px] bg-gradient-to-br from-emerald-500 to-emerald-700 ring-2 ring-zinc-800">
-          {user?.photoURL ? (
-            <img
-              src={user.photoURL}
-              alt="Perfil"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center font-heading text-2xl font-bold text-white">
-              {firstName.charAt(0)}
-            </div>
-          )}
+          <UserAvatar photoURL={user?.photoURL} name={user?.displayName} fallbackClassName="text-xl" />
         </div>
 
         <div className="min-w-0 flex-1 text-left">
