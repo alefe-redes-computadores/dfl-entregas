@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BellRing,
+  Activity,
   ChevronRight,
   ReceiptText,
   LockKeyhole,
@@ -175,6 +176,23 @@ export default function MaisPage() {
                   : 'Buscar mudanças recentes na nuvem'}
               </p>
             </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => router.push('/mais/diagnostico')}
+            className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 text-left transition-colors active:bg-zinc-800/50"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-400">
+              <Activity size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-zinc-100">Diagnóstico local</p>
+              <p className="text-xs text-zinc-500">
+                Leituras retornadas, duração e notificações agendadas
+              </p>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
           </button>
 
           <div className="flex items-center gap-4 p-4">

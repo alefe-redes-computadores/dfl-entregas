@@ -353,13 +353,6 @@ export default function NotificationSettingsPage() {
             disabled={masterDisabled}
           />
           <ToggleRow
-            title="Revisão de estoque no fechamento"
-            description="No fechamento operacional, lembra de registrar saídas, ajustes e conferir o estoque do dia."
-            checked={preferences.closingReview}
-            onChange={() => toggle('closingReview')}
-            disabled={masterDisabled}
-          />
-          <ToggleRow
             title="No fechamento"
             description="Avisa quando o horário programado termina."
             checked={preferences.shiftClose}
@@ -401,6 +394,20 @@ export default function NotificationSettingsPage() {
           title="Estoque e compras"
           subtitle="Alertas baseados em mudança real de saldo ou status"
         >
+          <ToggleRow
+            title="Compras do dia às 12h"
+            description="Nos dias de funcionamento, lembra de registrar compras, recebimentos e reposições."
+            checked={preferences.purchasePlanning}
+            onChange={() => toggle('purchasePlanning')}
+            disabled={masterDisabled}
+          />
+          <ToggleRow
+            title="Conferir estoque às 23h30"
+            description="Uma vez por dia de funcionamento, lembra de registrar saídas e ajustes pendentes."
+            checked={preferences.closingReview}
+            onChange={() => toggle('closingReview')}
+            disabled={masterDisabled}
+          />
           <ToggleRow
             title="Estoque baixo"
             description="Somente quando o produto cruza o mínimo cadastrado."

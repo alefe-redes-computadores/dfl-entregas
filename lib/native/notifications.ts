@@ -37,6 +37,7 @@ export type NotificationPreferences = {
   routeOpenReminder: boolean;
   routeFinished: boolean;
   ifoodPending: boolean;
+  purchasePlanning: boolean;
   stockLow: boolean;
   stockZero: boolean;
   supplyCheck: boolean;
@@ -53,6 +54,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   routeOpenReminder: true,
   routeFinished: true,
   ifoodPending: true,
+  purchasePlanning: true,
   stockLow: true,
   stockZero: true,
   supplyCheck: true,
@@ -334,6 +336,7 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
     body: string,
     at: Date,
     preferenceKey: NotificationPreferenceKey,
+    href = '/loja',
   ) => {
     if (!preferences[preferenceKey]) return;
     if (at.getTime() <= now.getTime() + 5_000) return;
@@ -345,7 +348,7 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
       channelId: ANDROID_CHANNEL_ID,
       schedule: { at, allowWhileIdle: true },
       extra: ownerExtra('shift', {
-        href: '/loja',
+        href,
         dflPreferenceKey: preferenceKey,
       }),
     });
@@ -355,6 +358,24 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
     const key = shiftDateKey(today, offset);
     const day = resolvedDay(key, settings);
     if (!day?.active || !day.shifts?.length) continue;
+
+    push(
+      `shift:purchase-planning:${key}`,
+      'Hora de organizar as compras',
+      'Registre compras, recebimentos e o que precisa ser reposto para a operação de hoje.',
+      operationalDateTime(key, '12:00'),
+      'purchasePlanning',
+      '/abastecimentos',
+    );
+
+    push(
+      `shift:closing-review:${key}`,
+      'Conferência do estoque às 23h30',
+      'Registre saídas e ajustes pendentes e deixe o estoque correto para o próximo expediente.',
+      operationalDateTime(key, '23:30'),
+      'closingReview',
+      '/estoque',
+    );
 
     day.shifts.forEach((shift, index) => {
       const start = operationalDateTime(key, shift.start);
@@ -383,14 +404,6 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
         'Revise rotas abertas, confirmações do iFood e pendências antes de encerrar.',
         minusMinutes(close, SHIFT_NOTICE_MINUTES),
         'shiftPreClose',
-      );
-
-      push(
-        `shift:closing-review:${key}:${index}`,
-        'Revisão de estoque do dia',
-        'Antes de encerrar, registre saídas ou ajustes pendentes e confira o estoque da operação.',
-        close,
-        'closingReview',
       );
 
       push(

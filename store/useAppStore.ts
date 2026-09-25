@@ -37,6 +37,7 @@ import { stockProductCategory, suggestStockCategory } from '@/lib/stock-categori
 import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop } from '@/lib/route-stops';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
+import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -407,6 +408,8 @@ export const useAppStore = create<AppState>()(
         // Chamadas explícitas posteriores são permitidas, mas nunca concorrentes.
         if (get().isSyncing) return;
 
+        const syncStartedAt = new Date().toISOString();
+        const syncStartedMs = Date.now();
         set({ isSyncing: true, syncError: false });
         try {
           const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, stockSuppliersSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, operationalExpensesSnap, storeSnap] = await Promise.all([
@@ -454,6 +457,22 @@ export const useAppStore = create<AppState>()(
             )),
             getDoc(doc(db, 'store', 'store_settings'))
           ]);
+
+          const syncCollections: Record<string, number> = {
+            routes: routesSnap.size,
+            deliveries: deliveriesSnap.size,
+            customers: customersSnap.size,
+            motoboys: motoboysSnap.size,
+            fuelings: fuelingsSnap.size,
+            stock_supplies: stockSuppliesSnap.size,
+            stock_suppliers: stockSuppliersSnap.size,
+            team_members: teamMembersSnap.size,
+            stock_products: stockProductsSnap.size,
+            stock_movements: stockMovementsSnap.size,
+            ifood_pending_confirmations: pendingConfirmationsSnap.size,
+            operational_expenses: operationalExpensesSnap.size,
+            store_settings: storeSnap.exists() ? 1 : 0,
+          };
 
           const fbRoutes = routesSnap.docs.map(d => d.data() as Route);
           const fbDeliveries = deliveriesSnap.docs.map(d => d.data() as Delivery);
@@ -673,9 +692,29 @@ export const useAppStore = create<AppState>()(
             isSyncing: false,
             syncError: false
           });
+          recordSyncDiagnostic({
+            startedAt: syncStartedAt,
+            finishedAt: new Date().toISOString(),
+            durationMs: Date.now() - syncStartedMs,
+            status: 'success',
+            totalDocuments: Object.values(syncCollections).reduce(
+              (sum, count) => sum + count,
+              0,
+            ),
+            collections: syncCollections,
+          });
         } catch (error) {
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false, syncError: true });
+          recordSyncDiagnostic({
+            startedAt: syncStartedAt,
+            finishedAt: new Date().toISOString(),
+            durationMs: Date.now() - syncStartedMs,
+            status: 'error',
+            totalDocuments: 0,
+            collections: {},
+            message: error instanceof Error ? error.message : 'Falha desconhecida',
+          });
           void notifySyncFailure(
             get().storeSettings.notificationPreferences,
           );
