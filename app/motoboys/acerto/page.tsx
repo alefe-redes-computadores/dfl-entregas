@@ -7,6 +7,9 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { getMotoboyDayData,operationalDateKey } from '@/lib/motoboy-analytics';
 import type { MotoboySettlementAdjustment } from '@/types';
+import { Capacitor } from '@capacitor/core';
+import { Directory, Filesystem } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 const fromKey=(key:string)=>new Date(`${key}T12:00:00-03:00`);
 const shift=(key:string,days:number)=>{const date=fromKey(key);date.setDate(date.getDate()+days);return operationalDateKey(date);};
@@ -32,6 +35,7 @@ function Content(){
   const [adjustmentValue,setAdjustmentValue]=useState('');
   const [cashHandedOver,setCashHandedOver]=useState(true);
   const [saving,setSaving]=useState(false);
+  const [imageBusy,setImageBusy]=useState(false);
 
   const sourceId=motoboy?`motoboy:${motoboy.id}:${date}`:'';
   const existing=operationalExpenses.find(item=>item.source_id===sourceId);
@@ -120,15 +124,26 @@ function Content(){
 
   const copy=async()=>{await navigator.clipboard.writeText(summary());toast.success('Resumo copiado.');};
   const share=async()=>{if(navigator.share){try{await navigator.share({title:`Acerto · ${motoboy.name}`,text:summary()});return}catch{}}await copy();};
-  const image=()=>{
+  const image=async()=>{
+    if(imageBusy)return;
+    setImageBusy(true);
+    try{
     const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1350;
     const ctx=canvas.getContext('2d');if(!ctx)return void toast.error('Não foi possível gerar a imagem.');
-    ctx.fillStyle='#09090b';ctx.fillRect(0,0,1080,1350);ctx.fillStyle='#10b981';ctx.fillRect(0,0,1080,18);
-    ctx.fillStyle='#f4f4f5';ctx.font='700 50px Arial';ctx.fillText('DFL ENTREGAS',72,100);
-    ctx.fillStyle='#a1a1aa';ctx.font='32px Arial';ctx.fillText(`Acerto · ${motoboy.name}`,72,158);ctx.fillText(fromKey(date).toLocaleDateString('pt-BR'),72,205);
-    let y=310;const row=(label:string,value:string,strong=false)=>{ctx.fillStyle='#71717a';ctx.font='30px Arial';ctx.fillText(label,72,y);ctx.fillStyle=strong?'#34d399':'#e4e4e7';ctx.font='700 34px Arial';ctx.textAlign='right';ctx.fillText(value,1008,y);ctx.textAlign='left';y+=70;};
-    row('Entregas',String(data.deliveries.length));row('Rotas',String(data.completedRoutes));row('Acerto bruto',`R$ ${money(data.fee.amount)}`);adjustments.forEach(item=>row(item.description,`- R$ ${money(item.amount)}`));y+=18;row('Líquido a pagar',`R$ ${money(data.liquidFee)}`,true);
-    const link=document.createElement('a');link.download=`acerto-${motoboy.name.toLowerCase().replace(/\s+/g,'-')}-${date}.png`;link.href=canvas.toDataURL('image/png');link.click();
+    const round=(x:number,y:number,w:number,h:number,r:number,fill:string,stroke?:string)=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}};
+    const gradient=ctx.createLinearGradient(0,0,1080,1350);gradient.addColorStop(0,'#07130f');gradient.addColorStop(.48,'#09090b');gradient.addColorStop(1,'#111116');ctx.fillStyle=gradient;ctx.fillRect(0,0,1080,1350);
+    ctx.fillStyle='#10b981';ctx.fillRect(0,0,1080,16);ctx.globalAlpha=.16;ctx.beginPath();ctx.arc(960,70,290,0,Math.PI*2);ctx.fillStyle='#10b981';ctx.fill();ctx.globalAlpha=1;
+    round(64,64,952,190,38,'rgba(24,24,27,.88)','#27332f');round(88,88,76,76,22,'#10b981');ctx.fillStyle='#052e22';ctx.font='900 29px Arial';ctx.textAlign='center';ctx.fillText('DFL',126,137);ctx.textAlign='left';
+    ctx.fillStyle='#f4f4f5';ctx.font='900 45px Arial';ctx.fillText('ACERTO DO MOTOBOY',190,125);ctx.fillStyle='#a1a1aa';ctx.font='600 28px Arial';ctx.fillText(motoboy.name,190,170);ctx.fillStyle='#6ee7b7';ctx.font='700 25px Arial';ctx.fillText(fromKey(date).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}),190,210);
+    round(64,286,952,156,34,'rgba(14,165,233,.07)','#173947');const stat=(x:number,label:string,value:string)=>{ctx.fillStyle='#71717a';ctx.font='700 22px Arial';ctx.fillText(label.toUpperCase(),x,337);ctx.fillStyle='#f4f4f5';ctx.font='900 38px Arial';ctx.fillText(value,x,392);};stat(100,'Entregas',String(data.deliveries.length));stat(405,'Rotas',String(data.completedRoutes));stat(700,'Dinheiro recebido',`R$ ${money(data.cashCollected)}`);
+    round(64,474,952,492,34,'rgba(24,24,27,.9)','#27272a');ctx.fillStyle='#d4d4d8';ctx.font='900 25px Arial';ctx.fillText('RESUMO FINANCEIRO',100,526);
+    let y=590;const row=(label:string,value:string,tone='#f4f4f5')=>{ctx.fillStyle='#8b8b94';ctx.font='600 27px Arial';ctx.fillText(label,100,y);ctx.fillStyle=tone;ctx.font='800 30px Arial';ctx.textAlign='right';ctx.fillText(value,980,y);ctx.textAlign='left';ctx.strokeStyle='#242429';ctx.beginPath();ctx.moveTo(100,y+25);ctx.lineTo(980,y+25);ctx.stroke();y+=72;};row('Acerto bruto',`R$ ${money(data.fee.amount)}`);row('Total de abatimentos',`- R$ ${money(data.totalVales)}`,'#fb7185');adjustments.slice(0,3).forEach(item=>row(`↳ ${item.description.slice(0,34)}`,`- R$ ${money(item.amount)}`,'#fb7185'));if(adjustments.length>3)row('Outros ajustes',`+ ${adjustments.length-3} item(ns)`);row('Líquido do motoboy',`R$ ${money(data.liquidFee)}`,'#34d399');
+    const resultColor=data.mustReturn?'#f59e0b':'#10b981';round(64,998,952,218,38,resultColor);ctx.fillStyle='#052e22';ctx.font='900 24px Arial';ctx.fillText('RESULTADO DO ACERTO',104,1053);ctx.font='900 54px Arial';ctx.fillText(`R$ ${money(data.balance)}`,104,1123);ctx.font='900 27px Arial';ctx.fillText(data.mustReturn?'MOTOBOY DEVOLVE À LOJA':'LOJA PAGA AO MOTOBOY',104,1170);
+    ctx.fillStyle='#71717a';ctx.font='600 21px Arial';ctx.fillText(cashHandedOver?'Caixa das entregas conferido na loja':'Dinheiro compensado no fechamento de caixa',72,1274);ctx.textAlign='right';ctx.fillText('Gerado pelo DFL Entregas',1008,1274);ctx.textAlign='left';
+    const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}.png`;
+    if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:'Comprovante do acerto gerado pelo DFL Entregas.',files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem gerada. Escolha onde compartilhar.');return;}
+    const blob=await (await fetch(dataUrl)).blob();const file=new File([blob],filename,{type:'image/png'});if(navigator.share&&navigator.canShare?.({files:[file]})){await navigator.share({title:`Acerto · ${motoboy.name}`,files:[file]});return;}const link=document.createElement('a');link.download=filename;link.href=dataUrl;link.click();toast.success('Imagem baixada.');
+    }catch(error){if(error instanceof Error&&/cancel/i.test(error.message))return;console.error('[ACERTO] Falha ao gerar imagem:',error);toast.error('Não foi possível gerar ou compartilhar a imagem.');}finally{setImageBusy(false);}
   };
 
   return <div className="flex flex-col gap-5 pb-28">
@@ -148,7 +163,7 @@ function Content(){
     <section className={`rounded-[26px] p-5 ${data.mustReturn?'bg-amber-500':'bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.mustReturn?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 text-3xl font-black text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black text-zinc-900">{data.mustReturn?'MOTOBOY DEVOLVE À LOJA':'LOJA PAGA AO MOTOBOY'}</p></section>
 
     <button disabled={saving||Boolean(existing)} onClick={confirm} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-40"><ReceiptText size={17}/>{existing?'Acerto já registrado':saving?'Confirmando...':'Confirmar acerto'}</button>
-    <div className="grid grid-cols-3 gap-2"><button onClick={copy} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><Copy size={14}/>Copiar</button><button onClick={share} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><Send size={14}/>Compartilhar</button><button onClick={image} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><ImageIcon size={14}/>Imagem</button></div>
+    <div className="grid grid-cols-3 gap-2"><button onClick={copy} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><Copy size={14}/>Copiar</button><button onClick={share} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><Send size={14}/>Compartilhar</button><button disabled={imageBusy} onClick={()=>void image()} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300 disabled:opacity-40"><ImageIcon size={14}/>{imageBusy?'Gerando...':'Imagem'}</button></div>
 
     {calendar&&<div className="fixed inset-0 z-50 flex items-end bg-black/75 p-3 backdrop-blur-sm" onClick={()=>setCalendar(false)}><div className="w-full rounded-[30px] border border-zinc-800 bg-zinc-950 p-5" onClick={e=>e.stopPropagation()}><div className="mb-4 flex items-center justify-between"><button onClick={()=>setMonth(value=>new Date(value.getFullYear(),value.getMonth()-1,1))} className="date-button"><ChevronLeft/></button><p className="font-black capitalize">{month.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</p><button onClick={()=>setMonth(value=>new Date(value.getFullYear(),value.getMonth()+1,1))} className="date-button"><ChevronRight/></button></div><div className="grid grid-cols-7 text-center text-[10px] text-zinc-600">{['D','S','T','Q','Q','S','S'].map((label,index)=><span key={`${label}-${index}`}>{label}</span>)}</div><div className="mt-2 grid grid-cols-7 gap-1">{days.map(day=>{const key=operationalDateKey(day);return <button key={key} onClick={()=>{setDate(key);setCalendar(false)}} className={`aspect-square rounded-xl text-xs font-bold ${key===date?'bg-emerald-500 text-zinc-950':day.getMonth()===month.getMonth()?'text-zinc-300':'text-zinc-700'}`}>{day.getDate()}</button>})}</div><button onClick={()=>setCalendar(false)} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 text-xs font-bold text-zinc-400"><X size={15}/>Fechar</button></div></div>}
 
