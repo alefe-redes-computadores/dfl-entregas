@@ -25,6 +25,7 @@ import { ReportChartCard } from '@/components/reports/ReportChartCard';
 import { DataQualityCard } from '@/components/reports/DataQualityCard';
 import { ReportDrilldownSheet } from '@/components/reports/ReportDrilldownSheet';
 import { ReportIntelligencePanel } from '@/components/reports/ReportIntelligencePanel';
+import { ReportMaintenanceCard } from '@/components/reports/ReportMaintenanceCard';
 import { buildReportModel } from '@/lib/reports/buildReportModel';
 import { buildOperationalIntelligence } from '@/lib/delivery-intelligence';
 import { saoPauloDateKey } from '@/lib/reports/time';
@@ -180,6 +181,7 @@ export default function RelatoriosPage() {
       </section>
 
       <main className="flex flex-col gap-4 px-2">
+        <ReportMaintenanceCard />
         <section className="grid grid-cols-2 gap-3">
           <SummaryCard
             title="Entregas"
