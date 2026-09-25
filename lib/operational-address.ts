@@ -22,10 +22,10 @@ const normalizeToken = (value?: string) =>
 
 const PHONE = /(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4,5}[-\s]?\d{4}/;
 // Aceita também CEP copiado como "38701 - 860".
-const POSTAL = /\b(?:CEP\s*:?\s*)?(\d{5})\s*-?\s*(\d{3})\b/i;
+const POSTAL = /\b(?:CEP\s*:?\s*)?(\d{5})\s*(?:-|–|—|\s)?\s*(\d{3})\b/i;
 
 const STRONG_COMPLEMENT =
-  /^(?:obs(?:erva(?:ç|c)[aã]o)?|refer[eê]ncia|complemento|instru(?:ç|c)[aã]o)\s*:|^(?:ap(?:to|artamento)?\.?\s*\w*|bloco\s+\w+|fundos\b|andar\b|sala\b|port[aã]o\b|interfone\b|entrada\b|casa\b|casa\s+de\s+esquina\b|em frente\b|ao lado\b|pr[oó]ximo\b|tocar\b|buzinar\b|ligar\b|chamar\b)/i;
+  /^(?:(?:obs(?:erva(?:ç|c)[aã]o)?|ponto\s+de\s+refer[eê]ncia|refer[eê]ncia|complemento|instru(?:ç|c)[aã]o)\s*:|(?:ap(?:to|artamento)?\.?\s*\w*|bloco\s+\w+|fundos\b|andar\b|sala\b|port[aã]o\b|interfone\b|entrada\b|casa\b|casa\s+de\s+esquina\b|em frente\b|ao lado\b|pr[oó]ximo\b|tocar\b|buzinar\b|ligar\b|chamar\b))/i;
 
 const GEO_NOISE_EXACT =
   /^(?:patos de minas|minas gerais|mg|brasil|brazil)$/i;

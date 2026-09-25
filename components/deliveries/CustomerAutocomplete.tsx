@@ -36,6 +36,27 @@ export function CustomerAutocomplete({
     useState(false);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const openTimerRef = useRef<number>();
+  const closeTimerRef = useRef<number>();
+
+  const closeSuggestions = () => {
+    window.clearTimeout(openTimerRef.current);
+    window.clearTimeout(closeTimerRef.current);
+    setShowSuggestions(false);
+  };
+
+  const scheduleSuggestions = () => {
+    window.clearTimeout(openTimerRef.current);
+    window.clearTimeout(closeTimerRef.current);
+    setShowSuggestions(false);
+    openTimerRef.current = window.setTimeout(() => {
+      setShowSuggestions(true);
+      closeTimerRef.current = window.setTimeout(
+        () => setShowSuggestions(false),
+        3_000,
+      );
+    }, 450);
+  };
 
   const suggestions = useMemo(() => {
     const nameQuery = normalizeCustomerName(value);
@@ -117,11 +138,14 @@ export function CustomerAutocomplete({
       handleClickOutside,
     );
 
-    return () =>
+    return () => {
       document.removeEventListener(
         'mousedown',
         handleClickOutside,
       );
+      window.clearTimeout(openTimerRef.current);
+      window.clearTimeout(closeTimerRef.current);
+    };
   }, []);
 
   function handleSelect(customer: Customer) {
@@ -151,9 +175,9 @@ export function CustomerAutocomplete({
           value={value}
           onChange={(event) => {
             onChange(event.target.value);
-            setShowSuggestions(true);
+            scheduleSuggestions();
           }}
-          onFocus={() => setShowSuggestions(true)}
+          onFocus={scheduleSuggestions}
           className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-11 pr-4 text-zinc-100 placeholder:text-zinc-600 transition-colors focus:border-emerald-500 focus:outline-none"
           autoComplete="off"
         />
@@ -192,6 +216,13 @@ export function CustomerAutocomplete({
               )}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={closeSuggestions}
+            className="sticky bottom-0 w-full border-t border-zinc-800 bg-zinc-950 px-4 py-3 text-left text-xs font-bold text-violet-300"
+          >
+            Continuar com um novo cliente
+          </button>
         </div>
       )}
     </div>

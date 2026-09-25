@@ -57,7 +57,9 @@ jobs:
           echo "APIs server-only isoladas do build estático do APK."
 
       - name: Build estático do Next.js
-        run: npm run build
+        run: |
+          test -n "$NEXT_PUBLIC_GEOAPIFY_API_KEY" || { echo "ERRO: secret NEXT_PUBLIC_GEOAPIFY_API_KEY ausente."; exit 1; }
+          npm run build
         env:
           DFL_STATIC_EXPORT: '1'
           NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}

@@ -98,9 +98,22 @@ export async function reconcileReverseTrackingOutbox() {
     .limit(200)
     .get();
 
+  const maintenanceRef = adminDb
+    .collection('integration_checkpoints')
+    .doc('reverse_recovery_v3');
+  const maintenanceSnap = await maintenanceRef.get();
+  const maintenanceState = maintenanceSnap.data() || {};
+  const lastMaintenanceAt = Date.parse(str(maintenanceState.last_run_at));
+  const maintenanceDue =
+    !Number.isFinite(lastMaintenanceAt) ||
+    Date.now() - lastMaintenanceAt >= 30 * 60 * 1000;
+
   const recentCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
   let recentCompletedDocs: QueryDocumentSnapshot[] = [];
   try {
+    // Recuperação é uma rede de segurança, não parte do polling rápido.
+    // Repetir a mesma janela de 48h a cada minuto multiplicava leituras.
+    if (!maintenanceDue) throw new Error('maintenance-not-due');
     const recentCompletedSnap = await adminDb.collection('deliveries')
       .where('source_system', '==', 'dfl_site')
       .where('completed', '==', true)
@@ -109,10 +122,14 @@ export async function reconcileReverseTrackingOutbox() {
       .get();
     recentCompletedDocs = recentCompletedSnap.docs as QueryDocumentSnapshot[];
   } catch (error) {
+    if (error instanceof Error && error.message === 'maintenance-not-due') {
+      // Ciclo rápido: somente entregas ativas.
+    } else {
     // Missing composite index must not stop active delivery reconciliation.
     console.warn('[integration/reverse-reconciler] recent recovery skipped', {
       error: error instanceof Error ? error.message : String(error),
     });
+    }
   }
 
   const byId = new Map<string, Item>();
@@ -142,10 +159,14 @@ export async function reconcileReverseTrackingOutbox() {
   const analyticsState=analyticsCheckpointSnap.data()||{};
   const analyticsCursor=str(analyticsState.updated_at).trim();
   const analyticsCursorId=str(analyticsState.last_document_id).trim();
-  let analyticsQuery=adminDb.collection('deliveries').orderBy('updated_at','asc').orderBy(FieldPath.documentId(),'asc').limit(80);
+  let analyticsQuery=adminDb.collection('deliveries').orderBy('updated_at','asc').orderBy(FieldPath.documentId(),'asc').limit(40);
   if(analyticsCursor&&analyticsCursorId)analyticsQuery=analyticsQuery.startAfter(analyticsCursor,analyticsCursorId);
-  const analyticsPage=await analyticsQuery.get();
-  const analyticsItems:Item[]=(analyticsPage.docs as QueryDocumentSnapshot[]).map(doc=>({id:doc.id,data:doc.data() as Raw}));
+  const analyticsPage=maintenanceDue
+    ? await analyticsQuery.get()
+    : null;
+  const analyticsItems:Item[]=analyticsPage
+    ? (analyticsPage.docs as QueryDocumentSnapshot[]).map(doc=>({id:doc.id,data:doc.data() as Raw}))
+    : [];
 
   const candidates: Array<{ eventId: string; event: ReturnType<typeof buildIntegrationEvent> }> = [];
 
@@ -237,11 +258,19 @@ export async function reconcileReverseTrackingOutbox() {
     }
   }
 
-  if(!analyticsPage.empty){const last=analyticsPage.docs[analyticsPage.docs.length-1],u=str((last.data() as Raw).updated_at).trim();if(u)await analyticsCheckpointRef.set({updated_at:u,last_document_id:last.id,updatedAt:new Date().toISOString()},{merge:true});}
+  if(analyticsPage&&!analyticsPage.empty){const last=analyticsPage.docs[analyticsPage.docs.length-1],u=str((last.data() as Raw).updated_at).trim();if(u)await analyticsCheckpointRef.set({updated_at:u,last_document_id:last.id,updatedAt:new Date().toISOString()},{merge:true});}
+  if (maintenanceDue) {
+    await maintenanceRef.set({
+      last_run_at: new Date().toISOString(),
+      recent_completed_read: recentCompletedDocs.length,
+      analytics_read: analyticsItems.length,
+    }, { merge: true });
+  }
 
   return {
     ok: true,
-    analyticsNativePageRead: analyticsPage.size,
+    maintenanceDue,
+    analyticsNativePageRead: analyticsPage?.size || 0,
     analyticsNativeCandidates: analyticsItems.length,
     analyticsNativeCheckpoint: analyticsCursor || null,
     siteDeliveries: siteDeliveries.length,

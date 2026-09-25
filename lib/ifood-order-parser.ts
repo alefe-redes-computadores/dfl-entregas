@@ -30,15 +30,15 @@ const STREET =
   /(?:\br\.(?=\s)|\b(?:rua|av\.?|avenida|alameda|travessa|pra[cç]a|rodovia|estrada|beco|viela)\b)/i;
 
 const POSTAL =
-  /\b(?:cep\s*:?\s*)?\d{5}-?\d{3}\b/i;
+  /\b(?:cep\s*:?\s*)?\d{5}\s*(?:-|–|—|\s)?\s*\d{3}\b/i;
 
 const POSTAL_ONLY =
-  /^\s*(?:cep\s*:?\s*)?\d{5}-?\d{3}\s*$/i;
+  /^\s*(?:cep\s*:?\s*)?\d{5}\s*(?:-|–|—|\s)?\s*\d{3}\s*$/i;
 
 const stripPostalResidue = (value: string) =>
   spaces(value)
-    .replace(/(?:^|\s[-–—,]?\s*)\bcep\s*:?\s*\d{5}-?\d{3}\b/gi, ' ')
-    .replace(/(?:^|\s[-–—,]?\s*)\b\d{5}-\d{3}\b/g, ' ')
+    .replace(/(?:^|\s[-–—,]?\s*)\bcep\s*:?\s*\d{5}\s*(?:-|–|—|\s)?\s*\d{3}\b/gi, ' ')
+    .replace(/(?:^|\s[-–—,]?\s*)\b\d{5}\s*(?:-|–|—)\s*\d{3}\b/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/\s*[-–—,]\s*$/g, '')
     .trim();
@@ -70,7 +70,7 @@ const MAP_HOST =
   /(?:google\.[^/]+\/(?:maps|url)|maps\.google\.[^/]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i;
 
 const OBS_PREFIX =
-  /^(?:obs(?:erva(?:ç|c)[aã]o)?|observa[cç][oõ]es?|refer[eê]ncia|complemento|instru(?:ç|c)[aã]o|instru[cç][oõ]es?|port[aã]o|nota)\s*:\s*/i;
+  /^(?:obs(?:erva(?:ç|c)[aã]o)?|observa[cç][oõ]es?|ponto\s+de\s+refer[eê]ncia|refer[eê]ncia|complemento|instru(?:ç|c)[aã]o|instru[cç][oõ]es?|port[aã]o|nota)\s*:\s*/i;
 
 const INSTRUCTION =
   /\b(?:ap(?:to|artamento)?\.?|bloco|casa|fundos|andar|sala|lote|quadra|port[aã]o|interfone|ligar|chamar|entrada|esquina|em frente|ao lado|pr[oó]ximo|casa de|deixar|tocar|buzinar|sem cebola|sem salada|retirar|adicionar|caprichar|separar|mandar|enviar)\b/i;
