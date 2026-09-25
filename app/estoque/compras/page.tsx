@@ -19,14 +19,18 @@ import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { stockLevel } from '@/lib/stock';
+import { stockOperationLabel, stockOperationPriority, stockOperationRank, stockOperationTiming } from '@/lib/stock-operation';
 import {
   buildStockRecommendations,
 } from '@/lib/stock-intelligence';
 import { formatStockQuantity, parseStockQuantityInput } from '@/lib/stock-quantity';
 import {
   committedStockQuantityMap,
-  netStockPurchaseQuantity,
+  commercialPurchasePlan,
 } from '@/lib/stock-shopping';
+import { formatCommercialPlan, isDiscretePurchaseUnit,
+  normalizeTypedPurchaseQuantity,
+} from '@/lib/stock-commercial';
 import type {
   StockProduct,
   StockSupply,
@@ -72,6 +76,8 @@ export default function ShoppingList() {
 
   const user = useAppStore((state) => state.user);
 
+  const [presentationIds, setPresentationIds] = useState<Record<string, string>>({});
+
   const recommendationMap = useMemo(
     () =>
       new Map(
@@ -102,15 +108,23 @@ export default function ShoppingList() {
           const committed =
             committedMap.get(product.id) || 0;
 
+          const commercial = commercialPurchasePlan(
+            product,
+            gross,
+            committed,
+            presentationIds[product.id],
+          );
+
           return [
             product.id,
             {
               gross,
               committed,
-              net: netStockPurchaseQuantity(
-                gross,
-                committed,
-              ),
+              rawNet: commercial.netNeed,
+              net: commercial.baseQuantity,
+              purchaseQuantity: commercial.purchaseQuantity,
+              presentation: commercial.presentation,
+              surplus: commercial.surplusQuantity,
             },
           ] as const;
         }),
@@ -119,6 +133,7 @@ export default function ShoppingList() {
       committedMap,
       products,
       recommendationMap,
+      presentationIds,
     ],
   );
 
@@ -129,13 +144,13 @@ export default function ShoppingList() {
           (product) =>
             (
               netRecommendationMap.get(product.id)
-                ?.net || 0
+                ?.purchaseQuantity || 0
             ) > 0,
         )
         .sort((a, b) => {
-          const aDue = recommendationMap.get(a.id)?.reorderDue ? 0 : 1;
-          const bDue = recommendationMap.get(b.id)?.reorderDue ? 0 : 1;
-          return aDue - bDue || prioritySort(a, b);
+          const aPriority = stockOperationPriority(a, recommendationMap.get(a.id));
+          const bPriority = stockOperationPriority(b, recommendationMap.get(b.id));
+          return stockOperationRank[aPriority] - stockOperationRank[bPriority] || prioritySort(a, b);
         }),
     [products, netRecommendationMap, recommendationMap],
   );
@@ -163,7 +178,7 @@ export default function ShoppingList() {
           Number(
             (
               netRecommendationMap.get(product.id)
-                ?.net || 0
+                ?.purchaseQuantity || 0
             ).toFixed(3),
           ),
         ),
@@ -202,7 +217,7 @@ export default function ShoppingList() {
             product.id,
             String(
               Number(
-                (netRecommendationMap.get(product.id)?.net || 0).toFixed(3),
+                (netRecommendationMap.get(product.id)?.purchaseQuantity || 0).toFixed(3),
               ),
             ),
           ]),
@@ -238,15 +253,32 @@ export default function ShoppingList() {
           .slice(2, 7)}`,
         occurred_at: now,
         status: 'solicitado',
-        items: chosen.map((product) => ({
-          id: `item-${product.id}`,
-          name: product.name,
-          quantity: parseStockQuantityInput(
+        items: chosen.map((product) => {
+          const typed = parseStockQuantityInput(
             quantities[product.id],
-          ),
-          unit: product.unit,
-          stock_product_id: product.id,
-        })),
+          );
+          const presentation = commercialPurchasePlan(product, 1, 0, presentationIds[product.id]).presentation;
+          const factor = presentation?.conversion_quantity || 1;
+          const purchaseUnit = presentation?.purchase_unit || product.unit;
+          const purchaseQuantity = normalizeTypedPurchaseQuantity(
+            typed,
+            purchaseUnit,
+          );
+          const baseQuantity = Number((purchaseQuantity * factor).toFixed(4));
+
+          return {
+            id: `item-${product.id}`,
+            name: product.name,
+            quantity: baseQuantity,
+            unit: product.unit,
+            stock_product_id: product.id,
+            presentation_id: presentation?.id,
+            presentation_label: presentation?.label,
+            purchase_quantity: purchaseQuantity,
+            purchase_unit: presentation?.purchase_unit || product.unit,
+            conversion_quantity: factor,
+          };
+        }),
         products_amount: 0,
         total_amount: 0,
         purchaser_name:
@@ -336,7 +368,15 @@ export default function ShoppingList() {
             netRecommendationMap.get(product.id);
 
           const suggestedQuantity =
-            purchasePlan?.net || 0;
+            purchasePlan?.purchaseQuantity || 0;
+
+          const operationPriority = stockOperationPriority(
+            product,
+            recommendation,
+          );
+          const operationTiming = stockOperationTiming(
+            recommendation,
+          );
 
           return (
             <article
@@ -365,7 +405,7 @@ export default function ShoppingList() {
                         [product.id]: String(
                           Number(
                             (
-                              suggestedQuantity || 1
+                              purchasePlan?.purchaseQuantity || 1
                             ).toFixed(3),
                           ),
                         ),
@@ -390,6 +430,20 @@ export default function ShoppingList() {
                     {product.name}
                   </p>
 
+                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                    <span className={`rounded-full border px-2 py-0.5 text-[8px] font-black uppercase ${
+                      operationPriority === 'ruptura'
+                        ? 'border-red-500/25 bg-red-500/10 text-red-300'
+                        : operationPriority === 'comprar_agora'
+                          ? 'border-amber-500/25 bg-amber-500/10 text-amber-300'
+                          : operationPriority === 'planejar'
+                            ? 'border-sky-500/25 bg-sky-500/10 text-sky-300'
+                            : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+                    }`}>
+                      {stockOperationLabel(operationPriority)}
+                    </span>
+                  </div>
+
                   <p className="text-[9px] text-zinc-600">
                     Agora{' '}
                     {formatStockQuantity(
@@ -404,14 +458,34 @@ export default function ShoppingList() {
                     )}
                   </p>
 
+                  {recommendation && (
+                    <p className="mt-1 text-[9px] text-zinc-500">
+                      Até o mínimo <b className="text-zinc-300">{operationTiming.minimum}</b>
+                      {' · '}até zerar <b className="text-zinc-300">{operationTiming.zero}</b>
+                      {' · '}reposição <b className="text-zinc-300">{operationTiming.lead}</b>
+                    </p>
+                  )}
+
                   {suggestedQuantity > 0 && (
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <p className="text-[9px] font-black text-amber-400">
                         Comprar{' '}
-                        {formatStockQuantity(
-                          suggestedQuantity,
-                          product.unit,
-                        )}{' '}
+                        {(() => {
+                          const plan = purchasePlan;
+                          return plan
+                            ? formatCommercialPlan({
+                                purchaseQuantity:
+                                  plan.purchaseQuantity,
+                                baseQuantity: plan.net,
+                                baseUnit: product.unit,
+                                presentation:
+                                  plan.presentation,
+                              })
+                            : formatStockQuantity(
+                                suggestedQuantity,
+                                product.unit,
+                              );
+                        })()}{' '}
                         · confiança {recommendation?.confidence}
                       </p>
                       {recommendation?.reorderDue && (
@@ -427,6 +501,19 @@ export default function ShoppingList() {
                     </div>
                   )}
 
+                  {purchasePlan &&
+                    purchasePlan.rawNet > 0 &&
+                    purchasePlan.net > purchasePlan.rawNet + 0.0001 && (
+                      <p className="mt-1 text-[9px] text-zinc-600">
+                        Necessidade matemática{' '}
+                        {formatStockQuantity(
+                          purchasePlan.rawNet,
+                          product.unit,
+                        )}{' '}
+                        · arredondada para a forma real de compra
+                      </p>
+                    )}
+
                   {(purchasePlan?.committed || 0) > 0 && (
                     <p className="mt-1 text-[9px] font-bold text-emerald-400">
                       {formatStockQuantity(
@@ -438,14 +525,27 @@ export default function ShoppingList() {
                   )}
                 </div>
 
-                <input
+                {(product.presentations || []).filter((item) => item.active && item.conversion_quantity > 0).length > 1 && (
+                  <div className="w-full sm:w-auto">
+                    <label className="mb-1 block text-[8px] font-black uppercase tracking-wider text-zinc-600">Forma de compra</label>
+                    <select value={presentationIds[product.id] || purchasePlan?.presentation?.id || ''} onChange={(event) => { const id=event.target.value; setPresentationIds((value)=>({...value,[product.id]:id})); const current=netRecommendationMap.get(product.id); const next=commercialPurchasePlan(product,current?.gross||0,current?.committed||0,id); setQuantities((value)=>({...value,[product.id]:String(Number(next.purchaseQuantity.toFixed(3)))})); }} className="h-11 max-w-[150px] rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-[10px] font-bold text-zinc-200 outline-none">
+                      {(product.presentations || []).filter((item)=>item.active&&item.conversion_quantity>0).map((item)=><option key={item.id} value={item.id}>{item.label} · {item.conversion_quantity.toLocaleString('pt-BR',{maximumFractionDigits:3})} {product.unit}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                <div className="shrink-0">
+                  <p className="mb-1 text-[8px] font-black uppercase tracking-wider text-zinc-600">
+                    Qtd. de compra
+                  </p>
+                  <input
                   inputMode="decimal"
                   value={
                     quantities[product.id] ??
                     String(
                       Number(
                         (
-                          suggestedQuantity || 1
+                          purchasePlan?.purchaseQuantity || 1
                         ).toFixed(3),
                       ),
                     )
@@ -460,8 +560,21 @@ export default function ShoppingList() {
                         ),
                     }))
                   }
+                  onBlur={(event) => {
+                    const parsed = parseStockQuantityInput(event.target.value);
+                    const presentation = purchasePlan?.presentation;
+                    const normalized = normalizeTypedPurchaseQuantity(
+                      parsed,
+                      presentation?.purchase_unit || product.unit,
+                    );
+                    setQuantities((value) => ({
+                      ...value,
+                      [product.id]: String(Number(Math.max(0, normalized).toFixed(3))),
+                    }));
+                  }}
                   className="h-11 w-20 rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-right font-black text-zinc-100 outline-none"
                 />
+                </div>
               </div>
 
               {recommendation && (

@@ -30,8 +30,10 @@ import { useAppStore } from '@/store/useAppStore';
 import { buildStockRecommendation } from '@/lib/stock-intelligence';
 import { stockProductValue } from '@/lib/stock';
 import { formatStockQuantity, parseStockQuantityInput } from '@/lib/stock-quantity';
+import { formatCommercialPlan, isDiscretePurchaseUnit, normalizeTypedPurchaseQuantity } from '@/lib/stock-commercial';
 import {
   committedStockQuantityMap,
+  commercialPurchasePlan,
   netStockPurchaseQuantity,
 } from '@/lib/stock-shopping';
 
@@ -275,6 +277,21 @@ export function StockSupplyForm({
       (item) => item.active,
     );
 
+    const recommendation = product
+      ? buildStockRecommendation(product, movements)
+      : null;
+    const committed = product
+      ? committedIncoming.get(product.id) || 0
+      : 0;
+    const plan = product && recommendation
+      ? commercialPurchasePlan(
+          product,
+          recommendation.recommendedQuantity,
+          committed,
+          presentation?.id,
+        )
+      : null;
+
     update(id, {
       bundle: false,
       stock_product_id: product?.id,
@@ -285,6 +302,9 @@ export function StockSupplyForm({
       purchase_unit:
         presentation?.purchase_unit || product?.unit || 'un',
       conversion: text(presentation?.conversion_quantity ?? 1),
+      purchaseQty: plan?.purchaseQuantity
+        ? text(plan.purchaseQuantity)
+        : '1',
     });
 
     if (product) {
@@ -317,11 +337,30 @@ export function StockSupplyForm({
       ?.presentations?.find((item) => item.id === presentationId);
 
     if (presentation) {
+      const product = products.find((current) => current.id === productId);
+      const recommendation = product
+        ? buildStockRecommendation(product, movements)
+        : null;
+      const committed = product
+        ? committedIncoming.get(product.id) || 0
+        : 0;
+      const plan = product && recommendation
+        ? commercialPurchasePlan(
+            product,
+            recommendation.recommendedQuantity,
+            committed,
+            presentation.id,
+          )
+        : null;
+
       update(id, {
         presentation_id: presentation.id,
         presentation_label: presentation.label,
         purchase_unit: presentation.purchase_unit,
         conversion: text(presentation.conversion_quantity),
+        purchaseQty: plan?.purchaseQuantity
+          ? text(plan.purchaseQuantity)
+          : '1',
       });
     }
   };
@@ -344,6 +383,17 @@ export function StockSupplyForm({
             conversion: '1',
           },
     );
+
+  const normalizeDraftPurchaseQuantity = (id: string) => {
+    const item = items.find((current) => current.id === id);
+    if (!item) return;
+    const parsed = number(item.purchaseQty);
+    const normalized = normalizeTypedPurchaseQuantity(
+      parsed,
+      item.purchase_unit || item.unit,
+    );
+    update(id, { purchaseQty: text(normalized) });
+  };
 
   const itemErrors = useMemo<Record<string, ItemErrors>>(() => {
     const errors: Record<string, ItemErrors> = {};
@@ -371,6 +421,11 @@ export function StockSupplyForm({
       }
       if (!(bought > 0)) {
         current.quantity = 'Informe uma quantidade maior que zero.';
+      } else if (
+        isDiscretePurchaseUnit(item.purchase_unit || item.unit) &&
+        !Number.isInteger(bought)
+      ) {
+        current.quantity = 'Esta embalagem é comprada inteira. Use 1, 2, 3...';
       }
       if (!(factor > 0)) {
         current.conversion =
@@ -734,6 +789,12 @@ export function StockSupplyForm({
                         recommendation.recommendedQuantity,
                         committed,
                       );
+                    const commercialPlan = commercialPurchasePlan(
+                      product,
+                      recommendation.recommendedQuantity,
+                      committed,
+                      item.presentation_id,
+                    );
 
                     return (
                       <>
@@ -793,6 +854,12 @@ export function StockSupplyForm({
                                 currentDraft,
                               product.unit,
                             )}
+                          </p>
+                        )}
+
+                        {commercialPlan.presentation && commercialPlan.netNeed > 0 && (
+                          <p className="mt-2 rounded-xl border border-amber-500/15 bg-amber-500/[.04] p-2 text-[9px] font-bold leading-relaxed text-amber-300">
+                            Compra comercial: {formatCommercialPlan({ purchaseQuantity: commercialPlan.purchaseQuantity, baseQuantity: commercialPlan.baseQuantity, baseUnit: product.unit, presentation: commercialPlan.presentation })}. Necessidade líquida: {formatStockQuantity(commercialPlan.netNeed, product.unit)}{commercialPlan.surplusQuantity > 0 ? ` · sobra planejada ${formatStockQuantity(commercialPlan.surplusQuantity, product.unit)}` : ''}.
                           </p>
                         )}
 
