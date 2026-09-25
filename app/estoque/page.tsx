@@ -37,7 +37,7 @@ export default function StockPage() {
       <CompactMetric label="Movimentações" value={String(movements.length)} />
     </section>
     <section className="grid grid-cols-2 gap-2"><Shortcut icon={ClipboardCheck} label="Contagem" color="text-sky-400" onClick={()=>router.push('/estoque/contagem')}/><Shortcut icon={ListChecks} label="Comprar" color="text-amber-400" onClick={()=>router.push('/estoque/compras')}/><Shortcut icon={BarChart3} label="Relatórios" color="text-emerald-400" onClick={()=>router.push('/estoque/relatorios')}/><Shortcut icon={Archive} label="Arquivados" color="text-zinc-400" onClick={()=>router.push('/estoque/arquivados')}/><Shortcut icon={Store} label="Fornecedores" color="text-orange-400" onClick={()=>router.push('/estoque/fornecedores')}/><Shortcut icon={BadgeDollarSign} label="Preços" color="text-lime-400" onClick={()=>router.push('/estoque/precos')}/><Shortcut icon={WandSparkles} label="Catálogo" color="text-violet-400" onClick={()=>router.push('/estoque/catalogo')}/></section>
-    <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/40 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.14em] text-zinc-500">Compra comercial</p><p className="mt-1 text-sm font-black text-zinc-100">{commercialHealth.configured}/{commercialHealth.total} produtos com embalagem configurada</p></div><span className="rounded-xl bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-400">{commercialHealth.percent}%</span></div>{commercialHealth.attention>0&&<p className="mt-2 text-[9px] text-amber-300">{commercialHealth.attention} produto(s) fracionado(s) aguardam revisão da forma real de compra. O histórico não será convertido.</p>}</section>
+    {commercialHealth.attention>0&&<button type="button" onClick={()=>router.push('/estoque/catalogo')} className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-amber-500/20 bg-amber-500/[.045] p-3.5 text-left active:scale-[.99]"><div><p className="text-[10px] font-black uppercase tracking-[.14em] text-amber-400">Formas de compra</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{commercialHealth.attention} produto{commercialHealth.attention===1?' fracionado precisa':'s fracionados precisam'} informar a embalagem real. A unidade histórica permanece protegida.</p></div><ChevronLeft size={17} className="shrink-0 rotate-180 text-amber-400"/></button>}
     {suggested.length>0&&<section className="rounded-[22px] border border-amber-500/25 bg-amber-500/[.055] p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -47,11 +47,11 @@ export default function StockPage() {
         <button onClick={()=>router.push('/estoque/compras')} className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-[10px] font-black text-zinc-950">Montar compra</button>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        {suggested.slice(0,4).map(p=>{const rec=recommendationMap.get(p.id)!;return <div key={p.id} className="rounded-xl bg-zinc-950/50 px-3 py-2">
+        {suggested.slice(0,4).map(p=>{const rec=recommendationMap.get(p.id)!;return <button type="button" key={p.id} onClick={()=>router.push(`/estoque/detalhes?id=${p.id}`)} className="rounded-xl bg-zinc-950/50 px-3 py-2 text-left transition active:scale-[.98] active:bg-zinc-900">
           <p className="truncate text-[10px] font-bold text-zinc-300">{p.name}</p>
           <p className="mt-0.5 text-[9px] font-black text-amber-400">Comprar {(()=>{const plan=commercialPurchasePlan(p,rec.recommendedQuantity,committedMap.get(p.id)||0);return formatCommercialPlan({purchaseQuantity:plan.purchaseQuantity,baseQuantity:plan.baseQuantity,baseUnit:p.unit,presentation:plan.presentation})})()}</p>
           <p className="mt-1 truncate text-[8px] text-zinc-600">{rec.minimumReached?'Mínimo atingido agora':rec.daysUntilMinimum!==null?`~${rec.daysUntilMinimum.toLocaleString('pt-BR',{maximumFractionDigits:1})} dias até o mínimo · confiança ${rec.confidence}`:'Regra configurada · histórico insuficiente'}</p>
-        </div>})}
+        </button>})}
       </div>
       {stockBrain.withoutSafetyStock>0&&<p className="mt-3 text-[9px] font-bold text-amber-300/80">{stockBrain.withoutSafetyStock} produto{stockBrain.withoutSafetyStock===1?' está':'s estão'} sem estoque de segurança configurado.</p>}
       {suggested.length>4&&<p className="mt-2 text-[9px] font-bold text-zinc-600">+ {suggested.length-4} outros produtos</p>}

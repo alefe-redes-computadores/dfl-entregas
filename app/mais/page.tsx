@@ -15,6 +15,7 @@ import { BellRing,
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { UserAvatar } from '@/components/UserAvatar';
+import { ReportMaintenanceCard } from '@/components/reports/ReportMaintenanceCard';
 
 export default function MaisPage() {
   const router = useRouter();
@@ -210,6 +211,13 @@ export default function MaisPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
+          Manutenção dos relatórios
+        </h2>
+        <ReportMaintenanceCard />
       </section>
 
       <button
