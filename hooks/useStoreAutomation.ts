@@ -42,6 +42,14 @@ export function useStoreAutomation() {
     (state) => state.storeSettings.notificationPreferences,
   );
 
+  const purchasePlanningTime = useAppStore(
+    (state) => state.storeSettings.purchasePlanningTime,
+  );
+
+  const stockReviewTime = useAppStore(
+    (state) => state.storeSettings.stockReviewTime,
+  );
+
   useEffect(() => {
     if (!hasHydrated) return;
 
@@ -51,6 +59,8 @@ export function useStoreAutomation() {
       pauses,
       holidaysOverrides,
       notificationPreferences,
+      purchasePlanningTime,
+      stockReviewTime,
     });
   }, [
     alertsEnabled,
@@ -58,7 +68,9 @@ export function useStoreAutomation() {
     holidaysOverrides,
     notificationPreferences,
     pauses,
+    purchasePlanningTime,
     schedule,
+    stockReviewTime,
   ]);
 
   useEffect(() => {

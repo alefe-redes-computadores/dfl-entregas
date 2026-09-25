@@ -23,22 +23,40 @@ export default function OperationalDiagnosticsPage() {
   const router = useRouter();
   const [entries, setEntries] = useState<SyncDiagnostic[]>([]);
   const [pendingNotifications, setPendingNotifications] = useState<number | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<
+    Array<{ id: number; title: string; at?: string }>
+  >([]);
 
   useEffect(() => {
     setEntries(readSyncDiagnostics());
     if (!Capacitor.isNativePlatform()) return;
     void LocalNotifications.getPending()
-      .then((result) => setPendingNotifications(result.notifications.length))
+      .then((result) => {
+        setPendingNotifications(result.notifications.length);
+        setPendingPreview(
+          result.notifications.slice(0, 8).map((item) => ({
+            id: item.id,
+            title: item.title || 'Notificação operacional',
+            at: item.schedule?.at
+              ? new Date(item.schedule.at).toISOString()
+              : undefined,
+          })),
+        );
+      })
       .catch(() => setPendingNotifications(null));
   }, []);
 
   const summary = useMemo(() => {
     const successes = entries.filter((entry) => entry.status === 'success');
     const total = successes.reduce((sum, entry) => sum + entry.totalDocuments, 0);
+    const repeatedHighVolume = successes
+      .slice(0, 3)
+      .filter((entry) => entry.totalDocuments >= 300).length >= 2;
     return {
       last: entries[0],
       total,
       errors: entries.filter((entry) => entry.status === 'error').length,
+      repeatedHighVolume,
     };
   }, [entries]);
 
@@ -89,7 +107,22 @@ export default function OperationalDiagnosticsPage() {
           {summary.last ? `${dateTime(summary.last.finishedAt)} · ${summary.last.status === 'success' ? 'concluída' : 'falhou'} · ${(summary.last.durationMs / 1000).toFixed(1)}s` : 'Ainda não registrada nesta versão.'}
         </p>
         {summary.errors > 0 && <p className="mt-1 text-[10px] text-red-400">{summary.errors} falha(s) no histórico local.</p>}
+        {summary.repeatedHighVolume && <p className="mt-2 rounded-xl bg-amber-500/10 p-2 text-[10px] leading-relaxed text-amber-400">Volume alto repetido: duas ou mais sincronizações recentes retornaram pelo menos 300 documentos. Copie o diagnóstico para investigação.</p>}
       </section>
+
+      {pendingPreview.length > 0 && (
+        <section className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/35 p-4">
+          <b className="text-xs text-zinc-200">Próximas notificações neste aparelho</b>
+          <div className="mt-2 space-y-2">
+            {pendingPreview.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 text-[10px]">
+                <span className="min-w-0 truncate text-zinc-400">{item.title}</span>
+                <span className="shrink-0 text-zinc-600">{item.at ? dateTime(item.at) : 'sem horário'}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="mt-4 space-y-2">
         {entries.map((entry) => (

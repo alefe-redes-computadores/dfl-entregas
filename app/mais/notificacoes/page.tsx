@@ -77,6 +77,36 @@ function ToggleRow({
   );
 }
 
+function TimeRow({
+  title,
+  description,
+  value,
+  onChange,
+  disabled,
+}: {
+  title: string;
+  description: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="flex w-full items-center gap-3 border-b border-zinc-800/70 px-4 py-3.5">
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold text-zinc-200">{title}</span>
+        <span className="mt-0.5 block text-[10px] leading-relaxed text-zinc-500">{description}</span>
+      </span>
+      <input
+        type="time"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm font-black text-zinc-100 outline-none focus:border-emerald-500 disabled:opacity-40"
+      />
+    </label>
+  );
+}
+
 function Section({
   icon: Icon,
   title,
@@ -154,6 +184,18 @@ export default function NotificationSettingsPage() {
     void save({
       ...preferences,
       [key]: !preferences[key],
+    });
+  };
+
+  const saveTime = (
+    key: 'purchasePlanningTime' | 'stockReviewTime',
+    value: string,
+  ) => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return;
+    void updateStoreSettings({ [key]: value }).then(() => {
+      toast.success('Horário atualizado e avisos reagendados.');
+    }).catch(() => {
+      toast.error('Não foi possível atualizar o horário.');
     });
   };
 
@@ -395,18 +437,32 @@ export default function NotificationSettingsPage() {
           subtitle="Alertas baseados em mudança real de saldo ou status"
         >
           <ToggleRow
-            title="Compras do dia às 12h"
+            title="Planejamento de compras"
             description="Nos dias de funcionamento, lembra de registrar compras, recebimentos e reposições."
             checked={preferences.purchasePlanning}
             onChange={() => toggle('purchasePlanning')}
             disabled={masterDisabled}
           />
+          <TimeRow
+            title="Horário do planejamento"
+            description="Padrão recomendado: 12:00."
+            value={storeSettings.purchasePlanningTime || '12:00'}
+            onChange={(value) => saveTime('purchasePlanningTime', value)}
+            disabled={masterDisabled || !preferences.purchasePlanning}
+          />
           <ToggleRow
-            title="Conferir estoque às 23h30"
+            title="Conferência diária do estoque"
             description="Uma vez por dia de funcionamento, lembra de registrar saídas e ajustes pendentes."
             checked={preferences.closingReview}
             onChange={() => toggle('closingReview')}
             disabled={masterDisabled}
+          />
+          <TimeRow
+            title="Horário da conferência"
+            description="Padrão recomendado: 23:30."
+            value={storeSettings.stockReviewTime || '23:30'}
+            onChange={(value) => saveTime('stockReviewTime', value)}
+            disabled={masterDisabled || !preferences.closingReview}
           />
           <ToggleRow
             title="Estoque baixo"

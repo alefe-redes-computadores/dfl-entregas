@@ -91,6 +91,8 @@ type ScheduleSettings = {
   schedule?: Record<number, DaySchedule>;
   pauses?: StorePause[];
   holidaysOverrides?: Record<string, HolidayOverride>;
+  purchasePlanningTime?: string;
+  stockReviewTime?: string;
 };
 
 type StockThresholdChange = {
@@ -321,6 +323,13 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
 
   const now = new Date();
   const today = dateKey(now);
+  const validTime = (value: string | undefined, fallback: string) =>
+    /^([01]\d|2[0-3]):[0-5]\d$/.test(value || '') ? value! : fallback;
+  const purchasePlanningTime = validTime(
+    settings.purchasePlanningTime,
+    '12:00',
+  );
+  const stockReviewTime = validTime(settings.stockReviewTime, '23:30');
   const notifications: Array<{
     id: number;
     title: string;
@@ -363,16 +372,16 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
       `shift:purchase-planning:${key}`,
       'Hora de organizar as compras',
       'Registre compras, recebimentos e o que precisa ser reposto para a operação de hoje.',
-      operationalDateTime(key, '12:00'),
+      operationalDateTime(key, purchasePlanningTime),
       'purchasePlanning',
       '/abastecimentos',
     );
 
     push(
       `shift:closing-review:${key}`,
-      'Conferência do estoque às 23h30',
+      `Conferência do estoque às ${stockReviewTime.replace(':', 'h')}`,
       'Registre saídas e ajustes pendentes e deixe o estoque correto para o próximo expediente.',
-      operationalDateTime(key, '23:30'),
+      operationalDateTime(key, stockReviewTime),
       'closingReview',
       '/estoque',
     );

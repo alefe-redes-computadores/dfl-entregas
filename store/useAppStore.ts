@@ -74,6 +74,8 @@ interface AppState {
     routeReminderEnabled?: boolean;
     autoCloseCompletedRoutes?: boolean;
     notificationPreferences?: NotificationPreferences;
+    purchasePlanningTime?: string;
+    stockReviewTime?: string;
     // 🔥 NOVOS CAMPOS DE EXPEDIENTE AVANÇADO
     schedule?: Record<number, DaySchedule>;
     pauses?: StorePause[];
