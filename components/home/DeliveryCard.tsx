@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, ExternalLink, Map as MapIcon, CheckSquare, Trash2
+  Smartphone, Store, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
@@ -82,7 +82,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const [inputCode, setInputCode] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [confirmRedirectModal, setConfirmRedirectModal] = useState<{isOpen: boolean, copiedText: string}>({ isOpen: false, copiedText: '' });
 
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
@@ -139,22 +138,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     const normalizedId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
     const copiedDigits = textToCopy.replace(/\D/g, '');
 
-    if (
-      options.offerIfoodPortal &&
-      delivery.completed &&
-      normalizedId.length === 8 &&
-      copiedDigits === normalizedId
-    ) {
-      window.setTimeout(() => {
-        setConfirmRedirectModal({ isOpen: true, copiedText: normalizedId });
-      }, 320);
-    }
+    void options; void normalizedId; void copiedDigits;
   };
 
-  const handleTouchStartLongPress = (text: string, offerIfoodPortal = false) => {
+  const handleTouchStartLongPress = (text: string, openPortal = false) => {
     longPressTimer.current = setTimeout(() => {
-      void triggerCopyAndRedirect(text, { offerIfoodPortal });
-    }, 450);
+      if (!openPortal || !delivery.completed) return;
+      const code = (delivery.confirmation_code || customer?.last_confirmation_code || '').replace(/\D/g, '').slice(0, 4);
+      const orderId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
+      if (code.length !== 4 || orderId.length !== 8) return;
+      void navigator.clipboard.writeText(code).catch(() => undefined);
+      router.replace(`/confirmar?orderId=${encodeURIComponent(orderId)}&code=${encodeURIComponent(code)}&returnTo=${encodeURIComponent(confirmationReturn)}`);
+    }, 5000);
   };
 
   const handleTouchEndLongPress = () => {
@@ -295,7 +290,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         return;
       }
 
-      if (isIfood && !delivery.confirmation_code && !customer?.last_confirmation_code) {
+      const skipsIfoodCode = delivery.payment_method === 'dinheiro' || delivery.payment_method?.includes('cartao');
+      if (isIfood && !skipsIfoodCode && !delivery.confirmation_code && !customer?.last_confirmation_code) {
         setInputCode('');
         setIsIfoodModalOpen(true);
         return;
@@ -842,46 +838,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           </section>
         </div>
       )}
-
-      {/* Modal Redirecionamento Direto para o Portal iFood */}
-      {confirmRedirectModal.isOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-900 p-6 shadow-2xl flex flex-col gap-4 dfl-v26-panel-press">
-            <div className="flex flex-col items-center justify-center text-center gap-3">
-              <div className="h-16 w-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center border border-red-500/20 mb-2">
-                <CheckSquare size={28} />
-              </div>
-              <h3 className="font-bold text-lg text-zinc-50">Confirmar no iFood?</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed px-2">
-                O identificador <strong className="text-zinc-200">"{confirmRedirectModal.copiedText}"</strong> foi copiado. Deseja abrir o portal de confirmações com esses dados?
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2 mt-2">
-              <button
-                onClick={async () => {
-                  if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                  const targetCode = delivery.confirmation_code || customer?.last_confirmation_code || '';
-                  const targetId = delivery.ifood_id || '';
-                  const returnTo = confirmationReturn;
-                  setConfirmRedirectModal({ isOpen: false, copiedText: '' });
-                  router.replace(`/confirmar?orderId=${encodeURIComponent(targetId)}&code=${encodeURIComponent(targetCode)}&returnTo=${encodeURIComponent(returnTo)}`);
-                }}
-                className="w-full h-12 bg-red-500 hover:bg-red-400 text-white font-bold rounded-xl active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2"
-              >
-                <ExternalLink size={16} /> Sim, abrir portal de confirmação
-              </button>
-              <button
-                onClick={() => setConfirmRedirectModal({ isOpen: false, copiedText: '' })}
-                className="w-full h-12 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold rounded-xl active:scale-95 transition-all"
-              >
-                Não, apenas copiar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
 
       {/* Código iFood — captura operacional compacta */}
       {isIfoodModalOpen && (

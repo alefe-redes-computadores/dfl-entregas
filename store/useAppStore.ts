@@ -1409,6 +1409,9 @@ export const useAppStore = create<AppState>()(
         const dataWithTimestamp: Partial<Delivery> = {
           ...updatedData,
           ...(isCompleting ? { completed_at: now } : {}),
+          ...(isCompleting && !isDeliveryFulfillment(deliveryToUpdate) && deliveryToUpdate.source_system !== 'dfl_site'
+            ? { analytics_sync_pending: true, analytics_sync_requested_at: now }
+            : {}),
           updated_at: now,
         };
         const previousDeliveries = state.deliveries;
@@ -1620,11 +1623,20 @@ export const useAppStore = create<AppState>()(
           const route = get().routes.find((item) => item.id === routeId);
           const finalEndTime = route?.end_time || endTime;
 
-          await updateDoc(doc(db, 'routes', routeId), {
+          const closeBatch = writeBatch(db);
+          closeBatch.update(doc(db, 'routes', routeId), {
             status: 'fechada',
             end_time: finalEndTime,
             updated_at: endTime,
           });
+          routeDeliveries
+            .filter((delivery) => delivery.source_system !== 'dfl_site')
+            .forEach((delivery) => closeBatch.update(doc(db, 'deliveries', delivery.id), {
+              analytics_sync_pending: true,
+              analytics_sync_requested_at: endTime,
+              updated_at: delivery.updated_at || endTime,
+            }));
+          await closeBatch.commit();
         } catch (error) {
           set({ routes: previousRoutes });
           console.error(error);

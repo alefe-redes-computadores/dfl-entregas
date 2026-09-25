@@ -106,6 +106,20 @@ const [routeId, setRouteId] = useState('');
     () => deliveries.find((delivery) => delivery.id === sameStopDeliveryId),
     [deliveries, sameStopDeliveryId],
   );
+  const customerIdentity = useMemo(() => {
+    const normalizeIdentity = (value?: string | null) => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g, ' ').trim();
+    const query = normalizeIdentity(customerName);
+    if (!query) return null;
+    const selected = customers.find((customer) => customer.id === selectedCustomerId);
+    if (selected) return { kind: 'existing' as const, customer: selected, count: 1 };
+    const matches = customers.filter((customer) => {
+      const name = normalizeIdentity(customer.name);
+      return name === query || (query.length >= 3 && (name.includes(query) || query.includes(name)));
+    });
+    if (matches.length === 1) return { kind: 'existing' as const, customer: matches[0], count: 1 };
+    if (matches.length > 1) return { kind: 'multiple' as const, count: matches.length };
+    return { kind: 'new' as const, count: 0 };
+  }, [customerName, customers, selectedCustomerId]);
 
   useEffect(() => {
     if (!sameStopSource || sameStopSeeded.current) return;
@@ -628,6 +642,15 @@ const [routeId, setRouteId] = useState('');
             onSelect={handleCustomerSelect}
             customers={customers}
           />
+          {customerIdentity && (
+            <div className={`rounded-xl border px-3 py-2 text-[10px] font-bold ${customerIdentity.kind === 'existing' ? 'border-emerald-500/25 bg-emerald-500/[.07] text-emerald-300' : customerIdentity.kind === 'multiple' ? 'border-amber-500/25 bg-amber-500/[.07] text-amber-300' : 'border-violet-500/25 bg-violet-500/[.07] text-violet-300'}`}>
+              {customerIdentity.kind === 'existing'
+                ? `Cliente encontrado: ${customerIdentity.customer?.name}. O cadastro existente será reutilizado sem duplicação.`
+                : customerIdentity.kind === 'multiple'
+                  ? `${customerIdentity.count} clientes parecidos encontrados. Escolha um na lista para evitar duplicação.`
+                  : 'Cliente novo: será cadastrado com os dados deste pedido.'}
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <div className="flex-1">

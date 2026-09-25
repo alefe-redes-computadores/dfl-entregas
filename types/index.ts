@@ -314,6 +314,10 @@ export interface Delivery {
   createdAt?: string; // Campo legado ainda lido pelos relatórios atuais
   created_at?: string;
   completed_at?: string;
+  /** Fila explícita de projeção analítica; evita varrer o histórico inteiro. */
+  analytics_sync_pending?: boolean;
+  analytics_sync_requested_at?: string;
+  analytics_synced_at?: string;
   /**
    * Retirada excepcional da fila operacional.
    * Não significa entrega concluída e não apaga o histórico comercial.

@@ -1,7 +1,7 @@
 // READ-GUARD V45B: preservar ativos dfl_site + recuperação limitada; nunca reintroduzir scan histórico completo.
 import 'server-only';
 import { createHash } from 'node:crypto';
-import { FieldPath, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { adminDb } from './admin';
 import { buildIntegrationEvent, buildOutboxRecord } from '../contracts';
 
@@ -154,19 +154,14 @@ export async function reconcileReverseTrackingOutbox() {
     routeItemsMap.set(routeId, items);
   }));
 
-  const analyticsCheckpointRef=adminDb.collection('integration_checkpoints').doc('analytics_native_deliveries_v2');
-  const analyticsCheckpointSnap=await analyticsCheckpointRef.get();
-  const analyticsState=analyticsCheckpointSnap.data()||{};
-  const analyticsCursor=str(analyticsState.updated_at).trim();
-  const analyticsCursorId=str(analyticsState.last_document_id).trim();
-  let analyticsQuery=adminDb.collection('deliveries').orderBy('updated_at','asc').orderBy(FieldPath.documentId(),'asc').limit(40);
-  if(analyticsCursor&&analyticsCursorId)analyticsQuery=analyticsQuery.startAfter(analyticsCursor,analyticsCursorId);
-  const analyticsPage=maintenanceDue
-    ? await analyticsQuery.get()
-    : null;
-  const analyticsItems:Item[]=analyticsPage
-    ? (analyticsPage.docs as QueryDocumentSnapshot[]).map(doc=>({id:doc.id,data:doc.data() as Raw}))
-    : [];
+  // Fila dirigida por escrita: zero paginação do histórico. Somente entregas
+  // marcadas ao fechar uma rota (ou concluir retirada/balcão) são lidas.
+  const analyticsPendingSnap = await adminDb.collection('deliveries')
+    .where('analytics_sync_pending', '==', true)
+    .limit(40)
+    .get();
+  const analyticsItems: Item[] = (analyticsPendingSnap.docs as QueryDocumentSnapshot[])
+    .map((doc) => ({ id: doc.id, data: doc.data() as Raw }));
 
   const candidates: Array<{ eventId: string; event: ReturnType<typeof buildIntegrationEvent> }> = [];
 
@@ -258,21 +253,29 @@ export async function reconcileReverseTrackingOutbox() {
     }
   }
 
-  if(analyticsPage&&!analyticsPage.empty){const last=analyticsPage.docs[analyticsPage.docs.length-1],u=str((last.data() as Raw).updated_at).trim();if(u)await analyticsCheckpointRef.set({updated_at:u,last_document_id:last.id,updatedAt:new Date().toISOString()},{merge:true});}
+  if (analyticsItems.length) {
+    const syncedAt = new Date().toISOString();
+    const batch = adminDb.batch();
+    analyticsItems.forEach((item) => batch.update(
+      adminDb.collection('deliveries').doc(item.id),
+      { analytics_sync_pending: false, analytics_synced_at: syncedAt },
+    ));
+    await batch.commit();
+  }
+
   if (maintenanceDue) {
     await maintenanceRef.set({
       last_run_at: new Date().toISOString(),
       recent_completed_read: recentCompletedDocs.length,
-      analytics_read: analyticsItems.length,
+      analytics_pending_read: analyticsItems.length,
     }, { merge: true });
   }
 
   return {
     ok: true,
     maintenanceDue,
-    analyticsNativePageRead: analyticsPage?.size || 0,
+    analyticsNativePendingRead: analyticsPendingSnap.size,
     analyticsNativeCandidates: analyticsItems.length,
-    analyticsNativeCheckpoint: analyticsCursor || null,
     siteDeliveries: siteDeliveries.length,
     activeSiteDeliveries: activeSnap.size,
     recentCompletedRecoveries: recentCompletedDocs.length,

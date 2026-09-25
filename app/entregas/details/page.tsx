@@ -265,7 +265,8 @@ function DeliveryDetailsContent() {
       }
     }
 
-    if (isIfood && !savedConfirmationCode) {
+    const skipsIfoodCode = delivery.payment_method === 'dinheiro' || delivery.payment_method?.includes('cartao');
+    if (isIfood && !skipsIfoodCode && !savedConfirmationCode) {
       setInputCode('');
       setIsIfoodModalOpen(true);
       return;

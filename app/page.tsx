@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
 import { TrendingUp, Package, Eye, EyeOff, Filter, Users, UserRound, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
@@ -35,6 +36,7 @@ function operationalKey(...values: Parameters<typeof firstValidTimestamp>): stri
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const routes = useAppStore((state) => state.routes);
   const deliveries = useAppStore((state) => state.deliveries);
   const motoboys = useAppStore((state) => state.motoboys);
@@ -507,9 +509,10 @@ export default function HomePage() {
               const isPickup = mode === 'pickup';
               const ModeIcon = isPickup ? ShoppingBag : Store;
               return (
-                <a
+                <button
+                  type="button"
                   key={order.id}
-                  href={`/entregas/details?id=${order.id}&date=${encodeURIComponent(selectedDateKey)}`}
+                  onClick={() => router.push(`/entregas/details?id=${order.id}&date=${encodeURIComponent(selectedDateKey)}`)}
                   className="flex w-full items-center gap-3 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-3.5 text-left transition-all active:scale-[0.99]"
                 >
                   <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
@@ -532,7 +535,7 @@ export default function HomePage() {
                     </p>
                     {order.completed ? <CheckCircle2 size={14} className="ml-auto mt-1 text-emerald-500" /> : <Clock3 size={14} className="ml-auto mt-1 text-amber-400" />}
                   </div>
-                </a>
+                </button>
               );
             })}
           </div>
