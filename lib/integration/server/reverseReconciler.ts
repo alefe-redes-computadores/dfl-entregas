@@ -8,6 +8,12 @@ import { buildIntegrationEvent, buildOutboxRecord } from '../contracts';
 type Raw = Record<string, unknown>;
 type Item = { id: string; data: Raw };
 type Stop = { key: string; deliveries: Item[]; pending: Item[] };
+export type ReverseReconcileOptions = {
+  tracking?: boolean;
+  recovery?: boolean;
+  analytics?: boolean;
+  activeLimit?: number;
+};
 
 const str = (value: unknown) => typeof value === 'string' ? value : '';
 const bool = (value: unknown) => value === true;
@@ -88,27 +94,32 @@ async function loadRouteDeliveries(routeId: string, fallback: Item): Promise<Ite
   return (snap.docs as QueryDocumentSnapshot[]).map((doc) => ({ id: doc.id, data: doc.data() as Raw }));
 }
 
-export async function reconcileReverseTrackingOutbox() {
+export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOptions = {}) {
+  const trackingEnabled = options.tracking !== false;
+  const recoveryEnabled = options.recovery !== false;
+  const analyticsEnabled = options.analytics !== false;
+  const activeLimit = Math.max(1, Math.min(40, Math.trunc(options.activeLimit || 40)));
   // O worker reverso só precisa partir de deliveries pertencentes ao Site.
   // A versão anterior lia TODAS as deliveries e TODAS as routes a cada minuto.
   // V42: reconciliation is a bounded recovery path, not a full-history scanner.
-  const activeSnap = await adminDb.collection('deliveries')
-    .where('source_system', '==', 'dfl_site')
-    .where('completed', '==', false)
-    .limit(200)
-    .get();
+  const activeSnap = trackingEnabled
+    ? await adminDb.collection('deliveries')
+      .where('source_system', '==', 'dfl_site')
+      .where('completed', '==', false)
+      .limit(activeLimit)
+      .get()
+    : null;
 
   const maintenanceRef = adminDb
     .collection('integration_checkpoints')
     .doc('reverse_recovery_v3');
-  const maintenanceSnap = await maintenanceRef.get();
-  const maintenanceState = maintenanceSnap.data() || {};
+  const maintenanceSnap = recoveryEnabled || analyticsEnabled ? await maintenanceRef.get() : null;
+  const maintenanceState = maintenanceSnap?.data() || {};
   const lastMaintenanceAt = Date.parse(str(maintenanceState.last_run_at));
-  const maintenanceDue =
-    !Number.isFinite(lastMaintenanceAt) ||
-    Date.now() - lastMaintenanceAt >= 30 * 60 * 1000;
+  const maintenanceDue = recoveryEnabled &&
+    (!Number.isFinite(lastMaintenanceAt) || Date.now() - lastMaintenanceAt >= 7 * 24 * 60 * 60 * 1000);
 
-  const recentCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const recentCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const completedCursor = str(maintenanceState.completed_cursor).trim();
   let recentCompletedDocs: QueryDocumentSnapshot[] = [];
   try {
@@ -135,7 +146,7 @@ export async function reconcileReverseTrackingOutbox() {
   }
 
   const byId = new Map<string, Item>();
-  for (const doc of [...(activeSnap.docs as QueryDocumentSnapshot[]), ...recentCompletedDocs]) {
+  for (const doc of [...((activeSnap?.docs || []) as QueryDocumentSnapshot[]), ...recentCompletedDocs]) {
     byId.set(doc.id, { id: doc.id, data: doc.data() as Raw });
   }
   const siteDeliveries: Item[] = [...byId.values()]
@@ -158,11 +169,10 @@ export async function reconcileReverseTrackingOutbox() {
 
   // Fila dirigida por escrita: zero paginação do histórico. Somente entregas
   // marcadas ao fechar uma rota (ou concluir retirada/balcão) são lidas.
-  const analyticsPendingSnap = await adminDb.collection('deliveries')
-    .where('analytics_sync_pending', '==', true)
-    .limit(40)
-    .get();
-  const analyticsItems: Item[] = (analyticsPendingSnap.docs as QueryDocumentSnapshot[])
+  const analyticsPendingSnap = analyticsEnabled
+    ? await adminDb.collection('deliveries').where('analytics_sync_pending', '==', true).limit(40).get()
+    : null;
+  const analyticsItems: Item[] = ((analyticsPendingSnap?.docs || []) as QueryDocumentSnapshot[])
     .map((doc) => ({ id: doc.id, data: doc.data() as Raw }));
 
   const candidates: Array<{ eventId: string; event: ReturnType<typeof buildIntegrationEvent> }> = [];
@@ -265,13 +275,13 @@ export async function reconcileReverseTrackingOutbox() {
     await batch.commit();
   }
 
-  if (maintenanceDue) {
+  if (maintenanceDue || analyticsEnabled) {
     const newestCompletedCursor = recentCompletedDocs.reduce((latest, doc) => {
       const value = str((doc.data() as Raw).updated_at).trim();
       return value > latest ? value : latest;
     }, completedCursor);
     await maintenanceRef.set({
-      last_run_at: new Date().toISOString(),
+      ...(maintenanceDue ? { last_run_at: new Date().toISOString() } : {}),
       recent_completed_read: recentCompletedDocs.length,
       analytics_pending_read: analyticsItems.length,
       ...(newestCompletedCursor ? { completed_cursor: newestCompletedCursor } : {}),
@@ -281,13 +291,16 @@ export async function reconcileReverseTrackingOutbox() {
   return {
     ok: true,
     maintenanceDue,
-    analyticsNativePendingRead: analyticsPendingSnap.size,
+    trackingEnabled,
+    recoveryEnabled,
+    analyticsEnabled,
+    activeLimit,
+    analyticsNativePendingRead: analyticsPendingSnap?.size || 0,
     analyticsNativeCandidates: analyticsItems.length,
     siteDeliveries: siteDeliveries.length,
-    activeSiteDeliveries: activeSnap.size,
+    activeSiteDeliveries: activeSnap?.size || 0,
     recentCompletedRecoveries: recentCompletedDocs.length,
-    completedRecoveryCursor: completedCursor || null,
-    recoveryWindowHours: 48,
+    recoveryWindowHours: 168,
     routesRead: routeIds.length,
     candidates: candidates.length,
     created,
