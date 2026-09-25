@@ -109,6 +109,7 @@ export async function reconcileReverseTrackingOutbox() {
     Date.now() - lastMaintenanceAt >= 30 * 60 * 1000;
 
   const recentCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const completedCursor = str(maintenanceState.completed_cursor).trim();
   let recentCompletedDocs: QueryDocumentSnapshot[] = [];
   try {
     // Recuperação é uma rede de segurança, não parte do polling rápido.
@@ -117,7 +118,8 @@ export async function reconcileReverseTrackingOutbox() {
     const recentCompletedSnap = await adminDb.collection('deliveries')
       .where('source_system', '==', 'dfl_site')
       .where('completed', '==', true)
-      .where('updated_at', '>=', recentCutoff)
+      .where('updated_at', '>', completedCursor || recentCutoff)
+      .orderBy('updated_at', 'asc')
       .limit(120)
       .get();
     recentCompletedDocs = recentCompletedSnap.docs as QueryDocumentSnapshot[];
@@ -264,10 +266,15 @@ export async function reconcileReverseTrackingOutbox() {
   }
 
   if (maintenanceDue) {
+    const newestCompletedCursor = recentCompletedDocs.reduce((latest, doc) => {
+      const value = str((doc.data() as Raw).updated_at).trim();
+      return value > latest ? value : latest;
+    }, completedCursor);
     await maintenanceRef.set({
       last_run_at: new Date().toISOString(),
       recent_completed_read: recentCompletedDocs.length,
       analytics_pending_read: analyticsItems.length,
+      ...(newestCompletedCursor ? { completed_cursor: newestCompletedCursor } : {}),
     }, { merge: true });
   }
 
@@ -279,6 +286,7 @@ export async function reconcileReverseTrackingOutbox() {
     siteDeliveries: siteDeliveries.length,
     activeSiteDeliveries: activeSnap.size,
     recentCompletedRecoveries: recentCompletedDocs.length,
+    completedRecoveryCursor: completedCursor || null,
     recoveryWindowHours: 48,
     routesRead: routeIds.length,
     candidates: candidates.length,

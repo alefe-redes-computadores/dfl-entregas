@@ -410,7 +410,7 @@ export const useAppStore = create<AppState>()(
         set({ isSyncing: true, syncError: false });
         try {
           const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, stockSuppliersSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, operationalExpensesSnap, storeSnap] = await Promise.all([
-            getDocs(collection(db, 'routes')),
+            getDocs(incrementalCollection('routes', get().routes, 'updated_at', (item) => item.updated_at || item.created_at)),
             getDocs(incrementalCollection(
               'deliveries',
               get().deliveries,
@@ -423,7 +423,7 @@ export const useAppStore = create<AppState>()(
               'updated_at',
               (item) => item.updated_at,
             )),
-            getDocs(collection(db, 'motoboys')),
+            getDocs(incrementalCollection('motoboys', get().motoboys, 'updated_at', (item) => item.updated_at || item.createdAt)),
             getDocs(incrementalCollection(
               'fuelings',
               get().fuelings,
@@ -436,16 +436,16 @@ export const useAppStore = create<AppState>()(
               'updated_at',
               (item) => item.updated_at || item.created_at || item.occurred_at,
             )),
-            getDocs(collection(db, 'stock_suppliers')),
-            getDocs(collection(db, 'team_members')),
-            getDocs(collection(db, 'stock_products')),
+            getDocs(incrementalCollection('stock_suppliers', get().stockSuppliers, 'updated_at', (item) => item.updated_at || item.created_at)),
+            getDocs(incrementalCollection('team_members', get().teamMembers, 'updated_at', (item) => item.updated_at || item.created_at)),
+            getDocs(incrementalCollection('stock_products', get().stockProducts, 'updated_at', (item) => item.updated_at || item.created_at)),
             getDocs(incrementalCollection(
               'stock_movements',
               get().stockMovements,
               'created_at',
               (item) => item.created_at || item.occurred_at,
             )),
-            getDocs(collection(db, 'ifood_pending_confirmations')),
+            getDocs(incrementalCollection('ifood_pending_confirmations', get().ifoodPendingConfirmations, 'updated_at', (item) => item.updated_at || item.created_at)),
             getDocs(incrementalCollection(
               'operational_expenses',
               get().operationalExpenses,

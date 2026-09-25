@@ -75,6 +75,8 @@ const PATOS_BOUNDS = {
 };
 
 let activeController: AbortController | null = null;
+const suggestionCache = new Map<string, { expiresAt: number; items: AddressSuggestion[] }>();
+const SUGGESTION_CACHE_MS = 10 * 60 * 1000;
 
 function getApiKey(): string {
   const key = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY?.trim();
@@ -233,6 +235,10 @@ export async function fetchAddressSuggestions(
 
   if (query.length < 3) return [];
 
+  const cacheKey = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+  const cached = suggestionCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.items;
+
   activeController?.abort();
   activeController = new AbortController();
 
@@ -279,7 +285,7 @@ export async function fetchAddressSuggestions(
   const data =
     (await response.json()) as GeoapifyResponse;
 
-  return (data.features || [])
+  const items = (data.features || [])
     .filter((feature) => {
       const props = feature.properties || {};
       const countryCode =
@@ -300,6 +306,13 @@ export async function fetchAddressSuggestions(
     })
     .filter((item) => item.label)
     .slice(0, 6);
+
+  suggestionCache.set(cacheKey, { expiresAt: Date.now() + SUGGESTION_CACHE_MS, items });
+  if (suggestionCache.size > 60) {
+    const oldest = suggestionCache.keys().next().value;
+    if (oldest) suggestionCache.delete(oldest);
+  }
+  return items;
 }
 
 export async function resolveAddressSuggestion(
