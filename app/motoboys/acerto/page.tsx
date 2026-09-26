@@ -44,6 +44,20 @@ function Content(){
 
   if(!motoboy||!data)return <div><PageHeader title="Acerto indisponível" to="/motoboys"/></div>;
 
+  const adjustmentKindLabel=(kind:MotoboySettlementAdjustment['kind'])=>kind==='meal'?'Lanche':kind==='advance'?'Adiantamento':'Outro ajuste';
+
+  const settlementTitle=data.settlementDirection==='store_credit'
+    ? `VALOR DA LOJA COM ${motoboy.name.toUpperCase()}`
+    : data.settlementDirection==='settled'
+      ? 'ACERTO ZERADO'
+      : `VALOR A PAGAR PARA ${motoboy.name.toUpperCase()}`;
+
+  const settlementExplanation=data.settlementDirection==='store_credit'
+    ? `${motoboy.name} ficou com R$ ${money(data.balance)} da loja neste acerto.`
+    : data.settlementDirection==='settled'
+      ? 'Nenhum valor ficou pendente entre a loja e o motoboy.'
+      : `A loja ainda deve R$ ${money(data.balance)} a ${motoboy.name} neste acerto.`;
+
   const addAdjustment=()=>{
     const amount=Number(adjustmentValue.replace(/\./g,'').replace(',','.'));
     if(!adjustmentDescription.trim()||!Number.isFinite(amount)||amount<=0)return void toast.error('Informe descrição e valor do ajuste.');
@@ -66,16 +80,21 @@ function Content(){
       `*Acerto bruto: R$ ${money(data.fee.amount)}*`,
     ];
     if(adjustments.length){
-      lines.push('','➖ *ABATIMENTOS*');
-      adjustments.forEach(item=>lines.push(`• ${item.description}: R$ ${money(item.amount)}`));
-      lines.push(`*Total de abatimentos: R$ ${money(data.totalVales)}*`);
+      lines.push(
+        '',
+        `➖ *ABATIMENTOS: - R$ ${money(data.totalVales)}*`,
+        `_Composição do total:_`
+      );
+      adjustments.forEach(item=>lines.push(`↳ ${adjustmentKindLabel(item.kind)} · ${item.description} · R$ ${money(item.amount)}`));
     }
     lines.push(
       '',
       `💵 *Dinheiro das entregas:* R$ ${money(data.cashCollected)}`,
-      cashHandedOver ? `↳ Caixa das entregas já conferido na loja` : `↳ Compensado no fechamento de caixa`,
+      cashHandedOver ? `↳ Caixa das entregas já conferido na loja` : `↳ Dinheiro ainda considerado no acerto com o motoboy`,
       '',
-      `🏪 *${data.settlementDirection==='store_credit'?'CRÉDITO DA LOJA':data.settlementDirection==='settled'?'ACERTO ZERADO':'CRÉDITO DO MOTOBOY'}: R$ ${money(data.balance)}*`
+      `🏪 *RESULTADO DO ACERTO*`,
+      `*R$ ${money(data.balance)} · ${settlementTitle}*`,
+      settlementExplanation
     );
     return lines.join('\n');
   };
@@ -140,10 +159,26 @@ function Content(){
     round(64,64,952,190,38,'rgba(24,24,27,.88)','#27332f');round(88,88,76,76,22,'#10b981');ctx.fillStyle='#052e22';ctx.font='900 29px Arial';ctx.textAlign='center';ctx.fillText('DFL',126,137);ctx.textAlign='left';
     ctx.fillStyle='#f4f4f5';ctx.font='900 45px Arial';ctx.fillText('ACERTO DO MOTOBOY',190,125);ctx.fillStyle='#a1a1aa';ctx.font='600 28px Arial';ctx.fillText(motoboy.name,190,170);ctx.fillStyle='#6ee7b7';ctx.font='700 25px Arial';ctx.fillText(fromKey(date).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}),190,210);
     round(64,286,952,156,34,'rgba(14,165,233,.07)','#173947');const stat=(x:number,label:string,value:string)=>{ctx.fillStyle='#71717a';ctx.font='700 22px Arial';ctx.fillText(label.toUpperCase(),x,337);ctx.fillStyle='#f4f4f5';ctx.font='900 38px Arial';ctx.fillText(value,x,392);};stat(100,'Entregas',String(data.deliveries.length));stat(405,'Rotas',String(data.completedRoutes));stat(700,'Dinheiro recebido',`R$ ${money(data.cashCollected)}`);
-    round(64,474,952,492,34,'rgba(24,24,27,.9)','#27272a');ctx.fillStyle='#d4d4d8';ctx.font='900 25px Arial';ctx.fillText('RESUMO FINANCEIRO',100,526);
-    let y=590;const row=(label:string,value:string,tone='#f4f4f5')=>{ctx.fillStyle='#8b8b94';ctx.font='600 27px Arial';ctx.fillText(label,100,y);ctx.fillStyle=tone;ctx.font='800 30px Arial';ctx.textAlign='right';ctx.fillText(value,980,y);ctx.textAlign='left';ctx.strokeStyle='#242429';ctx.beginPath();ctx.moveTo(100,y+25);ctx.lineTo(980,y+25);ctx.stroke();y+=72;};row('Acerto bruto',`R$ ${money(data.fee.amount)}`);row('Total de abatimentos',`- R$ ${money(data.totalVales)}`,'#fb7185');adjustments.slice(0,3).forEach(item=>row(`↳ ${item.description.slice(0,34)}`,`- R$ ${money(item.amount)}`,'#fb7185'));if(adjustments.length>3)row('Outros ajustes',`+ ${adjustments.length-3} item(ns)`);row('Líquido do motoboy',`R$ ${money(data.liquidFee)}`,'#34d399');
-    const resultColor=data.settlementDirection==='store_credit'?'#f59e0b':'#10b981';round(64,998,952,218,38,resultColor);ctx.fillStyle='#052e22';ctx.font='900 24px Arial';ctx.fillText('RESULTADO DO ACERTO',104,1053);ctx.font='900 54px Arial';ctx.fillText(`R$ ${money(data.balance)}`,104,1123);ctx.font='900 27px Arial';ctx.fillText(data.settlementDirection==='store_credit'?'CRÉDITO DA LOJA':data.settlementDirection==='settled'?'ACERTO ZERADO':'CRÉDITO DO MOTOBOY',104,1170);
-    ctx.fillStyle='#71717a';ctx.font='600 21px Arial';ctx.fillText(cashHandedOver?'Caixa das entregas conferido na loja':'Dinheiro compensado no fechamento de caixa',72,1274);ctx.textAlign='right';ctx.fillText('Gerado pelo DFL Entregas',1008,1274);ctx.textAlign='left';
+    round(64,474,952,430,34,'rgba(24,24,27,.9)','#27272a');ctx.fillStyle='#d4d4d8';ctx.font='900 25px Arial';ctx.fillText('RESUMO FINANCEIRO',100,526);
+    let y=590;
+    const row=(label:string,value:string,tone='#f4f4f5')=>{ctx.fillStyle='#8b8b94';ctx.font='600 27px Arial';ctx.fillText(label,100,y);ctx.fillStyle=tone;ctx.font='800 30px Arial';ctx.textAlign='right';ctx.fillText(value,980,y);ctx.textAlign='left';ctx.strokeStyle='#242429';ctx.beginPath();ctx.moveTo(100,y+25);ctx.lineTo(980,y+25);ctx.stroke();y+=72;};
+    const detail=(label:string,value:string)=>{ctx.fillStyle='#71717a';ctx.font='600 22px Arial';ctx.fillText(`↳ ${label}`,120,y);ctx.fillStyle='#a1a1aa';ctx.font='700 23px Arial';ctx.textAlign='right';ctx.fillText(value,980,y);ctx.textAlign='left';y+=48;};
+    row('Acerto bruto',`R$ ${money(data.fee.amount)}`);
+    if(data.totalVales>0){
+      row('Abatimentos',`- R$ ${money(data.totalVales)}`,'#fb7185');
+      adjustments.slice(0,3).forEach(item=>detail(`${adjustmentKindLabel(item.kind)} · ${item.description.slice(0,25)}`,`R$ ${money(item.amount)}`));
+      if(adjustments.length>3)detail('Outros abatimentos',`${adjustments.length-3} item(ns)`);
+    }
+    row('Líquido do motoboy',`R$ ${money(data.liquidFee)}`,'#34d399');
+
+    const resultColor=data.settlementDirection==='store_credit'?'#f59e0b':'#10b981';
+    round(64,936,952,246,38,resultColor);
+    ctx.fillStyle='#052e22';ctx.font='900 24px Arial';ctx.fillText('RESULTADO DO ACERTO',104,991);
+    ctx.font='900 54px Arial';ctx.fillText(`R$ ${money(data.balance)}`,104,1060);
+    ctx.font='900 25px Arial';ctx.fillText(settlementTitle.slice(0,48),104,1106);
+    ctx.font='700 22px Arial';ctx.fillText(settlementExplanation.slice(0,70),104,1148);
+
+    ctx.fillStyle='#71717a';ctx.font='600 21px Arial';ctx.fillText(cashHandedOver?'Caixa das entregas conferido na loja':'Dinheiro considerado no acerto com o motoboy',72,1274);ctx.textAlign='right';ctx.fillText('Gerado pelo DFL Entregas',1008,1274);ctx.textAlign='left';
     const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}.png`;
     if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:'Comprovante do acerto gerado pelo DFL Entregas.',files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem gerada. Escolha onde compartilhar.');return;}
     const blob=await (await fetch(dataUrl)).blob();const file=new File([blob],filename,{type:'image/png'});if(navigator.share&&navigator.canShare?.({files:[file]})){await navigator.share({title:`Acerto · ${motoboy.name}`,files:[file]});return;}const link=document.createElement('a');link.download=filename;link.href=dataUrl;link.click();toast.success('Imagem baixada.');
@@ -158,13 +193,13 @@ function Content(){
 
     <div className="grid grid-cols-2 gap-3"><Card icon={Package} label="Entregas concluídas" value={String(data.deliveries.length)} tone="sky"/><Card icon={Banknote} label="Dinheiro líquido" value={`R$ ${money(data.cashCollected)}`} tone="amber"/></div>
 
-    <section className="rounded-[24px] border border-sky-500/20 bg-sky-500/5 p-5"><p className="text-[10px] font-black uppercase tracking-wider text-sky-400">Prévia do acerto</p><div className="mt-4 space-y-3"><Line label="Acerto bruto" value={`R$ ${money(data.fee.amount)}`}/><p className="text-[10px] text-zinc-500">{data.fee.description}</p>{adjustments.map(item=><div key={item.id} className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-zinc-300">{item.description}</p><p className="text-[9px] text-zinc-600">{item.kind==='meal'?'Lanche':item.kind==='advance'?'Adiantamento':'Outro ajuste'}</p></div><span className="text-xs font-black text-red-400">- R$ {money(item.amount)}</span><button onClick={()=>setAdjustments(current=>current.filter(value=>value.id!==item.id))} className="grid h-8 w-8 place-items-center rounded-xl text-red-500"><Trash2 size={13}/></button></div>)}<div className="border-t border-sky-500/10 pt-3"><Line label="Ajustes" value={`- R$ ${money(data.totalVales)}`}/><Line label="Líquido a pagar" value={`R$ ${money(data.liquidFee)}`} strong/></div></div></section>
+    <section className="rounded-[24px] border border-sky-500/20 bg-sky-500/5 p-5"><p className="text-[10px] font-black uppercase tracking-wider text-sky-400">Prévia do acerto</p><div className="mt-4 space-y-3"><Line label="Acerto bruto" value={`R$ ${money(data.fee.amount)}`}/><p className="text-[10px] text-zinc-500">{data.fee.description}</p>{adjustments.map(item=><div key={item.id} className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-zinc-300">{item.description}</p><p className="text-[9px] text-zinc-600">{item.kind==='meal'?'Lanche':item.kind==='advance'?'Adiantamento':'Outro ajuste'}</p></div><span className="text-xs font-black text-red-400">- R$ {money(item.amount)}</span><button onClick={()=>setAdjustments(current=>current.filter(value=>value.id!==item.id))} className="grid h-8 w-8 place-items-center rounded-xl text-red-500"><Trash2 size={13}/></button></div>)}<div className="border-t border-sky-500/10 pt-3"><Line label="Total dos abatimentos" value={`- R$ ${money(data.totalVales)}`}/><Line label="Líquido do motoboy" value={`R$ ${money(data.liquidFee)}`} strong/></div></div></section>
 
     <section><p className="mb-1 px-1 text-[10px] font-black uppercase tracking-wider text-zinc-500">Ajuste do acerto</p><p className="mb-2 px-1 text-[9px] text-zinc-700">Só use quando algo deve realmente ser abatido do pagamento.</p><div className="mb-2 grid grid-cols-3 gap-2">{([['meal','Lanche'],['advance','Adiantamento'],['other','Outro']] as const).map(([value,label])=><button key={value} onClick={()=>setAdjustmentKind(value)} className={`h-10 rounded-xl border text-[10px] font-black ${adjustmentKind===value?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-600'}`}>{label}</button>)}</div><div className="grid grid-cols-[1fr_100px_48px] gap-2"><input value={adjustmentDescription} onChange={e=>setAdjustmentDescription(e.target.value)} placeholder="Ex.: Lanche" className="input"/><input value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)} inputMode="decimal" placeholder="0,00" className="input"/><button onClick={addAdjustment} className="flex h-12 items-center justify-center rounded-xl bg-zinc-800"><Plus size={18}/></button></div></section>
 
     <label className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/45 p-4"><div><p className="text-sm font-bold">Dinheiro já entregue ao caixa</p><p className="text-[10px] text-zinc-500">Desative se o dinheiro das entregas ainda estiver com o motoboy</p></div><input type="checkbox" checked={cashHandedOver} onChange={e=>setCashHandedOver(e.target.checked)} className="h-5 w-5 accent-emerald-500"/></label>
 
-    <section className={`rounded-[26px] p-5 ${data.settlementDirection==='store_credit'?'bg-amber-500':'bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.settlementDirection==='store_credit'?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 text-3xl font-black text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black text-zinc-900">{data.settlementDirection==='store_credit'?'CRÉDITO DA LOJA':data.settlementDirection==='settled'?'ACERTO ZERADO':'CRÉDITO DO MOTOBOY'}</p></section>
+    <section className={`rounded-[26px] p-5 ${data.settlementDirection==='store_credit'?'bg-amber-500':'bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.settlementDirection==='store_credit'?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 text-3xl font-black text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black uppercase text-zinc-900">{settlementTitle}</p><p className="mt-2 max-w-[32rem] text-[11px] font-bold leading-relaxed text-zinc-900/80">{settlementExplanation}</p></section>
 
     <button disabled={saving||Boolean(existing)} onClick={confirm} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-40"><ReceiptText size={17}/>{existing?'Acerto já registrado':saving?'Confirmando...':'Confirmar acerto'}</button>
     <div className="grid grid-cols-3 gap-2"><button onClick={copy} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><Copy size={14}/>Copiar</button><button onClick={share} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><Send size={14}/>Compartilhar</button><button disabled={imageBusy} onClick={()=>void image()} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300 disabled:opacity-40"><ImageIcon size={14}/>{imageBusy?'Gerando...':'Imagem'}</button></div>
