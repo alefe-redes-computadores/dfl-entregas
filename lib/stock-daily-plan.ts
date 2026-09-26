@@ -1,5 +1,6 @@
 import type { StockMovement, StockProduct } from '@/types';
 import { buildStockRecommendation } from '@/lib/stock-intelligence';
+import { commercialPurchasePlan } from '@/lib/stock-shopping';
 
 const DAY=86400000;
 const validOperational=(m:StockMovement)=>m.type==='saida'&&!m.supply_id&&!/estorno|revers|ajuste|contagem|saldo inicial/i.test(m.reason||'')&&m.quantity>0;
@@ -13,6 +14,17 @@ export function buildDailyStockSignal(product:StockProduct,movements:StockMoveme
  const rec=buildStockRecommendation(product,movements,now);
  const enough=samples.length>=3;
  const dailyTarget=enough?Math.max(product.minimum_quantity,weekdayAverage+Math.max(0,rec.averageDailyConsumption*rec.leadTimeDays)):rec.targetQuantity;
- const suggested=Math.max(0,dailyTarget-product.current_quantity);
- return {weekdaySamples:samples.length,weekdayAverage,dailyTarget,suggested,usesWeekday:enough,confidence:samples.length>=8?'alta':samples.length>=4?'media':'baixa' as const};
+ const rawSuggested=Math.max(0,dailyTarget-product.current_quantity);
+ const commercialPlan=commercialPurchasePlan(product,rawSuggested,0);
+ const suggested=commercialPlan.baseQuantity;
+ return {
+  weekdaySamples:samples.length,
+  weekdayAverage,
+  dailyTarget,
+  rawSuggested,
+  suggested,
+  commercialPlan,
+  usesWeekday:enough,
+  confidence:samples.length>=8?'alta':samples.length>=4?'media':'baixa' as const
+ };
 }

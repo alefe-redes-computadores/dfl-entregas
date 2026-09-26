@@ -6,6 +6,16 @@ const DISCRETE=new Set<StockSupplyUnit>(['un','cx','pct','fardo']);
 export const isDiscretePurchaseUnit=(unit:StockSupplyUnit)=>DISCRETE.has(unit);
 const precision=(unit:StockSupplyUnit)=>unit==='kg'||unit==='l'?3:unit==='g'||unit==='ml'?1:0;
 
+export const isFractionalPurchaseUnit=(unit:StockSupplyUnit)=>
+ unit==='kg'||unit==='g'||unit==='l'||unit==='ml';
+
+export const commercialDisplayPrecision=(unit:StockSupplyUnit,value:number)=>{
+ if(isDiscretePurchaseUnit(unit)) return 0;
+ const safe=Math.abs(Number(value)||0);
+ if(unit==='g'||unit==='ml') return safe<10?1:0;
+ return safe<1?3:safe<10?2:1;
+};
+
 const ceilToPrecision=(value:number,digits:number)=>{
  const factor=10**digits;
  return Number((Math.ceil((Math.max(0,value)-1e-12)*factor)/factor).toFixed(digits));
@@ -32,7 +42,14 @@ export const purchaseUnitWord=(unit:StockSupplyUnit,q:number)=>{
  const many:Partial<Record<StockSupplyUnit,string>>={un:'unidades',cx:'caixas',pct:'pacotes',fardo:'fardos'};
  return q===1?one[unit]:(many[unit]||one[unit]);
 };
-export const formatPurchaseQuantity=(q:number,u:StockSupplyUnit)=>`${q.toLocaleString('pt-BR',{maximumFractionDigits:precision(u)})} ${purchaseUnitWord(u,q)}`;
+export const formatPurchaseQuantity=(q:number,u:StockSupplyUnit)=>{
+ const normalized=isDiscretePurchaseUnit(u)
+  ? Math.ceil(Math.max(0,Number(q)||0)-1e-9)
+  : Math.max(0,Number(q)||0);
+ return `${normalized.toLocaleString('pt-BR',{
+  maximumFractionDigits:commercialDisplayPrecision(u,normalized)
+ })} ${purchaseUnitWord(u,normalized)}`;
+};
 export const formatCommercialPlan=({purchaseQuantity,baseQuantity,baseUnit,presentation}:{purchaseQuantity:number;baseQuantity:number;baseUnit:StockSupplyUnit;presentation?:StockProductPresentation})=>{
  if(!presentation)return formatStockQuantity(baseQuantity,baseUnit);
  const p=formatPurchaseQuantity(purchaseQuantity,presentation.purchase_unit),b=formatStockQuantity(baseQuantity,baseUnit),label=presentation.label.trim();

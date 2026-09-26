@@ -1,5 +1,9 @@
 import type { StockProduct, StockProductPresentation, StockSupplyUnit } from '@/types';
 import { formatStockQuantity } from '@/lib/stock-quantity';
+import {
+  formatPurchaseQuantity,
+  isDiscretePurchaseUnit,
+} from '@/lib/stock-commercial';
 
 const unitWord=(unit:StockSupplyUnit,q:number)=>{
   const one:Record<StockSupplyUnit,string>={un:'unidade',kg:'kg',g:'g',l:'L',ml:'ml',cx:'caixa',pct:'pacote',fardo:'fardo'};
@@ -28,16 +32,58 @@ export function humanPresentation(p:StockProductPresentation,baseUnit:StockSuppl
 }
 
 export function humanPurchasePlan(args:{purchaseQuantity:number;baseQuantity:number;baseUnit:StockSupplyUnit;presentation?:StockProductPresentation}){
-  const {purchaseQuantity:q,baseQuantity,baseUnit,presentation:p}=args;
-  if(!p) return formatStockQuantity(baseQuantity,baseUnit);
+  const {purchaseQuantity,baseQuantity,baseUnit,presentation:p}=args;
+
+  if(!p){
+    // Sem apresentação comercial, a unidade-base é a própria unidade de compra.
+    // Produtos discretos jamais aparecem fracionados.
+    return formatPurchaseQuantity(
+      isDiscretePurchaseUnit(baseUnit)
+        ? Math.ceil(Math.max(0,purchaseQuantity||baseQuantity)-1e-9)
+        : Math.max(0,purchaseQuantity||baseQuantity),
+      baseUnit,
+    );
+  }
+
+  const q=isDiscretePurchaseUnit(p.purchase_unit)
+    ? Math.ceil(Math.max(0,purchaseQuantity)-1e-9)
+    : Math.max(0,purchaseQuantity);
+
   const presentation=humanPresentation(p,baseUnit);
+
+  // Peso/volume vendidos de forma fracionada:
+  // "1,3 kg", não "1,3 unidades de 1 KG".
+  // Se a apresentação tiver cara de embalagem fechada ("1 KG", "500 g"),
+  // a quantidade comercial continua sendo tratada como pacote físico.
+  if(!isDiscretePurchaseUnit(p.purchase_unit)){
+    const label=cleanPresentationLabel(p.label||'');
+    const closedPackage=/^\d+(?:[.,]\d+)?\s*(kg|g|l|ml)$/i.test(label);
+    if(!closedPackage) return formatPurchaseQuantity(q,p.purchase_unit);
+    const packs=Math.ceil(Math.max(0,baseQuantity)/(Math.max(.0000001,Number(p.conversion_quantity)||1)-1e-12));
+    return `${packs} ${packs===1?'embalagem':'embalagens'} de ${label}`;
+  }
+
   if(q===1) return `1 ${presentation}`;
-  const noun=p.purchase_unit==='pct'?'pacotes':p.purchase_unit==='cx'?'caixas':p.purchase_unit==='fardo'?'fardos':p.purchase_unit==='un'?'unidades':unitWord(p.purchase_unit,q);
-  // Se o rótulo começa pelo mesmo substantivo, não repete "unidades de Unidade".
-  const detail=presentation.replace(/^(pacote|caixa|fardo|unidade)s?\s*/i,'').trim();
-  const head=`${number(q)} ${noun}`;
+
+  const noun=
+    p.purchase_unit==='pct'?'pacotes':
+    p.purchase_unit==='cx'?'caixas':
+    p.purchase_unit==='fardo'?'fardos':
+    'unidades';
+
+  const detail=presentation
+    .replace(/^(pacote|caixa|fardo|unidade)s?\s*/i,'')
+    .trim();
+
+  const head=`${Math.ceil(q)} ${noun}`;
+
   if(!detail) return head;
-  return `${head} ${detail.startsWith('de ')||detail.startsWith('com ')?detail:`de ${detail}`}`;
+
+  return `${head} ${
+    detail.startsWith('de ')||detail.startsWith('com ')
+      ? detail
+      : `de ${detail}`
+  }`;
 }
 
 export function physicalStockDisplay(product:StockProduct){
