@@ -119,6 +119,10 @@ export interface OperationalExpense {
   settlement_delivery_count?: number;
   settlement_route_count?: number;
   settlement_cash_collected?: number;
+  settlement_cash_retained?: number;
+  settlement_store_credit?: number;
+  settlement_motoboy_credit?: number;
+  settlement_direction?: 'store_credit' | 'motoboy_credit' | 'settled';
   settlement_cash_handed_over?: boolean;
   observation?: string;
   created_at: string;

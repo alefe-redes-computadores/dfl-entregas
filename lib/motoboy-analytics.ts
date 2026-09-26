@@ -23,9 +23,9 @@ export function calculateMotoboyFee(rule:MotoboyPaymentRule|undefined,deliveryCo
 
 export function deliveryCashCollected(delivery:Delivery){
   if(delivery.payment_method!=='dinheiro'||delivery.is_paid)return 0;
-  const orderValue=Number(delivery.value)||0;
-  const tendered=Number(delivery.change_for)||0;
-  return tendered>0?Math.max(orderValue,tendered):orderValue;
+  // `change_for` é quanto o cliente entregou antes do troco, não quanto ficou
+  // com o motoboy. O caixa retido corresponde ao valor do pedido.
+  return Math.max(0,Number(delivery.value)||0);
 }
 
 export function getMotoboyDayData(motoboy:Motoboy,date:string,routes:Route[],deliveries:Delivery[],vales:ValeInput[]=[],cashHandedOver=true){
@@ -36,6 +36,10 @@ export function getMotoboyDayData(motoboy:Motoboy,date:string,routes:Route[],del
   const fee=calculateMotoboyFee(motoboy.payment_rule,completedDeliveries.length);
   const totalVales=vales.reduce((sum,vale)=>sum+vale.amount,0);
   const liquidFee=Math.max(0,fee.amount-totalVales);
-  const difference=cashCollected-liquidFee;
-  return {routes:dayRoutes,completedRoutes:dayRoutes.filter(route=>route.status==='fechada').length,deliveries:completedDeliveries,cashCollected,fee,totalVales,liquidFee,mustReturn:!cashHandedOver&&difference>0,balance:cashHandedOver?liquidFee:Math.abs(difference)};
+  const retainedCash=cashHandedOver?0:cashCollected;
+  const difference=retainedCash-liquidFee;
+  const storeCredit=Math.max(0,difference);
+  const motoboyCredit=Math.max(0,-difference);
+  const settlementDirection:'store_credit'|'motoboy_credit'|'settled'=cashHandedOver?'motoboy_credit':storeCredit>0?'store_credit':motoboyCredit>0?'motoboy_credit':'settled';
+  return {routes:dayRoutes,completedRoutes:dayRoutes.filter(route=>route.status==='fechada').length,deliveries:completedDeliveries,cashCollected,retainedCash,fee,totalVales,liquidFee,storeCredit,motoboyCredit,settlementDirection,mustReturn:storeCredit>0,balance:storeCredit||motoboyCredit};
 }

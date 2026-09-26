@@ -75,7 +75,7 @@ function Content(){
       `💵 *Dinheiro das entregas:* R$ ${money(data.cashCollected)}`,
       cashHandedOver ? `↳ Caixa das entregas já conferido na loja` : `↳ Compensado no fechamento de caixa`,
       '',
-      `🏪 *${data.mustReturn?'MOTOBOY DEVOLVE À LOJA':'LOJA PAGA AO MOTOBOY'}: R$ ${money(data.balance)}*`
+      `🏪 *${data.settlementDirection==='store_credit'?'CRÉDITO DA LOJA':data.settlementDirection==='settled'?'ACERTO ZERADO':'CRÉDITO DO MOTOBOY'}: R$ ${money(data.balance)}*`
     );
     return lines.join('\n');
   };
@@ -112,6 +112,10 @@ function Content(){
         settlement_delivery_count:data.deliveries.length,
         settlement_route_count:data.completedRoutes,
         settlement_cash_collected:data.cashCollected,
+        settlement_cash_retained:data.retainedCash,
+        settlement_store_credit:data.storeCredit,
+        settlement_motoboy_credit:data.motoboyCredit,
+        settlement_direction:data.settlementDirection,
         settlement_cash_handed_over:cashHandedOver,
         observation:`${data.deliveries.length} entregas · ${data.completedRoutes} rotas · custo bruto R$ ${money(data.fee.amount)} · abatimentos R$ ${money(data.totalVales)} · líquido do motoboy R$ ${money(data.liquidFee)} · caixa R$ ${money(data.balance)}`,
         created_at:now,
@@ -138,7 +142,7 @@ function Content(){
     round(64,286,952,156,34,'rgba(14,165,233,.07)','#173947');const stat=(x:number,label:string,value:string)=>{ctx.fillStyle='#71717a';ctx.font='700 22px Arial';ctx.fillText(label.toUpperCase(),x,337);ctx.fillStyle='#f4f4f5';ctx.font='900 38px Arial';ctx.fillText(value,x,392);};stat(100,'Entregas',String(data.deliveries.length));stat(405,'Rotas',String(data.completedRoutes));stat(700,'Dinheiro recebido',`R$ ${money(data.cashCollected)}`);
     round(64,474,952,492,34,'rgba(24,24,27,.9)','#27272a');ctx.fillStyle='#d4d4d8';ctx.font='900 25px Arial';ctx.fillText('RESUMO FINANCEIRO',100,526);
     let y=590;const row=(label:string,value:string,tone='#f4f4f5')=>{ctx.fillStyle='#8b8b94';ctx.font='600 27px Arial';ctx.fillText(label,100,y);ctx.fillStyle=tone;ctx.font='800 30px Arial';ctx.textAlign='right';ctx.fillText(value,980,y);ctx.textAlign='left';ctx.strokeStyle='#242429';ctx.beginPath();ctx.moveTo(100,y+25);ctx.lineTo(980,y+25);ctx.stroke();y+=72;};row('Acerto bruto',`R$ ${money(data.fee.amount)}`);row('Total de abatimentos',`- R$ ${money(data.totalVales)}`,'#fb7185');adjustments.slice(0,3).forEach(item=>row(`↳ ${item.description.slice(0,34)}`,`- R$ ${money(item.amount)}`,'#fb7185'));if(adjustments.length>3)row('Outros ajustes',`+ ${adjustments.length-3} item(ns)`);row('Líquido do motoboy',`R$ ${money(data.liquidFee)}`,'#34d399');
-    const resultColor=data.mustReturn?'#f59e0b':'#10b981';round(64,998,952,218,38,resultColor);ctx.fillStyle='#052e22';ctx.font='900 24px Arial';ctx.fillText('RESULTADO DO ACERTO',104,1053);ctx.font='900 54px Arial';ctx.fillText(`R$ ${money(data.balance)}`,104,1123);ctx.font='900 27px Arial';ctx.fillText(data.mustReturn?'MOTOBOY DEVOLVE À LOJA':'LOJA PAGA AO MOTOBOY',104,1170);
+    const resultColor=data.settlementDirection==='store_credit'?'#f59e0b':'#10b981';round(64,998,952,218,38,resultColor);ctx.fillStyle='#052e22';ctx.font='900 24px Arial';ctx.fillText('RESULTADO DO ACERTO',104,1053);ctx.font='900 54px Arial';ctx.fillText(`R$ ${money(data.balance)}`,104,1123);ctx.font='900 27px Arial';ctx.fillText(data.settlementDirection==='store_credit'?'CRÉDITO DA LOJA':data.settlementDirection==='settled'?'ACERTO ZERADO':'CRÉDITO DO MOTOBOY',104,1170);
     ctx.fillStyle='#71717a';ctx.font='600 21px Arial';ctx.fillText(cashHandedOver?'Caixa das entregas conferido na loja':'Dinheiro compensado no fechamento de caixa',72,1274);ctx.textAlign='right';ctx.fillText('Gerado pelo DFL Entregas',1008,1274);ctx.textAlign='left';
     const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}.png`;
     if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:'Comprovante do acerto gerado pelo DFL Entregas.',files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem gerada. Escolha onde compartilhar.');return;}
@@ -160,7 +164,7 @@ function Content(){
 
     <label className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/45 p-4"><div><p className="text-sm font-bold">Dinheiro já entregue ao caixa</p><p className="text-[10px] text-zinc-500">Desative se o dinheiro das entregas ainda estiver com o motoboy</p></div><input type="checkbox" checked={cashHandedOver} onChange={e=>setCashHandedOver(e.target.checked)} className="h-5 w-5 accent-emerald-500"/></label>
 
-    <section className={`rounded-[26px] p-5 ${data.mustReturn?'bg-amber-500':'bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.mustReturn?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 text-3xl font-black text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black text-zinc-900">{data.mustReturn?'MOTOBOY DEVOLVE À LOJA':'LOJA PAGA AO MOTOBOY'}</p></section>
+    <section className={`rounded-[26px] p-5 ${data.settlementDirection==='store_credit'?'bg-amber-500':'bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.settlementDirection==='store_credit'?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 text-3xl font-black text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black text-zinc-900">{data.settlementDirection==='store_credit'?'CRÉDITO DA LOJA':data.settlementDirection==='settled'?'ACERTO ZERADO':'CRÉDITO DO MOTOBOY'}</p></section>
 
     <button disabled={saving||Boolean(existing)} onClick={confirm} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-40"><ReceiptText size={17}/>{existing?'Acerto já registrado':saving?'Confirmando...':'Confirmar acerto'}</button>
     <div className="grid grid-cols-3 gap-2"><button onClick={copy} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><Copy size={14}/>Copiar</button><button onClick={share} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><Send size={14}/>Compartilhar</button><button disabled={imageBusy} onClick={()=>void image()} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300 disabled:opacity-40"><ImageIcon size={14}/>{imageBusy?'Gerando...':'Imagem'}</button></div>

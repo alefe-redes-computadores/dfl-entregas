@@ -91,7 +91,21 @@ export function groupDeliveriesByStop(
     });
   }
 
-  return [...groups.values()];
+  const result = [...groups.values()];
+  // Urgência atua somente na fila automática. Uma parada que já recebeu
+  // ordem manual continua exatamente onde o operador a colocou.
+  if (result.some((group) =>
+    group.deliveries.some((delivery) => delivery.order_source === 'manual'),
+  )) return result;
+  const automatic = result.filter((group) =>
+    group.deliveries.every((delivery) => delivery.order_source !== 'manual'),
+  );
+  const urgentKeys = new Set(automatic.filter((group) => group.urgent).map((group) => group.key));
+  if (!urgentKeys.size) return result;
+
+  const urgent = result.filter((group) => urgentKeys.has(group.key));
+  const remaining = result.filter((group) => !urgentKeys.has(group.key));
+  return [...urgent, ...remaining];
 }
 
 export function expandStopOrder(
