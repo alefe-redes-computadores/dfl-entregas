@@ -9,14 +9,8 @@ export function PwaInstallPrompt() {
   const [showButton, setShowButton] = useState(false);
 
   useEffect(() => {
-    // 1. Registra o Service Worker automaticamente ao abrir o app
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.error('Erro ao registrar Service Worker:', err);
-      });
-    }
-
-    // 2. Ouve o evento do navegador que avisa que o app pode ser instalado
+    // O Service Worker é responsabilidade exclusiva do PwaRuntime.
+    // Este componente cuida somente do prompt visual de instalação.
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);

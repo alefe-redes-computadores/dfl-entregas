@@ -4,12 +4,10 @@ import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 
 /**
- * Runtime PWA independente do prompt de instalação.
+ * Autoridade única de registro/atualização do Service Worker.
  *
- * O registro do service worker precisa existir mesmo quando o
- * componente visual de instalação não é renderizado.
- *
- * No APK Capacitor o bundle já é local, portanto não registramos SW.
+ * PwaInstallPrompt cuida somente da instalação visual.
+ * No APK Capacitor não registramos SW.
  */
 export function PwaRuntime() {
   useEffect(() => {
@@ -21,6 +19,19 @@ export function PwaRuntime() {
     }
 
     let disposed = false;
+    let refreshing = false;
+
+    const handleControllerChange = () => {
+      if (disposed || refreshing) return;
+
+      refreshing = true;
+      window.location.reload();
+    };
+
+    navigator.serviceWorker.addEventListener(
+      'controllerchange',
+      handleControllerChange,
+    );
 
     const register = async () => {
       try {
@@ -33,9 +44,42 @@ export function PwaRuntime() {
             },
           );
 
-        if (!disposed) {
-          void registration.update();
+        if (disposed) return;
+
+        const activateWaiting = () => {
+          registration.waiting?.postMessage({
+            type: 'SKIP_WAITING',
+          });
+        };
+
+        if (registration.waiting) {
+          activateWaiting();
         }
+
+        registration.addEventListener(
+          'updatefound',
+          () => {
+            const worker = registration.installing;
+
+            if (!worker) return;
+
+            worker.addEventListener(
+              'statechange',
+              () => {
+                if (
+                  worker.state === 'installed' &&
+                  navigator.serviceWorker.controller
+                ) {
+                  worker.postMessage({
+                    type: 'SKIP_WAITING',
+                  });
+                }
+              },
+            );
+          },
+        );
+
+        await registration.update();
       } catch (error) {
         console.warn(
           '[PWA] Service Worker indisponível:',
@@ -48,6 +92,11 @@ export function PwaRuntime() {
 
     return () => {
       disposed = true;
+
+      navigator.serviceWorker.removeEventListener(
+        'controllerchange',
+        handleControllerChange,
+      );
     };
   }, []);
 

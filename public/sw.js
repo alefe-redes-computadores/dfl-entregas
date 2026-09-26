@@ -1,18 +1,18 @@
-// public/sw.js
+// DFL Entregas — App Shell Offline V6
 //
-// DFL Entregas — App Shell Offline V2
-//
-// Estratégia:
-// - app shell básico é pré-cacheado;
-// - assets estáticos versionados usam cache-first;
-// - navegação usa network-first + fallback local;
-// - respostas válidas visitadas são gravadas para uso offline;
-// - chamadas de terceiros/Firebase não são interceptadas.
+// Contrato:
+// - uma nova versão deste arquivo invalida os caches antigos;
+// - navegação é network-first;
+// - chunks imutáveis do Next podem usar cache-first;
+// - SW/manifest nunca ficam presos em cache antigo;
+// - Firebase/Maps/iFood e terceiros não são interceptados.
 
-const VERSION = 'dfl-entregas-v5';
+const VERSION = 'dfl-entregas-v6';
 const CORE_CACHE = `${VERSION}-core`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const ASSET_CACHE = `${VERSION}-assets`;
+
+const APP_CACHE_PREFIX = 'dfl-entregas-';
 
 const CORE_URLS = [
   '/',
@@ -25,8 +25,6 @@ const CORE_URLS = [
   '/apple-touch-icon.png?v=2',
   '/brand/dfl-entregas.png?v=2',
 ];
-
-const APP_CACHE_PREFIX = 'dfl-entregas-';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -44,7 +42,7 @@ self.addEventListener('install', (event) => {
               await cache.put(url, response.clone());
             }
           } catch {
-            // Uma falha isolada não invalida a instalação inteira.
+            // Cache offline nunca impede a instalação.
           }
         }),
       );
@@ -78,6 +76,12 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    void self.skipWaiting();
+  }
+});
+
 const isCacheableResponse = (response) =>
   Boolean(
     response &&
@@ -96,23 +100,20 @@ const putSafely = async (
     const cache = await caches.open(cacheName);
     await cache.put(request, response.clone());
   } catch {
-    // Cache é melhoria de resiliência, nunca motivo para quebrar a UI.
+    // Cache é resiliência, nunca autoridade sobre a UI.
   }
 };
 
 const navigationFallback = async (request) => {
   const exact = await caches.match(request);
-
   if (exact) return exact;
 
   const ignoringSearch = await caches.match(request, {
     ignoreSearch: true,
   });
-
   if (ignoringSearch) return ignoringSearch;
 
   const url = new URL(request.url);
-
   const pathnameMatch = await caches.match(url.pathname);
 
   if (pathnameMatch) return pathnameMatch;
@@ -122,7 +123,9 @@ const navigationFallback = async (request) => {
 
 const handleNavigation = async (request) => {
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, {
+      cache: 'no-store',
+    });
 
     if (isCacheableResponse(response)) {
       void putSafely(
@@ -150,7 +153,7 @@ const handleNavigation = async (request) => {
   }
 };
 
-const handleStaticAsset = async (request) => {
+const handleNextStaticAsset = async (request) => {
   const cached = await caches.match(request);
 
   if (cached) return cached;
@@ -168,9 +171,33 @@ const handleStaticAsset = async (request) => {
   return response;
 };
 
+const handleMutableStaticAsset = async (request) => {
+  try {
+    const response = await fetch(request, {
+      cache: 'no-cache',
+    });
+
+    if (isCacheableResponse(response)) {
+      void putSafely(
+        ASSET_CACHE,
+        request,
+        response,
+      );
+    }
+
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    throw new Error('offline-static-cache-miss');
+  }
+};
+
 const handleSameOriginGet = async (request) => {
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, {
+      cache: 'no-store',
+    });
 
     if (isCacheableResponse(response)) {
       void putSafely(
@@ -199,31 +226,36 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Firestore, Google Maps, iFood e demais terceiros
-  // mantêm suas próprias políticas de rede/cache.
   if (url.origin !== self.location.origin) return;
 
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      handleNavigation(request),
-    );
+  // O próprio mecanismo de atualização jamais passa pelo cache da PWA.
+  if (
+    url.pathname === '/sw.js' ||
+    url.pathname === '/manifest.json'
+  ) {
     return;
   }
 
-  const isStatic =
-    url.pathname.startsWith('/_next/static/') ||
+  if (request.mode === 'navigate') {
+    event.respondWith(handleNavigation(request));
+    return;
+  }
+
+  // Chunks Next possuem hash no nome e são imutáveis.
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(handleNextStaticAsset(request));
+    return;
+  }
+
+  const isMutableStatic =
     /\.(?:js|css|woff2?|png|jpe?g|webp|svg|ico)$/i.test(
       url.pathname,
     );
 
-  if (isStatic) {
-    event.respondWith(
-      handleStaticAsset(request),
-    );
+  if (isMutableStatic) {
+    event.respondWith(handleMutableStaticAsset(request));
     return;
   }
 
-  event.respondWith(
-    handleSameOriginGet(request),
-  );
+  event.respondWith(handleSameOriginGet(request));
 });
