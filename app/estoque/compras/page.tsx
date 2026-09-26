@@ -28,6 +28,7 @@ import {
   committedStockQuantityMap,
   commercialPurchasePlan,
 } from '@/lib/stock-shopping';
+import { humanPurchasePlan } from '@/lib/stock-commercial-display-v2';
 import { formatCommercialPlan, isDiscretePurchaseUnit,
   normalizeTypedPurchaseQuantity,
 } from '@/lib/stock-commercial';
@@ -473,7 +474,7 @@ export default function ShoppingList() {
                         {(() => {
                           const plan = purchasePlan;
                           return plan
-                            ? formatCommercialPlan({
+                            ? humanPurchasePlan({
                                 purchaseQuantity:
                                   plan.purchaseQuantity,
                                 baseQuantity: plan.net,

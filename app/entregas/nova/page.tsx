@@ -13,6 +13,7 @@ import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete
 import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrdersText } from '@/lib/ifood-order-parser';
 import { assessIfoodParseQuality } from '@/lib/ifood-parser-quality';
+import { loadInboxDay, markInboxDraft } from '@/lib/delivery-inbox';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 import { sameCustomerAddress } from '@/lib/customer-identity';
@@ -31,6 +32,8 @@ export default function NovaEntregaPage() {
   const searchParams = useSearchParams();
   const returnDate = searchParams.get('date') || '';
   const sameStopDeliveryId = searchParams.get('sameStop') || '';
+  const inboxDraftId = searchParams.get('inboxDraft') || '';
+  const inboxDay = searchParams.get('inboxDay') || '';
   const requestedReturn = searchParams.get('returnTo') || '';
   const safeReturnTo = requestedReturn.startsWith('/') && !requestedReturn.startsWith('//') ? requestedReturn : '';
   const todayDateKey = dateKey(new Date());
@@ -103,6 +106,7 @@ const [routeId, setRouteId] = useState('');
   const [observation, setObservation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const sameStopSeeded = useRef(false);
+  const inboxSeeded = useRef(false);
   const sameStopSource = useMemo(
     () => deliveries.find((delivery) => delivery.id === sameStopDeliveryId),
     [deliveries, sameStopDeliveryId],
@@ -121,6 +125,29 @@ const [routeId, setRouteId] = useState('');
     if (matches.length > 1) return { kind: 'multiple' as const, count: matches.length };
     return { kind: 'new' as const, count: 0 };
   }, [customerName, customers, selectedCustomerId]);
+
+  useEffect(() => {
+    if (!inboxDraftId || !inboxDay || inboxSeeded.current) return;
+
+    const draft = loadInboxDay(inboxDay).drafts.find(
+      (item) => item.id === inboxDraftId,
+    );
+
+    if (!draft) {
+      toast.warning('Rascunho não encontrado na Caixa de Entrada.');
+      return;
+    }
+
+    inboxSeeded.current = true;
+    setMagicText(draft.rawText);
+    setIsParserOpen(true);
+    setOrigin(draft.source === 'ifood' ? 'ifood' : 'loja');
+
+    toast.info('Rascunho carregado da Caixa de Entrada', {
+      description:
+        'Confira a leitura, escolha a rota e confirme o lançamento.',
+    });
+  }, [inboxDay, inboxDraftId]);
 
   useEffect(() => {
     if (!sameStopSource || sameStopSeeded.current) return;
@@ -401,6 +428,9 @@ const [routeId, setRouteId] = useState('');
       }else{
         let customerId='';if(customerName.trim())customerId=await findOrCreateCustomer(customerName,{address:fulfillmentMode==='delivery'?cleanStreet:undefined,phone:rawPhone||undefined,mapsLink:fulfillmentMode==='delivery'?resolvedMapsLink:undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});
         const cleanValue=parseMoney(value);await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:stopGroupId,origin,customer_id:customerId,customer_name:customerName.trim()||undefined,value:cleanValue,customer_charge:cleanValue,is_paid:isPaid,is_urgent:isUrgent,payment_method:paymentMethod,change_for:changeFor?parseMoney(changeFor):undefined,address_string:fulfillmentMode==='delivery'?cleanStreet:'',maps_link:fulfillmentMode==='delivery'?resolvedMapsLink:'',phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success(stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+      }
+      if (inboxDraftId && inboxDay) {
+        markInboxDraft(inboxDay, inboxDraftId, 'launched');
       }
       router.replace(safeReturnTo||deliveriesReturn);
     }catch(error){console.error('Erro ao cadastrar entrega:',error);toast.error('Não foi possível cadastrar a entrega.',{description:'Confira os dados e sua conexão e tente novamente.'})}finally{setIsSaving(false)}

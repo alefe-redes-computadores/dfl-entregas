@@ -84,8 +84,8 @@ export function ReportIntelligencePanel({
       selectOperationalHighlights(
         snapshot.insights.filter((insight) => !hiddenIds.has(insight.id)),
         {
-          limit: 4,
-          minimumSample: 3,
+          limit: 3,
+          minimumSample: 5,
         },
       ),
     [hiddenIds, snapshot.insights],

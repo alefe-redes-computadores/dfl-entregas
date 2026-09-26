@@ -821,7 +821,30 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </button>
             )}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && !isVirtualRoute && (
-              <div className="flex flex-col gap-2 rounded-[18px] border border-zinc-800 bg-zinc-950/55 p-2">
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRouteTools((current) => !current)}
+                  className="flex h-11 w-full items-center justify-between rounded-[16px] border border-zinc-800 bg-zinc-950/45 px-3 text-left active:scale-[0.99]"
+                >
+                  <span>
+                    <b className="block text-[11px] text-zinc-300">
+                      Ferramentas da rota
+                    </b>
+                    <small className="mt-0.5 block text-[9px] text-zinc-600">
+                      Otimização, WhatsApp e trajeto
+                    </small>
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    className={`text-zinc-600 transition-transform ${
+                      showRouteTools ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {showRouteTools && (
+                <div className="flex flex-col gap-2 rounded-[18px] border border-zinc-800 bg-zinc-950/55 p-2">
                 <button
                   onClick={buildOptimizerPreview}
                   disabled={optimizerBusy || pendingDeliveries.length < 2}
@@ -858,6 +881,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                     <Undo2 size={14} />
                     Desfazer organização
                   </button>
+                )}
+                </div>
                 )}
               </div>
             )}

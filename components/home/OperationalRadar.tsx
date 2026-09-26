@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useDeliveryIntelligence } from '@/hooks/useDeliveryIntelligence';
 import { useHiddenInsightsToday } from '@/hooks/useHiddenInsightsToday';
+import { useAppStore } from '@/store/useAppStore';
 import type {
   InsightSeverity,
   OperationalInsight,
@@ -76,9 +77,10 @@ export function OperationalRadar() {
   const router = useRouter();
   const intelligence = useDeliveryIntelligence({
     lookbackDays: 30,
-    minimumSample: 3,
-    highlightLimit: 5,
+    minimumSample: 5,
+    highlightLimit: 3,
   });
+  const routes = useAppStore((state) => state.routes);
   const { hiddenIds, hideForToday } = useHiddenInsightsToday();
 
   const visibleHighlights = intelligence.highlights.filter(
@@ -89,6 +91,23 @@ export function OperationalRadar() {
 
   const tone = meta[signal.severity];
   const Icon = tone.icon;
+
+  /*
+   * entityIds podem apontar para entidades históricas.
+   * Só oferecemos navegação de rota quando ela ainda existe
+   * no store atual.
+   */
+  const candidateRouteId =
+    signal.category === 'routes'
+      ? signal.entityIds?.find((id) =>
+          routes.some((route) => route.id === id),
+        )
+      : undefined;
+
+  const hasHistoricalRouteReference =
+    signal.category === 'routes' &&
+    Boolean(signal.entityIds?.length) &&
+    !candidateRouteId;
 
   return (
     <article
@@ -129,18 +148,24 @@ export function OperationalRadar() {
           </button>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            {signal.entityIds?.[0] && (
+            {candidateRouteId && (
               <button
                 type="button"
                 onClick={() =>
                   router.push(
-                    `/rotas/details?id=${encodeURIComponent(signal.entityIds![0])}`,
+                    `/rotas/details?id=${encodeURIComponent(candidateRouteId)}`,
                   )
                 }
                 className="flex h-9 items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.07] px-3 text-[9px] font-black text-amber-400 active:scale-95"
               >
                 Revisar rota
               </button>
+            )}
+
+            {hasHistoricalRouteReference && (
+              <span className="flex min-h-9 items-center rounded-xl border border-zinc-800/80 bg-zinc-950/35 px-3 text-[9px] font-bold text-zinc-600">
+                Referência histórica · detalhes no relatório
+              </span>
             )}
 
             <button

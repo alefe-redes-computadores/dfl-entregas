@@ -1,3 +1,10 @@
+
+/*
+ * DFL Route Insight V2:
+ * consumidores devem tratar route_id histórico como referência opcional.
+ * Um insight não pode prometer navegação para uma rota ausente do store.
+ * A UI deve preferir contexto/evidência quando o destino não existir.
+ */
 // hooks/useDeliveryIntelligence.ts
 'use client';
 
@@ -20,8 +27,8 @@ export function useDeliveryIntelligence(options?: {
   const stockSupplies = useAppStore((state) => state.stockSupplies);
 
   const lookbackDays = options?.lookbackDays ?? 30;
-  const minimumSample = options?.minimumSample ?? 3;
-  const highlightLimit = options?.highlightLimit ?? 3;
+  const minimumSample = options?.minimumSample ?? 5;
+  const highlightLimit = options?.highlightLimit ?? 2;
 
   return useMemo(() => {
     const snapshot = buildOperationalIntelligence({

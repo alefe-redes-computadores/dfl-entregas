@@ -152,8 +152,8 @@ function InsightCard({
 export function OperationalIntelligencePanel() {
   const intelligence = useDeliveryIntelligence({
     lookbackDays: 30,
-    minimumSample: 3,
-    highlightLimit: 3,
+    minimumSample: 5,
+    highlightLimit: 2,
   });
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -167,7 +167,7 @@ export function OperationalIntelligencePanel() {
             Inteligência operacional
           </p>
           <h2 className="font-heading text-base font-black text-zinc-100">
-            Leitura dos últimos 30 dias
+            Sinais que merecem atenção
           </h2>
         </div>
 
@@ -225,8 +225,8 @@ export function OperationalIntelligencePanel() {
       )}
 
       <p className="px-1 text-[9px] leading-relaxed text-zinc-700">
-        Sinais são contextuais e explicáveis. Eles ajudam a investigar a
-        operação, não substituem julgamento humano nem atribuem culpa.
+        O cérebro prioriza desvios com amostra e confiança suficientes.
+        Leituras menores continuam disponíveis nos relatórios sem poluir a operação.
       </p>
     </section>
   );

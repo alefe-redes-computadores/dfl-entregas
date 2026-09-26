@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
   AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft, Crosshair,
-  ReceiptText, ShieldCheck
+  ReceiptText, ShieldCheck, Inbox
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
@@ -53,8 +53,8 @@ export default function LojaPage() {
   const dashboardData = useStoreDashboard();
   const intelligence = useDeliveryIntelligence({
     lookbackDays: 30,
-    minimumSample: 3,
-    highlightLimit: 3,
+    minimumSample: 5,
+    highlightLimit: 2,
   });
   const [isLogisticsModalOpen, setIsLogisticsModalOpen] = useState(false);
   const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
@@ -328,6 +328,34 @@ export default function LojaPage() {
           </span>
         </div>
 
+        <button
+          onClick={() => {
+            if (Capacitor.isNativePlatform()) {
+              Haptics.impact({ style: ImpactStyle.Light });
+            }
+            router.push('/loja/caixa-de-entrada');
+          }}
+          className="group flex w-full items-center gap-3 rounded-[20px] border border-violet-500/20 bg-gradient-to-r from-violet-500/[.09] to-zinc-900/45 p-3 text-left active:scale-[.985]"
+        >
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-violet-500/10 text-violet-300">
+            <Inbox size={19} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="font-heading text-[13px] font-black text-zinc-100">
+                Caixa de Entrada
+              </p>
+              <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[8px] font-black uppercase text-violet-300">
+                Novo
+              </span>
+            </div>
+            <p className="mt-0.5 text-[9px] leading-relaxed text-zinc-500">
+              Cole iFood, WhatsApp ou texto livre antes de lançar
+            </p>
+          </div>
+          <ChevronRight size={16} className="shrink-0 text-zinc-700" />
+        </button>
+
         <div className="grid grid-cols-2 gap-1.5">
           <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[20px] border border-amber-500/25 bg-gradient-to-br from-amber-500/[.11] via-amber-500/[.035] to-zinc-900/45 p-3 shadow-[0_14px_32px_rgba(0,0,0,.14)] text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
@@ -461,7 +489,7 @@ export default function LojaPage() {
               Inteligência operacional
             </p>
             <h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">
-              Leitura dos últimos 30 dias
+              Sinais que merecem atenção
             </h2>
           </div>
           <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[9px] font-black text-zinc-500">
@@ -500,7 +528,7 @@ export default function LojaPage() {
                 {intelligence.highlights[0]?.title || 'O cérebro ainda está formando uma base confiável'}
               </p>
               <p className="mt-1 text-[10px] text-zinc-600">
-                Abra Relatórios para ver sinais, evidências e contexto completos.
+                Só mostramos aqui desvios com contexto suficiente para valer sua atenção.
               </p>
             </div>
             <ChevronRight size={16} className="shrink-0 text-zinc-700" />
