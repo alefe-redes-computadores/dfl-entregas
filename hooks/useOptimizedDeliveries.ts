@@ -30,6 +30,8 @@ export function useOptimizedDeliveries(
   }, {} as Record<string, number>);
 
   const groups = groupDeliveriesByStop(deliveries);
+  // groupDeliveriesByStop já aplica a prioridade operacional. Não há leitura
+  // remota nem geocoding aqui: montar/editar a rota permanece instantâneo.
   const sortedDeliveries = groups.flatMap((group) => group.deliveries);
   const pendingDeliveries = sortedDeliveries.filter((delivery) => !delivery.completed);
   const pendingGroups = groupDeliveriesByStop(pendingDeliveries);

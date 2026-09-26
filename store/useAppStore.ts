@@ -137,6 +137,7 @@ interface AppState {
   updateTeamMember: (id: string, data: Partial<TeamMember>) => Promise<void>;
   addStockProduct: (product: StockProduct) => Promise<void>;
   updateStockProduct: (id: string, data: Partial<StockProduct>) => Promise<void>;
+  cleanupDuplicateStockProducts: () => Promise<{ deleted: number; archived: number; groups: number }>;
   addStockMovement: (movement: Omit<StockMovement, 'balance_before' | 'balance_after' | 'created_at'>) => Promise<void>;
   integrateStockSupply: (id: string) => Promise<void>;
   reverseStockSupply: (id: string) => Promise<void>;
@@ -1140,6 +1141,54 @@ export const useAppStore = create<AppState>()(
         catch (error) { set({ stockProducts: previous }); throw error; }
       },
 
+      cleanupDuplicateStockProducts: async () => {
+        const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g, ' ').trim();
+        const products = get().stockProducts;
+        const movements = get().stockMovements;
+        const groups = new Map<string, StockProduct[]>();
+        for (const product of products) {
+          const key = normalize(product.name);
+          if (!key) continue;
+          const list = groups.get(key) || [];
+          list.push(product); groups.set(key, list);
+        }
+        let deleted = 0, archived = 0, groupCount = 0;
+        const deleteIds = new Set<string>();
+        const archiveIds = new Set<string>();
+        for (const list of groups.values()) {
+          if (list.length < 2) continue;
+          groupCount++;
+          const scored = [...list].sort((a,b) => {
+            const ah = movements.some(m=>m.product_id===a.id) ? 1 : 0;
+            const bh = movements.some(m=>m.product_id===b.id) ? 1 : 0;
+            if (ah !== bh) return bh-ah;
+            if (a.active !== b.active) return Number(b.active)-Number(a.active);
+            return (new Date(a.created_at||0).getTime()||0)-(new Date(b.created_at||0).getTime()||0);
+          });
+          const keep = scored[0];
+          for (const duplicate of scored.slice(1)) {
+            const hasHistory = movements.some(m=>m.product_id===duplicate.id);
+            if (hasHistory) archiveIds.add(duplicate.id);
+            else deleteIds.add(duplicate.id);
+          }
+          deleteIds.delete(keep.id); archiveIds.delete(keep.id);
+        }
+        if (!deleteIds.size && !archiveIds.size) return { deleted:0, archived:0, groups:groupCount };
+        const previous = get().stockProducts;
+        set({ stockProducts: previous.filter(p=>!deleteIds.has(p.id)).map(p=>archiveIds.has(p.id)?{...p,active:false,updated_at:new Date().toISOString()}:p) });
+        try {
+          const ops = [...deleteIds].map(id=>deleteDoc(doc(db,'stock_products',id)));
+          const now = new Date().toISOString();
+          ops.push(...[...archiveIds].map(id=>updateDoc(doc(db,'stock_products',id),{active:false,updated_at:now})));
+          await Promise.all(ops);
+          deleted=deleteIds.size; archived=archiveIds.size;
+          return {deleted,archived,groups:groupCount};
+        } catch(error) {
+          set({stockProducts:previous});
+          throw error;
+        }
+      },
+
       addStockMovement: async (movement) => {
         const product = get().stockProducts.find((item) => item.id === movement.product_id);
         if (!product) throw new Error('Produto de estoque não encontrado.');
@@ -1320,8 +1369,16 @@ export const useAppStore = create<AppState>()(
 
       addDelivery: async (delivery) => {
         const now = new Date().toISOString();
+        const siblings = get().deliveries.filter((item) => item.route_id === delivery.route_id && !item.completed);
+        const siblingIndexes = siblings.map((item) => item.order_index).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+        const minIndex = siblingIndexes.length ? Math.min(...siblingIndexes) : 0;
+        const maxIndex = siblingIndexes.length ? Math.max(...siblingIndexes) : -1;
+        const automaticIndex = delivery.is_urgent ? minIndex - 1 : maxIndex + 1;
         const deliveryWithTimestamp = {
           ...delivery,
+          order_index: delivery.order_index ?? automaticIndex,
+          order_source: delivery.order_source || 'smart',
+          order_updated_at: delivery.order_updated_at || now,
           createdAt: delivery.createdAt || delivery.created_at || now,
           created_at: delivery.created_at || delivery.createdAt || now,
           updated_at: now
@@ -1342,12 +1399,25 @@ export const useAppStore = create<AppState>()(
       addDeliveries: async (items) => {
         if (!items.length) return;
         const now = new Date().toISOString();
-        const prepared = items.map((delivery) => ({
-          ...delivery,
-          createdAt: delivery.createdAt || delivery.created_at || now,
-          created_at: delivery.created_at || delivery.createdAt || now,
-          updated_at: now,
-        } as Delivery));
+        const routeTail = new Map<string, number>();
+        get().deliveries.filter((item)=>!item.completed).forEach((item)=>{
+          const current=routeTail.get(item.route_id) ?? -1;
+          routeTail.set(item.route_id, Math.max(current, item.order_index ?? current));
+        });
+        const prepared = items.map((delivery, position) => {
+          const tail = routeTail.get(delivery.route_id) ?? -1;
+          const nextIndex = delivery.is_urgent ? -1000000 + position : tail + 1;
+          if (!delivery.is_urgent) routeTail.set(delivery.route_id, nextIndex);
+          return {
+            ...delivery,
+            order_index: delivery.order_index ?? nextIndex,
+            order_source: delivery.order_source || 'smart',
+            order_updated_at: delivery.order_updated_at || now,
+            createdAt: delivery.createdAt || delivery.created_at || now,
+            created_at: delivery.created_at || delivery.createdAt || now,
+            updated_at: now,
+          } as Delivery;
+        });
         const previous = get().deliveries;
         set((state) => ({ deliveries: [...prepared, ...state.deliveries] }));
         try {

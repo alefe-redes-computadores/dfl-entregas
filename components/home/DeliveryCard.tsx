@@ -361,7 +361,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   return (
     <>
       <div className={clsx(
-          "relative overflow-hidden rounded-[22px] transition-all duration-200",
+          "relative overflow-hidden rounded-[18px] transition-all duration-200",
           delivery.completed ? "opacity-80" : "shadow-sm",
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
           isNeighbor && !delivery.completed && "border-sky-500/30",
@@ -851,7 +851,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           }}
         >
           <div
-            className="mx-auto w-full max-w-sm rounded-[24px] border border-zinc-800 bg-zinc-950 p-4 shadow-2xl"
+            className="mx-auto w-full max-w-sm rounded-[20px] border border-zinc-800 bg-zinc-950 p-4 shadow-2xl"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="flex items-center gap-3">

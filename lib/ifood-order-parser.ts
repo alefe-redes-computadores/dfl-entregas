@@ -53,17 +53,18 @@ const URL = /https?:\/\/[^\s<>()]+/gi;
  * A linha inteira é reservada antes dos fallbacks genéricos para impedir
  * que o ID concorra com CEP/código e para manter múltiplos pedidos estáveis.
  */
-const IFOOD_HEADER =
-  /^\s*#?(\d{4})\s+(\d{8})\s*$/;
+const IFOOD_HEADER_PATTERNS = [
+  /^\s*#?(\d{3,6})\s+(\d{8})\s*$/,
+  /^\s*#?(\d{3,6})\s*[-–—|•·:]\s*(\d{8})\s*$/,
+  /^\s*(?:pedido|n[º°o.]?\s*(?:do\s+)?pedido)\s*[:#-]?\s*#?(\d{3,6})\b[\s\S]{0,28}?\b(?:id\s*(?:ifood|do\s+ifood|do\s+pedido)?|ifood\s+id)\s*[:#-]?\s*(\d{8})\s*$/i,
+];
 
 function explicitIfoodHeader(line: string) {
-  const match = line.match(IFOOD_HEADER);
-  if (!match) return null;
-
-  return {
-    orderId: match[1],
-    ifoodId: match[2],
-  };
+  for (const pattern of IFOOD_HEADER_PATTERNS) {
+    const match = line.match(pattern);
+    if (match) return { orderId: match[1], ifoodId: match[2] };
+  }
+  return null;
 }
 
 const MAP_HOST =
@@ -129,19 +130,42 @@ const looksLikeBrazilianPostal = (value: string) => {
   return digits.length === 8 && POSTAL.test(value);
 };
 
-function longestKnownMatch(
-  source: string,
-  values: string[] = [],
-) {
-  const haystack = ` ${normalizedComparable(source)} `;
+function editDistance(a: string, b: string) {
+  const left = normalizedComparable(a);
+  const right = normalizedComparable(b);
+  const row = Array.from({ length: right.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= left.length; i++) {
+    let prev = row[0]; row[0] = i;
+    for (let j = 1; j <= right.length; j++) {
+      const hold = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (left[i - 1] === right[j - 1] ? 0 : 1));
+      prev = hold;
+    }
+  }
+  return row[right.length];
+}
 
-  return [...values]
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length)
-    .find((candidate) => {
-      const needle = normalizedComparable(candidate);
-      return needle.length >= 3 && haystack.includes(` ${needle} `);
-    }) || '';
+function longestKnownMatch(source: string, values: string[] = []) {
+  const comparable = normalizedComparable(source);
+  const haystack = ` ${comparable} `;
+  const exact = [...values].filter(Boolean).sort((a,b)=>b.length-a.length).find(candidate => {
+    const needle = normalizedComparable(candidate);
+    return needle.length >= 3 && haystack.includes(` ${needle} `);
+  });
+  if (exact) return exact;
+
+  // Fuzzy conservador: acento/pontuação já foram removidos; aqui toleramos
+  // um pequeno erro de digitação apenas quando a linha parece ser um nome.
+  if (!comparable || comparable.length < 4 || comparable.length > 48 || /\d/.test(comparable)) return '';
+  let best = ''; let bestScore = 0;
+  for (const candidate of values.filter(Boolean)) {
+    const target = normalizedComparable(candidate);
+    if (target.length < 4 || Math.abs(target.length - comparable.length) > 3) continue;
+    const distance = editDistance(comparable, target);
+    const score = 1 - distance / Math.max(comparable.length, target.length);
+    if (score > bestScore) { bestScore = score; best = candidate; }
+  }
+  return bestScore >= 0.84 ? best : '';
 }
 
 function explicitIfoodId(line: string) {
@@ -916,8 +940,7 @@ export function parseIfoodOrdersText(
         index,
         ifoodId:
           header?.ifoodId ||
-          explicitIfoodId(line) ||
-          safeEightDigitCandidate(line),
+          explicitIfoodId(line),
       };
     })
     .filter((item) => Boolean(item.ifoodId))

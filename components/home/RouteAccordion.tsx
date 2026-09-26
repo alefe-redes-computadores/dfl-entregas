@@ -3,7 +3,7 @@
 import { PreRouteIntelligence } from '@/components/home/PreRouteIntelligence';
 import { RouteSequenceAdvisor } from '@/components/home/RouteSequenceAdvisor';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -73,6 +73,8 @@ interface RouteAccordionProps {
 export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [showRouteTools, setShowRouteTools] = useState(false);
+  const routeUiKey = 'dfl-route-last-open-v2';
   const [fuzzyModalOpen, setFuzzyModalOpen] = useState(false);
   const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
   const [isCopyMenuOpen, setIsCopyMenuOpen] = useState(false);
@@ -135,6 +137,29 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const isNotStarted = route.status === 'aberta' && !startedAt;
   const isInProgress = route.status === 'aberta' && !!startedAt;
   const isCompleted = route.status === 'fechada';
+
+  useEffect(() => {
+    if (isVirtualRoute || typeof window === 'undefined') return;
+    const remembered = localStorage.getItem(routeUiKey);
+    const rememberedExists = remembered && allRoutes.some((item) => item.id === remembered && item.status !== 'fechada');
+    const assembling = allRoutes.filter((item) => item.status === 'aberta' && !routeStartedAt(item));
+    const running = allRoutes.filter((item) => item.status === 'aberta' && Boolean(routeStartedAt(item)));
+    const preferred = rememberedExists
+      ? remembered
+      : assembling[0]?.id || running[0]?.id || null;
+    setIsOpen(defaultOpen || preferred === route.id);
+  }, [allRoutes, defaultOpen, isVirtualRoute, route.id]);
+
+  const toggleRouteOpen = () => {
+    setIsOpen((previous) => {
+      const next = !previous;
+      if (!next) setShowRouteTools(false);
+      if (typeof window !== 'undefined' && next && !isVirtualRoute) {
+        localStorage.setItem(routeUiKey, route.id);
+      }
+      return next;
+    });
+  };
 
   const motoboyObj = motoboys.find((m) => m.name === route.motoboy_name);
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
@@ -644,13 +669,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   return (
-    <div className={clsx("overflow-hidden rounded-[24px] border transition-all duration-200 relative", isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : isInProgress ? "bg-sky-900/10 border-sky-500/30" : "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]")}>
+    <div className={clsx("overflow-hidden rounded-[20px] border transition-all duration-200 relative", isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : isInProgress ? "bg-sky-900/10 border-sky-500/30" : "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]")}>
       {totalDeliveries > 0 && !isCompleted && (
         <div className="absolute top-0 left-0 h-1 bg-zinc-800 w-full">
           <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
         </div>
       )}
-      <button onClick={() => setIsOpen((prev) => !prev)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-3.5 pt-4 text-left active:scale-[0.99] transition-transform">
+      <button onClick={toggleRouteOpen} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-3 pt-3.5 text-left active:scale-[0.99] transition-transform">
         <div className="flex min-w-0 items-center gap-3">
           <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl transition-colors shrink-0', isNotStarted ? 'bg-zinc-800 text-zinc-400' : isInProgress ? 'bg-sky-500/20 text-sky-400' : 'bg-emerald-500/20 text-emerald-500')}>
             <Bike size={22} />
@@ -807,8 +832,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                       <Sparkles size={18} />
                     </span>
                     <div>
-                      <p className="text-xs font-black text-zinc-100">Organizar rota</p>
-                      <p className="mt-0.5 text-[10px] text-zinc-500">Paradas físicas · urgentes primeiro · GPS ou loja</p>
+                      <p className="text-xs font-black text-zinc-100">Otimizar sequência</p>
+                      <p className="mt-0.5 text-[10px] text-zinc-500">Sugere a melhor sequência sem alterar suas travas manuais</p>
                     </div>
                   </div>
                   <ArrowRight size={16} className="text-violet-300" />

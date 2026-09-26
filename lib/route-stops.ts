@@ -92,20 +92,13 @@ export function groupDeliveriesByStop(
   }
 
   const result = [...groups.values()];
-  // Urgência atua somente na fila automática. Uma parada que já recebeu
-  // ordem manual continua exatamente onde o operador a colocou.
-  if (result.some((group) =>
-    group.deliveries.some((delivery) => delivery.order_source === 'manual'),
-  )) return result;
-  const automatic = result.filter((group) =>
-    group.deliveries.every((delivery) => delivery.order_source !== 'manual'),
-  );
-  const urgentKeys = new Set(automatic.filter((group) => group.urgent).map((group) => group.key));
-  if (!urgentKeys.size) return result;
-
-  const urgent = result.filter((group) => urgentKeys.has(group.key));
-  const remaining = result.filter((group) => !urgentKeys.has(group.key));
-  return [...urgent, ...remaining];
+  // Regra operacional V4: urgência é soberana. Ordem manual continua
+  // preservada DENTRO dos blocos urgente/normal, mas nunca deixa uma
+  // entrega urgente escondida no meio/fim da rota.
+  const urgent = result.filter((group) => group.urgent);
+  if (!urgent.length) return result;
+  const normal = result.filter((group) => !group.urgent);
+  return [...urgent, ...normal];
 }
 
 export function expandStopOrder(
