@@ -4,6 +4,7 @@
 import { AlertTriangle, CheckCircle2, Wallet, X } from 'lucide-react';
 import type { Customer, Delivery, Route } from '@/types';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
+import { routeCashFlow } from '@/lib/route-cash-flow';
 
 type Props = {
   route: Route;
@@ -50,9 +51,10 @@ export function RouteDepartureChecklist({
   const warnings = checklist.filter(
     (item) => item.missingAddress || item.missingConfirmation,
   );
-  const requiredChange = change.reduce((sum, item) => sum + item.change, 0);
-  const routeCash = Math.max(0, Number(route.change_money || 0));
-  const routeCashShortage = Math.max(0, requiredChange - routeCash);
+  const cashFlow = routeCashFlow(deliveries, route.change_money);
+  const requiredChange = cashFlow.requiredChange;
+  const routeCash = cashFlow.initialCash;
+  const routeCashShortage = cashFlow.plannedPixChange;
 
   return (
     <div
@@ -125,8 +127,13 @@ export function RouteDepartureChecklist({
         {(change.length > 0 || routeCash > 0) && (
           <section className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/[.06] p-4">
             <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-400">Caixa da rota</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Necessidade dos pedidos é referência; “na bag” é o dinheiro físico realmente separado.</p></div><Wallet size={17} className="shrink-0 text-amber-400" /></div>
-            <div className="mt-3 grid grid-cols-2 gap-2"><div className="rounded-xl bg-zinc-950/50 p-3"><p className="text-[9px] font-bold uppercase text-zinc-600">Necessidade</p><p className="mt-1 text-sm font-black text-zinc-200">{isPrivacyMode ? 'R$ •••••' : `R$ ${requiredChange.toFixed(2).replace('.', ',')}`}</p></div><div className="rounded-xl bg-zinc-950/50 p-3"><p className="text-[9px] font-bold uppercase text-zinc-600">Na bag</p><p className="mt-1 text-sm font-black text-amber-300">{isPrivacyMode ? 'R$ •••••' : `R$ ${routeCash.toFixed(2).replace('.', ',')}`}</p></div></div>
-            {routeCashShortage > 0 && <div className="mt-3 flex gap-2 rounded-xl border border-red-500/20 bg-red-500/[.06] p-3"><AlertTriangle size={15} className="shrink-0 text-red-400"/><p className="text-[10px] text-red-300">Troco inicial {isPrivacyMode ? 'abaixo da necessidade calculada' : `R$ ${routeCashShortage.toFixed(2).replace('.', ',')} abaixo da necessidade calculada`}. Confirme o valor físico antes da saída.</p></div>}
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="rounded-xl bg-zinc-950/50 p-3"><p className="text-[9px] font-bold uppercase text-zinc-600">Troco pedido</p><p className="mt-1 text-sm font-black text-zinc-200">{isPrivacyMode ? 'R$ •••••' : `R$ ${requiredChange.toFixed(2).replace('.', ',')}`}</p></div>
+              <div className="rounded-xl bg-zinc-950/50 p-3"><p className="text-[9px] font-bold uppercase text-zinc-600">Dinheiro</p><p className="mt-1 text-sm font-black text-amber-300">{isPrivacyMode ? 'R$ •••••' : `R$ ${cashFlow.plannedCashChange.toFixed(2).replace('.', ',')}`}</p></div>
+              <div className="rounded-xl bg-zinc-950/50 p-3"><p className="text-[9px] font-bold uppercase text-zinc-600">Pix previsto</p><p className="mt-1 text-sm font-black text-emerald-300">{isPrivacyMode ? 'R$ •••••' : `R$ ${cashFlow.plannedPixChange.toFixed(2).replace('.', ',')}`}</p></div>
+            </div>
+            {routeCashShortage > 0 && <div className="mt-3 flex gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[.06] p-3"><AlertTriangle size={15} className="shrink-0 text-emerald-400"/><p className="text-[10px] text-emerald-300">Faltam {isPrivacyMode ? 'parte do troco em espécie' : `R$ ${routeCashShortage.toFixed(2).replace('.', ',')} em espécie`}. Planejamento: devolver essa parte via Pix. Ajuste o troco inicial se quiser levar mais dinheiro.</p></div>}
+            {cashFlow.expectedPhysicalReturn > 0 && <p className="mt-3 text-[10px] text-zinc-500">Retorno físico previsto para o caixa: <strong className="text-zinc-300">{isPrivacyMode?'R$ •••••':`R$ ${cashFlow.expectedPhysicalReturn.toFixed(2).replace('.', ',')}`}</strong>. É previsão de saída; o fechamento continua sendo o realizado.</p>}
             {change.length > 0 && <p className="mt-4 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">Pedidos que pedem troco</p>}
             <div className="mt-3 space-y-2">
               {change.map((item) => (

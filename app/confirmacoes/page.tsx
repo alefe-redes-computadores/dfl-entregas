@@ -116,6 +116,8 @@ export default function ConfirmacoesPage() {
   const deleteIfoodPendingConfirmation = useAppStore(
     (state) => state.deleteIfoodPendingConfirmation,
   );
+  const updateDelivery = useAppStore((state) => state.updateDelivery);
+  const updateCustomer = useAppStore((state) => state.updateCustomer);
 
   const [filter, setFilter] = useState<QueueFilter>('all');
   const [query, setQuery] = useState('');
@@ -295,25 +297,19 @@ export default function ConfirmacoesPage() {
         .filter((item) => (item.status || 'pending') === 'pending')
         .filter((item) => !requestedRouteId || item.route_id === requestedRouteId)
         .sort((a, b) => {
+          const deliveryA = a.delivery_id ? deliveries.find((delivery) => delivery.id === a.delivery_id) : undefined;
+          const deliveryB = b.delivery_id ? deliveries.find((delivery) => delivery.id === b.delivery_id) : undefined;
+          const completedA = new Date(deliveryA?.completed_at || a.created_at).getTime();
+          const completedB = new Date(deliveryB?.completed_at || b.created_at).getTime();
+          if (completedA !== completedB) return completedA - completedB;
+
           const contextA = manualOperationalContext(a);
           const contextB = manualOperationalContext(b);
+          if (contextA.rank !== contextB.rank) return contextA.rank - contextB.rank;
 
-          if (contextA.rank !== contextB.rank) {
-            return contextA.rank - contextB.rank;
-          }
-
-          const routeCompare = contextA.routeName.localeCompare(
-            contextB.routeName,
-            'pt-BR',
-          );
-          if (routeCompare !== 0) return routeCompare;
-
-          return (
-            new Date(b.updated_at || b.created_at).getTime() -
-            new Date(a.updated_at || a.created_at).getTime()
-          );
+          return contextA.routeName.localeCompare(contextB.routeName, 'pt-BR');
         }),
-    [ifoodPendingConfirmations, requestedRouteId, routes],
+    [deliveries, ifoodPendingConfirmations, requestedRouteId, routes],
   );
 
   const pendingOperationalCounts = useMemo(() => {
@@ -344,16 +340,59 @@ export default function ConfirmacoesPage() {
       ? pendingManualConfirmations
       : resolvedManualConfirmations;
 
+  const CODE_REVIEW_MARKER='[iFood] Último código informado não funcionou. Conferir novamente com o cliente.';
+
   const markManualResolved = async (item: IfoodPendingConfirmation) => {
     try {
       await vibrate(ImpactStyle.Medium);
+      const delivery=item.delivery_id?deliveries.find((current)=>current.id===item.delivery_id):undefined;
+      const customer=delivery?.customer_id?customers.find((current)=>current.id===delivery.customer_id):undefined;
+      const code=(item.confirmation_code||delivery?.confirmation_code||'').replace(/\D/g,'').slice(0,4);
+      if(customer&&code.length===4){
+        const cleanObservation=(customer.observation||'').replace(CODE_REVIEW_MARKER,'').replace(/\s{2,}/g,' ').trim();
+        await updateCustomer(customer.id,{
+          last_confirmation_code:code,
+          observation:cleanObservation||undefined,
+        });
+      }
       await updateIfoodPendingConfirmation(item.id, {
         status: 'resolved',
         resolved_at: new Date().toISOString(),
+        note:'Confirmado externamente no iFood.',
       });
-      toast.success('Pedido marcado como confirmado no iFood.');
+      toast.success('Confirmado no iFood.',{description:code.length===4?'Código validado e mantido como referência do cliente.':undefined});
     } catch {
       toast.error('Não foi possível concluir a pendência.');
+    }
+  };
+
+  const markInvalidCode = async (item:IfoodPendingConfirmation) => {
+    try{
+      await vibrate(ImpactStyle.Medium);
+      const delivery=item.delivery_id?deliveries.find((current)=>current.id===item.delivery_id):undefined;
+      const customer=delivery?.customer_id?customers.find((current)=>current.id===delivery.customer_id):undefined;
+      if(delivery?.confirmation_code){
+        await updateDelivery(delivery.id,{confirmation_code:undefined});
+      }
+      if(customer){
+        const current=(customer.observation||'').trim();
+        const observation=current.includes(CODE_REVIEW_MARKER)
+          ? current
+          : [current,CODE_REVIEW_MARKER].filter(Boolean).join(' · ');
+        await updateCustomer(customer.id,{
+          last_confirmation_code:undefined,
+          observation,
+        });
+      }
+      await updateIfoodPendingConfirmation(item.id,{
+        status:'resolved',
+        resolved_at:new Date().toISOString(),
+        confirmation_code:undefined,
+        note:'Código informado não funcionou; entrega mantida concluída e código marcado para revisão.',
+      });
+      toast.warning('Código marcado como inválido.',{description:'A entrega continua concluída. Na próxima vez o app pedirá para conferir o código com o cliente.'});
+    }catch{
+      toast.error('Não foi possível registrar o código inválido.');
     }
   };
 
@@ -794,6 +833,29 @@ export default function ConfirmacoesPage() {
             </div>
           )}
 
+          {manualView === 'pending' && visibleManualConfirmations.filter((item) => {
+            const id=(item.ifood_id||'').replace(/\D/g,'');
+            const code=(item.confirmation_code||'').replace(/\D/g,'');
+            return id.length===8&&code.length===4;
+          }).length > 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                const first=visibleManualConfirmations.find((item)=>{
+                  const id=(item.ifood_id||'').replace(/\D/g,'').slice(0,8);
+                  const code=(item.confirmation_code||'').replace(/\D/g,'').slice(0,4);
+                  return id.length===8&&code.length===4;
+                });
+                if(!first)return;
+                router.replace(`/confirmar?orderId=${encodeURIComponent((first.ifood_id||'').replace(/\D/g,'').slice(0,8))}&code=${encodeURIComponent((first.confirmation_code||'').replace(/\D/g,'').slice(0,4))}&pendingId=${encodeURIComponent(first.id)}&returnTo=${encodeURIComponent(confirmationReturn)}`);
+              }}
+              className="mb-3 flex h-12 w-full items-center justify-between rounded-2xl border border-sky-500/25 bg-sky-500/[.08] px-4 text-left active:scale-[.99]"
+            >
+              <span><span className="block text-[10px] font-black uppercase tracking-[.14em] text-sky-400">Modo sequencial</span><span className="mt-0.5 block text-[11px] font-bold text-zinc-300">Confirmar pendências prontas sem voltar à lista</span></span>
+              <ChevronRight size={17} className="text-sky-400"/>
+            </button>
+          )}
+
           {visibleManualConfirmations.length === 0 ? (
             <div className="rounded-[24px] border border-dashed border-zinc-800 px-5 py-9 text-center">
               {manualView === 'pending' ? (
@@ -909,7 +971,7 @@ export default function ConfirmacoesPage() {
                   </div>
 
                   {!resolved ? (
-                    <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+                    <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-2">
                       <button
                         onClick={() =>
                           router.replace(
@@ -930,6 +992,16 @@ export default function ConfirmacoesPage() {
                       >
                         <ExternalLink size={15} />
                         {ready ? 'Confirmar no iFood' : 'Abrir portal'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => markInvalidCode(item)}
+                        className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-400 active:scale-95"
+                        aria-label="Código não funcionou"
+                        title="Código não funcionou"
+                      >
+                        <AlertTriangle size={17} />
                       </button>
 
                       <button

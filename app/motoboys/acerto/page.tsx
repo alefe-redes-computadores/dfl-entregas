@@ -39,7 +39,14 @@ function Content(){
 
   const sourceId=motoboy?`motoboy:${motoboy.id}:${date}`:'';
   const existing=operationalExpenses.find(item=>item.source_id===sourceId);
-  const data=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,adjustments,cashHandedOver):null,[adjustments,cashHandedOver,date,deliveries,motoboy,routes]);
+  const priorSettlement=useMemo(()=>motoboy?operationalExpenses
+    .filter(item=>item.motoboy_id===motoboy.id&&item.source_kind==='motoboy_settlement'&&operationalDateKey(item.occurred_at)<date)
+    .sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at))[0]:undefined,[date,motoboy,operationalExpenses]);
+  const priorCarry=useMemo(()=>({
+    storeCredit:Math.max(0,Number(priorSettlement?.settlement_store_credit)||0),
+    motoboyCredit:Math.max(0,Number(priorSettlement?.settlement_motoboy_credit)||0),
+  }),[priorSettlement]);
+  const data=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,adjustments,cashHandedOver,priorCarry):null,[adjustments,cashHandedOver,date,deliveries,motoboy,priorCarry,routes]);
   const days=useMemo(()=>{const first=new Date(month.getFullYear(),month.getMonth(),1);const start=new Date(first.getFullYear(),first.getMonth(),1-first.getDay());return Array.from({length:42},(_,index)=>{const day=new Date(start);day.setDate(start.getDate()+index);return day;});},[month]);
 
   if(!motoboy||!data)return <div><PageHeader title="Acerto indisponível" to="/motoboys"/></div>;
@@ -73,12 +80,22 @@ function Content(){
       `🏍️ *Entregador:* ${motoboy.name}`,
       `📅 *Data:* ${day}/${monthValue}/${year}`,
       '',
-      `📦 *${data.deliveries.length} entregas* · 🔁 *${data.completedRoutes} rotas*`,
+      `📦 *${data.physicalDeliveryCount} entregas*${data.orderCount!==data.physicalDeliveryCount?` · ${data.orderCount} pedidos`:''} · 🔁 *${data.completedRoutes} rotas*`,
       '',
       `💰 *DIÁRIA*`,
       data.fee.description,
       `*Acerto bruto: R$ ${money(data.fee.amount)}*`,
     ];
+    if(data.priorStoreCredit>0||data.priorMotoboyCredit>0){
+      const priorDate=priorSettlement?.occurred_at?new Date(priorSettlement.occurred_at).toLocaleDateString('pt-BR'):'acerto anterior';
+      lines.push(
+        '',
+        `🔄 *SALDO ANTERIOR · ${priorDate}*`,
+        data.priorStoreCredit>0
+          ? `↳ R$ ${money(data.priorStoreCredit)} da loja estava com ${motoboy.name}`
+          : `↳ A loja devia R$ ${money(data.priorMotoboyCredit)} a ${motoboy.name}`
+      );
+    }
     if(adjustments.length){
       lines.push(
         '',
@@ -128,7 +145,7 @@ function Content(){
         settlement_net_payable:data.liquidFee,
         settlement_cash_balance:data.balance,
         settlement_adjustments:adjustments,
-        settlement_delivery_count:data.deliveries.length,
+        settlement_delivery_count:data.physicalDeliveryCount,
         settlement_route_count:data.completedRoutes,
         settlement_cash_collected:data.cashCollected,
         settlement_cash_retained:data.retainedCash,
@@ -136,7 +153,7 @@ function Content(){
         settlement_motoboy_credit:data.motoboyCredit,
         settlement_direction:data.settlementDirection,
         settlement_cash_handed_over:cashHandedOver,
-        observation:`${data.deliveries.length} entregas · ${data.completedRoutes} rotas · custo bruto R$ ${money(data.fee.amount)} · abatimentos R$ ${money(data.totalVales)} · líquido do motoboy R$ ${money(data.liquidFee)} · caixa R$ ${money(data.balance)}`,
+        observation:`${data.physicalDeliveryCount} entregas físicas · ${data.orderCount} pedidos · ${data.completedRoutes} rotas · custo bruto R$ ${money(data.fee.amount)} · abatimentos R$ ${money(data.totalVales)} · líquido do motoboy R$ ${money(data.liquidFee)} · caixa R$ ${money(data.balance)}`,
         created_at:now,
         updated_at:now,
       });
@@ -158,7 +175,7 @@ function Content(){
     ctx.fillStyle='#10b981';ctx.fillRect(0,0,1080,16);ctx.globalAlpha=.16;ctx.beginPath();ctx.arc(960,70,290,0,Math.PI*2);ctx.fillStyle='#10b981';ctx.fill();ctx.globalAlpha=1;
     round(64,64,952,190,38,'rgba(24,24,27,.88)','#27332f');round(88,88,76,76,22,'#10b981');ctx.fillStyle='#052e22';ctx.font='900 29px Arial';ctx.textAlign='center';ctx.fillText('DFL',126,137);ctx.textAlign='left';
     ctx.fillStyle='#f4f4f5';ctx.font='900 45px Arial';ctx.fillText('ACERTO DO MOTOBOY',190,125);ctx.fillStyle='#a1a1aa';ctx.font='600 28px Arial';ctx.fillText(motoboy.name,190,170);ctx.fillStyle='#6ee7b7';ctx.font='700 25px Arial';ctx.fillText(fromKey(date).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}),190,210);
-    round(64,286,952,156,34,'rgba(14,165,233,.07)','#173947');const stat=(x:number,label:string,value:string)=>{ctx.fillStyle='#71717a';ctx.font='700 22px Arial';ctx.fillText(label.toUpperCase(),x,337);ctx.fillStyle='#f4f4f5';ctx.font='900 38px Arial';ctx.fillText(value,x,392);};stat(100,'Entregas',String(data.deliveries.length));stat(405,'Rotas',String(data.completedRoutes));stat(700,'Dinheiro recebido',`R$ ${money(data.cashCollected)}`);
+    round(64,286,952,156,34,'rgba(14,165,233,.07)','#173947');const stat=(x:number,label:string,value:string)=>{ctx.fillStyle='#71717a';ctx.font='700 22px Arial';ctx.fillText(label.toUpperCase(),x,337);ctx.fillStyle='#f4f4f5';ctx.font='900 38px Arial';ctx.fillText(value,x,392);};stat(100,'Entregas',String(data.physicalDeliveryCount));stat(405,'Rotas',String(data.completedRoutes));stat(700,'Dinheiro recebido',`R$ ${money(data.cashCollected)}`);
     round(64,474,952,430,34,'rgba(24,24,27,.9)','#27272a');ctx.fillStyle='#d4d4d8';ctx.font='900 25px Arial';ctx.fillText('RESUMO FINANCEIRO',100,526);
     let y=590;
     const row=(label:string,value:string,tone='#f4f4f5')=>{ctx.fillStyle='#8b8b94';ctx.font='600 27px Arial';ctx.fillText(label,100,y);ctx.fillStyle=tone;ctx.font='800 30px Arial';ctx.textAlign='right';ctx.fillText(value,980,y);ctx.textAlign='left';ctx.strokeStyle='#242429';ctx.beginPath();ctx.moveTo(100,y+25);ctx.lineTo(980,y+25);ctx.stroke();y+=72;};
@@ -191,7 +208,9 @@ function Content(){
 
     {existing&&<section className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.05] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-emerald-400">{typeof existing.settlement_gross_amount==='number'?'Acerto registrado':'Acerto registrado · legado'}</p><p className="mt-2 text-xl font-black text-emerald-300">R$ {money(existing.settlement_gross_amount ?? existing.amount)}</p><p className="mt-1 text-[10px] text-zinc-500">{typeof existing.settlement_gross_amount==='number'?'Custo operacional bruto do motoboy. O dinheiro recebido de clientes fica separado como liquidação de caixa.':'Valor originalmente registrado. Este acerto é anterior à separação entre custo bruto, abatimentos e caixa; o histórico não foi recalculado automaticamente.'}</p></section>}
 
-    <div className="grid grid-cols-2 gap-3"><Card icon={Package} label="Entregas concluídas" value={String(data.deliveries.length)} tone="sky"/><Card icon={Banknote} label="Dinheiro líquido" value={`R$ ${money(data.cashCollected)}`} tone="amber"/></div>
+    <div className="grid grid-cols-2 gap-3"><Card icon={Package} label={data.orderCount===data.physicalDeliveryCount?"Entregas concluídas":`${data.orderCount} pedidos`} value={String(data.physicalDeliveryCount)} tone="sky"/><Card icon={Banknote} label="Dinheiro líquido" value={`R$ ${money(data.cashCollected)}`} tone="amber"/></div>
+
+    {(data.priorStoreCredit>0||data.priorMotoboyCredit>0)&&<section className="rounded-[22px] border border-amber-500/20 bg-amber-500/[.055] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-amber-400">Saldo trazido do acerto anterior</p><p className="mt-2 text-lg font-black text-amber-200">R$ {money(data.priorStoreCredit||data.priorMotoboyCredit)}</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{data.priorStoreCredit>0?`${motoboy.name} estava com este valor da loja. Ele será compensado automaticamente hoje.`:`A loja devia este valor a ${motoboy.name}. Ele será somado automaticamente ao acerto de hoje.`}</p></section>}
 
     <section className="rounded-[24px] border border-sky-500/20 bg-sky-500/5 p-5"><p className="text-[10px] font-black uppercase tracking-wider text-sky-400">Prévia do acerto</p><div className="mt-4 space-y-3"><Line label="Acerto bruto" value={`R$ ${money(data.fee.amount)}`}/><p className="text-[10px] text-zinc-500">{data.fee.description}</p>{adjustments.map(item=><div key={item.id} className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-zinc-300">{item.description}</p><p className="text-[9px] text-zinc-600">{item.kind==='meal'?'Lanche':item.kind==='advance'?'Adiantamento':'Outro ajuste'}</p></div><span className="text-xs font-black text-red-400">- R$ {money(item.amount)}</span><button onClick={()=>setAdjustments(current=>current.filter(value=>value.id!==item.id))} className="grid h-8 w-8 place-items-center rounded-xl text-red-500"><Trash2 size={13}/></button></div>)}<div className="border-t border-sky-500/10 pt-3"><Line label="Total dos abatimentos" value={`- R$ ${money(data.totalVales)}`}/><Line label="Líquido do motoboy" value={`R$ ${money(data.liquidFee)}`} strong/></div></div></section>
 

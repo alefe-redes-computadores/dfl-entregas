@@ -325,7 +325,10 @@ export function customerIdentityEvidence(
       ) ||
       (
         sameAddress &&
-        similarity >= 0.65 &&
+        (
+          exactName ||
+          similarity >= 0.82
+        ) &&
         !phoneConflict
       ) ||
       (

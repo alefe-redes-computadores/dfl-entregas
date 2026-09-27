@@ -1,5 +1,6 @@
 // lib/motoboy-analytics.ts
 import type { Delivery, Motoboy, MotoboyPaymentRule, MotoboySettlementAdjustment, Route } from '@/types';
+import { groupDeliveriesByStop } from '@/lib/route-stops';
 
 export type ValeInput = MotoboySettlementAdjustment;
 export const normalizeName=(value?:string)=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLocaleLowerCase('pt-BR');
@@ -28,18 +29,50 @@ export function deliveryCashCollected(delivery:Delivery){
   return Math.max(0,Number(delivery.value)||0);
 }
 
-export function getMotoboyDayData(motoboy:Motoboy,date:string,routes:Route[],deliveries:Delivery[],vales:ValeInput[]=[],cashHandedOver=true){
+export function getMotoboyDayData(
+  motoboy:Motoboy,
+  date:string,
+  routes:Route[],
+  deliveries:Delivery[],
+  vales:ValeInput[]=[],
+  cashHandedOver=true,
+  carry:{storeCredit?:number;motoboyCredit?:number}={},
+){
   const dayRoutes=getMotoboyRoutes(motoboy,routes).filter(route=>{const value=routeOperationalDate(route);return value?operationalDateKey(value)===date:false;});
   const routeIds=new Set(dayRoutes.map(route=>route.id));
   const completedDeliveries=deliveries.filter(delivery=>routeIds.has(delivery.route_id)&&delivery.completed===true);
+  const completedStops=groupDeliveriesByStop(completedDeliveries);
+  const physicalDeliveryCount=completedStops.length;
+  const orderCount=completedDeliveries.length;
   const cashCollected=completedDeliveries.reduce((sum,delivery)=>sum+deliveryCashCollected(delivery),0);
-  const fee=calculateMotoboyFee(motoboy.payment_rule,completedDeliveries.length);
+  const fee=calculateMotoboyFee(motoboy.payment_rule,physicalDeliveryCount);
   const totalVales=vales.reduce((sum,vale)=>sum+vale.amount,0);
   const liquidFee=Math.max(0,fee.amount-totalVales);
   const retainedCash=cashHandedOver?0:cashCollected;
-  const difference=retainedCash-liquidFee;
+  const priorStoreCredit=Math.max(0,Number(carry.storeCredit)||0);
+  const priorMotoboyCredit=Math.max(0,Number(carry.motoboyCredit)||0);
+  const difference=retainedCash+priorStoreCredit-liquidFee-priorMotoboyCredit;
   const storeCredit=Math.max(0,difference);
   const motoboyCredit=Math.max(0,-difference);
-  const settlementDirection:'store_credit'|'motoboy_credit'|'settled'=cashHandedOver?'motoboy_credit':storeCredit>0?'store_credit':motoboyCredit>0?'motoboy_credit':'settled';
-  return {routes:dayRoutes,completedRoutes:dayRoutes.filter(route=>route.status==='fechada').length,deliveries:completedDeliveries,cashCollected,retainedCash,fee,totalVales,liquidFee,storeCredit,motoboyCredit,settlementDirection,mustReturn:storeCredit>0,balance:storeCredit||motoboyCredit};
+  const settlementDirection:'store_credit'|'motoboy_credit'|'settled'=storeCredit>0?'store_credit':motoboyCredit>0?'motoboy_credit':'settled';
+  return {
+    routes:dayRoutes,
+    completedRoutes:dayRoutes.filter(route=>route.status==='fechada').length,
+    deliveries:completedDeliveries,
+    completedStops,
+    physicalDeliveryCount,
+    orderCount,
+    cashCollected,
+    retainedCash,
+    fee,
+    totalVales,
+    liquidFee,
+    priorStoreCredit,
+    priorMotoboyCredit,
+    storeCredit,
+    motoboyCredit,
+    settlementDirection,
+    mustReturn:storeCredit>0,
+    balance:storeCredit||motoboyCredit,
+  };
 }

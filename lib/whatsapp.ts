@@ -5,6 +5,7 @@ import { routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { canonicalizeOperationalAddress, bestOperationalAddress, hasHouseNumber } from "@/lib/operational-address";
 import { deliveryStopKey, stopNumberMap, groupDeliveriesByStop } from '@/lib/route-stops';
+import { routeCashFlow } from '@/lib/route-cash-flow';
 
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -467,7 +468,20 @@ export async function generateRouteMessages(
       );
       const flags = `${needsCode ? ' · 🔑 código' : ''}${needsCashChange ? ' · 💵 troco' : ''}`;
 
-      msg2.push(`${getNumberEmoji(num)} *${neighborhood}*${streetLabel}${drinkInfo}${flags}${zapWarning}`);
+      if(groupedDeliveries.length>1){
+        msg2.push(`${getNumberEmoji(num)} *${neighborhood}*${streetLabel} · *${groupedDeliveries.length} pedidos / mesma parada*${zapWarning}`);
+        groupedDeliveries.forEach((candidate)=>{
+          const candidateCustomer=getCustomerById(candidate.customer_id);
+          const candidateName=candidateCustomer?.name||candidate.customer_name||'Cliente';
+          const shortId=candidate.order_id?`#${candidate.order_id}`:'#—';
+          const code=(candidate.confirmation_code||candidateCustomer?.last_confirmation_code||'').replace(/\D/g,'').slice(0,4);
+          const codeInfo=candidate.origin==='ifood'?(code?` · 🔑 ${code}`:' · 🔑 pedir código'):'';
+          const candidateDrinks=candidate.drinks?.trim()?` · 🥤 ${candidate.drinks.trim()}`:'';
+          msg2.push(`   ↳ ${candidateName} · ${shortId}${candidateDrinks}${codeInfo}`);
+        });
+      }else{
+        msg2.push(`${getNumberEmoji(num)} *${neighborhood}*${streetLabel}${drinkInfo}${flags}${zapWarning}`);
+      }
     });
 
     msg2.push(`──────────────`);
@@ -511,49 +525,73 @@ export async function generateRouteMessages(
       msg2.push(`──────────────`);
     }
 
-    // V42 — FLUXO FÍSICO DE DINHEIRO.
-    // change_for = quanto o cliente pretende entregar (dado do pedido).
-    // route.change_money = dinheiro físico que SAIU do caixa e foi para a bag.
-    // Portanto, o esperado fisicamente na volta é:
-    // troco que saiu do caixa + soma das vendas em dinheiro.
-    const pendingMoney = deliveries.filter(
-      d => !d.is_paid && d.payment_method === 'dinheiro'
-    );
-    const cashSalesTotal = pendingMoney.reduce(
-      (sum, d) => sum + deliveryCharge(d),
-      0,
-    );
-    const changeMoneyOut = Math.max(0, Number(route.change_money || 0));
-    const expectedCashInBag = changeMoneyOut + cashSalesTotal;
-    const cashGeneratedForStore = cashSalesTotal;
+    // V3C — MOTOR FÍSICO ÚNICO DA ROTA.
+    // Pedido 64, cliente entrega 100 e recebe 36:
+    // a bag volta com 100 quando os 36 saíram como troco inicial.
+    const cashFlow = routeCashFlow(deliveries, route.change_money);
+    const pendingMoney = cashFlow.cashOrders.map((item) => item.delivery);
 
-    if (changeMoneyOut > 0) {
-      msg2.push(`🪙 *TROCO (SAI DO CAIXA)*`);
-      const changeNeeds = pendingMoney.filter(
-        d => d.change_for && d.change_for > deliveryCharge(d)
-      );
-      changeNeeds.forEach((d) => {
-        const num = physicalStopNumbers.get(deliveryGroupKey(d)) || 1;
-        const customer = getCustomerById(d.customer_id);
-        const needed = Math.max(0, Number(d.change_for || 0) - deliveryCharge(d));
-        msg2.push(`• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · precisa R$ ${formatMoney(needed)}`);
-      });
-      msg2.push(`*Total de troco na bag:* \`R$ ${formatMoney(changeMoneyOut)}\``);
+    if (cashFlow.requiredChange > 0 || cashFlow.initialCash > 0) {
+      msg2.push(`🪙 *PLANO DE TROCO*`);
+      cashFlow.cashOrders
+        .filter((item) => item.requestedChange > 0)
+        .forEach((item) => {
+          const d = item.delivery;
+          const num = physicalStopNumbers.get(deliveryGroupKey(d)) || 1;
+          const customer = getCustomerById(d.customer_id);
+          msg2.push(
+            `• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · recebe R$ ${formatMoney(item.requestedChange)} de troco`
+          );
+        });
+
+      if (cashFlow.plannedCashChange > 0) {
+        msg2.push(`💵 Em dinheiro: *R$ ${formatMoney(cashFlow.plannedCashChange)}*`);
+      }
+      if (cashFlow.plannedPixChange > 0) {
+        msg2.push(`📱 Via Pix se faltar espécie: *R$ ${formatMoney(cashFlow.plannedPixChange)}*`);
+      }
+      if (cashFlow.unusedInitialCash > 0) {
+        msg2.push(`👜 Sobra do troco inicial na bag: R$ ${formatMoney(cashFlow.unusedInitialCash)}`);
+      }
       msg2.push(`──────────────`);
     }
 
-    if (pendingMoney.length > 0 || changeMoneyOut > 0) {
-      msg2.push(`💵 *DINHEIRO PRA ENTREGAR NO CAIXA*`);
-      pendingMoney.forEach((d) => {
+    if (pendingMoney.length > 0 || cashFlow.initialCash > 0) {
+      const singleSimple =
+        cashFlow.cashOrders.length === 1 &&
+        cashFlow.initialCash <= 0 &&
+        cashFlow.requiredChange <= 0;
+
+      msg2.push(
+        singleSimple
+          ? `💵 *DINHEIRO PRA ENTREGAR NO CAIXA*`
+          : `💵 *RETORNO FÍSICO PREVISTO · R$ ${formatMoney(cashFlow.expectedPhysicalReturn)}*`
+      );
+
+      cashFlow.cashOrders.forEach((item) => {
+        const d = item.delivery;
         const num = physicalStopNumbers.get(deliveryGroupKey(d)) || 1;
         const customer = getCustomerById(d.customer_id);
-        msg2.push(`• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · venda R$ ${formatMoney(deliveryCharge(d))}`);
+        if (item.requestedChange > 0) {
+          msg2.push(
+            `• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · entrega R$ ${formatMoney(item.tenderedCash)} · pedido R$ ${formatMoney(item.customerCharge)}`
+          );
+        } else {
+          msg2.push(
+            `• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · R$ ${formatMoney(item.customerCharge)}`
+          );
+        }
       });
-      if (changeMoneyOut > 0) {
-        msg2.push(`Troco inicial da bag: R$ ${formatMoney(changeMoneyOut)}`);
+
+      if (!singleSimple) {
+        if (cashFlow.initialCash > 0) {
+          msg2.push(`Troco inicial que saiu da loja: R$ ${formatMoney(cashFlow.initialCash)}`);
+        }
+        if (cashFlow.plannedPixChange > 0) {
+          msg2.push(`Pix previsto para completar troco: R$ ${formatMoney(cashFlow.plannedPixChange)}`);
+        }
+        msg2.push(`*Volta física prevista na bag:* \`R$ ${formatMoney(cashFlow.expectedPhysicalReturn)}\``);
       }
-      msg2.push(`*Esperado fisicamente na bag:* \`R$ ${formatMoney(expectedCashInBag)}\``);
-      msg2.push(`*Venda em dinheiro gerada para o caixa:* \`R$ ${formatMoney(cashGeneratedForStore)}\``);
       msg2.push(`──────────────`);
     }
 

@@ -120,10 +120,17 @@ export function findInboxDuplicate(
       existingOrder === orderId &&
       delivery.origin === 'ifood'
     ) {
-      return {
-        id: delivery.id,
-        reason: `Pedido #${orderId} já lançado`,
-      };
+      const incomingDay = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      const existingDate = delivery.created_at || delivery.createdAt || delivery.updated_at || '';
+      const existingDay = existingDate
+        ? new Intl.DateTimeFormat('en-CA', { timeZone:'America/Sao_Paulo', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date(existingDate))
+        : '';
+      if (existingDay === incomingDay) {
+        return {
+          id: delivery.id,
+          reason: `Pedido #${orderId} já lançado hoje`,
+        };
+      }
     }
   }
 

@@ -16,7 +16,7 @@ import { assessIfoodParseQuality } from '@/lib/ifood-parser-quality';
 import { loadInboxDay, markInboxDraft } from '@/lib/delivery-inbox';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
-import { sameCustomerAddress } from '@/lib/customer-identity';
+import { customerIdentityEvidence, sameCustomerAddress } from '@/lib/customer-identity';
 import {
   auditOperationalAddress,
   knownOperationalNeighborhoods,
@@ -117,14 +117,14 @@ const [routeId, setRouteId] = useState('');
     if (!query) return null;
     const selected = customers.find((customer) => customer.id === selectedCustomerId);
     if (selected) return { kind: 'existing' as const, customer: selected, count: 1 };
-    const matches = customers.filter((customer) => {
-      const name = normalizeIdentity(customer.name);
-      return name === query || (query.length >= 3 && (name.includes(query) || query.includes(name)));
-    });
-    if (matches.length === 1) return { kind: 'existing' as const, customer: matches[0], count: 1 };
-    if (matches.length > 1) return { kind: 'multiple' as const, count: matches.length };
+    const identityDetails = { address: streetAddress || undefined, phone: phone || undefined };
+    const reusable = customers.map((customer) => ({ customer, evidence: customerIdentityEvidence(customer, customerName, identityDetails) })).filter((item) => item.evidence.reusable).sort((a,b) => b.evidence.score - a.evidence.score);
+    if (reusable.length === 1) return { kind: 'existing' as const, customer: reusable[0].customer, count: 1 };
+    if (reusable.length > 1) return { kind: 'multiple' as const, count: reusable.length };
+    const sameAddressCandidates = customers.filter((customer) => Boolean(streetAddress && customer.address && sameCustomerAddress(customer.address, streetAddress)));
+    if (sameAddressCandidates.length) return { kind: 'same_address' as const, count: sameAddressCandidates.length };
     return { kind: 'new' as const, count: 0 };
-  }, [customerName, customers, selectedCustomerId]);
+  }, [customerName, customers, phone, selectedCustomerId, streetAddress]);
 
   useEffect(() => {
     if (!inboxDraftId || !inboxDay || inboxSeeded.current) return;
@@ -175,6 +175,15 @@ const [routeId, setRouteId] = useState('');
       routeId && openRoutes.some((route) => route.id === routeId);
 
     if (currentStillEligible) return;
+
+    if (typeof window !== 'undefined') {
+      const rememberedRouteId = localStorage.getItem('dfl-active-operational-route-v1');
+      const rememberedRoute = openRoutes.find((route) => route.id === rememberedRouteId);
+      if (rememberedRoute) {
+        setRouteId(rememberedRoute.id);
+        return;
+      }
+    }
 
     if (openRoutes.length === 1) {
       setRouteId(openRoutes[0].id);
@@ -601,7 +610,7 @@ const [routeId, setRouteId] = useState('');
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => { routeSelectionTouched.current = true; setRouteId(r.id); setIsRouteDropdownOpen(false); }}
+                  onClick={() => { routeSelectionTouched.current = true; setRouteId(r.id); if(typeof window!=='undefined')localStorage.setItem('dfl-active-operational-route-v1',r.id); setIsRouteDropdownOpen(false); }}
                   className="flex items-center justify-between px-4 py-4 text-left text-sm active:bg-zinc-800 border-b border-zinc-800/50 last:border-0"
                 >
                   <span className={`font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>
@@ -689,12 +698,14 @@ const [routeId, setRouteId] = useState('');
             customers={customers}
           />
           {customerIdentity && (
-            <div className={`rounded-xl border px-3 py-2 text-[10px] font-bold ${customerIdentity.kind === 'existing' ? 'border-emerald-500/25 bg-emerald-500/[.07] text-emerald-300' : customerIdentity.kind === 'multiple' ? 'border-amber-500/25 bg-amber-500/[.07] text-amber-300' : 'border-violet-500/25 bg-violet-500/[.07] text-violet-300'}`}>
+            <div className={`rounded-xl border px-3 py-2 text-[10px] font-bold ${customerIdentity.kind === 'existing' ? 'border-emerald-500/25 bg-emerald-500/[.07] text-emerald-300' : customerIdentity.kind === 'multiple' || customerIdentity.kind === 'same_address' ? 'border-amber-500/25 bg-amber-500/[.07] text-amber-300' : 'border-violet-500/25 bg-violet-500/[.07] text-violet-300'}`}>
               {customerIdentity.kind === 'existing'
-                ? `Cliente encontrado: ${customerIdentity.customer?.name}. O cadastro existente será reutilizado sem duplicação.`
+                ? `Cliente encontrado: ${customerIdentity.customer?.name}. Nome e identidade são compatíveis; o cadastro será reutilizado.`
                 : customerIdentity.kind === 'multiple'
-                  ? `${customerIdentity.count} clientes parecidos encontrados. Escolha um na lista para evitar duplicação.`
-                  : 'Cliente novo: será cadastrado com os dados deste pedido.'}
+                  ? `${customerIdentity.count} clientes compatíveis encontrados. Escolha um para evitar associação errada.`
+                  : customerIdentity.kind === 'same_address'
+                    ? `${customerIdentity.count} cliente(s) já usam este endereço, mas o nome não confere. Será mantido como pessoa diferente até você selecionar alguém manualmente.`
+                    : 'Cliente novo: será cadastrado com os dados deste pedido.'}
             </div>
           )}
 

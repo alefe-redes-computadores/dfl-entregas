@@ -7,6 +7,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   Copy,
+  AlertTriangle,
+  ChevronRight,
   ExternalLink,
   ShieldCheck,
 } from 'lucide-react';
@@ -44,6 +46,10 @@ function ConfirmarContent() {
   const updatePendingConfirmation = useAppStore(
     (state) => state.updateIfoodPendingConfirmation,
   );
+  const updateDelivery = useAppStore((state) => state.updateDelivery);
+  const updateCustomer = useAppStore((state) => state.updateCustomer);
+  const deliveries = useAppStore((state) => state.deliveries);
+  const customers = useAppStore((state) => state.customers);
 
   const pendingConfirmations = useAppStore(
     (state) => state.ifoodPendingConfirmations,
@@ -100,6 +106,43 @@ function ConfirmarContent() {
     router.replace(returnTo);
   };
 
+  const CODE_REVIEW_MARKER =
+    '[iFood] Último código informado não funcionou. Conferir novamente com o cliente.';
+
+  const readyPending = (excludeId = '') => {
+    const current = pendingConfirmations.find((item) => item.id === pendingId);
+    return pendingConfirmations
+      .filter((item) => {
+        if (item.id === excludeId || (item.status || 'pending') !== 'pending') return false;
+        if (current?.route_id && item.route_id !== current.route_id) return false;
+        const id = (item.ifood_id || '').replace(/\D/g, '').slice(0, 8);
+        const itemCode = (item.confirmation_code || '').replace(/\D/g, '').slice(0, 4);
+        return id.length === 8 && itemCode.length === 4;
+      })
+      .sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  };
+
+  const goNextOrLeave = (resolvedId: string, message: string) => {
+    const next = readyPending(resolvedId)[0];
+    if (!next) {
+      toast.success(message);
+      router.replace(returnTo);
+      return;
+    }
+
+    const nextId = (next.ifood_id || '').replace(/\D/g, '').slice(0, 8);
+    const nextCode = (next.confirmation_code || '').replace(/\D/g, '').slice(0, 4);
+    const remaining = readyPending(resolvedId).length;
+
+    toast.success(message, {
+      description: `${remaining} confirmação${remaining === 1 ? '' : 'ões'} pronta${remaining === 1 ? '' : 's'} na sequência.`,
+    });
+
+    router.replace(
+      `/confirmar?orderId=${encodeURIComponent(nextId)}&code=${encodeURIComponent(nextCode)}&pendingId=${encodeURIComponent(next.id)}&returnTo=${encodeURIComponent(returnTo)}`,
+    );
+  };
+
   const confirmExternalAndLeave = async () => {
     if (!pendingId) {
       await leaveConfirmation();
@@ -108,82 +151,80 @@ function ConfirmarContent() {
 
     try {
       await vibrate(ImpactStyle.Medium);
+      const currentPending = pendingConfirmations.find((item) => item.id === pendingId);
+      const delivery = currentPending?.delivery_id
+        ? deliveries.find((item) => item.id === currentPending.delivery_id)
+        : undefined;
+      const customer = delivery?.customer_id
+        ? customers.find((item) => item.id === delivery.customer_id)
+        : undefined;
+      const validCode = (currentPending?.confirmation_code || code).replace(/\D/g, '').slice(0,4);
 
-      const currentPending = pendingConfirmations.find(
-        (item) => item.id === pendingId,
-      );
+      if (customer && validCode.length === 4) {
+        const cleanObservation = (customer.observation || '')
+          .replace(CODE_REVIEW_MARKER, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        await updateCustomer(customer.id, {
+          last_confirmation_code: validCode,
+          observation: cleanObservation || undefined,
+        });
+      }
 
       await updatePendingConfirmation(pendingId, {
         status: 'resolved',
         resolved_at: new Date().toISOString(),
+        note: 'Confirmado externamente no iFood.',
       });
 
-      const latest =
-        useAppStore.getState().ifoodPendingConfirmations;
+      goNextOrLeave(pendingId, 'Confirmado no iFood. Próximo pedido preparado.');
+    } catch {
+      toast.error('Não foi possível concluir a pendência.');
+    }
+  };
 
-      const nextReady =
-        currentPending?.route_id
-          ? latest.find((item) => {
-              if (item.id === pendingId) return false;
+  const invalidCodeAndContinue = async () => {
+    if (!pendingId) {
+      toast.error('Esta confirmação não está vinculada a uma pendência.');
+      return;
+    }
 
-              if ((item.status || 'pending') !== 'pending') {
-                return false;
-              }
+    try {
+      await vibrate(ImpactStyle.Heavy);
+      const currentPending = pendingConfirmations.find((item) => item.id === pendingId);
+      const delivery = currentPending?.delivery_id
+        ? deliveries.find((item) => item.id === currentPending.delivery_id)
+        : undefined;
+      const customer = delivery?.customer_id
+        ? customers.find((item) => item.id === delivery.customer_id)
+        : undefined;
 
-              if (item.route_id !== currentPending.route_id) {
-                return false;
-              }
-
-              const nextId = (item.ifood_id || '')
-                .replace(/\D/g, '')
-                .slice(0, 8);
-
-              const nextCode = (item.confirmation_code || '')
-                .replace(/\D/g, '')
-                .slice(0, 4);
-
-              return (
-                nextId.length === 8 &&
-                nextCode.length === 4
-              );
-            })
-          : undefined;
-
-      if (nextReady) {
-        const nextId = (nextReady.ifood_id || '')
-          .replace(/\D/g, '')
-          .slice(0, 8);
-
-        const nextCode = (nextReady.confirmation_code || '')
-          .replace(/\D/g, '')
-          .slice(0, 4);
-
-        toast.success(
-          'Confirmado. Próximo pedido carregado.',
-        );
-
-        router.replace(
-          `/confirmar?orderId=${encodeURIComponent(
-            nextId,
-          )}&code=${encodeURIComponent(
-            nextCode,
-          )}&pendingId=${encodeURIComponent(
-            nextReady.id,
-          )}&returnTo=${encodeURIComponent(returnTo)}`,
-        );
-
-        return;
+      if (delivery?.confirmation_code) {
+        await updateDelivery(delivery.id, { confirmation_code: undefined });
       }
 
-      toast.success(
-        'Pedido marcado como confirmado no iFood.',
-      );
+      if (customer) {
+        const currentObservation = (customer.observation || '').trim();
+        const observation = currentObservation.includes(CODE_REVIEW_MARKER)
+          ? currentObservation
+          : [currentObservation, CODE_REVIEW_MARKER].filter(Boolean).join(' · ');
 
-      router.replace(returnTo);
+        await updateCustomer(customer.id, {
+          last_confirmation_code: undefined,
+          observation,
+        });
+      }
+
+      await updatePendingConfirmation(pendingId, {
+        status: 'resolved',
+        resolved_at: new Date().toISOString(),
+        confirmation_code: undefined,
+        note: 'Código não funcionou no portal; conferir novamente com o cliente na próxima entrega.',
+      });
+
+      goNextOrLeave(pendingId, 'Código inválido registrado. Próximo pedido preparado.');
     } catch {
-      toast.error(
-        'Não foi possível concluir a pendência.',
-      );
+      toast.error('Não foi possível registrar o código inválido.');
     }
   };
 
@@ -280,14 +321,34 @@ function ConfirmarContent() {
       <div className="relative flex-1 bg-white">
         {pendingId && (
         <div className="border-b border-zinc-800 bg-zinc-950 px-4 py-3">
-          <button
-            type="button"
-            onClick={confirmExternalAndLeave}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-xs font-black text-zinc-950 active:scale-[0.98]"
-          >
-            <CheckCircle2 size={15} />
-            Já confirmei no iFood
-          </button>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[9px] font-black uppercase tracking-[.14em] text-zinc-500">Resultado no portal</p>
+            {readyPending(pendingId).length > 0 && (
+              <span className="flex items-center gap-1 text-[9px] font-black text-sky-400">
+                +{readyPending(pendingId).length} na sequência <ChevronRight size={11}/>
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <button
+              type="button"
+              onClick={confirmExternalAndLeave}
+              className="flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 text-xs font-black text-zinc-950 active:scale-[0.98]"
+            >
+              <CheckCircle2 size={15} />
+              Funcionou · próximo
+            </button>
+            <button
+              type="button"
+              onClick={invalidCodeAndContinue}
+              className="flex h-11 items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-[10px] font-black text-amber-300 active:scale-[0.98]"
+              title="Código não funcionou"
+              aria-label="Código não funcionou"
+            >
+              <AlertTriangle size={15}/>
+              Código errado
+            </button>
+          </div>
         </div>
       )}
 

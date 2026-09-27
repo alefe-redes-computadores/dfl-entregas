@@ -156,6 +156,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       if (!next) setShowRouteTools(false);
       if (typeof window !== 'undefined' && next && !isVirtualRoute) {
         localStorage.setItem(routeUiKey, route.id);
+        localStorage.setItem('dfl-active-operational-route-v1', route.id);
       }
       return next;
     });

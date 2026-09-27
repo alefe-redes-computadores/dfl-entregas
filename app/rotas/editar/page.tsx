@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Bike, User, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
+import { normalizeMoneyDraft, parseMoneyDraft } from '@/lib/route-cash-flow';
 
 export default function EditRoutePage() {
   const router = useRouter();
@@ -28,10 +29,6 @@ export default function EditRoutePage() {
   const [change, setChange] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const parseRouteCash = (raw: string) => {
-    const value = Number(raw.trim().replace(/\s/g, '').replace(',', '.') || 0);
-    return Number.isFinite(value) && value > 0 ? value : 0;
-  };
 
   useEffect(() => {
     if (!route) return;
@@ -79,7 +76,7 @@ export default function EditRoutePage() {
         name: name.trim(),
         motoboy_id: motoboy.id,
         motoboy_name: motoboy.name,
-        change_money: parseRouteCash(change),
+        change_money: parseMoneyDraft(change),
       });
       toast.success('Rota atualizada.');
       router.replace(
@@ -183,7 +180,7 @@ export default function EditRoutePage() {
               inputMode="decimal"
               placeholder="0,00"
               value={change}
-              onChange={(event) => setChange(event.target.value.replace(/[^0-9,.]/g, ''))}
+              onChange={(event) => setChange(normalizeMoneyDraft(event.target.value))}
               aria-label="Dinheiro físico entregue ao motoboy na saída"
               className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-950/45 pl-12 pr-4 text-zinc-100 outline-none focus:border-emerald-500"
             />

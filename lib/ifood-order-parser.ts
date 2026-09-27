@@ -172,7 +172,7 @@ function explicitIfoodId(line: string) {
   if (POSTAL.test(line)) return '';
 
   const patterns = [
-    /\b(?:id\s*(?:ifood|do\s+ifood|do\s+pedido)?|ifood\s+id)\s*[:#-]?\s*(\d{8})\b/i,
+    /\b(?:id\s*(?:ifood|do\s+ifood|do\s+pedido)?|ifood(?:\s+id)?)\s*[:#-]?\s*(\d{8})\b/i,
     /\b(?:identificador)\s*[:#-]?\s*(\d{8})\b/i,
   ];
 
