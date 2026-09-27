@@ -58,16 +58,35 @@ function timeOf(data: DocumentData) {
 }
 
 async function candidateDocs(limit: number) {
-  const snapshots = await Promise.all(
-    ['pending', 'failed', 'processing'].map((status) =>
-      adminDb.collection(COLLECTION).where('status', '==', status).limit(Math.max(limit * 3, 30)).get(),
-    ),
-  );
+  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit || 20)));
+
+  // Pending e o caminho quente. Failed/processing permanecem como recovery
+  // limitado, sem restaurar tres scans minimos de 30 documentos por ciclo.
+  const [pending, failed, processing] = await Promise.all([
+    adminDb.collection(COLLECTION)
+      .where('status', '==', 'pending')
+      .limit(safeLimit)
+      .get(),
+    adminDb.collection(COLLECTION)
+      .where('status', '==', 'failed')
+      .limit(Math.max(2, Math.ceil(safeLimit / 4)))
+      .get(),
+    adminDb.collection(COLLECTION)
+      .where('status', '==', 'processing')
+      .limit(Math.max(2, Math.ceil(safeLimit / 4)))
+      .get(),
+  ]);
+
   const map = new Map<string, QueryDocumentSnapshot>();
-  for (const snapshot of snapshots) for (const doc of snapshot.docs) map.set(doc.id, doc);
+
+  for (const snapshot of [pending, failed, processing]) {
+    for (const doc of snapshot.docs) map.set(doc.id, doc);
+  }
+
   return [...map.values()].sort((a, b) => {
     const delta = timeOf(a.data()) - timeOf(b.data());
-    return delta || String(a.data().event_id || a.id).localeCompare(String(b.data().event_id || b.id));
+    return delta || String(a.data().event_id || a.id)
+      .localeCompare(String(b.data().event_id || b.id));
   });
 }
 

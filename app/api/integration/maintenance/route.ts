@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { DocumentData } from 'firebase-admin/firestore';
-import { adminAuth, adminDb } from '@/lib/integration/server/admin';
+import { adminDb } from '@/lib/integration/server/admin';
+import { adminAuth } from '@/lib/integration/server/adminAuth';
 import { reconcileReverseTrackingOutbox } from '@/lib/integration/server/reverseReconciler';
 
 export const runtime = 'nodejs';

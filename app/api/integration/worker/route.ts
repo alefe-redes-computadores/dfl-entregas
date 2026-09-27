@@ -76,7 +76,12 @@ async function run(req: NextRequest) {
   const mode = modeOf(req);
   if (!mode) return NextResponse.json({ ok: false, error: 'mode inválido; use auto, tracking, reports, reconcile ou drain.' }, { status: 400 });
 
-  const schedule = mode === 'auto' ? await claimAutomaticWork() : null;
+  const scheduleStage = mode === 'auto'
+    ? await stage('schedule', () => claimAutomaticWork())
+    : null;
+
+  const schedule = scheduleStage?.ok ? scheduleStage.value : null;
+
   let reconcileOptions: ReverseReconcileOptions | null = null;
   if (mode === 'tracking' || (mode === 'auto' && schedule?.tracking)) reconcileOptions = { tracking: true, recovery: false, analytics: false, activeLimit: 40 };
   if (mode === 'reports' || (mode === 'auto' && schedule?.reports)) reconcileOptions = { tracking: false, recovery: true, analytics: true, activeLimit: 40 };
@@ -89,14 +94,16 @@ async function run(req: NextRequest) {
   // no horário, eventos que já existem na outbox seguem sendo entregues.
   const relay = await stage('relay', () => drainReverseIntegrationOutbox());
 
+  const scheduleOk = scheduleStage === null || scheduleStage.ok;
   const reconciliationOk = reconciliation === null || reconciliation.ok;
-  const ok = reconciliationOk && relay.ok;
+  const ok = scheduleOk && reconciliationOk && relay.ok;
   const resourceExhausted =
+    (scheduleStage !== null && !scheduleStage.ok && scheduleStage.resourceExhausted) ||
     (reconciliation !== null && !reconciliation.ok && reconciliation.resourceExhausted) ||
     (!relay.ok && relay.resourceExhausted);
   console.log('[integration/reverse-worker]', { mode, ok, resourceExhausted, schedule, reconcileOptions });
   return NextResponse.json(
-    { ok, mode, resourceExhausted, schedule, reconcileOptions, reconciliation, relay },
+    { ok, mode, resourceExhausted, schedule, scheduleStage, reconcileOptions, reconciliation, relay },
     { status: ok ? 200 : resourceExhausted ? 429 : 207 },
   );
 }
