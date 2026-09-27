@@ -104,33 +104,33 @@ export function SiteAdminHub({
 
   return (
     <section
-      className={`dfl-v26-site overflow-hidden rounded-[24px] border bg-zinc-900/45 transition-colors ${
+      className={`dfl-v26-site overflow-hidden rounded-[20px] border transition-colors ${
         hasAttention
-          ? 'border-amber-400/25'
-          : 'border-zinc-800'
+          ? 'border-amber-400/25 bg-amber-400/[.045]'
+          : 'border-zinc-800/70 bg-zinc-900/25'
       }`}
     >
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-3 p-4 text-left active:scale-[.99]"
+        className="flex w-full items-center gap-3 px-3.5 py-3 text-left active:scale-[.99]"
       >
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-amber-400/10 text-amber-300">
-          <ShoppingBag size={20} />
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-400/[.08] text-amber-300">
+          <ShoppingBag size={17} />
         </span>
 
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            <strong className="truncate text-sm font-black text-zinc-100">
+            <strong className="truncate text-[13px] font-black text-zinc-100">
               Pedidos do Site
             </strong>
-            <span className="shrink-0 rounded-md bg-amber-400/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-amber-300">
+            <span className="shrink-0 rounded-md bg-zinc-800/70 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wide text-zinc-500">
               DFL Site
             </span>
           </span>
 
-          <span className="mt-1 block text-[11px] text-zinc-500">
+          <span className="mt-0.5 block text-[10px] text-zinc-500">
             {stats.total === 0
               ? 'Nenhum pedido recebido'
               : `${stats.active} ativo${stats.active === 1 ? '' : 's'} · ${stats.completed} concluído${stats.completed === 1 ? '' : 's'}`}

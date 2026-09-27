@@ -289,41 +289,41 @@ export default function LojaPage() {
   if (!isMounted || !hasHydrated) return null;
 
   return (
-    <div className="dfl-page flex flex-col gap-3.5 pb-32 animate-in fade-in duration-300 relative">
-      <PageHeader title="Minha Loja" subtitle="Central de operação da Da Família Lanches" to="/" />
+    <div className="dfl-page dfl-loja-v7 flex flex-col gap-4 pb-32 animate-in fade-in duration-300 relative">
+      <PageHeader title="Minha Loja" subtitle="Operação, logística e gestão em um só lugar" to="/" />
 
       <SiteAdminHub
         selectedDateOrders={dashboardData.selectedDateOrders}
         selectedDateLabel={dashboardData.formattedDateLabel}
       />
 
-      <section className={`rounded-[22px] border ${isStoreOpen ? 'border-emerald-500/25 bg-emerald-500/[.055]' : 'border-zinc-800 bg-zinc-900/55'}`}>
+      <section className={`overflow-hidden rounded-[24px] border shadow-[0_18px_45px_rgba(0,0,0,.14)] ${isStoreOpen ? 'border-emerald-500/25 bg-gradient-to-br from-emerald-500/[.09] via-zinc-900/55 to-zinc-950/60' : 'border-zinc-800 bg-gradient-to-br from-zinc-900/80 to-zinc-950/60'}`}>
         <button
           onClick={toggleStore}
-          className="flex w-full items-center gap-3 px-4 py-3 text-left active:scale-[0.99]"
+          className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left active:scale-[0.99]"
         >
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isStoreOpen ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-500'}`}>
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isStoreOpen ? 'bg-emerald-400 text-zinc-950 shadow-[0_0_24px_rgba(52,211,153,.16)]' : 'bg-zinc-800/90 text-zinc-500'}`}>
             <Power size={18} strokeWidth={2.5} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <p className={`truncate text-sm font-black ${isStoreOpen ? 'text-emerald-300' : 'text-zinc-200'}`}>
-                {isStoreOpen ? 'Loja aberta' : 'Loja fechada'}
+              <p className={`truncate text-[15px] font-black ${isStoreOpen ? 'text-emerald-300' : 'text-zinc-100'}`}>
+                {isStoreOpen ? (scheduledOpenNow ? 'Aberta no expediente' : 'Aberta manualmente') : 'Fechada agora'}
               </p>
               <span className={`h-2 w-2 shrink-0 rounded-full ${isStoreOpen ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
             </div>
-            <p className="mt-0.5 line-clamp-2 text-[10px] text-zinc-600">
+            <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">
               {isStoreOpen
                 ? scheduledOpenNow
-                  ? `${activeMotoboys.length} entregador${activeMotoboys.length === 1 ? '' : 'es'} ativo${activeMotoboys.length === 1 ? '' : 's'} · dentro do horário programado`
-                  : 'Aberta manualmente fora do horário · a automação reconciliará o estado'
+                  ? `Expediente programado · ${activeMotoboys.length} entregador${activeMotoboys.length === 1 ? '' : 'es'} ativo${activeMotoboys.length === 1 ? '' : 's'}`
+                  : 'Fora do expediente programado · fechamento automático continua protegido'
                 : scheduledOpenNow
-                  ? 'Horário programado ativo · sincronizando estado da operação'
-                  : 'Fora do horário programado · toque para uma abertura manual temporária'}
+                  ? 'Expediente programado ativo · a automação deve abrir a operação'
+                  : 'Fora do expediente · toque em Abrir agora somente se precisar operar'}
             </p>
           </div>
           <span className="shrink-0 text-[9px] font-black uppercase tracking-wide text-zinc-600">
-            {isStoreOpen ? 'Encerrar' : 'Abrir'}
+            {isStoreOpen ? 'Encerrar' : 'Abrir agora'}
           </span>
         </button>
       </section>
@@ -331,8 +331,8 @@ export default function LojaPage() {
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Agora</p>
-            <h2 className="font-heading text-base font-black text-zinc-100">Operação do dia</h2>
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400/80">Agora</p>
+            <h2 className="mt-0.5 font-heading text-[17px] font-black text-zinc-50">Operação do dia</h2>
           </div>
           <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] font-bold text-zinc-500">
             {dashboardData.formattedDateLabel}
@@ -346,9 +346,9 @@ export default function LojaPage() {
             }
             router.push('/loja/caixa-de-entrada');
           }}
-          className="group flex w-full items-center gap-3 rounded-[20px] border border-violet-500/20 bg-gradient-to-r from-violet-500/[.09] to-zinc-900/45 p-3 text-left active:scale-[.985]"
+          className="group flex w-full items-center gap-3 rounded-[20px] border border-violet-500/15 bg-violet-500/[.045] px-3.5 py-3 text-left active:scale-[.985]"
         >
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-violet-500/10 text-violet-300">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-violet-300">
             <Inbox size={19} />
           </div>
           <div className="min-w-0 flex-1">
@@ -356,8 +356,8 @@ export default function LojaPage() {
               <p className="font-heading text-[13px] font-black text-zinc-100">
                 Caixa de Entrada
               </p>
-              <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[8px] font-black uppercase text-violet-300">
-                Novo
+              <span className="rounded-full border border-violet-500/15 bg-violet-500/[.06] px-2 py-0.5 text-[8px] font-black uppercase text-violet-300">
+                Entrada rápida
               </span>
             </div>
             <p className="mt-0.5 text-[9px] leading-relaxed text-zinc-500">
@@ -367,72 +367,77 @@ export default function LojaPage() {
           <ChevronRight size={16} className="shrink-0 text-zinc-700" />
         </button>
 
-        <div className="grid grid-cols-2 gap-1.5">
-          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[20px] border border-amber-500/25 bg-gradient-to-br from-amber-500/[.11] via-amber-500/[.035] to-zinc-900/45 p-3 shadow-[0_14px_32px_rgba(0,0,0,.14)] text-left active:scale-[0.97]">
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative min-h-[118px] overflow-hidden rounded-[22px] border border-amber-500/20 bg-gradient-to-br from-amber-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
             </div>
             <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Entregas</p>
-            <p className="mt-0.5 min-h-[1.9rem] text-[9px] leading-[1.25] text-zinc-500">{dashboardData.totalEntregas} registradas no período</p>
+            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.totalEntregas} registradas no período</p>
           </button>
 
-          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative overflow-hidden rounded-[20px] border border-sky-500/25 bg-gradient-to-br from-sky-500/[.11] via-sky-500/[.035] to-zinc-900/45 p-3 shadow-[0_14px_32px_rgba(0,0,0,.14)] text-left active:scale-[0.97]">
+          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative min-h-[118px] overflow-hidden rounded-[22px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
             </div>
             <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Rotas</p>
-            <p className="mt-0.5 min-h-[1.9rem] text-[9px] leading-[1.25] text-zinc-500">{dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'} no período</p>
+            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'} no período</p>
           </button>
 
-          <button onClick={() => router.push('/equipe')} className="group rounded-[20px] border border-violet-500/15 bg-violet-500/[.035] p-2.5 text-left active:scale-[0.97]">
+          <div className="col-span-2 mt-1 flex items-center gap-2 px-1 pt-1">
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">Gestão</span>
+            <span className="h-px flex-1 bg-zinc-800/80" />
+          </div>
+
+          <button onClick={() => router.push('/equipe')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400"><Users size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
             <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Equipe</p>
-            <p className="mt-0.5 min-h-[1.9rem] text-[9px] leading-[1.25] text-zinc-500">Equipe interna e entregadores</p>
+            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Equipe interna e entregadores</p>
           </button>
 
-          <button onClick={() => router.push('/clientes')} className="group rounded-[20px] border border-zinc-800 bg-zinc-900/55 p-2.5 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/clientes')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400"><Users size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
             <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Clientes</p>
-            <p className="mt-0.5 min-h-[1.9rem] text-[9px] leading-[1.25] text-zinc-500">Base, endereços e histórico</p>
+            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Base, endereços e histórico</p>
           </button>
 
-          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[20px] border border-amber-500/20 bg-amber-500/[.045] p-2.5 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700" />
             </div>
             <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Compras</p>
-            <p className="mt-0.5 min-h-[1.9rem] text-[9px] leading-[1.25] text-zinc-500">Compras, fornecedores e conferência</p>
+            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Compras, fornecedores e conferência</p>
           </button>
-          <button onClick={() => router.push('/estoque')} className="group rounded-[20px] border border-emerald-500/20 bg-emerald-500/[.045] p-2.5 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/estoque')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400"><Boxes size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Estoque</p><p className="mt-0.5 min-h-[1.9rem] text-[9px] leading-[1.25] text-zinc-500">Saldos, contagens e movimentações</p>
+            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Estoque</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Saldos, contagens e movimentações</p>
           </button>
 
-          <button onClick={() => router.push('/despesas')} className="group rounded-[20px] border border-amber-500/15 bg-amber-500/[.03] p-2.5 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/despesas')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><ReceiptText size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Despesas</p><p className="mt-0.5 min-h-[1.9rem] text-[9px] leading-[1.25] text-zinc-500">Taxas, manutenção, fretes e diárias</p>
+            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Despesas</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Taxas, manutenção, fretes e diárias</p>
           </button>
 
-          <button onClick={() => router.push('/confirmacoes')} className="group rounded-[20px] border border-red-500/15 bg-red-500/[.03] p-2.5 text-left active:scale-[0.97]">
+          <button onClick={() => router.push('/confirmacoes')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-400"><ShieldCheck size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">iFood</p><p className="mt-0.5 min-h-[1.9rem] text-[9px] leading-[1.25] text-zinc-500">Confirmações pendentes e portal</p>
+            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">iFood</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Confirmações pendentes e portal</p>
           </button>
         </div>
       </section>
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Leitura do período</p>
-            <h2 className="font-heading text-base font-black text-zinc-100">Resumo do dia</h2>
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">Hoje em números</p>
+            <h2 className="mt-0.5 font-heading text-[16px] font-black text-zinc-100">Resumo operacional</h2>
           </div>
 
           <div className="flex items-center gap-1">
@@ -459,15 +464,15 @@ export default function LojaPage() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-900/45">
+        <div className="grid grid-cols-2 overflow-hidden rounded-[22px] border border-zinc-800/80 bg-zinc-900/35">
           <button
             onClick={() => setIsLogisticsModalOpen(true)}
-            className="flex w-full items-center justify-between gap-4 border-b border-zinc-800/80 p-4 text-left active:bg-zinc-900"
+            className="flex min-w-0 items-center justify-between gap-2 border-r border-zinc-800/80 p-3.5 text-left active:bg-zinc-900"
           >
             <div>
               <p className="text-[10px] font-black uppercase tracking-wide text-sky-500">Operação</p>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="font-heading text-2xl font-black text-zinc-50">{dashboardData.totalEntregas}</span>
+                <span className="font-heading text-xl font-black text-zinc-50">{dashboardData.totalEntregas}</span>
                 <span className="text-[11px] font-bold text-zinc-500">entregas</span>
               </div>
               <p className="mt-1 text-[10px] text-zinc-600">
@@ -479,11 +484,11 @@ export default function LojaPage() {
 
           <button
             onClick={() => setIsRevenueModalOpen(true)}
-            className="flex w-full items-center justify-between gap-4 p-4 text-left active:bg-zinc-900"
+            className="flex min-w-0 items-center justify-between gap-2 p-3.5 text-left active:bg-zinc-900"
           >
             <div>
               <p className="text-[10px] font-black uppercase tracking-wide text-emerald-500">Valor dos pedidos</p>
-              <p className="mt-1 font-heading text-xl font-black text-emerald-400">
+              <p className="mt-1 font-heading text-[17px] font-black text-emerald-400">
                 {isPrivacyMode ? 'R$ •••••' : `R$ ${formatMoney(dashboardData.faturamentoTotal)}`}
               </p>
               <p className="mt-1 text-[10px] text-zinc-600">Total econômico registrado no período</p>
@@ -499,8 +504,8 @@ export default function LojaPage() {
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-400">
               Inteligência operacional
             </p>
-            <h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">
-              Sinais que merecem atenção
+            <h2 className="mt-0.5 font-heading text-[15px] font-black text-zinc-100">
+              Leitura operacional
             </h2>
           </div>
           <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[9px] font-black text-zinc-500">
@@ -511,10 +516,10 @@ export default function LojaPage() {
         <button
           type="button"
           onClick={() => router.push('/relatorios')}
-          className="w-full rounded-[22px] border border-indigo-500/15 bg-indigo-500/[.035] p-4 text-left active:scale-[0.99]"
+          className="w-full rounded-[20px] border border-indigo-500/12 bg-indigo-500/[.025] p-3.5 text-left active:scale-[0.99]"
         >
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-500/10 text-indigo-400">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-500/[.08] text-indigo-400">
               <TrendingUp size={17} />
             </div>
             <div className="min-w-0 flex-1">
@@ -535,11 +540,11 @@ export default function LojaPage() {
                   <span className="text-zinc-500">Ainda sem sinais suficientes</span>
                 )}
               </div>
-              <p className="mt-1.5 line-clamp-2 text-xs font-black text-zinc-200">
+              <p className="mt-1 line-clamp-2 text-[11px] font-black leading-snug text-zinc-300">
                 {intelligence.highlights[0]?.title || 'O cérebro ainda está formando uma base confiável'}
               </p>
-              <p className="mt-1 text-[10px] text-zinc-600">
-                Só mostramos aqui desvios com contexto suficiente para valer sua atenção.
+              <p className="mt-1 text-[9px] text-zinc-600">
+                Toque para abrir evidências e contexto nos Relatórios.
               </p>
             </div>
             <ChevronRight size={16} className="shrink-0 text-zinc-700" />
@@ -562,18 +567,18 @@ export default function LojaPage() {
         </div>
 
         {!isScheduleEditorOpen && (
-          <div className="rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-4">
+          <div className="rounded-[20px] border border-zinc-800/80 bg-zinc-900/35 p-3.5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-black text-zinc-200">{activeScheduleDays.length} dia{activeScheduleDays.length === 1 ? '' : 's'} programado{activeScheduleDays.length === 1 ? '' : 's'}</p>
+                <p className="text-[13px] font-black text-zinc-200">{activeScheduleDays.length} dia{activeScheduleDays.length === 1 ? '' : 's'} programado{activeScheduleDays.length === 1 ? '' : 's'} na semana</p>
                 <p className="mt-1 text-[10px] leading-relaxed text-zinc-600">
-                  Horários aparecem resumidos aqui. Abra o editor somente quando precisar alterar.
+                  Visão rápida do expediente. Toque em um dia para editar.
                 </p>
               </div>
               <Clock size={18} className="shrink-0 text-indigo-400" />
             </div>
 
-            <div className="mt-4 grid grid-cols-7 gap-1.5">
+            <div className="mt-3 grid grid-cols-7 gap-1">
               {DAYS_OF_WEEK.map((dayName, index) => {
                 const dayData = schedule[index] || { active: false, shifts: [] };
                 const active = dayData.active && dayData.shifts.length > 0;
@@ -583,7 +588,7 @@ export default function LojaPage() {
                   <button
                     key={dayName}
                     onClick={() => openDayEditor(index)}
-                    className={`rounded-xl border px-1 py-2 text-center active:scale-95 ${active ? 'border-emerald-500/20 bg-emerald-500/[.07]' : 'border-zinc-800 bg-zinc-950/50'}`}
+                    className={`rounded-xl border px-0.5 py-1.5 text-center active:scale-95 ${active ? 'border-emerald-500/20 bg-emerald-500/[.07]' : 'border-zinc-800 bg-zinc-950/50'}`}
                   >
                     <span className={`block text-[8px] font-black uppercase ${active ? 'text-emerald-400' : 'text-zinc-600'}`}>{shortNames[index]}</span>
                     <span className="mt-1 block truncate text-[8px] font-bold text-zinc-500">{active ? dayData.shifts[0].start : '—'}</span>
@@ -680,7 +685,7 @@ export default function LojaPage() {
       <section className="flex flex-col gap-3">
         <button
           onClick={() => setIsSettingsOpen((value) => !value)}
-          className="flex items-center justify-between rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4 text-left active:scale-[0.99]"
+          className="flex items-center justify-between rounded-[20px] border border-zinc-800/70 bg-zinc-900/25 px-4 py-3.5 text-left active:scale-[0.99]"
         >
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Configurações</p>
