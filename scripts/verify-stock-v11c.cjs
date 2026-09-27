@@ -1,0 +1,13 @@
+const fs=require('fs');
+const r=f=>fs.readFileSync(f,'utf8');
+const ok=(v,m)=>{if(!v)throw new Error('FALHOU: '+m);console.log('OK',m)};
+const home=r('app/estoque/page.tsx'), novo=r('app/estoque/novo/page.tsx'), edit=r('app/estoque/editar/page.tsx'), banner=r('components/stock/StockCriticalBanner.tsx');
+ok(home.includes("import { StockCriticalBanner }"),'import do alerta');
+ok(home.includes('<StockCriticalBanner products={active} />'),'alerta integrado após cabeçalho real');
+ok((home.match(/<StockCriticalBanner products=/g)||[]).length===1,'alerta sem duplicação');
+ok(banner.includes("stockLevel(product) === 'zero'"),'critério zerado usa contrato real');
+ok(novo.includes('StockCategoryPicker value={category} onChange={setCategory}'),'categoria NOVO usa picker');
+ok(edit.includes('StockCategoryPicker value={category} onChange={setCategory}'),'categoria EDITAR usa picker');
+ok(edit.includes('disabled={hasHistory}'),'unidade histórica protegida');
+ok(!novo.includes('stock-category-suggestions')&&!edit.includes('stock-category-suggestions'),'datalist legado não reintroduzido');
+console.log('ESTOQUE V11C: CONTRATOS OK');

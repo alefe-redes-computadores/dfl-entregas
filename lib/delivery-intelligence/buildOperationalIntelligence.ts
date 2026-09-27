@@ -435,7 +435,9 @@ export function buildOperationalIntelligence(
   );
 
   const operationalDeliveries = deliveries.filter(
-    (delivery) => !internalCustomerIds.has(delivery.customer_id),
+    (delivery) =>
+      !delivery.exclude_customer_metrics &&
+      !internalCustomerIds.has(delivery.customer_id),
   );
   const operationalRoutes = routes.filter(
     (route) => !isInternalOperationalRoute(route, input.motoboys),

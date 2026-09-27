@@ -384,7 +384,7 @@ export default function ShoppingList() {
           return (
             <article
               key={product.id}
-              className={`rounded-2xl border p-3 ${
+              className={`rounded-2xl border px-3 py-2.5 ${
                 selected[product.id]
                   ? 'border-amber-500/30 bg-amber-500/[.05]'
                   : 'border-zinc-800 bg-zinc-900/40'
@@ -489,18 +489,12 @@ export default function ShoppingList() {
                                 product.unit,
                               );
                         })()}{' '}
-                        · {purchasePlan?.guard.reason || `confiança ${recommendation?.confidence}`}
+                        · {purchasePlan?.guard.mode === 'configured'
+                          ? 'baseado na meta'
+                          : purchasePlan?.guard.mode === 'history'
+                            ? 'histórico confiável'
+                            : 'histórico parcial'}
                       </p>
-                      {recommendation?.reorderDue && (
-                        <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[8px] font-black uppercase text-red-300">
-                          Comprar agora
-                        </span>
-                      )}
-                      {recommendation && !recommendation.reorderDue && (
-                        <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[8px] font-black uppercase text-sky-300">
-                          Compra planejável
-                        </span>
-                      )}
                     </div>
                   )}
 
@@ -530,7 +524,7 @@ export default function ShoppingList() {
 
               </div>
 
-              <div className="mt-3 grid grid-cols-[minmax(0,1fr)_92px] gap-2 border-t border-zinc-800/70 pt-3">
+              <div className={`mt-2 grid gap-2 border-t border-zinc-800/70 pt-2 ${(product.presentations || []).filter((item) => item.active && item.conversion_quantity > 0).length > 1 ? "grid-cols-[minmax(0,1fr)_92px]" : "grid-cols-[92px]"}`}>
                 {(product.presentations || []).filter((item) => item.active && item.conversion_quantity > 0).length > 1 && (
                   <div className="min-w-0">
                     <label className="mb-1 block text-[8px] font-black uppercase tracking-wider text-zinc-600">Forma de compra</label>
@@ -584,19 +578,24 @@ export default function ShoppingList() {
               </div>
 
               {recommendation && (
-                <p className="mt-2 border-t border-zinc-800/70 pt-2 text-[9px] leading-relaxed text-zinc-600">
-                  {recommendation.explanation}
-                  {` Prazo de reposição: ${recommendation.leadTimeDays.toLocaleString(
-                    'pt-BR',
-                    { maximumFractionDigits: 1 },
-                  )} dia(s).`}
-                  {(purchasePlan?.committed || 0) > 0
-                    ? ` A sugestão líquida já desconta ${formatStockQuantity(
-                        purchasePlan?.committed || 0,
-                        product.unit,
-                      )} de compras solicitadas/em andamento.`
-                    : ''}
-                </p>
+                <details className="mt-2 border-t border-zinc-800/60 pt-2">
+                  <summary className="cursor-pointer list-none text-[9px] font-bold text-zinc-500">
+                    Por que esta sugestão?
+                  </summary>
+                  <p className="mt-1.5 text-[9px] leading-relaxed text-zinc-500">
+                    {purchasePlan?.guard.reason}. {recommendation.explanation}
+                    {` Prazo de reposição: ${recommendation.leadTimeDays.toLocaleString(
+                      'pt-BR',
+                      { maximumFractionDigits: 1 },
+                    )} dia(s).`}
+                    {(purchasePlan?.committed || 0) > 0
+                      ? ` Já descontamos ${formatStockQuantity(
+                          purchasePlan?.committed || 0,
+                          product.unit,
+                        )} de compras em andamento.`
+                      : ''}
+                  </p>
+                </details>
               )}
             </article>
           );

@@ -26,6 +26,7 @@ type NotificationOwner =
   | 'immediate'
   | 'shift'
   | 'route-reminder'
+  | 'route-duration'
   | 'stock-supply';
 
 export type NotificationPreferences = {
@@ -35,7 +36,9 @@ export type NotificationPreferences = {
   shiftPreClose: boolean;
   shiftClose: boolean;
   routeOpenReminder: boolean;
+  routeStarted: boolean;
   routeFinished: boolean;
+  siteOrderNew: boolean;
   ifoodPending: boolean;
   purchasePlanning: boolean;
   stockLow: boolean;
@@ -52,7 +55,9 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   shiftPreClose: true,
   shiftClose: false,
   routeOpenReminder: true,
+  routeStarted: true,
   routeFinished: true,
+  siteOrderNew: true,
   ifoodPending: true,
   purchasePlanning: true,
   stockLow: true,
@@ -503,6 +508,95 @@ export async function syncOpenRouteReminderNotifications(
   }
 }
 
+export const notifyNewSiteOrder = (
+  deliveryId: string,
+  customerName?: string,
+  preferences?: Partial<NotificationPreferences>,
+) =>
+  notifyOperational(
+    `site-order:${deliveryId}`,
+    'Novo pedido do site',
+    customerName?.trim()
+      ? `${customerName.trim()} enviou um novo pedido. Confira e confirme antes de lançar na operação.`
+      : 'Chegou um novo pedido pelo site. Confira e confirme antes de lançar na operação.',
+    {
+      cooldownMs: 30 * 60_000,
+      extra: {
+        href: `/entregas/details?id=${encodeURIComponent(deliveryId)}`,
+      },
+      preferences,
+      preferenceKey: 'siteOrderNew',
+    },
+  );
+
+const routeDurationText = (startedAt: string, endedAt = new Date().toISOString()) => {
+  const ms = Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime());
+  const total = Math.round(ms / 60_000);
+  if (total < 60) return `${total} min`;
+  const hours = Math.floor(total / 60);
+  const minutesPart = total % 60;
+  return minutesPart ? `${hours}h ${minutesPart}min` : `${hours}h`;
+};
+
+export const notifyRouteStarted = (
+  routeId: string,
+  routeName: string,
+  motoboyName: string,
+  startedByName: string,
+  stops: number,
+  orders: number,
+  preferences?: Partial<NotificationPreferences>,
+) =>
+  notifyOperational(
+    `route-started:${routeId}`,
+    'Rota iniciada',
+    `${routeName} saiu com ${motoboyName || 'motoboy não informado'} · ${stops} ${stops === 1 ? 'parada' : 'paradas'} · ${orders} ${orders === 1 ? 'pedido' : 'pedidos'}. Iniciada por ${startedByName || 'usuário logado'}.`,
+    {
+      cooldownMs: 60_000,
+      extra: { href: `/rotas/details?id=${encodeURIComponent(routeId)}` },
+      preferences,
+      preferenceKey: 'routeStarted',
+    },
+  );
+
+export async function scheduleRouteDurationReminder(
+  route: Route,
+  preferences?: Partial<NotificationPreferences>,
+) {
+  if (!isNative() || !preferenceEnabled(preferences, 'routeOpenReminder')) return false;
+  const startedRaw = route.started_at || route.departure_time;
+  if (!startedRaw || route.status === 'fechada' || Boolean(route.end_time)) return false;
+  const started = new Date(startedRaw);
+  if (!Number.isFinite(started.getTime())) return false;
+  const key = `route-duration:${route.id}`;
+  const id = notificationIdFromKey(key);
+  await cancelId(id);
+  if (!(await hasPermission())) return false;
+  const expected = new Date(started.getTime() + 60 * 60_000);
+  const at = expected.getTime() > Date.now() + 5_000 ? expected : new Date(Date.now() + 5_000);
+  try {
+    await LocalNotifications.schedule({ notifications: [{
+      id,
+      channelId: ANDROID_CHANNEL_ID,
+      title: 'Rota aberta há bastante tempo',
+      body: `${route.name} está aberta há pelo menos ${expected.getTime() > Date.now() ? '1h' : routeDurationText(startedRaw)}. Se a operação já terminou, finalize a rota.`,
+      schedule: { at, allowWhileIdle: true },
+      extra: ownerExtra('route-duration', {
+        href: `/rotas/details?id=${encodeURIComponent(route.id)}`,
+        dflPreferenceKey: 'routeOpenReminder',
+      }),
+    }]});
+    return true;
+  } catch (error) {
+    console.error('[NOTIFICATIONS] Falha no lembrete de duração da rota:', error);
+    return false;
+  }
+}
+
+export async function cancelRouteDurationReminder(routeId: string) {
+  await cancelId(notificationIdFromKey(`route-duration:${routeId}`));
+}
+
 export const notifyIfoodRoutePending = (
   routeId: string,
   routeName: string,
@@ -529,20 +623,22 @@ export const notifyRouteFinished = (
   routeId: string,
   routeName: string,
   preferences?: Partial<NotificationPreferences>,
-) =>
-  notifyOperational(
+  details?: { startedAt?: string; endedAt?: string; motoboyName?: string; stops?: number; orders?: number },
+) => {
+  const duration = details?.startedAt ? ` · duração ${routeDurationText(details.startedAt, details.endedAt)}` : '';
+  const operation = details ? ` · ${details.stops ?? 0} ${details.stops === 1 ? 'parada' : 'paradas'} · ${details.orders ?? 0} ${details.orders === 1 ? 'pedido' : 'pedidos'}` : '';
+  return notifyOperational(
     `route-finished:${routeId}`,
-    'Rota concluída',
-    `${routeName} foi finalizada sem confirmações do iFood pendentes.`,
+    'Rota finalizada',
+    `${routeName}${details?.motoboyName ? ` · ${details.motoboyName}` : ''}${duration}${operation}.`,
     {
       cooldownMs: 5 * 60_000,
-      extra: {
-        href: `/rotas/details?id=${encodeURIComponent(routeId)}`,
-      },
+      extra: { href: `/rotas/details?id=${encodeURIComponent(routeId)}` },
       preferences,
       preferenceKey: 'routeFinished',
     },
   );
+};
 
 export const notifySyncFailure = (
   preferences?: Partial<NotificationPreferences>,

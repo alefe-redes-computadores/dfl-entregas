@@ -12,6 +12,14 @@ const unitWord=(unit:StockSupplyUnit,q:number)=>{
 };
 const number=(q:number,max=3)=>q.toLocaleString('pt-BR',{maximumFractionDigits:max});
 
+export function formatPlanningQuantity(q:number,unit:StockSupplyUnit){
+  const value=Math.max(0,Number(q)||0);
+  if(unit==='kg'||unit==='l') return `${value.toLocaleString('pt-BR',{maximumFractionDigits:1})} ${unit==='l'?'L':unit}`;
+  if(unit==='g'||unit==='ml') return `${Math.round(value).toLocaleString('pt-BR')} ${unit}`;
+  if(unit==='un'||unit==='cx'||unit==='pct'||unit==='fardo') return formatPurchaseQuantity(Math.ceil(value-1e-9),unit);
+  return formatStockQuantity(value,unit);
+}
+
 export function cleanPresentationLabel(label:string){
   return label.replace(/\s+/g,' ').replace(/^\s+|\s+$/g,'');
 }
@@ -79,7 +87,7 @@ export function humanPurchasePlan(args:{purchaseQuantity:number;baseQuantity:num
   const head=`${count} ${noun}`;
   const conversion=Math.max(0,Number(p.conversion_quantity)||0);
   const totalBase=Math.max(0,Number(baseQuantity)||count*conversion);
-  const totalLabel=conversion>0 ? ` (${formatStockQuantity(totalBase,baseUnit)} no total)` : '';
+  const totalLabel=conversion>0 ? ` (${formatPlanningQuantity(totalBase,baseUnit)} no total)` : '';
   if(!detail) return `${head}${totalLabel}`;
   const packageDetail=detail.startsWith('de ')||detail.startsWith('com ') ? detail : `de ${detail}`;
   return `${head} ${packageDetail}${totalLabel}`;

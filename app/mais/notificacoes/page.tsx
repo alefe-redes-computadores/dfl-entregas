@@ -405,9 +405,16 @@ export default function NotificationSettingsPage() {
 
         <Section
           icon={Bike}
-          title="Rotas e iFood"
-          subtitle="Avisos ligados ao fluxo real de entregas"
+          title="Pedidos, rotas e iFood"
+          subtitle="Avisos que levam direto para a ação necessária"
         >
+          <ToggleRow
+            title="Novo pedido do site"
+            description="Ao sincronizar um pedido novo, abre diretamente os detalhes para conferência."
+            checked={preferences.siteOrderNew}
+            onChange={() => toggle('siteOrderNew')}
+            disabled={masterDisabled}
+          />
           <ToggleRow
             title="Rota ainda aberta"
             description="Lembrete próximo ao fechamento quando existe rota iniciada."
@@ -416,6 +423,12 @@ export default function NotificationSettingsPage() {
             disabled={masterDisabled}
           />
           <ToggleRow
+              title="Rota iniciada"
+              description="Confirma quem iniciou, motoboy, pedidos e paradas."
+              checked={preferences.routeStarted}
+              onChange={() => toggle('routeStarted')}
+            />
+            <ToggleRow
             title="Rota finalizada"
             description="Confirma o encerramento quando não há iFood pendente."
             checked={preferences.routeFinished}

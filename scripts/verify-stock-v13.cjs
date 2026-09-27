@@ -1,0 +1,17 @@
+const fs=require('fs'),r=f=>fs.readFileSync(f,'utf8');
+const ok=(v,m)=>{if(!v)throw new Error('FALHOU: '+m);console.log('OK',m)};
+const h=r('lib/stock-commercial-health.ts'),s=r('lib/stock-shopping.ts'),p=r('lib/stock-pricing.ts'),i=r('lib/stock-intelligence.ts'),k=r('components/stock-supplies/StockProductPicker.tsx'),f=r('components/stock-supplies/StockSupplyForm.tsx'),c=r('app/estoque/compras/page.tsx');
+ok(h.includes('export function comparableBaseUnitCost'),'contrato comparableBaseUnitCost restaurado');
+ok(h.includes('total / quantity'),'custo total/base');
+ok(h.includes('purchaseUnitPrice / conversion'),'fallback embalagem/base');
+ok(s.includes('comparableBaseUnitCost'),'shopping usa custo comparável');
+ok(p.includes('comparableBaseUnitCost'),'pricing usa custo comparável');
+ok(i.includes('daysUntilMinimum'),'dias até mínimo');
+ok(i.includes('coverageDays'),'dias até zerar preservados');
+ok(i.includes('leadTimeDays')&&i.includes('reorderDue'),'lead time interfere na urgência');
+ok(k.includes('preferredProductIds'),'produtos históricos do fornecedor');
+ok(k.includes('draftIncoming'),'quantidade da compra atual projetada');
+ok(k.includes('Outros produtos'),'outros produtos separados');
+ok(f.includes('StockProductPicker'),'form usa picker operacional');
+ok(c.includes('committedStockQuantityMap'),'compras abertas consideradas');
+console.log('ESTOQUE V13: CONTRATOS OK');

@@ -1,0 +1,12 @@
+const fs=require('fs'),r=f=>fs.readFileSync(f,'utf8'),m=(f,t,n)=>{if(!r(f).includes(t))throw Error(`FALHOU ${n}: ${f}`);console.log('OK',n)};
+m('lib/stock-commercial.ts',"baseUnit:StockSupplyUnit='un'",'fracionário por unidade-base');
+m('lib/stock-shopping.ts','presentation, product.unit','plano comercial recebe unidade-base');
+m('lib/stock-shopping.ts','comparableBaseUnitCost','histórico de preço normalizado');
+m('lib/stock-pricing.ts','comparableBaseUnitCost','pricing normalizado');
+m('app/estoque/compras/page.tsx','const purchaseQuantity = typed','input representa compra comercial');
+m('app/estoque/compras/page.tsx','purchaseQuantity * factor','compra converte para estoque-base');
+m('app/estoque/page.tsx','Compra comercial','saúde comercial na Home');
+m('app/estoque/relatorios/page.tsx','formatStockQuantity(usage,p.unit)','relatório com unidade humana');
+m('app/estoque/contagem/page.tsx','unidade física de controle','contagem física explícita');
+m('store/useAppStore.ts','A unidade de controle não pode ser alterada porque este produto já possui histórico.','histórico protegido');
+console.log('ESTOQUE V8 CONTRATOS OK');

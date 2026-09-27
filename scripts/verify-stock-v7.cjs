@@ -1,0 +1,10 @@
+const fs=require('fs');
+const must=(f,t,n)=>{const s=fs.readFileSync(f,'utf8');if(!s.includes(t))throw new Error(`FALHOU ${n}: ${f}`);console.log('OK',n)};
+must('lib/stock-shopping.ts','commercialPurchasePlan','pipeline comercial central');
+must('app/estoque/compras/page.tsx','purchase_quantity: presentation','snapshot comercial na compra inteligente');
+must('app/estoque/compras/page.tsx','arredondada para a forma real de compra','necessidade matemática separada da compra');
+must('app/estoque/page.tsx','formatCommercialPlan','Home usa quantidade comprável');
+must('app/estoque/detalhes/page.tsx','commercialPlan','Detalhes usa quantidade comprável');
+must('app/estoque/editar/page.tsx','commercialSuggestion','preview de edição usa embalagem');
+must('store/useAppStore.ts','A unidade de controle não pode ser alterada porque este produto já possui histórico.','histórico continua protegido');
+console.log('CONTRATOS ESTOQUE V7 OK');

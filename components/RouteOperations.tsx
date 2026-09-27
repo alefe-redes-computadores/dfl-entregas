@@ -7,7 +7,7 @@ import {
   routeDate,
   routeStartedAt,
 } from '@/lib/operational-time';
-import { syncOpenRouteReminderNotifications } from '@/lib/native/notifications';
+import { scheduleRouteDurationReminder, syncOpenRouteReminderNotifications } from '@/lib/native/notifications';
 
 export function RouteOperations() {
   const hydrated = useAppStore((state) => state.hasHydrated);
@@ -63,6 +63,14 @@ export function RouteOperations() {
       holidaysOverrides: settings.holidaysOverrides,
       notificationPreferences: settings.notificationPreferences,
     });
+    routes
+      .filter((route) => route.status === 'aberta' && Boolean(route.started_at || route.departure_time))
+      .forEach((route) => {
+        void scheduleRouteDurationReminder(
+          route,
+          useAppStore.getState().storeSettings.notificationPreferences,
+        );
+      });
   }, [
     hydrated,
     routes,

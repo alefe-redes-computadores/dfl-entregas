@@ -19,6 +19,7 @@ import { dateKey, deliveryDate, routeStartedAt } from '@/lib/operational-time';
 import { compactAddressForCard, hasHouseNumber } from "@/lib/operational-address";
 import { auditOperationalAddress } from '@/lib/address-quality';
 import { SiteOrderSnapshot } from '@/components/home/SiteOrderSnapshot';
+import { customerRecurrence } from '@/lib/customer-recurrence';
 
 interface DeliveryCardProps {
   delivery: Delivery & { is_expanded?: boolean };
@@ -50,6 +51,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
+  const allDeliveries = useAppStore((state) => state.deliveries);
 
   const isExpanded = delivery.is_expanded || false;
   const groupedDeliveries = stopDeliveries?.length ? stopDeliveries : [delivery];
@@ -89,7 +91,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isSiteOrder = delivery.source_system === 'dfl_site';
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
   const isUrgent = groupedDeliveries.some((item) => item.is_urgent);
-  const isVIP = (customer?.orderCount || 0) >= 5;
+  const recurrence = customerRecurrence(allDeliveries, delivery.customer_id, delivery);
+  const customerTier = recurrence.tier;
+  const isVIP = Boolean(customerTier);
 
   const shortAddress = compactAddressForCard(delivery.address_string, customer?.address, customer?.neighborhood);
   const hasCoordinatesOrLink = !!(customer?.maps_link || delivery.maps_link);
@@ -412,7 +416,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   <div className="flex items-center gap-1.5 truncate max-w-[170px]">
                     <p className="font-heading text-sm font-black tracking-tight text-zinc-50 truncate flex items-center gap-1">
                       {isGroupedStop
-                        ? `${groupedDeliveries.length} pedidos · mesma parada`
+                        ? `${groupedDeliveries.length} pedidos · 1 parada`
                         : customer?.name || delivery.customer_name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
                       {!isGroupedStop && isVIP && <Crown size={12} className="text-amber-500 shrink-0" />}
                     </p>
@@ -428,9 +432,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {isSiteOrder && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-sky-300">Site</span>}
                   {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
+                  {!isGroupedStop && customerTier && <span className="rounded-md border border-amber-500/20 bg-amber-500/[.08] px-2 py-0.5 text-[9px] font-black text-amber-300">{customerTier === 'super' ? 'Supercliente' : 'Frequente'} · {recurrence.completedOrders} concluídos</span>}
+                  {!isGroupedStop && recurrence.milestoneLabel && <button type="button" onClick={(event) => { event.stopPropagation(); toast.info('Marco de cliente direto', { description: recurrence.milestoneLabel || undefined }); }} className="rounded-md border border-violet-500/25 bg-violet-500/[.08] px-2 py-0.5 text-[9px] font-black text-violet-300">{recurrence.milestoneLabel}</button>}
                   {isGroupedStop ? (
                     <span className="bg-violet-500/15 border border-violet-500/30 text-violet-300 px-2 py-0.5 rounded-md text-[10px] font-black shrink-0">
-                      1 parada · {groupedDeliveries.length} pedidos · {groupedPending} pendente{groupedPending === 1 ? '' : 's'}
+                      {groupedDeliveries.length} pedidos · {groupedPending} pendente{groupedPending === 1 ? '' : 's'}
                     </span>
                   ) : isIfood && delivery.order_id ? (
                     <span className="bg-red-500/15 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0">

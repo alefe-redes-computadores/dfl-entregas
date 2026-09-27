@@ -6,6 +6,7 @@ import { firstValidTimestamp } from '@/lib/reports/time';
 import { canonicalizeOperationalAddress, bestOperationalAddress, hasHouseNumber } from "@/lib/operational-address";
 import { deliveryStopKey, stopNumberMap, groupDeliveriesByStop } from '@/lib/route-stops';
 import { routeCashFlow } from '@/lib/route-cash-flow';
+import { buildRouteChangePlan } from '@/lib/route-change-plan';
 
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -525,81 +526,50 @@ export async function generateRouteMessages(
       msg2.push(`──────────────`);
     }
 
-    // V3C — MOTOR FÍSICO ÚNICO DA ROTA.
-    // Pedido 64, cliente entrega 100 e recebe 36:
-    // a bag volta com 100 quando os 36 saíram como troco inicial.
+    // Troco detalhado pertence exclusivamente à Mensagem 3.
+    // A Mensagem 2 só sinaliza que existe conferência financeira, sem duplicar valores.
     const cashFlow = routeCashFlow(deliveries, route.change_money);
-    const pendingMoney = cashFlow.cashOrders.map((item) => item.delivery);
-
     if (cashFlow.requiredChange > 0 || cashFlow.initialCash > 0) {
-      msg2.push(`🪙 *PLANO DE TROCO*`);
-      cashFlow.cashOrders
-        .filter((item) => item.requestedChange > 0)
-        .forEach((item) => {
-          const d = item.delivery;
-          const num = physicalStopNumbers.get(deliveryGroupKey(d)) || 1;
-          const customer = getCustomerById(d.customer_id);
-          msg2.push(
-            `• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · recebe R$ ${formatMoney(item.requestedChange)} de troco`
-          );
-        });
-
-      if (cashFlow.plannedCashChange > 0) {
-        msg2.push(`💵 Em dinheiro: *R$ ${formatMoney(cashFlow.plannedCashChange)}*`);
-      }
-      if (cashFlow.plannedPixChange > 0) {
-        msg2.push(`📱 Via Pix se faltar espécie: *R$ ${formatMoney(cashFlow.plannedPixChange)}*`);
-      }
-      if (cashFlow.unusedInitialCash > 0) {
-        msg2.push(`👜 Sobra do troco inicial na bag: R$ ${formatMoney(cashFlow.unusedInitialCash)}`);
-      }
+      msg2.push(`🪙 *Trocos:* conferir a Mensagem 3`);
       msg2.push(`──────────────`);
     }
 
-    if (pendingMoney.length > 0 || cashFlow.initialCash > 0) {
-      const singleSimple =
-        cashFlow.cashOrders.length === 1 &&
-        cashFlow.initialCash <= 0 &&
-        cashFlow.requiredChange <= 0;
+    const changePlan = buildRouteChangePlan(
+      deliveries,
+      route.change_money,
+      getCustomerById,
+    );
+    const msg3: string[] = [];
+    msg3.push(`──────────────`);
+    msg3.push(`🪙 *TROCOS · Rota ${routeNumber}*`);
+    msg3.push(`🏍️ ${route.motoboy_name}`);
+    msg3.push(`──────────────`);
 
-      msg2.push(
-        singleSimple
-          ? `💵 *DINHEIRO PRA ENTREGAR NO CAIXA*`
-          : `💵 *RETORNO FÍSICO PREVISTO · R$ ${formatMoney(cashFlow.expectedPhysicalReturn)}*`
-      );
-
-      cashFlow.cashOrders.forEach((item) => {
-        const d = item.delivery;
-        const num = physicalStopNumbers.get(deliveryGroupKey(d)) || 1;
-        const customer = getCustomerById(d.customer_id);
-        if (item.requestedChange > 0) {
-          msg2.push(
-            `• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · entrega R$ ${formatMoney(item.tenderedCash)} · pedido R$ ${formatMoney(item.customerCharge)}`
-          );
-        } else {
-          msg2.push(
-            `• ${getNumberEmoji(num)} ${customer?.name || d.customer_name || 'Cliente'} · R$ ${formatMoney(item.customerCharge)}`
-          );
-        }
+    if (!changePlan.lines.length) {
+      msg3.push(`✅ Nenhuma parada precisa de troco.`);
+    } else {
+      changePlan.lines.forEach((line) => {
+        msg3.push(`${getNumberEmoji(line.stop)} *${line.customer}*`);
+        msg3.push(`Pedido: R$ ${formatMoney(line.charge)} · cliente entrega *R$ ${formatMoney(line.tendered)}*`);
+        msg3.push(`Troco: *R$ ${formatMoney(line.change)}*`);
+        if (line.cashChange > 0) msg3.push(`↳ 💵 Dinheiro: R$ ${formatMoney(line.cashChange)}`);
+        if (line.pixChange > 0) msg3.push(`↳ 📱 Pix: R$ ${formatMoney(line.pixChange)}`);
+        msg3.push('');
       });
-
-      if (!singleSimple) {
-        if (cashFlow.initialCash > 0) {
-          msg2.push(`Troco inicial que saiu da loja: R$ ${formatMoney(cashFlow.initialCash)}`);
-        }
-        if (cashFlow.plannedPixChange > 0) {
-          msg2.push(`Pix previsto para completar troco: R$ ${formatMoney(cashFlow.plannedPixChange)}`);
-        }
-        msg2.push(`*Volta física prevista na bag:* \`R$ ${formatMoney(cashFlow.expectedPhysicalReturn)}\``);
+      msg3.push(`──────────────`);
+      msg3.push(`💵 Troco separado em dinheiro: *R$ ${formatMoney(changePlan.flow.plannedCashChange)}*`);
+      if (changePlan.flow.plannedPixChange > 0) {
+        msg3.push(`📱 Troco previsto via Pix: *R$ ${formatMoney(changePlan.flow.plannedPixChange)}*`);
       }
-      msg2.push(`──────────────`);
+      msg3.push(`💰 Clientes entregarão em espécie: *R$ ${formatMoney(changePlan.flow.tenderedCash)}*`);
+      msg3.push(`👜 Retorno físico previsto: *R$ ${formatMoney(changePlan.flow.expectedPhysicalReturn)}*`);
     }
 
     return {
       success: true,
       hasFuzzyAddresses,
       fuzzyList: fuzzyDeliveries,
-      messages: [msg1.join('\n'), msg2.join('\n')]
+      messages: [msg1.join('\n'), msg2.join('\n'), msg3.join('\n')]
     };
   } catch (error) {
     console.error('Falha ao gerar mensagens da rota:', error);

@@ -83,10 +83,7 @@ export function useStoreAutomation() {
       const state = useAppStore.getState();
       const settings = state.storeSettings;
 
-      if (
-        !settings?.schedule ||
-        !settings.alertsEnabled
-      ) {
+      if (!settings?.schedule) {
         return;
       }
 

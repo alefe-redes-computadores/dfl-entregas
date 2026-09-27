@@ -591,7 +591,9 @@ export function buildReportModel(input: {
   // Comercial permanece íntegro; apenas os recortes operacionais ignoram
   // pedidos do perfil interno.
   const customerOperationalCurrent = logisticsCurrent.filter(
-    (delivery) => !isInternalOperationalCustomer(delivery.customer),
+    (delivery) =>
+      !delivery.exclude_customer_metrics &&
+      !isInternalOperationalCustomer(delivery.customer),
   );
 
   const motoboyOperationalCurrent = customerOperationalCurrent.filter(

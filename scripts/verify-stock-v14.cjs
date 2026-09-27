@@ -1,0 +1,14 @@
+const fs=require('fs'),r=f=>fs.readFileSync(f,'utf8'),ok=(v,m)=>{if(!v)throw Error('FALHOU: '+m);console.log('OK',m)};
+const op=r('lib/stock-operation.ts'),c=r('app/estoque/compras/page.tsx'),f=r('components/stock-supplies/StockSupplyForm.tsx'),p=r('components/stock-supplies/StockProductPicker.tsx'),i=r('lib/stock-intelligence.ts'),sh=r('lib/stock-shopping.ts');
+ok(op.includes("'ruptura'")&&op.includes("'comprar_agora'")&&op.includes("'planejar'")&&op.includes("'ok'"),'quatro estados operacionais');
+ok(op.includes('coverageDays')&&op.includes('daysUntilMinimum'),'mínimo e zerar separados');
+ok(op.includes('leadTimeDays'),'lead time na decisão');
+ok(c.includes('stockOperationRank[aPriority]'),'ordenação por urgência operacional');
+ok(c.includes('Até o mínimo <b')&&c.includes('até zerar <b'),'rótulos temporais explícitos');
+ok(c.includes('formatCommercialPlan'),'apresentação comercial preservada');
+ok(sh.includes('committedStockQuantityMap'),'compras abertas preservadas');
+ok(p.includes('preferredProductIds')&&p.includes('draftIncoming'),'fornecedor e compra atual preservados');
+ok(p.includes('Outros produtos'),'seção outros produtos preservada');
+ok(f.includes('beforeunload')&&f.includes('popstate')&&f.includes('leaveOpen'),'proteção de saída preservada');
+ok(i.includes('reorderDue')&&i.includes('leadTimeDays'),'inteligência de reposição preservada');
+console.log('ESTOQUE V14: FECHAMENTO OPERACIONAL OK');

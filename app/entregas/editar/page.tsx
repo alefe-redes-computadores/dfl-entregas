@@ -1,5 +1,6 @@
 // app/entregas/editar/page.tsx
 'use client';
+import { formatBrazilPhone, normalizeBrazilPhone } from '@/lib/phone';
 
 import {
   useState, useEffect, useMemo, Suspense } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store,
@@ -126,18 +127,7 @@ const [routeId, setRouteId] = useState('');
     return numberValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const formatPhoneInput = (val: string) => {
-    const rawDigits = val.replace(/\D/g, '');
-    const localDigits =
-      rawDigits.startsWith('55') && (rawDigits.length === 12 || rawDigits.length === 13)
-        ? rawDigits.slice(2)
-        : rawDigits;
-    const digits = localDigits.slice(0, 11);
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-    if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-  };
+  const formatPhoneInput = (val: string) => formatBrazilPhone(val);
 
   // PARSER MÁGICO DE ALTA PRECISÃO NA EDIÇÃO
   const handleExecuteMagicParse = async () => {
@@ -543,7 +533,7 @@ const [routeId, setRouteId] = useState('');
       const cleanValue = Math.max(0, customerCharge) + Math.max(0, subsidy);
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
       const cleanStreet = fulfillmentMode === 'delivery' ? normalizeAddressText(streetAddress) : '';
-      const rawPhone = phone.replace(/\D/g, '');
+      const rawPhone = normalizeBrazilPhone(phone);
 
       let resolvedMapsLink = mapsLink.trim();
       if (fulfillmentMode === 'delivery' && cleanStreet && !resolvedMapsLink) {

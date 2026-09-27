@@ -18,7 +18,7 @@ import { PerformanceModals } from '@/components/store/PerformanceModals';
 import { OperationalCalendar } from '@/components/store/OperationalCalendar';
 import { StoreTimePicker } from '@/components/store/StoreTimePicker';
 import { useDeliveryIntelligence } from '@/hooks/useDeliveryIntelligence';
-import { validateSchedule } from '@/lib/operational-time';
+import { isWithinSchedule, validateSchedule } from '@/lib/operational-time';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
 import { requestDeviceLocation } from '@/lib/device-location';
 import { extractLatLngFromMapsUrl, parseCoordinateString } from '@/lib/maps';
@@ -279,6 +279,13 @@ export default function LojaPage() {
     setTimePicker(null);
   };
 
+  const scheduledOpenNow = isWithinSchedule(
+    new Date(),
+    schedule,
+    pauses,
+    holidaysOverrides,
+  );
+
   if (!isMounted || !hasHydrated) return null;
 
   return (
@@ -307,8 +314,12 @@ export default function LojaPage() {
             </div>
             <p className="mt-0.5 line-clamp-2 text-[10px] text-zinc-600">
               {isStoreOpen
-                ? `${activeMotoboys.length} entregador${activeMotoboys.length === 1 ? '' : 'es'} ativo${activeMotoboys.length === 1 ? '' : 's'} agora`
-                : 'Toque para iniciar a operação manualmente'}
+                ? scheduledOpenNow
+                  ? `${activeMotoboys.length} entregador${activeMotoboys.length === 1 ? '' : 'es'} ativo${activeMotoboys.length === 1 ? '' : 's'} · dentro do horário programado`
+                  : 'Aberta manualmente fora do horário · a automação reconciliará o estado'
+                : scheduledOpenNow
+                  ? 'Horário programado ativo · sincronizando estado da operação'
+                  : 'Fora do horário programado · toque para uma abertura manual temporária'}
             </p>
           </div>
           <span className="shrink-0 text-[9px] font-black uppercase tracking-wide text-zinc-600">
@@ -321,7 +332,7 @@ export default function LojaPage() {
         <div className="flex items-center justify-between px-1">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Agora</p>
-            <h2 className="font-heading text-base font-black text-zinc-100">Central de operação</h2>
+            <h2 className="font-heading text-base font-black text-zinc-100">Operação do dia</h2>
           </div>
           <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] font-bold text-zinc-500">
             {dashboardData.formattedDateLabel}
@@ -421,7 +432,7 @@ export default function LojaPage() {
         <div className="flex items-center justify-between px-1">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Leitura do período</p>
-            <h2 className="font-heading text-base font-black text-zinc-100">Resumo operacional</h2>
+            <h2 className="font-heading text-base font-black text-zinc-100">Resumo do dia</h2>
           </div>
 
           <div className="flex items-center gap-1">

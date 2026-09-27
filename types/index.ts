@@ -198,6 +198,9 @@ export interface Route {
   motoboy_id?: string;
   departure_time?: string; // Legado: novas rotas usam started_at como saída real
   started_at?: string;
+  started_by_uid?: string;
+  started_by_name?: string;
+  started_by_email?: string;
   end_time?: string;
   reopened_at?: string;
   auto_closed_at?: string;
@@ -315,6 +318,8 @@ export interface Delivery {
   phone?: string;
   notify_whatsapp?: boolean;
   customer_name?: string;
+  /** Preserva a venda, mas exclui ranking/recorrência de cliente. */
+  exclude_customer_metrics?: boolean;
   createdAt?: string; // Campo legado ainda lido pelos relatórios atuais
   created_at?: string;
   completed_at?: string;

@@ -80,7 +80,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [isCopyMenuOpen, setIsCopyMenuOpen] = useState(false);
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [currentFuzzyList, setCurrentFuzzyList] = useState<any[]>([]);
-  const [pendingActionType, setPendingActionType] = useState<'copy1' | 'copy2' | 'maps' | null>(null);
+  const [pendingActionType, setPendingActionType] = useState<'copy1' | 'copy2' | 'copy3' | 'maps' | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [departureChecklistOpen, setDepartureChecklistOpen] = useState(false);
   const [optimizerOpen, setOptimizerOpen] = useState(false);
@@ -417,7 +417,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     }
   };
 
-  const handleCopyMessage = async (msgType: 1 | 2) => {
+  const handleCopyMessage = async (msgType: 1 | 2 | 3) => {
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
     const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
     const previousRoute = getPreviousRoute();
@@ -426,7 +426,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
     if (result.hasFuzzyAddresses && result.fuzzyList.length > 0 && msgType === 1) {
       setCurrentFuzzyList(result.fuzzyList);
-      setPendingActionType(msgType === 1 ? 'copy1' : 'copy2');
+      setPendingActionType(msgType === 1 ? 'copy1' : msgType === 2 ? 'copy2' : 'copy3');
       setFuzzyModalOpen(true);
       return;
     }
@@ -434,7 +434,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     executeCopyAction(msgType, result.messages);
   };
 
-  const executeCopyAction = async (msgType: 1 | 2, messages?: string[]) => {
+  const executeCopyAction = async (msgType: 1 | 2 | 3, messages?: string[]) => {
     setFuzzyModalOpen(false);
     const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
     const previousRoute = getPreviousRoute();
@@ -444,9 +444,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (msgType === 1) {
       await navigator.clipboard.writeText(msgsToCopy[0]);
       toast.success('Mensagem 1 copiada!', { description: 'Rota e mapas prontos para o WhatsApp.' });
-    } else {
+    } else if (msgType === 2) {
       await navigator.clipboard.writeText(msgsToCopy[1]);
-      toast.success('Mensagem 2 copiada!', { description: 'Conferência, troco físico da bag e dinheiro esperado na volta prontos.' });
+      toast.success('Mensagem 2 copiada!', { description: 'Conferência operacional e dinheiro esperado na volta prontos.' });
+    } else {
+      await navigator.clipboard.writeText(msgsToCopy[2] || '');
+      toast.success('Trocos copiados!', { description: 'Plano de dinheiro e Pix por parada pronto.' });
     }
     setIsCopyMenuOpen(false);
   };
@@ -593,17 +596,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         expandedOrder,
         {
           metadata: {
-            /*
-             * Depois que o usuário confirma a organização, a sequência
-             * vira contrato operacional. Persistimos a ordem e travamos
-             * as paradas para que outra interação não desfaça silenciosamente
-             * o resultado. O algoritmo buildSmartRouteOrder não é alterado.
-             */
-            order_locked: true,
-            order_source:
-              optimizerEdited
-                ? 'manual'
-                : 'smart',
+            // O otimizador nunca cria trava em massa. Travas explícitas permanecem
+            // intactas porque setDeliveryOrder só altera os metadados informados aqui.
+            order_source: optimizerEdited ? 'manual' : 'smart',
             order_updated_at: now,
           },
         },
@@ -615,8 +610,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         await Haptics.notification({ type: NotificationType.Success });
       }
 
-      toast.success('Ordem aplicada e travada.', {
-        description: 'A sequência foi persistida. Você ainda pode desfazer enquanto a rota estiver aberta.',
+      toast.success(optimizerEdited ? 'Ordem manual aplicada.' : 'Ordem inteligente aplicada.', {
+        description: optimizerEdited ? 'A sequência foi salva sem criar travas automáticas.' : 'A sequência continua livre para encaixar novas paradas.',
       });
     } catch {
       toast.error('Não foi possível aplicar a ordem sugerida.');
@@ -1125,7 +1120,15 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   <div className="h-14 w-14 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0"><Receipt size={24}/></div>
                   <div className="flex flex-col">
                     <span className="font-black text-zinc-100 text-lg">Mensagem 2 (Acerto)</span>
-                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Bebidas, maquininha, troco físico da bag e dinheiro esperado na volta.</span>
+                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Bebidas, maquininha, códigos e dinheiro esperado na volta.</span>
+                  </div>
+                </button>
+
+                <button onClick={() => handleCopyMessage(3)} className="flex items-center gap-4 bg-zinc-900 border border-amber-500/20 p-5 rounded-3xl active:scale-95 transition-all text-left">
+                  <div className="h-14 w-14 rounded-full bg-amber-500/10 text-amber-300 flex items-center justify-center shrink-0"><Wallet size={24}/></div>
+                  <div className="flex flex-col">
+                    <span className="font-black text-zinc-100 text-lg">Mensagem 3 (Trocos)</span>
+                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Quanto cada cliente entrega, troco em dinheiro/Pix e retorno físico previsto.</span>
                   </div>
                 </button>
              </div>
@@ -1207,7 +1210,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               ))}
             </div>
             <div className="flex flex-col gap-2.5 pt-2">
-              <button onClick={() => { if (pendingActionType) executeCopyAction(pendingActionType === 'copy1' ? 1 : 2); }} className="w-full h-12 bg-sky-500 hover:bg-sky-400 rounded-xl font-bold text-zinc-950 text-sm active:scale-95 transition-all shadow-lg shadow-sky-500/20">Prosseguir Mesmo Assim</button>
+              <button onClick={() => { if (pendingActionType) executeCopyAction(pendingActionType === 'copy1' ? 1 : pendingActionType === 'copy3' ? 3 : 2); }} className="w-full h-12 bg-sky-500 hover:bg-sky-400 rounded-xl font-bold text-zinc-950 text-sm active:scale-95 transition-all shadow-lg shadow-sky-500/20">Prosseguir Mesmo Assim</button>
               <button onClick={() => setFuzzyModalOpen(false)} className="w-full h-11 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-semibold text-zinc-300 text-xs active:scale-95 transition-all">Cancelar e Inserir Links Manuais</button>
             </div>
           </div>

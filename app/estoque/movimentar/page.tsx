@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Calculator,
   Save,
+  SkipForward,
 } from 'lucide-react';
 
 import { toast } from 'sonner';
@@ -79,8 +80,10 @@ const options: Array<
 function Content() {
   const router = useRouter();
 
-  const id =
-    useSearchParams().get('id');
+  const search = useSearchParams();
+
+  const id = search.get('id');
+  const from = search.get('from');
 
   const product = useAppStore(
     (state) =>
@@ -92,6 +95,18 @@ function Content() {
   const add = useAppStore(
     (state) =>
       state.addStockMovement,
+  );
+
+  const activeProducts = useAppStore(
+    (state) =>
+      state.stockProducts
+        .filter((item) => item.active)
+        .sort((a, b) =>
+          a.name.localeCompare(
+            b.name,
+            'pt-BR',
+          ),
+        ),
   );
 
   const [type, setType] =
@@ -121,6 +136,9 @@ function Content() {
 
   const [busy, setBusy] =
     useState(false);
+
+  const [submitIntent, setSubmitIntent] =
+    useState<'return' | 'next'>('return');
 
   const [attempted, setAttempted] =
     useState(false);
@@ -281,9 +299,45 @@ function Content() {
         },
       );
 
-      router.replace(
-        `/estoque/detalhes?id=${product.id}`,
+      sessionStorage.setItem(
+        'dfl-stock-anchor',
+        product.id,
       );
+
+      if (submitIntent === 'next') {
+        const index =
+          activeProducts.findIndex(
+            (item) =>
+              item.id === product.id,
+          );
+        const next =
+          index >= 0
+            ? activeProducts[index + 1]
+            : undefined;
+
+        if (next) {
+          sessionStorage.setItem(
+            'dfl-stock-anchor',
+            next.id,
+          );
+          router.replace(
+            `/estoque/movimentar?id=${next.id}&from=estoque`,
+          );
+          return;
+        }
+
+        toast.success(
+          'Último produto da lista conferido.',
+        );
+      }
+
+      if (from === 'estoque') {
+        router.replace('/estoque');
+      } else {
+        router.replace(
+          `/estoque/detalhes?id=${product.id}`,
+        );
+      }
     } catch (error) {
       console.error(
         'Erro ao movimentar estoque:',
@@ -310,7 +364,11 @@ function Content() {
       <PageHeader
         title="Movimentar estoque"
         subtitle={product.name}
-        to={`/estoque/detalhes?id=${product.id}`}
+        to={
+          from === 'estoque'
+            ? '/estoque'
+            : `/estoque/detalhes?id=${product.id}`
+        }
       />
 
       <section className="mb-5 rounded-[24px] border border-emerald-500/20 bg-emerald-500/[.05] p-4">
@@ -605,16 +663,41 @@ function Content() {
           />
         </label>
 
-        <button
-          disabled={busy}
-          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950 active:scale-[.99] disabled:opacity-40"
-        >
-          <Save size={18} />
+        <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+          <button
+            type="submit"
+            disabled={busy}
+            onClick={() =>
+              setSubmitIntent('return')
+            }
+            className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950 active:scale-[.99] disabled:opacity-40"
+          >
+            <Save size={18} />
+            {busy &&
+            submitIntent === 'return'
+              ? 'Salvando...'
+              : from === 'estoque'
+                ? 'Salvar e voltar'
+                : 'Confirmar'}
+          </button>
 
-          {busy
-            ? 'Salvando...'
-            : 'Confirmar movimentação'}
-        </button>
+          {from === 'estoque' && (
+            <button
+              type="submit"
+              disabled={busy}
+              onClick={() =>
+                setSubmitIntent('next')
+              }
+              className="flex h-14 items-center justify-center gap-2 rounded-2xl border border-sky-500/30 bg-sky-500/10 font-black text-sky-300 active:scale-[.99] disabled:opacity-40"
+            >
+              <SkipForward size={18} />
+              {busy &&
+              submitIntent === 'next'
+                ? 'Salvando...'
+                : 'Salvar e próximo'}
+            </button>
+          )}
+        </div>
       </form>
     </div>
   );

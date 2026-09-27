@@ -8,9 +8,13 @@ import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import {
+  cancelRouteDurationReminder,
+  notifyRouteStarted,
+  scheduleRouteDurationReminder,
   cancelStockSupplyCheckReminder,
   DEFAULT_NOTIFICATION_PREFERENCES,
   notifyIfoodRoutePending,
+  notifyNewSiteOrder,
   notifyRouteFinished,
   notifyStockThresholdChanges,
   notifySyncFailure,
@@ -38,6 +42,72 @@ import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop } from '@/lib/r
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
+import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
+
+
+async function autoOrganizeLoadedRouteAfterInsert(
+  routeId: string,
+  deliveries: Delivery[],
+  customers: Customer[],
+  settings: { storeLatitude?: number; storeLongitude?: number },
+) {
+  if (!routeId) return;
+  const items = deliveries
+    .filter((delivery) => delivery.route_id === routeId && !delivery.completed)
+    .sort((a, b) => (a.order_index ?? 999999) - (b.order_index ?? 999999));
+  const groups = groupDeliveriesByStop(items);
+  if (groups.length < 2) return;
+
+  const lat = Number(settings.storeLatitude);
+  const lng = Number(settings.storeLongitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+  const lockedAt = new Map<number, (typeof groups)[number]>();
+  const freeGroups: typeof groups = [];
+  groups.forEach((group, index) => {
+    const locked = group.deliveries.some(
+      (delivery) => delivery.order_locked === true && delivery.order_source !== 'smart',
+    );
+    if (locked) lockedAt.set(index, group);
+    else freeGroups.push(group);
+  });
+  if (freeGroups.length < 2) return;
+
+  const customerMap = new Map(customers.map((customer) => [customer.id, customer]));
+  const freeStops = freeGroups.map((group) => {
+    const delivery = group.representative;
+    const customer = customerMap.get(delivery.customer_id);
+    return { delivery, customer, point: deliveryPoint(delivery, customer) };
+  });
+  if (freeStops.filter((stop) => Boolean(stop.point)).length < 2) return;
+
+  const smartFree = buildSmartRouteOrder({ lat, lng }, freeStops);
+  const smartByKey = new Map(
+    smartFree.map((stop) => [deliveryStopKey(stop.delivery), freeGroups.find((group) => group.key === deliveryStopKey(stop.delivery))!]),
+  );
+  const orderedFree = smartFree.map((stop) => smartByKey.get(deliveryStopKey(stop.delivery))!).filter(Boolean);
+  const finalGroups: typeof groups = [];
+  let freeCursor = 0;
+  for (let index = 0; index < groups.length; index += 1) {
+    finalGroups[index] = lockedAt.get(index) || orderedFree[freeCursor++];
+  }
+
+  const expanded = finalGroups.flatMap((group) => group.deliveries.map((delivery) => delivery.id));
+  const now = new Date().toISOString();
+  const updates = expanded
+    .map((id, index) => {
+      const current = items.find((item) => item.id === id);
+      if (!current || current.order_locked === true) return null;
+      if ((current.order_index ?? -1) === index && current.order_source === 'smart') return null;
+      return { id, order_index: index, order_source: 'smart' as const, order_updated_at: now };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  if (!updates.length) return;
+
+  const batch = writeBatch(db);
+  updates.forEach((update) => batch.update(doc(db, 'deliveries', update.id), sanitizeForFirebase(update)));
+  await batch.commit();
+}
 
 interface AppState {
   user: FirebaseUser | null;
@@ -412,6 +482,13 @@ export const useAppStore = create<AppState>()(
         if (get().isSyncing) return;
 
         const syncStartedAt = new Date().toISOString();
+        const knownDeliveryIds = new Set(get().deliveries.map((item) => item.id));
+        let siteOrderWatchReady = false;
+        try {
+          siteOrderWatchReady = localStorage.getItem('dfl-site-order-watch-ready') === '1';
+        } catch {
+          siteOrderWatchReady = false;
+        }
         const syncStartedMs = Date.now();
         set({ isSyncing: true, syncError: false });
         try {
@@ -677,6 +754,27 @@ export const useAppStore = create<AppState>()(
               }
             : defaultSettings;
 
+          if (siteOrderWatchReady) {
+            const newSiteOrders = fbDeliveries.filter((delivery) =>
+              !knownDeliveryIds.has(delivery.id) &&
+              delivery.source_system === 'dfl_site' &&
+              (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente'
+            );
+            newSiteOrders.slice(0, 3).forEach((delivery) => {
+              const customer = mergedCustomers.find((item) => item.id === delivery.customer_id);
+              void notifyNewSiteOrder(
+                delivery.id,
+                customer?.name,
+                finalStoreSettings.notificationPreferences,
+              );
+            });
+          }
+          try {
+            localStorage.setItem('dfl-site-order-watch-ready', '1');
+          } catch {
+            // Persistência indisponível: a sincronização continua normalmente.
+          }
+
           set({
             routes: mergedRoutes,
             deliveries: mergedDeliveries,
@@ -803,11 +901,21 @@ export const useAppStore = create<AppState>()(
         }
         if (routeStartedAt(current)) return;
         const now = new Date().toISOString();
+        const actor = get().user;
+        const startedByName = actor?.displayName?.trim() || actor?.email?.split('@')[0] || 'Usuário logado';
+        const audit = {
+          started_by_uid: actor?.uid || undefined,
+          started_by_name: startedByName,
+          started_by_email: actor?.email || undefined,
+        };
         set((state) => ({
-          routes: state.routes.map((r) => r.id === routeId ? { ...r, started_at: now, updated_at: now } : r),
+          routes: state.routes.map((r) => r.id === routeId ? { ...r, started_at: now, updated_at: now, ...audit } : r),
         }));
         try {
-          await updateDoc(doc(db, 'routes', routeId), { started_at: now, departure_time: now, updated_at: now });
+          await updateDoc(doc(db, 'routes', routeId), sanitizeForFirebase({ started_at: now, departure_time: now, updated_at: now, ...audit }));
+          const stops = groupDeliveriesByStop(routeDeliveries).length;
+          void notifyRouteStarted(routeId, current.name || 'Rota', current.motoboy_name || '', startedByName, stops, routeDeliveries.length, get().storeSettings.notificationPreferences);
+          void scheduleRouteDurationReminder({ ...current, started_at: now, ...audit }, get().storeSettings.notificationPreferences);
         } catch (error) {
           set({ routes: previousRoutes });
           console.error(error);
@@ -1389,6 +1497,13 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
           await setDoc(doc(db, 'deliveries', delivery.id), safeData);
+          if (deliveryWithTimestamp.route_id) {
+            try {
+              await autoOrganizeLoadedRouteAfterInsert(deliveryWithTimestamp.route_id, get().deliveries, get().customers, get().storeSettings);
+            } catch (organizeError) {
+              console.warn('Auto-organização incremental não aplicada:', organizeError);
+            }
+          }
         } catch (error) {
           set((state) => ({ deliveries: state.deliveries.filter((item) => item.id !== delivery.id) }));
           console.error(error);
@@ -1427,6 +1542,19 @@ export const useAppStore = create<AppState>()(
             sanitizeForFirebase(delivery),
           ));
           await batch.commit();
+          const touchedRoutes = Array.from(new Set(prepared.map((delivery) => delivery.route_id).filter(Boolean)));
+          for (const touchedRouteId of touchedRoutes) {
+            try {
+              await autoOrganizeLoadedRouteAfterInsert(
+                touchedRouteId,
+                get().deliveries,
+                get().customers,
+                get().storeSettings,
+              );
+            } catch (organizeError) {
+              console.warn('Auto-organização do lote não aplicada:', organizeError);
+            }
+          }
         } catch (error) {
           set({ deliveries: previous, syncError: true });
           console.error('Erro ao adicionar pedidos em lote:', error);
@@ -1748,6 +1876,7 @@ export const useAppStore = create<AppState>()(
               updated_at: delivery.updated_at || endTime,
             }));
           await closeBatch.commit();
+          void cancelRouteDurationReminder(routeId);
         } catch (error) {
           set({ routes: previousRoutes });
           console.error(error);
@@ -1812,6 +1941,14 @@ export const useAppStore = create<AppState>()(
             void notifyRouteFinished(
               routeId,
               routeBeforeClose.name || 'Rota',
+              get().storeSettings.notificationPreferences,
+              {
+                startedAt: routeStartedAt(routeBeforeClose) || undefined,
+                endedAt: endTime,
+                motoboyName: routeBeforeClose.motoboy_name,
+                stops: groupDeliveriesByStop(routeDeliveries).length,
+                orders: routeDeliveries.length,
+              },
             );
           }
         } catch (error) {
@@ -1857,105 +1994,66 @@ export const useAppStore = create<AppState>()(
       },
 
       reorderDelivery: async (routeId, deliveryId, direction) => {
-        const state = get();
-        const pending = state.deliveries
+        const pending = get().deliveries
           .filter((delivery) => delivery.route_id === routeId && !delivery.completed)
           .map((delivery) => ({ ...delivery }));
-
         const selected = pending.find((delivery) => delivery.id === deliveryId);
         if (!selected) return;
-
         const groups = groupDeliveriesByStop(pending);
-        const currentIndex = groups.findIndex(
-          (group) => group.key === deliveryStopKey(selected),
-        );
+        const currentIndex = groups.findIndex((group) => group.key === deliveryStopKey(selected));
         if (currentIndex < 0) return;
-        const currentManuallyLocked = groups[currentIndex].deliveries.some(
+        const isLocked = (group: (typeof groups)[number]) => group.deliveries.some(
           (delivery) => delivery.order_locked === true && delivery.order_source !== 'smart',
         );
-        if (currentManuallyLocked) {
-          throw new Error('Destrave a parada antes de reordenar.');
-        }
+        if (isLocked(groups[currentIndex])) throw new Error('Destrave a parada antes de reordenar.');
 
-        const targetIndex =
-          direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-
-        if (targetIndex < 0 || targetIndex >= groups.length) return;
-        const targetManuallyLocked = groups[targetIndex].deliveries.some(
-          (delivery) => delivery.order_locked === true && delivery.order_source !== 'smart',
-        );
-        if (targetManuallyLocked) {
-          throw new Error('A parada vizinha está travada manualmente.');
-        }
-
-        [groups[currentIndex], groups[targetIndex]] = [
-          groups[targetIndex],
-          groups[currentIndex],
-        ];
+        const freeIndices = groups.map((group, index) => isLocked(group) ? -1 : index).filter((index) => index >= 0);
+        const freeRank = freeIndices.indexOf(currentIndex);
+        const targetRank = freeRank + (direction === 'up' ? -1 : 1);
+        if (freeRank < 0 || targetRank < 0 || targetRank >= freeIndices.length) return;
+        const targetIndex = freeIndices[targetRank];
+        [groups[currentIndex], groups[targetIndex]] = [groups[targetIndex], groups[currentIndex]];
 
         await get().setDeliveryOrder(
           routeId,
-          groups.flatMap((group) =>
-            group.deliveries.map((delivery) => delivery.id),
-          ),
-          {
-            metadata: {
-              order_locked: false,
-              order_source: 'manual',
-              order_updated_at: new Date().toISOString(),
-            },
-          },
+          groups.flatMap((group) => group.deliveries.map((delivery) => delivery.id)),
+          { metadata: { order_source: 'manual', order_updated_at: new Date().toISOString() } },
         );
       },
 
       moveDeliveryToIndex: async (routeId, deliveryId, targetIndex) => {
-        const state = get();
-        const pending = state.deliveries
+        const pending = get().deliveries
           .filter((delivery) => delivery.route_id === routeId && !delivery.completed)
           .map((delivery) => ({ ...delivery }));
-
         const selected = pending.find((delivery) => delivery.id === deliveryId);
         if (!selected || pending.length < 2) return;
-
         const groups = groupDeliveriesByStop(pending);
-        if (groups.length < 2) return;
-
-        const currentGroupIndex = groups.findIndex(
-          (group) => group.key === deliveryStopKey(selected),
+        const currentIndex = groups.findIndex((group) => group.key === deliveryStopKey(selected));
+        if (currentIndex < 0) return;
+        const isLocked = (group: (typeof groups)[number]) => group.deliveries.some(
+          (delivery) => delivery.order_locked === true && delivery.order_source !== 'smart',
         );
-        if (currentGroupIndex < 0) return;
-        if (groups[currentGroupIndex].locked) {
-          throw new Error('Destrave a parada antes de reordenar.');
-        }
+        if (isLocked(groups[currentIndex])) throw new Error('Destrave a parada antes de reordenar.');
 
-        // targetIndex é índice de PARADA física, não de Delivery.
-        // Usar `pending[targetIndex]` quebrava quando uma parada tinha
-        // dois ou mais pedidos no mesmo stop_group_id.
-        const targetGroupIndex = Math.max(
-          0,
-          Math.min(targetIndex, groups.length - 1),
-        );
+        const freeIndices = groups.map((group, index) => isLocked(group) ? -1 : index).filter((index) => index >= 0);
+        const freeGroups = freeIndices.map((index) => groups[index]);
+        const currentRank = freeIndices.indexOf(currentIndex);
+        if (currentRank < 0) return;
+        const rawTarget = Math.max(0, Math.min(targetIndex, groups.length - 1));
+        let targetRank = 0;
+        for (const index of freeIndices) if (index <= rawTarget) targetRank += 1;
+        targetRank = Math.max(0, Math.min(targetRank - 1, freeGroups.length - 1));
+        if (targetRank === currentRank) return;
 
-        if (targetGroupIndex === currentGroupIndex) return;
-
-        if (groups[targetGroupIndex].locked) {
-          throw new Error('A parada de destino está travada na sequência.');
-        }
-
-        const [moved] = groups.splice(currentGroupIndex, 1);
-        groups.splice(targetGroupIndex, 0, moved);
+        const [moved] = freeGroups.splice(currentRank, 1);
+        freeGroups.splice(targetRank, 0, moved);
+        const finalGroups = [...groups];
+        freeIndices.forEach((absoluteIndex, rank) => { finalGroups[absoluteIndex] = freeGroups[rank]; });
 
         await get().setDeliveryOrder(
           routeId,
-          groups.flatMap((group) =>
-            group.deliveries.map((delivery) => delivery.id),
-          ),
-          {
-            metadata: {
-              order_source: 'manual',
-              order_updated_at: new Date().toISOString(),
-            },
-          },
+          finalGroups.flatMap((group) => group.deliveries.map((delivery) => delivery.id)),
+          { metadata: { order_source: 'manual', order_updated_at: new Date().toISOString() } },
         );
       },
 

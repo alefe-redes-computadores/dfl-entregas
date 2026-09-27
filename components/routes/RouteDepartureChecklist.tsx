@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Wallet, X } from 'lucide-react';
 import type { Customer, Delivery, Route } from '@/types';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { routeCashFlow } from '@/lib/route-cash-flow';
+import { groupDeliveriesByStop } from '@/lib/route-stops';
 
 type Props = {
   route: Route;
@@ -25,6 +26,7 @@ export function RouteDepartureChecklist({
   onClose,
   onConfirm,
 }: Props) {
+  const physicalStops = groupDeliveriesByStop(deliveries).length;
   const checklist = deliveries.map((delivery) => {
     const customer = getCustomerById(delivery.customer_id);
     return {
@@ -92,8 +94,8 @@ export function RouteDepartureChecklist({
 
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
-            <p className="text-lg font-black text-zinc-100">{deliveries.length}</p>
-            <p className="text-[9px] font-bold uppercase text-zinc-500">Entregas</p>
+            <p className="text-lg font-black text-zinc-100">{physicalStops}</p>
+            <p className="text-[9px] font-bold uppercase text-zinc-500">Paradas</p>
           </div>
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
             <p className="text-lg font-black text-sky-300">{drinks.length}</p>
