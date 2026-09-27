@@ -1,6 +1,7 @@
 import type { StockMovement, StockProduct } from '@/types';
 import { buildStockRecommendation } from '@/lib/stock-intelligence';
 import { commercialPurchasePlan } from '@/lib/stock-shopping';
+import { guardedStockRecommendation } from '@/lib/stock-recommendation-guard';
 
 const DAY=86400000;
 const validOperational=(m:StockMovement)=>m.type==='saida'&&!m.supply_id&&!/estorno|revers|ajuste|contagem|saldo inicial/i.test(m.reason||'')&&m.quantity>0;
@@ -13,8 +14,11 @@ export function buildDailyStockSignal(product:StockProduct,movements:StockMoveme
  const weekdayAverage=samples.length?samples.reduce((a,b)=>a+b,0)/samples.length:0;
  const rec=buildStockRecommendation(product,movements,now);
  const enough=samples.length>=3;
- const dailyTarget=enough?Math.max(product.minimum_quantity,weekdayAverage+Math.max(0,rec.averageDailyConsumption*rec.leadTimeDays)):rec.targetQuantity;
- const rawSuggested=Math.max(0,dailyTarget-product.current_quantity);
+ const guarded=guardedStockRecommendation(product,rec);
+ const historyTarget=Math.max(Number(product.minimum_quantity)||0,weekdayAverage+Math.max(0,rec.averageDailyConsumption*rec.leadTimeDays));
+ const rawHistorySuggested=Math.max(0,historyTarget-product.current_quantity);
+ const rawSuggested=guarded.mode==='history'&&enough?rawHistorySuggested:guarded.quantity;
+ const dailyTarget=Math.max(0,product.current_quantity+rawSuggested);
  const commercialPlan=commercialPurchasePlan(product,rawSuggested,0);
  const suggested=commercialPlan.baseQuantity;
  return {
@@ -24,7 +28,9 @@ export function buildDailyStockSignal(product:StockProduct,movements:StockMoveme
   rawSuggested,
   suggested,
   commercialPlan,
-  usesWeekday:enough,
-  confidence:samples.length>=8?'alta':samples.length>=4?'media':'baixa' as const
+  usesWeekday:guarded.mode==='history'&&enough,
+  confidence:samples.length>=8?'alta':samples.length>=4?'media':'baixa' as const,
+  recommendationMode:guarded.mode,
+  recommendationReason:guarded.reason
  };
 }

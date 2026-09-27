@@ -75,15 +75,14 @@ export function humanPurchasePlan(args:{purchaseQuantity:number;baseQuantity:num
     .replace(/^(pacote|caixa|fardo|unidade)s?\s*/i,'')
     .trim();
 
-  const head=`${Math.ceil(q)} ${noun}`;
-
-  if(!detail) return head;
-
-  return `${head} ${
-    detail.startsWith('de ')||detail.startsWith('com ')
-      ? detail
-      : `de ${detail}`
-  }`;
+  const count=Math.ceil(q);
+  const head=`${count} ${noun}`;
+  const conversion=Math.max(0,Number(p.conversion_quantity)||0);
+  const totalBase=Math.max(0,Number(baseQuantity)||count*conversion);
+  const totalLabel=conversion>0 ? ` (${formatStockQuantity(totalBase,baseUnit)} no total)` : '';
+  if(!detail) return `${head}${totalLabel}`;
+  const packageDetail=detail.startsWith('de ')||detail.startsWith('com ') ? detail : `de ${detail}`;
+  return `${head} ${packageDetail}${totalLabel}`;
 }
 
 export function physicalStockDisplay(product:StockProduct){

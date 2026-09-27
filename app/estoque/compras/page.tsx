@@ -29,6 +29,7 @@ import {
   commercialPurchasePlan,
 } from '@/lib/stock-shopping';
 import { humanPurchasePlan } from '@/lib/stock-commercial-display-v2';
+import { guardedStockRecommendation } from '@/lib/stock-recommendation-guard';
 import { formatCommercialPlan, isDiscretePurchaseUnit,
   normalizeTypedPurchaseQuantity,
 } from '@/lib/stock-commercial';
@@ -102,9 +103,9 @@ export default function ShoppingList() {
     () =>
       new Map(
         products.map((product) => {
-          const gross =
-            recommendationMap.get(product.id)
-              ?.recommendedQuantity || 0;
+          const recommendation = recommendationMap.get(product.id);
+          const guarded = guardedStockRecommendation(product, recommendation);
+          const gross = guarded.quantity;
 
           const committed =
             committedMap.get(product.id) || 0;
@@ -126,6 +127,7 @@ export default function ShoppingList() {
               purchaseQuantity: commercial.purchaseQuantity,
               presentation: commercial.presentation,
               surplus: commercial.surplusQuantity,
+              guard: guarded,
             },
           ] as const;
         }),
@@ -453,7 +455,7 @@ export default function ShoppingList() {
                     )}{' '}
                     · alvo{' '}
                     {formatStockQuantity(
-                      recommendation?.targetQuantity ||
+                      purchasePlan?.guard.configuredTarget ||
                         0,
                       product.unit,
                     )}
@@ -487,7 +489,7 @@ export default function ShoppingList() {
                                 product.unit,
                               );
                         })()}{' '}
-                        · confiança {recommendation?.confidence}
+                        · {purchasePlan?.guard.reason || `confiança ${recommendation?.confidence}`}
                       </p>
                       {recommendation?.reorderDue && (
                         <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[8px] font-black uppercase text-red-300">
@@ -526,16 +528,19 @@ export default function ShoppingList() {
                   )}
                 </div>
 
+              </div>
+
+              <div className="mt-3 grid grid-cols-[minmax(0,1fr)_92px] gap-2 border-t border-zinc-800/70 pt-3">
                 {(product.presentations || []).filter((item) => item.active && item.conversion_quantity > 0).length > 1 && (
-                  <div className="w-full sm:w-auto">
+                  <div className="min-w-0">
                     <label className="mb-1 block text-[8px] font-black uppercase tracking-wider text-zinc-600">Forma de compra</label>
-                    <select value={presentationIds[product.id] || purchasePlan?.presentation?.id || ''} onChange={(event) => { const id=event.target.value; setPresentationIds((value)=>({...value,[product.id]:id})); const current=netRecommendationMap.get(product.id); const next=commercialPurchasePlan(product,current?.gross||0,current?.committed||0,id); setQuantities((value)=>({...value,[product.id]:String(Number(next.purchaseQuantity.toFixed(3)))})); }} className="h-11 max-w-[150px] rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-[10px] font-bold text-zinc-200 outline-none">
+                    <select value={presentationIds[product.id] || purchasePlan?.presentation?.id || ''} onChange={(event) => { const id=event.target.value; setPresentationIds((value)=>({...value,[product.id]:id})); const current=netRecommendationMap.get(product.id); const next=commercialPurchasePlan(product,current?.gross||0,current?.committed||0,id); setQuantities((value)=>({...value,[product.id]:String(Number(next.purchaseQuantity.toFixed(3)))})); }} className="h-11 w-full min-w-0 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-[10px] font-bold text-zinc-200 outline-none">
                       {(product.presentations || []).filter((item)=>item.active&&item.conversion_quantity>0).map((item)=><option key={item.id} value={item.id}>{item.label} · {item.conversion_quantity.toLocaleString('pt-BR',{maximumFractionDigits:3})} {product.unit}</option>)}
                     </select>
                   </div>
                 )}
 
-                <div className="shrink-0">
+                <div className="w-[92px] shrink-0">
                   <p className="mb-1 text-[8px] font-black uppercase tracking-wider text-zinc-600">
                     Qtd. de compra
                   </p>
@@ -573,7 +578,7 @@ export default function ShoppingList() {
                       [product.id]: String(Number(Math.max(0, normalized).toFixed(3))),
                     }));
                   }}
-                  className="h-11 w-20 rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-right font-black text-zinc-100 outline-none"
+                  className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-right font-black text-zinc-100 outline-none"
                 />
                 </div>
               </div>
