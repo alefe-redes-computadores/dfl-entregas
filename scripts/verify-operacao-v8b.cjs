@@ -1,0 +1,4 @@
+const fs=require('fs'); const p=fs.readFileSync('lib/ifood-order-parser.ts','utf8'),i=fs.readFileSync('lib/delivery-inbox.ts','utf8'),n=fs.readFileSync('app/entregas/nova/page.tsx','utf8'); let bad=0;
+for(const [x,v] of [['payment explícito',p.includes('explicitPaid')],['Pix pendente protegido',p.includes('pix\\s+pendente')],['ID 4+4',p.includes('(\\d{4})[\\s.-]?(\\d{4})')],['telefone +55',p.includes('\\+?55')],['seed preserva pago',i.includes("parsed.isPaid ? ' · pago' : ''")],['draft estruturado hidratado',n.includes('inboxParsedRef.current = draft.parsed')],['draft estruturado consumido',n.includes('? [inboxParsedRef.current]')]]){console.log(`${v?'OK':'ERRO'}: ${x}`);if(!v)bad++}
+for(const f of ['lib/ifood-order-parser.ts','lib/delivery-inbox.ts']) if(/\b(getDocs|getDoc|onSnapshot|collection|query)\s*\(/.test(fs.readFileSync(f,'utf8'))){console.log('ERRO: Firestore direto em '+f);bad++}
+if(bad)process.exit(1); console.log('\nV8B: contratos OK');

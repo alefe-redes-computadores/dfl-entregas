@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
+import { paymentStateForInput } from '@/lib/delivery-finance';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
@@ -74,7 +75,8 @@ export default function NovaEntregaPage() {
   );
 
   const [magicText, setMagicText] = useState('');
-  const [isParserOpen, setIsParserOpen] = useState(true);
+  const [isParserOpen, setIsParserOpen] = useState(true);  const inboxParsedRef = useRef<ReturnType<typeof parseIfoodOrdersText>[number] | null>(null);
+
 
   const [origin, setOrigin] = useState<OrderOrigin>('ifood');
     const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>('delivery');
@@ -142,7 +144,8 @@ const [routeId, setRouteId] = useState('');
 
     inboxSeeded.current = true;
     setMagicText(draft.rawText);
-    setIsParserOpen(true);
+    setIsParserOpen(true);    inboxParsedRef.current = draft.parsed;
+
     setOrigin(draft.source === 'ifood' ? 'ifood' : 'loja');
 
     toast.info('Rascunho carregado da Caixa de Entrada', {
@@ -258,10 +261,13 @@ const [routeId, setRouteId] = useState('');
   const handleExecuteMagicParse = async () => {
     if (!magicText.trim()) { toast.error('Cole o texto do pedido antes de processar.'); return; }
     if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-    const parsedOrders=parseIfoodOrdersText(magicText,{
+    const parsedOrders = inboxParsedRef.current
+      ? [inboxParsedRef.current]
+      : parseIfoodOrdersText(magicText,{
       knownNeighborhoods,
       knownCustomerNames:customers.map(customer=>customer.name),
-    }); const parsed=parsedOrders[0]; const identified:string[]=[];
+    });
+    inboxParsedRef.current = null; const parsed=parsedOrders[0]; const identified:string[]=[];
     if(parsed.orderId){setOrderId(parsed.orderId);identified.push(`Nº #${parsed.orderId}`)}
     if(parsed.ifoodId){setIfoodId(parsed.ifoodId);identified.push(`ID ${parsed.ifoodId}`)}
     if(parsed.confirmationCode){setConfirmationCode(parsed.confirmationCode);identified.push(`Cód. ${parsed.confirmationCode}`)}
@@ -422,12 +428,12 @@ const [routeId, setRouteId] = useState('');
       if(origin==='ifood'){
         const deliveriesToCreate:Delivery[]=[];
         for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));let customerId='';if(draftName){customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?cleanStreet:undefined,phone:index===0?(rawPhone||undefined):undefined,mapsLink:fulfillmentMode==='delivery'?resolvedMapsLink:undefined,confirmationCode:draft.confirmationCode||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:index===0?(selectedCustomerId||undefined):undefined})}
-          deliveriesToCreate.push({id:index===0?Date.now().toString():`${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:stopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_customer_metrics:excludeCustomerMetrics||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:draft.paymentMethod,change_for:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?cleanStreet:'',maps_link:fulfillmentMode==='delivery'?resolvedMapsLink:'',phone:index===0?(rawPhone||undefined):undefined,notify_whatsapp:index===0?notifyWhatsapp:false,observation:cleanObservation||undefined,drinks:index===0?drinks:'',createdAt:now,created_at:now,updated_at:now});
+          deliveriesToCreate.push({id:index===0?Date.now().toString():`${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:stopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_customer_metrics:excludeCustomerMetrics||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:draft.paymentMethod,payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid),change_for:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?cleanStreet:'',maps_link:fulfillmentMode==='delivery'?resolvedMapsLink:'',phone:index===0?(rawPhone||undefined):undefined,notify_whatsapp:index===0?notifyWhatsapp:false,observation:cleanObservation||undefined,drinks:index===0?drinks:'',createdAt:now,created_at:now,updated_at:now});
         }
         await addDeliveries(deliveriesToCreate);toast.success(drafts.length>1?`${drafts.length} pedidos cadastrados na mesma parada.`:'Entrega cadastrada com sucesso!');
       }else{
         let customerId='';if(customerName.trim())customerId=await findOrCreateCustomer(customerName,{address:fulfillmentMode==='delivery'?cleanStreet:undefined,phone:rawPhone||undefined,mapsLink:fulfillmentMode==='delivery'?resolvedMapsLink:undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});
-        const cleanValue=parseMoney(value);await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:stopGroupId,origin,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_customer_metrics:excludeCustomerMetrics||(fulfillmentMode==='pickup'&&!customerName.trim()),value:cleanValue,customer_charge:cleanValue,is_paid:isPaid,is_urgent:isUrgent,payment_method:paymentMethod,change_for:changeFor?parseMoney(changeFor):undefined,address_string:fulfillmentMode==='delivery'?cleanStreet:'',maps_link:fulfillmentMode==='delivery'?resolvedMapsLink:'',phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success(stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+        const cleanValue=parseMoney(value);await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:stopGroupId,origin,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_customer_metrics:excludeCustomerMetrics||(fulfillmentMode==='pickup'&&!customerName.trim()),value:cleanValue,customer_charge:cleanValue,is_paid:isPaid,is_urgent:isUrgent,payment_method:paymentMethod,payment_state:paymentStateForInput(paymentMethod,isPaid),change_for:changeFor?parseMoney(changeFor):undefined,address_string:fulfillmentMode==='delivery'?cleanStreet:'',maps_link:fulfillmentMode==='delivery'?resolvedMapsLink:'',phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success(stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
       }
       if (inboxDraftId && inboxDay) {
         markInboxDraft(inboxDay, inboxDraftId, 'launched');

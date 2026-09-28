@@ -74,7 +74,7 @@ export function inboxSeedText(
     parsed.customerCharge &&
       `Cliente paga: R$ ${parsed.customerCharge}`,
     parsed.subsidy && `Subsídio: R$ ${parsed.subsidy}`,
-    parsed.paymentMethod && `Pagamento: ${parsed.paymentMethod}`,
+    parsed.paymentMethod && `Pagamento: ${parsed.paymentMethod}${parsed.isPaid ? ' · pago' : ''}`,
     parsed.changeFor && `Troco para: R$ ${parsed.changeFor}`,
     parsed.observations.length > 0 &&
       `Obs: ${parsed.observations.join(' - ')}`,
@@ -135,16 +135,54 @@ export function findInboxDuplicate(
   }
 
   if (name && address) {
-    const match = deliveries.find((delivery) =>
-      normalizeInboxText(delivery.customer_name) === name &&
-      normalizeInboxText(delivery.address_string) === address
-    );
+    const incomingDay = new Date().toLocaleDateString('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+    });
+    const incomingCharge = Number(parsed.customerCharge || 0);
+
+    const match = deliveries.find((delivery) => {
+      if (
+        normalizeInboxText(delivery.customer_name) !== name ||
+        normalizeInboxText(delivery.address_string) !== address
+      ) {
+        return false;
+      }
+
+      const existingDate =
+        delivery.created_at ||
+        delivery.createdAt ||
+        delivery.updated_at ||
+        '';
+
+      if (!existingDate) return false;
+
+      const existingDay = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(existingDate));
+
+      if (existingDay !== incomingDay) return false;
+
+      const existingCharge = Number(
+        delivery.customer_charge ?? delivery.value ?? 0,
+      );
+
+      // Sem identificador forte, só bloqueamos a repetição quando
+      // cliente + endereço + dia + valor também coincidem.
+      // Dois pedidos reais para o mesmo endereço continuam permitidos.
+      return (
+        incomingCharge > 0 &&
+        Math.abs(existingCharge - incomingCharge) < 0.01
+      );
+    });
 
     if (match) {
       return {
         id: match.id,
         reason:
-          'Mesmo cliente e endereço já aparecem nas entregas carregadas',
+          'Mesmo cliente, endereço e valor já foram lançados hoje',
       };
     }
   }

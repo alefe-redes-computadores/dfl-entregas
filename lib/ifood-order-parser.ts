@@ -172,13 +172,13 @@ function explicitIfoodId(line: string) {
   if (POSTAL.test(line)) return '';
 
   const patterns = [
-    /\b(?:id\s*(?:ifood|do\s+ifood|do\s+pedido)?|ifood(?:\s+id)?)\s*[:#-]?\s*(\d{8})\b/i,
-    /\b(?:identificador)\s*[:#-]?\s*(\d{8})\b/i,
+    /\b(?:id\s*(?:ifood|do\s+ifood|do\s+pedido)?|ifood(?:\s+id)?)\s*[:#-]?\s*(\d{4})[\s.-]?(\d{4})\b/i,
+    /\b(?:identificador)\s*[:#-]?\s*(\d{4})[\s.-]?(\d{4})\b/i,
   ];
 
   for (const pattern of patterns) {
     const match = line.match(pattern);
-    if (match) return match[1];
+    if (match) return [match[1], match[2]].filter(Boolean).join('');
   }
 
   return '';
@@ -363,52 +363,40 @@ function parsePayment(
   line: string,
   result: ParsedIfoodOrder,
 ) {
+  const normalized = line
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR');
+
   const negative =
-    /\b(?:n[aã]o\s+pago|pagamento\s+pendente|pix\s+pendente|pagar\s+na\s+entrega)\b/i.test(
-      line,
-    );
+    /\b(?:nao\s+pago|nao\s+esta\s+pago|pagamento\s+pendente|pix\s+pendente|pix\s+a\s+pagar|pagar\s+(?:no\s+)?pix\s+na\s+entrega|pagar\s+na\s+entrega|cobrar\s+na\s+entrega)\b/.test(normalized);
 
-  const cash = /\b(?:dinheiro|troco|voltar)\b/i.test(line);
+  const cash = /\b(?:dinheiro|troco|voltar)\b/.test(normalized);
   const card =
-    /\b(?:cart[aã]o|cr[eé]dito|d[eé]bito|maquininha)\b/i.test(
-      line,
-    );
+    /\b(?:cartao|credito|debito|maquininha)\b/.test(normalized);
+  const pix = /\bpix\b/.test(normalized);
 
-  const paid =
+  const explicitPaid =
     !negative &&
-    !cash &&
-    !card &&
-    /\b(?:pago|paga|pagamento\s+(?:online|pago|confirmado|aprovado|ok)|pedido\s+pago|j[aá]\s+pago|pago\s+(?:no\s+app|online)|pix\s+(?:pago|confirmado|aprovado|ok))\b/i.test(
-      line,
-    );
+    /\b(?:pago|paga|quitado|recebido|pagamento\s+(?:online|pago|confirmado|aprovado|ok)|pedido\s+pago|ja\s+pago|pago\s+(?:no\s+app|online)|pix\s+(?:pago|confirmado|aprovado|recebido|ok)|pagou\s+(?:no\s+)?pix)\b/.test(normalized);
 
   if (card) {
     result.paymentMethod = 'cartao';
-    result.isPaid = false;
+    result.isPaid = explicitPaid;
     result.changeFor = '';
     return;
   }
 
   if (cash) {
     result.paymentMethod = 'dinheiro';
-    result.isPaid = false;
+    result.isPaid = explicitPaid;
     return;
   }
 
-  if (paid) {
+  if (pix || explicitPaid) {
     result.paymentMethod = 'pix';
-    result.isPaid = true;
+    result.isPaid = explicitPaid;
     result.changeFor = '';
-    return;
-  }
-
-  if (/\bpix\b/i.test(line)) {
-    result.paymentMethod = 'pix';
-    result.isPaid =
-      !negative &&
-      /\b(?:pago|confirmado|aprovado|ok|online)\b/i.test(
-        line,
-      );
   }
 }
 
@@ -811,7 +799,7 @@ export function parseIfoodOrderText(
     }
 
     const phone = line.match(
-      /(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4,5}[-\s]?\d{4}/,
+      /(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4,5}[-\s]?\d{4}/,
     )?.[0];
 
     if (
@@ -819,12 +807,19 @@ export function parseIfoodOrderText(
       !result.phone &&
       !POSTAL.test(line)
     ) {
-      const digits = phone.replace(/\D/g, '');
+      let digits = phone.replace(/\D/g, '');
+      if (digits.startsWith('55') && digits.length >= 12) {
+        digits = digits.slice(2);
+      }
 
-      if (
-        digits.length >= 10 &&
-        digits.length <= 11
-      ) {
+      // Celular brasileiro antigo com DDD + 8 dígitos:
+      // insere o nono dígito somente quando o primeiro dígito local
+      // é compatível com celular, sem alterar telefone fixo.
+      if (digits.length === 10 && /^[1-9]{2}[6-9]/.test(digits)) {
+        digits = `${digits.slice(0, 2)}9${digits.slice(2)}`;
+      }
+
+      if (digits.length >= 10 && digits.length <= 11) {
         result.phone = digits;
       }
     }

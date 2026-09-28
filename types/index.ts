@@ -1,4 +1,9 @@
 export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debito' | 'cartao';
+
+export type DeliveryPaymentState =
+  | 'paid'
+  | 'collect_on_delivery'
+  | 'pending';
 export type RouteStatus = 'aberta' | 'fechada';
 export type OrderOrigin = 'ifood' | 'loja';
 export type IntegrationSourceSystem = 'dfl_site' | 'dfl_entregas';
@@ -304,6 +309,12 @@ export interface Delivery {
   value: number;
   is_paid: boolean;
   payment_method: PaymentMethod;
+  /**
+   * Estado financeiro operacional explícito.
+   * Registros legados continuam válidos: a camada financeira deriva o estado
+   * a partir de is_paid + payment_method quando este campo não existir.
+   */
+  payment_state?: DeliveryPaymentState;
   change_for?: number;
   address_string: string;
   maps_link: string;

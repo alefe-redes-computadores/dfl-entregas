@@ -20,6 +20,7 @@ import { compactAddressForCard, hasHouseNumber } from "@/lib/operational-address
 import { auditOperationalAddress } from '@/lib/address-quality';
 import { SiteOrderSnapshot } from '@/components/home/SiteOrderSnapshot';
 import { customerRecurrence } from '@/lib/customer-recurrence';
+import { deliveryPaymentStateLabel } from '@/lib/delivery-finance';
 
 interface DeliveryCardProps {
   delivery: Delivery & { is_expanded?: boolean };
@@ -87,6 +88,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
+  const paymentStateLabel = deliveryPaymentStateLabel(delivery);
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const isSiteOrder = delivery.source_system === 'dfl_site';
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
@@ -754,7 +756,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   ) : (
                     <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}>
                       <PaymentIcon size={14} />
-                      {payment.label === 'Dinheiro' && delivery.change_for ? `Troco p/ R$ ${isPrivacyMode ? '•••••' : delivery.change_for.toFixed(2).replace('.', ',')}` : payment.label}
+                      {payment.label === 'Dinheiro' && delivery.change_for
+                        ? `Troco p/ R$ ${isPrivacyMode ? '•••••' : delivery.change_for.toFixed(2).replace('.', ',')}`
+                        : paymentStateLabel}
                     </span>
                   )}
                   {delivery.drinks && (

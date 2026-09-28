@@ -1,5 +1,5 @@
 // lib/delivery-finance.ts
-import type { Delivery } from '@/types';
+import type { Delivery, DeliveryPaymentState, PaymentMethod } from '@/types';
 
 /**
  * Contrato financeiro canônico.
@@ -11,6 +11,49 @@ import type { Delivery } from '@/types';
  * Registros históricos não possuem customer_charge; nesses casos,
  * value continua sendo o fallback compatível.
  */
+export const deriveDeliveryPaymentState = (
+  input: Pick<Delivery, 'is_paid' | 'payment_method' | 'payment_state'>,
+): DeliveryPaymentState => {
+  if (input.payment_state) return input.payment_state;
+  if (input.is_paid) return 'paid';
+
+  // Dinheiro/cartão são cobrados fisicamente na entrega.
+  if (
+    input.payment_method === 'dinheiro' ||
+    input.payment_method === 'cartao' ||
+    input.payment_method === 'cartao_credito' ||
+    input.payment_method === 'cartao_debito'
+  ) {
+    return 'collect_on_delivery';
+  }
+
+  // Pix não recebido ainda é pendência financeira, não "troco/maquininha".
+  return 'pending';
+};
+
+export const paymentStateForInput = (
+  paymentMethod: PaymentMethod,
+  isPaid: boolean,
+): DeliveryPaymentState => {
+  if (isPaid) return 'paid';
+  if (
+    paymentMethod === 'dinheiro' ||
+    paymentMethod === 'cartao' ||
+    paymentMethod === 'cartao_credito' ||
+    paymentMethod === 'cartao_debito'
+  ) {
+    return 'collect_on_delivery';
+  }
+  return 'pending';
+};
+
+export const deliveryPaymentStateLabel = (delivery: Delivery) => {
+  const state = deriveDeliveryPaymentState(delivery);
+  if (state === 'paid') return 'Pago';
+  if (state === 'pending') return 'Pix pendente';
+  return 'Cobrar na entrega';
+};
+
 export const deliveryEconomicValue = (delivery: Delivery): number => {
   const value = Number(delivery.value || 0);
   return Number.isFinite(value) ? Math.max(0, value) : 0;

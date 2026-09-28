@@ -18,6 +18,7 @@ import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { getFulfillmentMode } from '@/lib/delivery-mode';
 import { dateKey, deliveryDate, routeDate } from '@/lib/operational-time';
+import { paymentStateForInput } from '@/lib/delivery-finance';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
@@ -583,6 +584,7 @@ const [routeId, setRouteId] = useState('');
         is_paid: isPaid,
         is_urgent: isUrgent,
         payment_method: paymentMethod,
+        payment_state: paymentStateForInput(paymentMethod, isPaid),
         change_for: cleanChangeFor,
         address_string: fulfillmentMode === 'delivery' ? cleanStreet : '',
         maps_link: fulfillmentMode === 'delivery' ? resolvedMapsLink : '',
