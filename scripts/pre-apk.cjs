@@ -2,6 +2,7 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/verify-delivery-inbox-money-v9.cjs',
   'scripts/verify-pre-apk-stability-v8.cjs',
   'scripts/verify-operacao-v8a.cjs',
   'scripts/test-operacao-v8b-parser.cjs',

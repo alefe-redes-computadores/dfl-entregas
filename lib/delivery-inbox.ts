@@ -33,6 +33,34 @@ export interface DeliveryInboxDay {
 
 export const DELIVERY_INBOX_PREFIX = 'dfl-delivery-inbox-v1:';
 
+// DFL_MONEY_HELPER_START
+export function parseInboxMoney(value?: string | number | null) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const raw = (value || '').trim().replace(/[^\d,.-]/g, '');
+  if (!raw) return 0;
+
+  const comma = raw.lastIndexOf(',');
+  const dot = raw.lastIndexOf('.');
+  let normalized = raw;
+
+  if (comma >= 0 && dot >= 0) {
+    normalized = comma > dot
+      ? raw.replace(/\./g, '').replace(',', '.')
+      : raw.replace(/,/g, '');
+  } else if (comma >= 0) {
+    normalized = raw.replace(/\./g, '').replace(',', '.');
+  } else if (/^-?\d{1,3}(?:\.\d{3})+$/.test(raw)) {
+    normalized = raw.replace(/\./g, '');
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+// DFL_MONEY_HELPER_END
+
 export function normalizeInboxText(value?: string | null) {
   return (value || '')
     .normalize('NFD')
@@ -138,7 +166,7 @@ export function findInboxDuplicate(
     const incomingDay = new Date().toLocaleDateString('en-CA', {
       timeZone: 'America/Sao_Paulo',
     });
-    const incomingCharge = Number(parsed.customerCharge || 0);
+    const incomingCharge = parseInboxMoney(parsed.customerCharge);
 
     const match = deliveries.find((delivery) => {
       if (

@@ -29,6 +29,14 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
+      - name: Validar contratos pré-APK
+        shell: bash
+        run: |
+          node node_modules/typescript/bin/tsc --noEmit
+          node scripts/pre-apk.cjs
+          node scripts/audit-pre-apk-firestore.cjs
+          git diff --check
+
       - name: Gerar identidade visual do app
         run: |
           python3 scripts/generate-brand-assets.py dfl-entregas-icon-master.png public

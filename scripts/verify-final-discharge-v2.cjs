@@ -23,7 +23,7 @@ const checks=[
  ['Sync detecta pedido site novo sem scan extra',f.store.includes('newSiteOrders = fbDeliveries.filter')],
  ['Bootstrap evita tempestade de avisos antigos',f.store.includes('dfl-site-order-watch-ready')],
  ['Automação não depende de alertsEnabled',!f.automation.includes("!settings.alertsEnabled")],
- ['Loja explica divergência manual/programada',f.loja.includes('Aberta manualmente fora do horário')],
+ ['Loja explica divergência manual/programada',f.loja.includes('Aberta manualmente')&&f.loja.includes('Fora do expediente programado')],
  ['Clique em notificação já navega por href',f.native.includes('localNotificationActionPerformed')&&f.native.includes('router.replace(href)')],
 ];
 let bad=0;
