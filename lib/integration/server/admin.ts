@@ -1,6 +1,7 @@
 import 'server-only';
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 function credential() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
@@ -26,3 +27,4 @@ function credential() {
 
 export const adminApp = getApps()[0] || initializeApp({ credential: credential() });
 export const adminDb = getFirestore(adminApp);
+export const adminAuth = getAuth(adminApp);

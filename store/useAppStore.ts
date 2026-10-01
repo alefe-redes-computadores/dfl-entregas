@@ -913,6 +913,46 @@ export const useAppStore = create<AppState>()(
         }));
         try {
           await updateDoc(doc(db, 'routes', routeId), sanitizeForFirebase({ started_at: now, departure_time: now, updated_at: now, ...audit }));
+
+          /*
+           * Fast lane reverso:
+           *
+           * iniciar a rota é o evento real de saída da loja.
+           * Acordamos a projeção imediatamente em vez de esperar
+           * o worker periódico.
+           *
+           * Falha aqui NÃO desfaz a rota:
+           * o worker periódico continua como rede de segurança.
+           */
+          try {
+            const token = await auth.currentUser?.getIdToken();
+
+            if (token) {
+              const response = await fetch('/api/integration/route-kick', {
+                method: 'POST',
+                headers: {
+                  authorization: `Bearer ${token}`,
+                },
+              });
+
+              if (!response.ok) {
+                console.warn(
+                  '[route-kick] resposta não OK; fallback periódico preservado',
+                  response.status,
+                );
+              }
+            } else {
+              console.warn(
+                '[route-kick] usuário sem token; fallback periódico preservado',
+              );
+            }
+          } catch (kickError) {
+            console.warn(
+              '[route-kick] falhou; fallback periódico preservado',
+              kickError,
+            );
+          }
+
           const stops = groupDeliveriesByStop(routeDeliveries).length;
           void notifyRouteStarted(routeId, current.name || 'Rota', current.motoboy_name || '', startedByName, stops, routeDeliveries.length, get().storeSettings.notificationPreferences);
           void scheduleRouteDurationReminder({ ...current, started_at: now, ...audit }, get().storeSettings.notificationPreferences);
