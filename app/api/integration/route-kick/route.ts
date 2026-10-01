@@ -25,6 +25,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let routeId = '';
+
+  try {
+    const body = await req.json() as { routeId?: unknown };
+    routeId = typeof body.routeId === 'string' ? body.routeId.trim() : '';
+  } catch {
+    routeId = '';
+  }
+
+  if (!routeId) {
+    return NextResponse.json(
+      { ok: false, error: 'routeId obrigatório' },
+      { status: 400 },
+    );
+  }
+
   try {
     /*
      * Fast lane operacional.
@@ -41,6 +57,7 @@ export async function POST(req: NextRequest) {
         recovery: false,
         analytics: false,
         activeLimit: 40,
+        routeId,
       });
 
     const relay = await drainReverseIntegrationOutbox();

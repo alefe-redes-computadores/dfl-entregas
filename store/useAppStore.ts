@@ -932,7 +932,9 @@ export const useAppStore = create<AppState>()(
                 method: 'POST',
                 headers: {
                   authorization: `Bearer ${token}`,
+                  'content-type': 'application/json',
                 },
+                body: JSON.stringify({ routeId }),
               });
 
               if (!response.ok) {

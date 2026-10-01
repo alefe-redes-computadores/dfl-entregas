@@ -13,6 +13,7 @@ export type ReverseReconcileOptions = {
   recovery?: boolean;
   analytics?: boolean;
   activeLimit?: number;
+  routeId?: string;
 };
 
 const str = (value: unknown) => typeof value === 'string' ? value : '';
@@ -105,12 +106,28 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
   // O worker reverso só precisa partir de deliveries pertencentes ao Site.
   // A versão anterior lia TODAS as deliveries e TODAS as routes a cada minuto.
   // V42: reconciliation is a bounded recovery path, not a full-history scanner.
+  const targetedRouteId = str(options.routeId).trim();
+
+  /*
+   * Fast lane dirigida:
+   *
+   * Quando a própria operação informa qual rota mudou, não fazemos uma
+   * busca global pelas primeiras deliveries ativas. Consultamos somente
+   * aquela rota e filtramos as deliveries do Site em memória.
+   *
+   * O caminho global limitado continua existindo exclusivamente para
+   * o worker periódico de recuperação.
+   */
   const activeSnap = trackingEnabled
-    ? await adminDb.collection('deliveries')
-      .where('source_system', '==', 'dfl_site')
-      .where('completed', '==', false)
-      .limit(activeLimit)
-      .get()
+    ? targetedRouteId
+      ? await adminDb.collection('deliveries')
+        .where('route_id', '==', targetedRouteId)
+        .get()
+      : await adminDb.collection('deliveries')
+        .where('source_system', '==', 'dfl_site')
+        .where('completed', '==', false)
+        .limit(activeLimit)
+        .get()
     : null;
 
   const maintenanceRef = adminDb
@@ -150,7 +167,20 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
 
   const byId = new Map<string, Item>();
   for (const doc of [...((activeSnap?.docs || []) as QueryDocumentSnapshot[]), ...recentCompletedDocs]) {
-    byId.set(doc.id, { id: doc.id, data: doc.data() as Raw });
+    const data = doc.data() as Raw;
+
+    if (
+      targetedRouteId &&
+      (
+        str(data.route_id).trim() !== targetedRouteId ||
+        str(data.source_system).trim() !== 'dfl_site' ||
+        bool(data.completed)
+      )
+    ) {
+      continue;
+    }
+
+    byId.set(doc.id, { id: doc.id, data });
   }
   const siteDeliveries: Item[] = [...byId.values()]
     .filter((item) => str(item.data.external_order_id).trim().length > 0);
