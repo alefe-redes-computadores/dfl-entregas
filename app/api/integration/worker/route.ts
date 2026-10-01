@@ -60,10 +60,9 @@ async function claimAutomaticWork() {
     const state = snapshot.data() || {};
     const lastTracking = Date.parse(typeof state.last_tracking_at === 'string' ? state.last_tracking_at : '');
     const tracking = !Number.isFinite(lastTracking) || now - lastTracking >= 15 * 60 * 1000;
-    const lastReports = Date.parse(typeof state.last_reports_at === 'string' ? state.last_reports_at : '');
-    // analytics_sync_pending é uma fila explícita limitada a 40. Mantemos
-    // relatórios no mesmo pulso protegido de 15 min, sem scan histórico.
-    const reports = !Number.isFinite(lastReports) || now - lastReports >= 15 * 60 * 1000;
+    const lastReportsKey = typeof state.last_reports_key === 'string' ? state.last_reports_key : '';
+    // Snapshot diário fora da operação quente; mode=reports preserva refresh manual.
+    const reports = clock.hour === 4 && lastReportsKey !== clock.dateKey;
     if (tracking || reports) transaction.set(ref, {
       ...(tracking ? { last_tracking_at: new Date(now).toISOString() } : {}),
       ...(reports ? { last_reports_key: clock.dateKey, last_reports_at: new Date(now).toISOString() } : {}),

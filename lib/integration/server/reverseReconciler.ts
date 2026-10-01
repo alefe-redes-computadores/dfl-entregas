@@ -62,7 +62,7 @@ function occurredAt(delivery: Raw, route: Raw | undefined) {
   return valid[0]?.value || new Date().toISOString();
 }
 
-function eventTypes(delivery: Raw, route: Raw | undefined, pendingIndex: number) {
+function eventTypes(delivery: Raw, route: Raw | undefined, pendingIndex: number, pendingStops: number, totalStops: number) {
   if (bool(delivery.completed)) return ['delivery.completed'] as const;
   if (routeClosed(route)) return ['route.completed'] as const;
 
@@ -77,6 +77,9 @@ function eventTypes(delivery: Raw, route: Raw | undefined, pendingIndex: number)
   // 2) a posição operacional atual.
   // Mantemos ambas no outbox, mas somente next_stop deve significar
   // "você é o próximo".
+  if (pendingIndex === 0 && pendingStops >= totalStops) {
+    return ['delivery.out_for_delivery'] as const;
+  }
   return pendingIndex === 0
     ? ['delivery.out_for_delivery', 'delivery.next_stop'] as const
     : ['delivery.out_for_delivery', 'delivery.position_changed'] as const;
@@ -198,7 +201,7 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
     const pendingGroups = stopGroups.filter((group) => group.pending.length > 0);
     const pendingIndex = pendingGroups.findIndex((group) => group.key === key);
     const started = routeStarted(route);
-    const types = eventTypes(item.data, route, pendingIndex);
+    const types = eventTypes(item.data, route, pendingIndex, pendingGroups.length, stopGroups.length);
     if (!types.length) continue;
 
     const payload = {
