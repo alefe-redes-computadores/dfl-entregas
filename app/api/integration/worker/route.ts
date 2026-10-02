@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import { adminDb } from '@/lib/integration/server/admin';
 import { reconcileReverseTrackingOutbox, type ReverseReconcileOptions } from '@/lib/integration/server/reverseReconciler';
-import { drainReverseIntegrationOutbox } from '@/lib/integration/server/reverseRelay';
+import {
+  drainReverseIntegrationEventIds,
+  drainReverseIntegrationOutbox,
+} from '@/lib/integration/server/reverseRelay';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -63,12 +66,14 @@ async function claimAutomaticWork() {
     const lastReportsKey = typeof state.last_reports_key === 'string' ? state.last_reports_key : '';
     // Snapshot diário fora da operação quente; mode=reports preserva refresh manual.
     const reports = clock.hour === 4 && lastReportsKey !== clock.dateKey;
+    const statusRecoveryReplay =
+      state.status_recovery_v17_4_done !== true;
     if (tracking || reports) transaction.set(ref, {
       ...(tracking ? { last_tracking_at: new Date(now).toISOString() } : {}),
       ...(reports ? { last_reports_key: clock.dateKey, last_reports_at: new Date(now).toISOString() } : {}),
       updated_at: new Date(now).toISOString(),
     }, { merge: true });
-    return { tracking, reports, clock };
+    return { tracking, reports, statusRecoveryReplay, clock };
   });
 }
 
@@ -88,23 +93,90 @@ async function run(req: NextRequest) {
   if (mode === 'reports' || (mode === 'auto' && schedule?.reports)) reconcileOptions = { tracking: false, recovery: true, analytics: true, activeLimit: 40 };
   if (mode === 'reconcile' || (mode === 'auto' && schedule?.tracking && schedule?.reports)) reconcileOptions = { tracking: true, recovery: true, analytics: true, activeLimit: 40 };
 
+  if (mode === 'auto' && schedule?.statusRecoveryReplay) {
+    reconcileOptions = {
+      ...(reconcileOptions || {
+        tracking: true,
+        recovery: false,
+        analytics: false,
+        activeLimit: 40,
+      }),
+      statusRecoveryReplay: true,
+    };
+  }
+
   const reconciliation = reconcileOptions
     ? await stage('reconciliation', () => reconcileReverseTrackingOutbox(reconcileOptions!))
     : null;
-  // Drain continua leve e idempotente. Mesmo quando a reconciliação não está
-  // no horário, eventos que já existem na outbox seguem sendo entregues.
+  const statusRecoveryEventIds =
+    reconciliation && reconciliation.ok
+      ? reconciliation.value.statusRecoveryReplayEventIds || []
+      : [];
+
+  const statusRecoveryRelay =
+    statusRecoveryEventIds.length > 0
+      ? await stage(
+          'status-recovery-relay',
+          () => drainReverseIntegrationEventIds(statusRecoveryEventIds),
+        )
+      : null;
+
+  const statusRecoveryCheckpoint =
+    mode === 'auto' &&
+    schedule?.statusRecoveryReplay &&
+    reconciliation &&
+    reconciliation.ok &&
+    reconciliation.value.statusRecoveryReplayEnabled
+      ? await stage('status-recovery-checkpoint', async () => {
+          await adminDb
+            .collection('integration_checkpoints')
+            .doc('worker_schedule_v72')
+            .set({
+              status_recovery_v17_4_done: true,
+              status_recovery_v17_4_at: new Date().toISOString(),
+              status_recovery_v17_4_read:
+                reconciliation.value.statusRecoveryReplayRead,
+              updated_at: new Date().toISOString(),
+            }, { merge: true });
+
+          return { done: true };
+        })
+      : null;
+
+  // Drain global permanece somente como rede de segurança da outbox.
   const relay = await stage('relay', () => drainReverseIntegrationOutbox());
 
   const scheduleOk = scheduleStage === null || scheduleStage.ok;
   const reconciliationOk = reconciliation === null || reconciliation.ok;
-  const ok = scheduleOk && reconciliationOk && relay.ok;
+  const statusRecoveryRelayOk =
+    statusRecoveryRelay === null || statusRecoveryRelay.ok;
+  const statusRecoveryCheckpointOk =
+    statusRecoveryCheckpoint === null || statusRecoveryCheckpoint.ok;
+
+  const ok =
+    scheduleOk &&
+    reconciliationOk &&
+    statusRecoveryRelayOk &&
+    statusRecoveryCheckpointOk &&
+    relay.ok;
   const resourceExhausted =
     (scheduleStage !== null && !scheduleStage.ok && scheduleStage.resourceExhausted) ||
     (reconciliation !== null && !reconciliation.ok && reconciliation.resourceExhausted) ||
     (!relay.ok && relay.resourceExhausted);
   console.log('[integration/reverse-worker]', { mode, ok, resourceExhausted, schedule, reconcileOptions });
   return NextResponse.json(
-    { ok, mode, resourceExhausted, schedule, scheduleStage, reconcileOptions, reconciliation, relay },
+    {
+      ok,
+      mode,
+      resourceExhausted,
+      schedule,
+      scheduleStage,
+      reconcileOptions,
+      reconciliation,
+      statusRecoveryRelay,
+      statusRecoveryCheckpoint,
+      relay,
+    },
     { status: ok ? 200 : resourceExhausted ? 429 : 207 },
   );
 }

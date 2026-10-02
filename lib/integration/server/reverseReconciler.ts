@@ -14,6 +14,7 @@ export type ReverseReconcileOptions = {
   analytics?: boolean;
   activeLimit?: number;
   routeId?: string;
+  statusRecoveryReplay?: boolean;
 };
 
 const str = (value: unknown) => typeof value === 'string' ? value : '';
@@ -130,6 +131,28 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
         .get()
     : null;
 
+  const statusRecoveryReplayEnabled =
+    options.statusRecoveryReplay === true;
+
+  const statusRecoveryCutoff =
+    new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+  const statusRecoverySnap = statusRecoveryReplayEnabled
+    ? await adminDb.collection('deliveries')
+      .where('source_system', '==', 'dfl_site')
+      .where('completed', '==', true)
+      .where('updated_at', '>', statusRecoveryCutoff)
+      .orderBy('updated_at', 'asc')
+      .limit(40)
+      .get()
+    : null;
+
+  const statusRecoveryDocs =
+    (statusRecoverySnap?.docs || []) as QueryDocumentSnapshot[];
+
+  const statusRecoveryIds =
+    new Set(statusRecoveryDocs.map((doc) => doc.id));
+
   const maintenanceRef = adminDb
     .collection('integration_checkpoints')
     .doc('reverse_recovery_v3');
@@ -166,7 +189,11 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
   }
 
   const byId = new Map<string, Item>();
-  for (const doc of [...((activeSnap?.docs || []) as QueryDocumentSnapshot[]), ...recentCompletedDocs]) {
+  for (const doc of [
+    ...((activeSnap?.docs || []) as QueryDocumentSnapshot[]),
+    ...recentCompletedDocs,
+    ...statusRecoveryDocs,
+  ]) {
     const data = doc.data() as Raw;
 
     if (
@@ -208,6 +235,7 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
     .map((doc) => ({ id: doc.id, data: doc.data() as Raw }));
 
   const candidates: Array<{ eventId: string; event: ReturnType<typeof buildIntegrationEvent> }> = [];
+  const statusRecoveryReplayEventIds: string[] = [];
 
   for(const item of analyticsItems){
     const updatedAt=str(item.data.updated_at).trim(),completedAt=str(item.data.completed_at).trim(),createdAt=str(item.data.created_at||item.data.createdAt).trim();
@@ -233,6 +261,8 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
     const types = eventTypes(item.data, route, pendingIndex, pendingGroups.length, stopGroups.length);
     if (!types.length) continue;
 
+    const recoveryReplay = statusRecoveryIds.has(item.id);
+
     const payload = {
       externalOrderId: str(item.data.external_order_id),
       externalOrderSource: 'dfl_site' as const,
@@ -248,6 +278,7 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
       nextStop: started && pendingIndex === 0,
       completedAt: str(item.data.completed_at) || null,
       failedReason: null,
+      ...(recoveryReplay ? { recoveryReplay: true } : {}),
     };
 
     for (const type of types) {
@@ -263,8 +294,22 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
           }
         : { type, payload };
 
-      const fingerprint = stableHash(identity);
-      const eventId = `evt-v1__${type}__${encodeURIComponent(item.id)}__snapshot-${fingerprint}`;
+      const isStatusRecoveryEvent =
+        recoveryReplay && type === 'delivery.completed';
+
+      const fingerprint = stableHash(
+        isStatusRecoveryEvent
+          ? { identity, recoveryProtocol: 'status-v17.4' }
+          : identity,
+      );
+
+      const eventId =
+        `evt-v1__${type}__${encodeURIComponent(item.id)}__${isStatusRecoveryEvent ? 'recovery-v17-4-' : 'snapshot-'}${fingerprint}`;
+
+      if (isStatusRecoveryEvent) {
+        statusRecoveryReplayEventIds.push(eventId);
+      }
+
       candidates.push({
         eventId,
         event: buildIntegrationEvent({
@@ -337,6 +382,9 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
     candidates: candidates.length,
     created,
     existing,
+    statusRecoveryReplayEnabled,
+    statusRecoveryReplayRead: statusRecoveryDocs.length,
+    statusRecoveryReplayEventIds,
     eventIds: candidates.map((candidate) => candidate.eventId),
   };
 }
