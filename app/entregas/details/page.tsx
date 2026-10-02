@@ -44,6 +44,7 @@ import {
   deliveryChannelLabel,
   deliveryOrderNumber,
   formatBrazilianPhone,
+  operationalAddressLabel,
   operationalMapsUrl,
   siteStatusLabel,
 } from '@/lib/delivery-presentation';
@@ -314,8 +315,8 @@ function DeliveryDetailsContent() {
             : 'border-amber-500/25 bg-amber-500/[0.05]'
         }`}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <div
               className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
                 channel === 'ifood'
@@ -328,11 +329,11 @@ function DeliveryDetailsContent() {
               {channel === 'ifood' ? <Smartphone /> : channel === 'site' ? <Globe2 /> : <Store />}
             </div>
 
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-bold uppercase text-zinc-500">
                 {deliveryChannelLabel(delivery)}
               </p>
-              <p className="mt-0.5 text-lg font-black text-zinc-100">
+              <p className="mt-0.5 truncate text-lg font-black text-zinc-100">
                 {visibleOrderNumber ? `#${visibleOrderNumber}` : 'Sem número informado'}
               </p>
             </div>
@@ -384,7 +385,7 @@ function DeliveryDetailsContent() {
           <InfoRow
             icon={MapPin}
             label="Endereço"
-            value={delivery.address_string || 'Não informado'}
+            value={operationalAddressLabel(delivery.address_string, customer?.neighborhood) || 'Não informado'}
           />
         )}
 

@@ -227,19 +227,15 @@ export function dflSiteAddressString(
   const street = text(snapshot.street);
   const number = text(snapshot.number);
   const district = text(snapshot.district);
+  const main = [street, number].filter(Boolean).join(', ');
+  return [main, district].filter(Boolean).join(' - ');
+}
+
+function dflSiteAddressObservation(snapshot: DflSiteDeliverySnapshotV1 | null) {
+  if (!snapshot) return undefined;
   const complement = text(snapshot.complement);
   const reference = text(snapshot.reference);
-  const cep = text(snapshot.cep);
-
-  return [
-    [street, number].filter(Boolean).join(', '),
-    district ? `Bairro ${district}` : '',
-    complement,
-    reference ? `Ref.: ${reference}` : '',
-    cep ? `CEP ${cep}` : '',
-  ]
-    .filter(Boolean)
-    .join(' • ');
+  return [complement, reference ? `Ref.: ${reference}` : ''].filter(Boolean).join(' · ') || undefined;
 }
 
 export function normalizeSitePaymentMethod(
@@ -308,6 +304,7 @@ export function customerDraftFromSite(
       undefined,
     origin: 'loja',
     address: address || undefined,
+    observation: dflSiteAddressObservation(payload.deliverySnapshot),
     createdAt: now,
     updated_at: now,
   };
@@ -501,6 +498,7 @@ export function deliveryDraftFromSite(
     address_string: address,
     maps_link: '',
     phone: phone || undefined,
+    observation: dflSiteAddressObservation(payload.deliverySnapshot),
 
     completed: false,
     createdAt: now,
