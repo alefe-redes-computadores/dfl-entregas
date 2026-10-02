@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { auth } from '@/lib/firebase';
 
 export type RouteKickReason =
@@ -34,36 +35,55 @@ type RouteKickOptions = {
   retryDelayMs?: number;
 };
 
+const DEFAULT_SERVER_ORIGIN = 'https://dfl-entregas.vercel.app';
+
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
 
+function serverOrigin() {
+  return (
+    process.env.NEXT_PUBLIC_DFL_SERVER_ORIGIN?.trim() ||
+    DEFAULT_SERVER_ORIGIN
+  ).replace(/\/+$/, '');
+}
+
+export function routeKickUrl() {
+  return Capacitor.isNativePlatform()
+    ? `${serverOrigin()}/api/integration/route-kick`
+    : '/api/integration/route-kick';
+}
+
 function firstRelayError(result: RouteKickResult | null) {
   return result?.relay?.results?.find((item) => item.ok === false)?.error || '';
 }
 
-function shouldRetry(
-  status: number,
-  result: RouteKickResult | null,
-) {
+function shouldRetry(status: number, result: RouteKickResult | null) {
   if (status === 401 || status === 408 || status === 425 || status === 429) {
     return true;
   }
-
   if (status >= 500) return true;
-
   return Number(result?.relay?.retryable || 0) > 0;
 }
 
-/**
- * Fast lane dirigido da rota.
- *
- * Não cria polling/listener. É uma sequência curta e limitada disparada
- * exclusivamente pela ação operacional atual. O retry existe apenas para
- * absorver corrida com um worker que já tenha reclamado o mesmo eventId ou
- * uma falha transitória do relay.
- */
+async function parseRouteKickResponse(response: Response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    const preview = (await response.text()).replace(/\s+/g, ' ').slice(0, 160);
+    throw new Error(
+      `Fast lane respondeu conteúdo inválido (HTTP ${response.status})` +
+      (preview ? `: ${preview}` : '.'),
+    );
+  }
+
+  const result = await response.json().catch(() => null) as RouteKickResult | null;
+  if (!result || typeof result !== 'object') {
+    throw new Error(`Fast lane respondeu JSON inválido (HTTP ${response.status}).`);
+  }
+  return result;
+}
+
 export async function kickSiteRoute(
   routeId: string,
   options: RouteKickOptions,
@@ -71,35 +91,22 @@ export async function kickSiteRoute(
   const safeRouteId = routeId.trim();
   if (!safeRouteId) throw new Error('Rota inválida para sincronização do Site.');
 
-  const maxAttempts = Math.max(
-    1,
-    Math.min(3, Math.trunc(options.maxAttempts ?? 3)),
-  );
-  const retryDelayMs = Math.max(
-    500,
-    Math.min(2500, Math.trunc(options.retryDelayMs ?? 900)),
-  );
-
+  const maxAttempts = Math.max(1, Math.min(3, Math.trunc(options.maxAttempts ?? 3)));
+  const retryDelayMs = Math.max(500, Math.min(2500, Math.trunc(options.retryDelayMs ?? 900)));
   let lastError = 'Não foi possível sincronizar a rota com o Site.';
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const user = auth.currentUser;
-
-    if (!user) {
-      throw new Error('Sessão indisponível para sincronizar a rota.');
-    }
+    if (!user) throw new Error('Sessão indisponível para sincronizar a rota.');
 
     const token = await user.getIdToken(attempt > 0);
-
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 30_000);
-
-    let response: Response;
     let result: RouteKickResult | null = null;
     let retryAllowed = true;
 
     try {
-      response = await fetch('/api/integration/route-kick', {
+      const response = await fetch(routeKickUrl(), {
         method: 'POST',
         headers: {
           authorization: `Bearer ${token}`,
@@ -110,22 +117,17 @@ export async function kickSiteRoute(
           reason: options.reason,
         }),
         cache: 'no-store',
-        credentials: 'same-origin',
+        credentials: 'omit',
         signal: controller.signal,
       });
 
-      result = await response.json().catch(() => null);
+      result = await parseRouteKickResponse(response);
 
-      if (response.ok && result?.ok !== false) {
-        return result || {
-          ok: true,
-          routeId: safeRouteId,
-          reason: options.reason,
-        };
-      }
+      // HTTP 200 sozinho não basta: o contrato exige JSON {ok:true}.
+      if (response.ok && result.ok === true) return result;
 
       lastError =
-        result?.error ||
+        result.error ||
         firstRelayError(result) ||
         `Falha ao sincronizar rota (HTTP ${response.status}).`;
 

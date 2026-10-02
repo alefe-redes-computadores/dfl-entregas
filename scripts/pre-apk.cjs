@@ -18,6 +18,7 @@ const tests=[
   'scripts/verify-motoboy-settlement-carry-v10.cjs',
   'scripts/verify-site-route-experience-v11.cjs',
   'scripts/test-v17-5-auto-fastlane-next-stop.cjs',
+  'scripts/test-v17-6-native-route-kick.cjs',
   'scripts/verify-stock-operation-recovery-v2.cjs',
   'scripts/audit-delivery-inbox-firestore.cjs',
   'scripts/audit-operation-ifood-routes-firestore.cjs',

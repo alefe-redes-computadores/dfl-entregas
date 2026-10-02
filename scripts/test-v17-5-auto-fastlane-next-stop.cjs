@@ -70,7 +70,7 @@ ok(
   'route-kick não identifica origem operacional',
 );
 ok(
-  routeKick.includes('{ status: result.ok ? 200 : 207 }'),
+  routeKick.includes('result.ok ? 200 : 207'),
   'route-kick ainda mascara fast lane incompleto como 200',
 );
 ok(

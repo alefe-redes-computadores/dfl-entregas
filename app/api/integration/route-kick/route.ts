@@ -6,22 +6,64 @@ import { drainReverseIntegrationEventIds } from '@/lib/integration/server/revers
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const NATIVE_ORIGINS = new Set([
+  'https://localhost',
+  'http://localhost',
+  'capacitor://localhost',
+]);
+
+function corsHeaders(req: NextRequest): Record<string, string> {
+  const origin = req.headers.get('origin')?.trim() || '';
+
+  if (!NATIVE_ORIGINS.has(origin)) return {};
+
+  return {
+    'access-control-allow-origin': origin,
+    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-headers': 'authorization, content-type',
+    'access-control-max-age': '600',
+    'vary': 'Origin',
+  };
+}
+
+function json(req: NextRequest, body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: corsHeaders(req),
+  });
+}
+
+export async function OPTIONS(req: NextRequest) {
+  const origin = req.headers.get('origin')?.trim() || '';
+
+  if (!NATIVE_ORIGINS.has(origin)) {
+    return new NextResponse(null, { status: 403 });
+  }
+
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(req),
+  });
+}
+
 export async function POST(req: NextRequest) {
   const authorization = req.headers.get('authorization') || '';
 
   if (!authorization.startsWith('Bearer ')) {
-    return NextResponse.json(
+    return json(
+      req,
       { ok: false, error: 'Unauthorized' },
-      { status: 401 },
+      401,
     );
   }
 
   try {
     await adminAuth.verifyIdToken(authorization.slice(7));
   } catch {
-    return NextResponse.json(
+    return json(
+      req,
       { ok: false, error: 'Unauthorized' },
-      { status: 401 },
+      401,
     );
   }
 
@@ -44,9 +86,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (!routeId) {
-    return NextResponse.json(
+    return json(
+      req,
       { ok: false, error: 'routeId obrigatório' },
-      { status: 400 },
+      400,
     );
   }
 
@@ -100,14 +143,16 @@ export async function POST(req: NextRequest) {
       }),
     );
 
-    return NextResponse.json(
+    return json(
+      req,
       result,
-      { status: result.ok ? 200 : 207 },
+      result.ok ? 200 : 207,
     );
   } catch (error) {
     console.error('[integration/route-kick]', error);
 
-    return NextResponse.json(
+    return json(
+      req,
       {
         ok: false,
         error:
@@ -115,7 +160,7 @@ export async function POST(req: NextRequest) {
             ? error.message
             : 'route kick failed',
       },
-      { status: 500 },
+      500,
     );
   }
 }
