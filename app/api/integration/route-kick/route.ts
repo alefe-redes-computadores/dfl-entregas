@@ -26,12 +26,21 @@ export async function POST(req: NextRequest) {
   }
 
   let routeId = '';
+  let reason = 'unspecified';
 
   try {
-    const body = await req.json() as { routeId?: unknown };
+    const body = await req.json() as {
+      routeId?: unknown;
+      reason?: unknown;
+    };
     routeId = typeof body.routeId === 'string' ? body.routeId.trim() : '';
+    reason =
+      typeof body.reason === 'string' && body.reason.trim()
+        ? body.reason.trim().slice(0, 64)
+        : 'unspecified';
   } catch {
     routeId = '';
+    reason = 'unspecified';
   }
 
   if (!routeId) {
@@ -67,6 +76,7 @@ export async function POST(req: NextRequest) {
     const result = {
       ok: reconciliation.ok && relay.ok,
       routeId,
+      reason,
       reconciliation,
       relay,
     };
@@ -75,6 +85,7 @@ export async function POST(req: NextRequest) {
       '[integration/route-kick]',
       JSON.stringify({
         routeId,
+        reason,
         siteDeliveries: reconciliation.siteDeliveries,
         candidates: reconciliation.candidates,
         created: reconciliation.created,
@@ -83,10 +94,16 @@ export async function POST(req: NextRequest) {
         claimed: relay.claimed,
         sent: relay.sent,
         failed: relay.failed,
+        inFlight: relay.inFlight,
+        retryable: relay.retryable,
+        unsettled: relay.unsettled,
       }),
     );
 
-    return NextResponse.json(result);
+    return NextResponse.json(
+      result,
+      { status: result.ok ? 200 : 207 },
+    );
   } catch (error) {
     console.error('[integration/route-kick]', error);
 

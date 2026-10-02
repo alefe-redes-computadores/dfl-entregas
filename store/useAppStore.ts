@@ -43,6 +43,7 @@ import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
+import { kickSiteRoute } from '@/lib/integration/client/routeKick';
 
 
 async function autoOrganizeLoadedRouteAfterInsert(
@@ -900,41 +901,17 @@ export const useAppStore = create<AppState>()(
           throw new Error('Há pedido agendado nesta rota que ainda não foi liberado para operação.');
         }
         if (routeStartedAt(current)) {
-          try {
-            const token = await auth.currentUser?.getIdToken();
+          const result = await kickSiteRoute(routeId, {
+            reason: 'manual_recovery',
+            maxAttempts: 3,
+          });
 
-            if (!token) {
-              throw new Error('Sessão indisponível para sincronizar a rota.');
-            }
+          console.info(
+            '[route-kick:recovery] fast lane concluída',
+            result,
+          );
 
-            const response = await fetch('/api/integration/route-kick', {
-              method: 'POST',
-              headers: {
-                authorization: `Bearer ${token}`,
-                'content-type': 'application/json',
-              },
-              body: JSON.stringify({ routeId }),
-            });
-
-            const result = await response.json().catch(() => null);
-
-            if (!response.ok || result?.ok === false) {
-              throw new Error(
-                result?.error ||
-                `Falha ao sincronizar rota (HTTP ${response.status}).`,
-              );
-            }
-
-            console.info(
-              '[route-kick:recovery] fast lane concluída',
-              result,
-            );
-
-            return;
-          } catch (error) {
-            console.warn('[route-kick:recovery] falhou', error);
-            throw error;
-          }
+          return;
         }
 
         const now = new Date().toISOString();
@@ -954,52 +931,32 @@ export const useAppStore = create<AppState>()(
           /*
            * Fast lane reverso:
            *
-           * iniciar a rota é o evento real de saída da loja.
-           * Acordamos a projeção imediatamente em vez de esperar
-           * o worker periódico.
-           *
-           * Falha aqui NÃO desfaz a rota:
-           * o worker periódico continua como rede de segurança.
+           * A persistência da rota é autoridade local. A sincronização com o
+           * Site acontece logo depois e possui retry curto/event-driven.
+           * Se ainda falhar, a rota NÃO volta atrás: o operador recebe
+           * feedback visível e o botão "Sincronizar Site" permanece como
+           * recuperação manual.
            */
           try {
-            const token = await auth.currentUser?.getIdToken();
+            const result = await kickSiteRoute(routeId, {
+              reason: 'route_started',
+              maxAttempts: 3,
+            });
 
-            if (token) {
-              const response = await fetch('/api/integration/route-kick', {
-                method: 'POST',
-                headers: {
-                  authorization: `Bearer ${token}`,
-                  'content-type': 'application/json',
-                },
-                body: JSON.stringify({ routeId }),
-              });
-
-              const result = await response
-                .json()
-                .catch(() => null);
-
-              if (!response.ok || result?.ok === false) {
-                console.warn(
-                  '[route-kick] resposta não OK; fallback periódico preservado',
-                  response.status,
-                  result,
-                );
-              } else {
-                console.info(
-                  '[route-kick] fast lane concluída',
-                  result,
-                );
-              }
-            } else {
-              console.warn(
-                '[route-kick] usuário sem token; fallback periódico preservado',
-              );
-            }
+            console.info(
+              '[route-kick] fast lane concluída',
+              result,
+            );
           } catch (kickError) {
             console.warn(
               '[route-kick] falhou; fallback periódico preservado',
               kickError,
             );
+            toast.warning('Rota iniciada; Site aguardando sincronização.', {
+              description:
+                'A saída foi salva. Se o aviso não aparecer no Site, use Sincronizar Site.',
+              duration: 5000,
+            });
           }
 
           const stops = groupDeliveriesByStop(routeDeliveries).length;
@@ -1795,10 +1752,12 @@ export const useAppStore = create<AppState>()(
           /*
            * Mudança logística real:
            * após persistir a conclusão, acordamos SOMENTE a rota dessa
-           * delivery. O endpoint materializa completed + nova posição
-           * e drena exclusivamente os eventIds produzidos por ela.
+           * delivery. O mesmo kick materializa delivery.completed e a nova
+           * posição/next_stop das demais paradas.
            *
-           * Falha aqui não desfaz a baixa: worker periódico é fallback.
+           * O retry é curto e dirigido; não existe listener nem polling.
+           * Se ainda falhar, a baixa permanece válida e o operador recebe
+           * feedback em vez de um erro silencioso de console.
            */
           if (
             isCompleting &&
@@ -1806,45 +1765,27 @@ export const useAppStore = create<AppState>()(
             nextDelivery.route_id
           ) {
             try {
-              const token = await auth.currentUser?.getIdToken();
+              const result = await kickSiteRoute(nextDelivery.route_id, {
+                reason: 'delivery_completed',
+                maxAttempts: 3,
+              });
 
-              if (token) {
-                const response = await fetch('/api/integration/route-kick', {
-                  method: 'POST',
-                  headers: {
-                    authorization: `Bearer ${token}`,
-                    'content-type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    routeId: nextDelivery.route_id,
-                  }),
-                });
-
-                const result = await response
-                  .json()
-                  .catch(() => null);
-
-                if (!response.ok || result?.ok === false) {
-                  console.warn(
-                    '[route-kick:delivery] resposta não OK; fallback periódico preservado',
-                    response.status,
-                    result,
-                  );
-                } else {
-                  console.info(
-                    '[route-kick:delivery] fast lane concluída',
-                    result,
-                  );
-                }
-              } else {
-                console.warn(
-                  '[route-kick:delivery] usuário sem token; fallback periódico preservado',
-                );
-              }
+              console.info(
+                '[route-kick:delivery] fast lane concluída',
+                result,
+              );
             } catch (kickError) {
               console.warn(
                 '[route-kick:delivery] falhou; fallback periódico preservado',
                 kickError,
+              );
+              toast.warning(
+                'Entrega concluída; Site aguardando sincronização.',
+                {
+                  description:
+                    'A baixa foi salva. Use Sincronizar Site na rota se a atualização não aparecer.',
+                  duration: 5000,
+                },
               );
             }
           }

@@ -104,29 +104,58 @@ export async function drainReverseIntegrationEventIds(
     eventId: string;
     claimed: boolean;
     ok: boolean;
+    state: string;
+    retryable: boolean;
+    attempts?: number;
     status?: number;
+    lockedAt?: string | null;
+    nextAttemptAt?: string | null;
+    processedAt?: string | null;
     error?: string;
   }> = [];
 
   for (const eventId of uniqueIds) {
-    const item = await claimReverseOutboxByEventId({
+    const claim = await claimReverseOutboxByEventId({
       eventId,
       workerId,
       lockMs: config.lockMs,
+      // Uma ação humana/operacional explícita não precisa aguardar o
+      // backoff do recovery global para tentar novamente um evento failed.
+      allowFailedBeforeNextAttempt: true,
     });
 
-    if (!item) {
-      /*
-       * Pode já estar sent por idempotência.
-       * Não procuramos outro documento para "compensar".
-       */
+    if (claim.kind === 'not_claimed') {
+      const state = claim.state;
+      const alreadySent = state.status === 'sent';
+      const retryable =
+        state.status === 'processing' ||
+        state.status === 'failed' ||
+        state.status === 'pending';
+
       results.push({
         eventId,
         claimed: false,
-        ok: true,
+        ok: alreadySent,
+        state: state.status,
+        retryable,
+        attempts: state.attempts,
+        lockedAt: state.lockedAt,
+        nextAttemptAt: state.nextAttemptAt,
+        processedAt: state.processedAt,
+        ...(
+          alreadySent
+            ? {}
+            : {
+                error:
+                  state.lastError ||
+                  `Evento não disponível para claim: ${state.status}.`,
+              }
+        ),
       });
       continue;
     }
+
+    const item = claim.item;
 
     try {
       const response = await sendOne(item.event, config);
@@ -136,6 +165,9 @@ export async function drainReverseIntegrationEventIds(
         eventId,
         claimed: true,
         ok: true,
+        state: 'sent',
+        retryable: false,
+        attempts: item.attempts,
         status: response.status,
       });
     } catch (error) {
@@ -143,6 +175,7 @@ export async function drainReverseIntegrationEventIds(
         error instanceof Error
           ? error.message
           : 'Falha desconhecida no fast lane reverso.';
+      const dead = item.attempts >= config.maxAttempts;
 
       await markReverseOutboxFailed({
         refId: item.refId,
@@ -155,6 +188,9 @@ export async function drainReverseIntegrationEventIds(
         eventId,
         claimed: true,
         ok: false,
+        state: dead ? 'dead_letter' : 'failed',
+        retryable: !dead,
+        attempts: item.attempts,
         error: message,
       });
     }
@@ -167,7 +203,21 @@ export async function drainReverseIntegrationEventIds(
     sent: results.filter(
       (item) => item.claimed && item.ok,
     ).length,
-    failed: results.filter((item) => !item.ok).length,
+    alreadySent: results.filter(
+      (item) => !item.claimed && item.state === 'sent',
+    ).length,
+    inFlight: results.filter(
+      (item) => item.state === 'processing',
+    ).length,
+    retryable: results.filter(
+      (item) => !item.ok && item.retryable,
+    ).length,
+    failed: results.filter(
+      (item) =>
+        !item.ok &&
+        item.state !== 'processing',
+    ).length,
+    unsettled: results.filter((item) => !item.ok).length,
     results,
   };
 }

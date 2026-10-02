@@ -64,6 +64,72 @@ function occurredAt(delivery: Raw, route: Raw | undefined) {
   return valid[0]?.value || new Date().toISOString();
 }
 
+function latestIso(values: string[]) {
+  const valid = values
+    .filter(Boolean)
+    .map((value) => ({ value, time: Date.parse(value) }))
+    .filter((item) => Number.isFinite(item.time))
+    .sort((a, b) => b.time - a.time);
+
+  return valid[0]?.value || '';
+}
+
+function routeMovementAt(
+  routeItems: Item[],
+  route: Raw | undefined,
+) {
+  return latestIso([
+    ...routeItems.flatMap((item) => [
+      str(item.data.completed_at),
+      str(item.data.order_updated_at),
+      str(item.data.updated_at),
+    ]),
+    str(route?.end_time),
+    str(route?.updated_at),
+    str(route?.started_at),
+    str(route?.departure_time),
+  ]);
+}
+
+function eventOccurredAt(
+  type: string,
+  delivery: Raw,
+  route: Raw | undefined,
+  routeItems: Item[],
+) {
+  if (type === 'delivery.out_for_delivery') {
+    return (
+      str(route?.started_at) ||
+      str(route?.departure_time) ||
+      occurredAt(delivery, route)
+    );
+  }
+
+  if (type === 'delivery.completed') {
+    return str(delivery.completed_at) || occurredAt(delivery, route);
+  }
+
+  if (
+    type === 'delivery.next_stop' ||
+    type === 'delivery.position_changed'
+  ) {
+    return (
+      routeMovementAt(routeItems, route) ||
+      occurredAt(delivery, route)
+    );
+  }
+
+  if (type === 'route.completed') {
+    return (
+      str(route?.end_time) ||
+      str(route?.updated_at) ||
+      occurredAt(delivery, route)
+    );
+  }
+
+  return occurredAt(delivery, route);
+}
+
 function eventTypes(delivery: Raw, route: Raw | undefined, pendingIndex: number, pendingStops: number, totalStops: number) {
   if (bool(delivery.completed)) return ['delivery.completed'] as const;
   if (routeClosed(route)) return ['route.completed'] as const;
@@ -313,7 +379,7 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
       candidates.push({
         eventId,
         event: buildIntegrationEvent({
-          event_id: eventId, event_type: type, occurred_at: occurredAt(item.data, route),
+          event_id: eventId, event_type: type, occurred_at: eventOccurredAt(type, item.data, route, routeItems),
           source_system: 'dfl_entregas', entity_type: 'delivery', entity_id: item.id,
           correlation_id: str(item.data.external_order_id), payload,
         }),

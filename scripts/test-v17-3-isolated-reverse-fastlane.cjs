@@ -80,7 +80,7 @@ ok(
 );
 
 ok(
-  store.includes("routeId: nextDelivery.route_id"),
+  store.includes("kickSiteRoute(nextDelivery.route_id"),
   "conclusão não envia routeId exato",
 );
 

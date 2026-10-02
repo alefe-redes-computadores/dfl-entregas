@@ -1,6 +1,10 @@
 const fs = require("fs");
 
 const store = fs.readFileSync("store/useAppStore.ts", "utf8");
+const helper = fs.readFileSync(
+  "lib/integration/client/routeKick.ts",
+  "utf8",
+);
 const route = fs.readFileSync(
   "components/home/RouteAccordion.tsx",
   "utf8",
@@ -16,7 +20,8 @@ ok(
 );
 
 ok(
-  store.includes("body: JSON.stringify({ routeId })"),
+  store.includes("reason: 'manual_recovery'") &&
+    helper.includes("routeId: safeRouteId"),
   "recovery não é dirigido pela própria rota",
 );
 

@@ -22,6 +22,49 @@ type Claimed = {
   attempts: number;
 };
 
+export type ReverseOutboxState = {
+  exists: boolean;
+  status: string;
+  eventType: string | null;
+  attempts: number;
+  lockedAt: string | null;
+  nextAttemptAt: string | null;
+  processedAt: string | null;
+  lastError: string | null;
+};
+
+export type ReverseOutboxClaimResult =
+  | { kind: 'claimed'; item: Claimed }
+  | { kind: 'not_claimed'; state: ReverseOutboxState };
+
+function stateFrom(data?: DocumentData): ReverseOutboxState {
+  if (!data) {
+    return {
+      exists: false,
+      status: 'missing',
+      eventType: null,
+      attempts: 0,
+      lockedAt: null,
+      nextAttemptAt: null,
+      processedAt: null,
+      lastError: null,
+    };
+  }
+
+  return {
+    exists: true,
+    status: String(data.status || 'unknown'),
+    eventType: data.event_type ? String(data.event_type) : null,
+    attempts: Number(data.attempts || 0),
+    lockedAt: data.locked_at ? String(data.locked_at) : null,
+    nextAttemptAt: data.next_attempt_at
+      ? String(data.next_attempt_at)
+      : null,
+    processedAt: data.processed_at ? String(data.processed_at) : null,
+    lastError: data.last_error ? String(data.last_error) : null,
+  };
+}
+
 function eventFrom(data: DocumentData): IntegrationEventEnvelope {
   return {
     event_id: String(data.event_id),
@@ -37,12 +80,20 @@ function eventFrom(data: DocumentData): IntegrationEventEnvelope {
   };
 }
 
-function eligible(data: DocumentData, now: number, lockMs: number) {
+function eligible(
+  data: DocumentData,
+  now: number,
+  lockMs: number,
+  allowFailedBeforeNextAttempt = false,
+) {
   if (data.source_system !== 'dfl_entregas') return false;
   if (!REVERSE_EVENT_TYPES.has(String(data.event_type))) return false;
   if (data.status === 'pending') return true;
   if (data.status === 'failed') {
-    const next = data.next_attempt_at ? Date.parse(String(data.next_attempt_at)) : 0;
+    if (allowFailedBeforeNextAttempt) return true;
+    const next = data.next_attempt_at
+      ? Date.parse(String(data.next_attempt_at))
+      : 0;
     return !Number.isFinite(next) || next <= now;
   }
   if (data.status === 'processing') {
@@ -127,19 +178,38 @@ export async function claimReverseOutboxByEventId(input: {
   eventId: string;
   workerId: string;
   lockMs: number;
-}): Promise<Claimed | null> {
+  allowFailedBeforeNextAttempt?: boolean;
+}): Promise<ReverseOutboxClaimResult> {
   const ref = adminDb
     .collection(COLLECTION)
     .doc(encodeURIComponent(input.eventId));
 
   return adminDb.runTransaction(async (tx: Transaction) => {
     const fresh = await tx.get(ref);
-    if (!fresh.exists) return null;
+
+    if (!fresh.exists) {
+      return {
+        kind: 'not_claimed',
+        state: stateFrom(),
+      };
+    }
 
     const data = fresh.data()!;
     const now = Date.now();
 
-    if (!eligible(data, now, input.lockMs)) return null;
+    if (
+      !eligible(
+        data,
+        now,
+        input.lockMs,
+        input.allowFailedBeforeNextAttempt === true,
+      )
+    ) {
+      return {
+        kind: 'not_claimed',
+        state: stateFrom(data),
+      };
+    }
 
     const attempts = Number(data.attempts || 0) + 1;
 
@@ -153,9 +223,12 @@ export async function claimReverseOutboxByEventId(input: {
     });
 
     return {
-      refId: ref.id,
-      event: eventFrom(data),
-      attempts,
+      kind: 'claimed',
+      item: {
+        refId: ref.id,
+        event: eventFrom(data),
+        attempts,
+      },
     };
   });
 }
