@@ -106,6 +106,20 @@ export function buildMotoboyLedger(input: {
         new Date(a.occurred_at).getTime(),
     );
 
+  const latestSettlement = settlementExpenses[0];
+  const carriedBalance = latestSettlement?.settlement_carry_forward === true
+    ? {
+        amount:
+          latestSettlement.settlement_direction === 'store_credit'
+            ? Number(latestSettlement.settlement_store_credit || 0)
+            : latestSettlement.settlement_direction === 'motoboy_credit'
+              ? Number(latestSettlement.settlement_motoboy_credit || 0)
+              : 0,
+        direction: latestSettlement.settlement_direction || 'settled',
+        source: latestSettlement,
+      }
+    : null;
+
   const otherExpenses = input.expenses
     .filter(
       (expense) =>
@@ -202,6 +216,7 @@ export function buildMotoboyLedger(input: {
     settlementExpenses,
     otherExpenses,
     days: sortedDays,
-    lastSettlement: settlementExpenses[0],
+    lastSettlement: latestSettlement,
+    carriedBalance: carriedBalance?.amount ? carriedBalance : null,
   };
 }

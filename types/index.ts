@@ -255,6 +255,12 @@ export interface SiteOrderCommercialSnapshot {
   scheduled: boolean;
 }
 
+export interface SiteOrderTimelineEntry {
+  event_id: string;
+  status: string;
+  occurred_at: string;
+}
+
 export interface Delivery {
   id: string;
   route_id: string;
@@ -298,6 +304,8 @@ export interface Delivery {
   site_order_status_updated_at?: string | null;
   site_order_last_event_at?: string;
   site_order_last_event_id?: string;
+  /** Histórico compacto e idempotente dos estados enviados pelo Site. */
+  site_order_timeline?: SiteOrderTimelineEntry[];
   site_order_items?: SiteOrderItemSnapshot[];
   site_order_subtotal?: number;
   site_order_delivery_fee?: number;
@@ -333,6 +341,10 @@ export interface Delivery {
   customer_name?: string;
   /** Preserva a venda, mas exclui ranking/recorrência de cliente. */
   exclude_customer_metrics?: boolean;
+  /** Pedido criado pelo proprietário para teste; nunca entra em métricas de cliente. */
+  developer_test?: boolean;
+  external_customer_id?: string;
+  customer_email?: string;
   createdAt?: string; // Campo legado ainda lido pelos relatórios atuais
   created_at?: string;
   completed_at?: string;

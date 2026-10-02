@@ -54,6 +54,7 @@ function Content() {
 
   const [month, setMonth] = useState(() => new Date());
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+  const [balanceOpen, setBalanceOpen] = useState(false);
 
   const ledger = useMemo(
     () =>
@@ -195,6 +196,18 @@ function Content() {
           />
         </div>
       </section>
+
+      {ledger.carriedBalance && (
+        <button type="button" onClick={() => setBalanceOpen((value) => !value)} className={`w-full rounded-[22px] border p-4 text-left ${ledger.carriedBalance.direction === 'store_credit' ? 'border-amber-500/25 bg-amber-500/[.06]' : 'border-sky-500/25 bg-sky-500/[.06]'}`}>
+          <div className="flex items-center gap-3">
+            <CircleDollarSign size={20} className={ledger.carriedBalance.direction === 'store_credit' ? 'text-amber-400' : 'text-sky-400'} />
+            <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[.15em] text-zinc-500">Saldo para o próximo acerto</p><p className="mt-1 text-lg font-black text-zinc-100">{money(ledger.carriedBalance.amount)}</p></div>
+            <ChevronDown size={17} className={`text-zinc-500 transition ${balanceOpen ? 'rotate-180' : ''}`} />
+          </div>
+          <p className="mt-2 text-xs text-zinc-400">{ledger.carriedBalance.direction === 'store_credit' ? `${motoboy.name} está com crédito da loja.` : `A loja deve este valor a ${motoboy.name}.`}</p>
+          {balanceOpen && <div className="mt-3 border-t border-white/10 pt-3 text-[11px] leading-relaxed text-zinc-500">Origem: acerto de {new Date(ledger.carriedBalance.source.occurred_at).toLocaleDateString('pt-BR')}. Só o saldo marcado para transporte entra no próximo acerto; valores quitados não acumulam.</div>}
+        </button>
+      )}
 
       <button
         onClick={() => router.push(`/motoboys/acerto?id=${motoboy.id}`)}

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2
+  Smartphone, Store, Globe2, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
@@ -91,6 +91,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const paymentStateLabel = deliveryPaymentStateLabel(delivery);
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const isSiteOrder = delivery.source_system === 'dfl_site';
+  const isDeveloperTest = delivery.developer_test === true;
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
   const isUrgent = groupedDeliveries.some((item) => item.is_urgent);
   const recurrence = customerRecurrence(allDeliveries, delivery.customer_id, delivery);
@@ -403,8 +404,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           <div className={clsx("flex flex-col", isExpanded ? "p-4" : "px-3 py-2.5")}>
             <div className="flex items-start gap-3">
               <div className="relative shrink-0 mt-0.5">
-                <span className={clsx("flex items-center justify-center rounded-xl border", isExpanded ? "h-10 w-10" : "h-9 w-9", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
-                  {isIfood ? <Smartphone size={19} /> : <Store size={19} />}
+                <span className={clsx("flex items-center justify-center rounded-xl border", isExpanded ? "h-10 w-10" : "h-9 w-9", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : isSiteOrder ? "bg-sky-500/10 border-sky-500/20 text-sky-400" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
+                  {isIfood ? <Smartphone size={19} /> : isSiteOrder ? <Globe2 size={19} /> : <Store size={19} />}
                 </span>
                 {position !== undefined && (
                   <span className="absolute -left-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 px-1 text-[9px] font-black text-zinc-200 shadow-lg">
@@ -434,7 +435,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {isSiteOrder && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-sky-300">Site</span>}
                   {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
-                  {!isGroupedStop && customerTier && <span className="rounded-md border border-amber-500/20 bg-amber-500/[.08] px-2 py-0.5 text-[9px] font-black text-amber-300">{customerTier === 'super' ? 'Supercliente' : 'Frequente'} · {recurrence.completedOrders} concluídos</span>}
+                  {!isGroupedStop && isDeveloperTest && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black text-sky-300">DEV · teste</span>}
+                  {!isGroupedStop && !isDeveloperTest && customerTier && <span className="rounded-md border border-amber-500/20 bg-amber-500/[.08] px-2 py-0.5 text-[9px] font-black text-amber-300">{customerTier === 'super' ? 'Supercliente' : 'Frequente'} · {recurrence.completedOrders} concluídos</span>}
                   {!isGroupedStop && recurrence.milestoneLabel && <button type="button" onClick={(event) => { event.stopPropagation(); toast.info('Marco de cliente direto', { description: recurrence.milestoneLabel || undefined }); }} className="rounded-md border border-violet-500/25 bg-violet-500/[.08] px-2 py-0.5 text-[9px] font-black text-violet-300">{recurrence.milestoneLabel}</button>}
                   {isGroupedStop ? (
                     <span className="bg-violet-500/15 border border-violet-500/30 text-violet-300 px-2 py-0.5 rounded-md text-[10px] font-black shrink-0">

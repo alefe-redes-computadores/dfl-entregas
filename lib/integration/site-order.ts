@@ -449,6 +449,8 @@ export function deliveryDraftFromSite(
 ): Delivery {
   const fulfillmentMode = fulfillmentFromSite(payload.tipoEntrega);
   const customerName = payload.customerSnapshot?.name?.trim();
+  const customerEmail = payload.customerSnapshot?.email?.trim().toLowerCase();
+  const developerTest = customerEmail === 'alefejohsefe@gmail.com';
   const phone =
     payload.customerSnapshot?.phoneE164?.trim() ||
     payload.customerSnapshot?.phone?.trim();
@@ -485,6 +487,10 @@ export function deliveryDraftFromSite(
 
     customer_id: customerId,
     customer_name: customerName || undefined,
+    external_customer_id: payload.userId || undefined,
+    customer_email: customerEmail || undefined,
+    developer_test: developerTest || undefined,
+    exclude_customer_metrics: developerTest || undefined,
 
     value: payload.total,
     customer_charge: payload.total,
