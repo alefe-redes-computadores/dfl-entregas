@@ -4,14 +4,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { Activity, BellRing, ChevronLeft, Clipboard, Database, Trash2 } from 'lucide-react';
+import { Activity, BellRing, ChevronLeft, Clipboard, Database, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAppStore } from '@/store/useAppStore';
+import { ReportMaintenanceCard } from '@/components/reports/ReportMaintenanceCard';
 import {
   clearSyncDiagnostics,
   readSyncDiagnostics,
   syncDiagnosticText,
   type SyncDiagnostic,
 } from '@/lib/sync-diagnostics';
+
+const DIAGNOSTICS_ADMIN_EMAIL = 'alefejohsefe@gmail.com';
 
 const dateTime = (value: string) =>
   new Intl.DateTimeFormat('pt-BR', {
@@ -21,11 +25,21 @@ const dateTime = (value: string) =>
 
 export default function OperationalDiagnosticsPage() {
   const router = useRouter();
+  const user = useAppStore((state) => state.user);
+  const initData = useAppStore((state) => state.initData);
+  const isSyncing = useAppStore((state) => state.isSyncing);
+  const syncError = useAppStore((state) => state.syncError);
+  const [syncChecking, setSyncChecking] = useState(false);
   const [entries, setEntries] = useState<SyncDiagnostic[]>([]);
   const [pendingNotifications, setPendingNotifications] = useState<number | null>(null);
   const [pendingPreview, setPendingPreview] = useState<
     Array<{ id: number; title: string; at?: string }>
   >([]);
+  const isAdmin = user?.email?.trim().toLowerCase() === DIAGNOSTICS_ADMIN_EMAIL;
+
+  useEffect(() => {
+    if (user && !isAdmin) router.replace('/mais');
+  }, [isAdmin, router, user]);
 
   useEffect(() => {
     setEntries(readSyncDiagnostics());
@@ -75,6 +89,30 @@ export default function OperationalDiagnosticsPage() {
     toast.success('Histórico local apagado.');
   };
 
+  const handleSync = async () => {
+    if (isSyncing || syncChecking) return;
+    setSyncChecking(true);
+    toast.loading('Sincronizando com a nuvem...', { id: 'sync-toast' });
+    try {
+      await initData();
+      window.setTimeout(() => {
+        const currentState = useAppStore.getState();
+        if (currentState.syncError) {
+          toast.error('Falha na sincronização', { id: 'sync-toast', description: 'Confira sua internet e tente novamente.' });
+        } else {
+          toast.success('Sincronização concluída', { id: 'sync-toast', description: 'Os dados estão atualizados com a nuvem.' });
+        }
+        setEntries(readSyncDiagnostics());
+        setSyncChecking(false);
+      }, 500);
+    } catch {
+      setSyncChecking(false);
+      toast.error('Não foi possível sincronizar', { id: 'sync-toast' });
+    }
+  };
+
+  if (!user || !isAdmin) return null;
+
   return (
     <div className="pb-28">
       <header className="mb-5 flex items-center gap-3">
@@ -100,6 +138,15 @@ export default function OperationalDiagnosticsPage() {
           <p className="text-[10px] text-zinc-500">notificações locais pendentes neste aparelho</p>
         </div>
       </section>
+
+      <button type="button" disabled={isSyncing || syncChecking} onClick={handleSync} className="mt-3 flex h-13 w-full items-center justify-center gap-2 rounded-2xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-3.5 text-sm font-black text-cyan-300 active:scale-[.98] disabled:opacity-50">
+        <RefreshCw size={17} className={isSyncing || syncChecking ? 'animate-spin' : ''} />
+        {isSyncing || syncChecking ? 'Sincronizando…' : syncError ? 'Tentar sincronizar novamente' : 'Sincronizar agora'}
+      </button>
+
+      <div className="mt-4">
+        <ReportMaintenanceCard />
+      </div>
 
       <section className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-4">
         <div className="flex items-center gap-2"><Activity size={17} className="text-emerald-400" /><b className="text-sm text-zinc-100">Última sincronização</b></div>

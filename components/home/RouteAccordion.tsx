@@ -137,6 +137,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const isNotStarted = route.status === 'aberta' && !startedAt;
   const isInProgress = route.status === 'aberta' && !!startedAt;
   const isCompleted = route.status === 'fechada';
+  const hasSiteDelivery = deliveries.some(
+    (delivery) => delivery.source_system === 'dfl_site',
+  );
 
   useEffect(() => {
     if (isVirtualRoute || typeof window === 'undefined') return;
@@ -304,6 +307,35 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar a rota.');
     } finally { setActionBusy(false); }
+  };
+
+  const handleSyncSiteRoute = async () => {
+    if (actionBusy) return;
+
+    setActionBusy(true);
+
+    try {
+      await startRoute(route.id);
+
+      if (Capacitor.isNativePlatform()) {
+        await Haptics.notification({
+          type: NotificationType.Success,
+        });
+      }
+
+      toast.success('Site sincronizado.', {
+        description:
+          'A rota permaneceu em andamento e a integração foi reconciliada agora.',
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível sincronizar o Site.',
+      );
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   const handleStartRoute = async () => {
@@ -678,7 +710,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           </div>
           <div className="flex min-w-0 flex-col text-left">
             <div className="flex min-w-0 items-center gap-1.5">
-              <p className={clsx("min-w-0 truncate font-heading text-base font-bold min-[390px]:text-lg", isCompleted ? "text-emerald-400" : "text-zinc-50")}>{route.name}</p>
+              <p className={clsx("min-w-0 font-heading text-base font-bold min-[390px]:text-lg", !isAwaitingRoute && "truncate", isCompleted ? "text-emerald-400" : "text-zinc-50")}>{route.name}</p>
               {isNotStarted && <span className="rounded-full bg-zinc-700 px-2 py-0.5 text-[9px] font-bold uppercase text-zinc-300">Montando</span>}
               {isInProgress && <span className="rounded-full bg-sky-500 px-2 py-0.5 text-[9px] font-bold uppercase text-white shadow-sm shadow-sky-500/30">Na Rua</span>}
             </div>
@@ -818,6 +850,17 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             )}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && !isVirtualRoute && (
               <div className="flex flex-col gap-2">
+                {isInProgress && hasSiteDelivery && (
+                  <button
+                    type="button"
+                    disabled={actionBusy}
+                    onClick={handleSyncSiteRoute}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-[16px] border border-sky-500/25 bg-sky-500/10 px-3 text-xs font-black text-sky-300 active:scale-[0.99] disabled:opacity-50"
+                  >
+                    <RotateCcw size={15} />
+                    Sincronizar Site
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowRouteTools((current) => !current)}

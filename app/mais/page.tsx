@@ -1,73 +1,25 @@
 // app/mais/page.tsx
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BellRing,
   Activity,
   ChevronRight,
-  ReceiptText,
-  LockKeyhole,
   LogOut,
-  Moon,
-  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { UserAvatar } from '@/components/UserAvatar';
-import { ReportMaintenanceCard } from '@/components/reports/ReportMaintenanceCard';
+
+const DIAGNOSTICS_ADMIN_EMAIL = 'alefejohsefe@gmail.com';
 
 export default function MaisPage() {
   const router = useRouter();
 
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
-  const initData = useAppStore((state) => state.initData);
-  const isSyncing = useAppStore((state) => state.isSyncing);
-  const syncError = useAppStore((state) => state.syncError);
-
-  const [syncChecking, setSyncChecking] = useState(false);
-
   const fullName = user?.displayName?.trim() || 'Usuário DFL';
-
-  const handleSync = async () => {
-    if (isSyncing || syncChecking) return;
-
-    setSyncChecking(true);
-    toast.loading('Sincronizando com a nuvem...', { id: 'sync-toast' });
-
-    try {
-      await initData();
-
-      window.setTimeout(() => {
-        const currentState = useAppStore.getState();
-
-        if (currentState.syncError) {
-          toast.error('Falha na sincronização', {
-            id: 'sync-toast',
-            description:
-              'Não foi possível conectar. Confira sua internet e tente novamente.',
-            duration: 4000,
-          });
-        } else {
-          toast.success('Sincronização concluída', {
-            id: 'sync-toast',
-            description:
-              'Rotas, clientes e entregas estão atualizados com a nuvem.',
-            duration: 3000,
-          });
-        }
-
-        setSyncChecking(false);
-      }, 500);
-    } catch {
-      setSyncChecking(false);
-      toast.error('Não foi possível sincronizar', {
-        id: 'sync-toast',
-        description: 'Tente novamente quando a conexão estiver estável.',
-      });
-    }
-  };
+  const isDiagnosticsAdmin = user?.email?.trim().toLowerCase() === DIAGNOSTICS_ADMIN_EMAIL;
 
   const handleLogout = async () => {
     try {
@@ -77,8 +29,6 @@ export default function MaisPage() {
       toast.error('Não foi possível sair da conta.');
     }
   };
-
-  const syncing = isSyncing || syncChecking;
 
   return (
     <div className="dfl-page relative animate-in fade-in duration-300">
@@ -131,58 +81,10 @@ export default function MaisPage() {
             <ChevronRight size={18} className="shrink-0 text-zinc-600" />
           </button>
 
-          <div className="flex items-center gap-4 border-b border-zinc-800/80 p-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
-              <Moon size={20} />
-            </div>
-            <div className="min-w-0 flex-1 text-left">
-              <p className="font-semibold text-zinc-100">Tema escuro</p>
-              <p className="text-xs text-zinc-500">
-                Padrão visual ativo no aplicativo
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSync}
-            disabled={syncing}
-            className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 text-left transition-colors active:bg-zinc-800/50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-                syncError
-                  ? 'bg-red-500/10 text-red-500'
-                  : 'bg-emerald-500/10 text-emerald-500'
-              }`}
-            >
-              <RefreshCw size={20} className={syncing ? 'animate-spin' : ''} />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p
-                className={`font-semibold ${
-                  syncError ? 'text-red-400' : 'text-zinc-100'
-                }`}
-              >
-                {syncing
-                  ? 'Buscando dados...'
-                  : syncError
-                    ? 'Falha na última sincronização'
-                    : 'Sincronizar agora'}
-              </p>
-              <p className="text-xs text-zinc-500">
-                {syncing
-                  ? 'Aguarde a atualização terminar'
-                  : 'Buscar mudanças recentes na nuvem'}
-              </p>
-            </div>
-          </button>
-
-          <button
+          {isDiagnosticsAdmin && <button
             type="button"
             onClick={() => router.push('/mais/diagnostico')}
-            className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 text-left transition-colors active:bg-zinc-800/50"
+            className="flex w-full items-center gap-4 p-4 text-left transition-colors active:bg-zinc-800/50"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-400">
               <Activity size={20} />
@@ -194,30 +96,8 @@ export default function MaisPage() {
               </p>
             </div>
             <ChevronRight size={18} className="shrink-0 text-zinc-600" />
-          </button>
-
-          <div className="flex items-center gap-4 p-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-500">
-              <LockKeyhole size={19} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-zinc-300">
-                Limpeza local protegida
-              </p>
-              <p className="text-xs leading-relaxed text-zinc-600">
-                A exclusão em massa permanece indisponível para evitar perda
-                acidental de dados.
-              </p>
-            </div>
-          </div>
+          </button>}
         </div>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-          Manutenção dos relatórios
-        </h2>
-        <ReportMaintenanceCard />
       </section>
 
       <button

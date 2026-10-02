@@ -6,7 +6,8 @@ import { ChevronLeft, User, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { dateKey } from '@/lib/operational-time';
 import { useAppStore } from '@/store/useAppStore';
-import { normalizeMoneyDraft, parseMoneyDraft } from '@/lib/route-cash-flow';
+import { parseMoneyDraft } from '@/lib/route-cash-flow';
+import { MoneyDraftInput } from '@/components/routes/MoneyDraftInput';
 import type { Route, Motoboy } from '@/types';
 
 export default function NovaRotaPage() {
@@ -233,20 +234,7 @@ export default function NovaRotaPage() {
             </p>
           </div>
 
-          <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-zinc-600">
-              R$
-            </span>
-            <input
-              type="text"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={changeMoney}
-              onChange={(e) => setChangeMoney(normalizeMoneyDraft(e.target.value))}
-              aria-label="Dinheiro físico entregue ao motoboy na saída"
-              className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-950/45 pl-12 pr-4 text-zinc-100 placeholder:text-zinc-700 focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
+          <MoneyDraftInput value={changeMoney} onChange={setChangeMoney} ariaLabel="Dinheiro físico entregue ao motoboy na saída" />
         </section>
 
         <button

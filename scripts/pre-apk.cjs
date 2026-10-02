@@ -16,6 +16,7 @@ const tests=[
   'scripts/verify-route-notifications-v3.cjs',
   'scripts/verify-motoboy-settlement-semantics-final.cjs',
   'scripts/verify-motoboy-settlement-carry-v10.cjs',
+  'scripts/verify-site-route-experience-v11.cjs',
   'scripts/verify-stock-operation-recovery-v2.cjs',
   'scripts/audit-delivery-inbox-firestore.cjs',
   'scripts/audit-operation-ifood-routes-firestore.cjs',

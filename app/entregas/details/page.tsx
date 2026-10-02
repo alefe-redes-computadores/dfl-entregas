@@ -15,6 +15,7 @@ import {
   Copy,
   Edit3,
   ExternalLink,
+  Globe2,
   MapPin,
   MessageCircle,
   Navigation,
@@ -38,6 +39,14 @@ import {
 } from '@/lib/delivery-mode';
 import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
 import { routeStartedAt } from '@/lib/operational-time';
+import {
+  deliveryChannel,
+  deliveryChannelLabel,
+  deliveryOrderNumber,
+  formatBrazilianPhone,
+  operationalMapsUrl,
+  siteStatusLabel,
+} from '@/lib/delivery-presentation';
 
 const money = (value = 0) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -97,18 +106,13 @@ function DeliveryDetailsContent() {
   }
 
   const name = customer?.name || delivery.customer_name || 'Cliente não informado';
-  const phone = delivery.phone || customer?.phone;
+  const phone = formatBrazilianPhone(delivery.phone || customer?.phone);
   const mode = getFulfillmentMode(delivery);
   const logistics = isDeliveryFulfillment(delivery);
   const modeLabel = fulfillmentLabel(delivery);
   const ModeIcon = mode === 'pickup' ? ShoppingBag : mode === 'counter' ? Store : Bike;
 
-  const mapsUrl = logistics
-    ? delivery.maps_link ||
-      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-        delivery.address_string,
-      )}`
-    : '';
+  const mapsUrl = logistics ? operationalMapsUrl(delivery) : '';
 
   const customerCharge = delivery.customer_charge ?? delivery.value;
   const subsidy = delivery.ifood_subsidy || 0;
@@ -122,6 +126,8 @@ function DeliveryDetailsContent() {
 
   const PaymentIcon = paymentIcon;
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
+  const channel = deliveryChannel(delivery);
+  const visibleOrderNumber = deliveryOrderNumber(delivery);
   const savedConfirmationCode =
     delivery.confirmation_code || customer?.last_confirmation_code || '';
   const normalizedIfoodId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
@@ -312,20 +318,22 @@ function DeliveryDetailsContent() {
           <div className="flex items-center gap-3">
             <div
               className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
-                delivery.origin === 'ifood'
+                channel === 'ifood'
                   ? 'bg-red-500/15 text-red-400'
+                  : channel === 'site'
+                    ? 'bg-sky-500/15 text-sky-400'
                   : 'bg-emerald-500/15 text-emerald-400'
               }`}
             >
-              {delivery.origin === 'ifood' ? <Smartphone /> : <Store />}
+              {channel === 'ifood' ? <Smartphone /> : channel === 'site' ? <Globe2 /> : <Store />}
             </div>
 
             <div>
               <p className="text-xs font-bold uppercase text-zinc-500">
-                {delivery.origin === 'ifood' ? 'Pedido iFood' : 'Pedido da loja'}
+                {deliveryChannelLabel(delivery)}
               </p>
               <p className="mt-0.5 text-lg font-black text-zinc-100">
-                {delivery.order_id ? `#${delivery.order_id}` : 'Sem número'}
+                {visibleOrderNumber ? `#${visibleOrderNumber}` : 'Sem número informado'}
               </p>
             </div>
           </div>
@@ -564,9 +572,25 @@ function DeliveryDetailsContent() {
 
         <InfoRow
           icon={Clock3}
-          label="Criado em"
+          label={channel === 'site' ? 'Pedido recebido' : 'Criado em'}
           value={dateTime(delivery.created_at, delivery.createdAt)}
         />
+
+        {channel === 'site' && delivery.site_order_timeline?.length ? (
+          delivery.site_order_timeline.map((entry) => (
+            <InfoRow key={entry.event_id} icon={Globe2} label={siteStatusLabel(entry.status)} value={dateTime(entry.occurred_at)} />
+          ))
+        ) : channel === 'site' && delivery.site_order_status ? (
+          <InfoRow
+            icon={Globe2}
+            label={siteStatusLabel(delivery.site_order_status)}
+            value={dateTime(delivery.site_order_status_updated_at, delivery.site_order_last_event_at)}
+          />
+        ) : null}
+
+        {logistics && route && routeStartedAt(route) && (
+          <InfoRow icon={Navigation} label="Saiu para entrega" value={dateTime(routeStartedAt(route))} />
+        )}
 
         <InfoRow
           icon={CheckCircle2}

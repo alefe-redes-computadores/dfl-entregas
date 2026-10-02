@@ -475,11 +475,14 @@ export async function consumeDflSiteOrderCreatedPersisted(
     }
 
     const now = new Date().toISOString();
-    const delivery = deliveryDraftFromSite(
-      event.payload,
-      customer.id,
-      now,
-    );
+    const delivery = {
+      ...deliveryDraftFromSite(event.payload, customer.id, now),
+      site_order_timeline: [{
+        event_id: event.event_id,
+        status: event.payload.status || 'recebido',
+        occurred_at: event.payload.statusUpdatedAt || event.occurred_at,
+      }],
+    };
     const inboxReceipt = createdInbox(event, delivery.id, now);
 
     // Todas as leituras terminaram acima. A partir daqui, somente escritas.
@@ -700,6 +703,18 @@ export async function consumeDflSiteOrderUpdatedPersisted(
       const siteFinalized =
         normalizedIncomingStatus.includes('final') ||
         normalizedIncomingStatus.includes('conclu');
+      const siteOrderTimeline = [
+        ...(delivery.site_order_timeline || []).filter(
+          (item) => item.event_id !== event.event_id,
+        ),
+        {
+          event_id: event.event_id,
+          status: event.payload.status,
+          occurred_at: incoming.timestamp,
+        },
+      ]
+        .sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at))
+        .slice(-20);
 
       tx.update(
         deliveryRef,
@@ -724,6 +739,7 @@ export async function consumeDflSiteOrderUpdatedPersisted(
           schedule_window_minutes: typeof event.payload.scheduleWindowMinutes === 'number' ? event.payload.scheduleWindowMinutes : null,
           site_order_last_event_at: incoming.timestamp,
           site_order_last_event_id: event.event_id,
+          site_order_timeline: siteOrderTimeline,
           external_order_schema_version: event.payload.orderSchemaVersion,
           site_order_items: siteOrderItemsFromPayload(event.payload.itens),
           site_order_subtotal: event.payload.subtotal,

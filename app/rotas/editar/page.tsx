@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Bike, User, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
-import { normalizeMoneyDraft, parseMoneyDraft } from '@/lib/route-cash-flow';
+import { parseMoneyDraft } from '@/lib/route-cash-flow';
+import { MoneyDraftInput } from '@/components/routes/MoneyDraftInput';
 
 export default function EditRoutePage() {
   const router = useRouter();
@@ -171,20 +172,7 @@ export default function EditRoutePage() {
             </div>
           </div>
 
-          <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-zinc-600">
-              R$
-            </span>
-            <input
-              type="text"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={change}
-              onChange={(event) => setChange(normalizeMoneyDraft(event.target.value))}
-              aria-label="Dinheiro físico entregue ao motoboy na saída"
-              className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-950/45 pl-12 pr-4 text-zinc-100 outline-none focus:border-emerald-500"
-            />
-          </div>
+          <MoneyDraftInput value={change} onChange={setChange} ariaLabel="Dinheiro físico entregue ao motoboy na saída" />
           <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">Valor físico colocado na bag. Não é o “troco para” informado pelo cliente.</p>
         </section>
 

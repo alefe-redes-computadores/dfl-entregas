@@ -174,7 +174,7 @@ export default function HomePage() {
       routesDoDia.push({ id: 'rota-site-aguardando-confirmacao', name: 'Site · aguardando confirmação', status: 'aberta', motoboy_name: 'Aguardando loja', departure_time: selectedDate.toISOString(), change_money: 0, drinks_summary: 'Pedido recebido do Site, ainda Pendente no fluxo comercial' });
     }
     if (awaitingRouteDeliveries.length > 0 && !globalMotoboy) {
-      routesDoDia.push({ id: 'rota-aguardando-vinculo', name: 'Pedidos aguardando rota', status: 'aberta', motoboy_name: 'Aguardando definição', departure_time: selectedDate.toISOString(), change_money: 0, drinks_summary: 'Pedidos recebidos e ainda não vinculados a uma rota' });
+      routesDoDia.push({ id: 'rota-aguardando-vinculo', name: 'Pedidos sem rota', status: 'aberta', motoboy_name: 'Vincule antes de iniciar', departure_time: selectedDate.toISOString(), change_money: 0, drinks_summary: 'Pedidos recebidos e ainda não vinculados a uma rota' });
     }
     if (orphanedDeliveries.length > 0 && !globalMotoboy) {
       routesDoDia.push({ id: 'rota-resgate-recuperada', name: 'Rota Geral de Recuperação', status: 'aberta', motoboy_name: 'Sistema', departure_time: selectedDate.toISOString(), change_money: 0, drinks_summary: 'Referência de rota inválida — corrigir vínculo' });

@@ -136,7 +136,7 @@ export function hasHouseNumber(value?: string): boolean {
   // O CEP é removido antes da inspeção para nunca virar número residencial.
   const withoutPostal = address.replace(POSTAL, ' ');
 
-  return /(?:,\s*|\s)\d{1,5}[A-Za-z]?(?=\s*(?:$|[-,/]))/i.test(
+  return /(?:,\s*|\s)\d{1,5}[A-Za-z]?(?=\s*(?:$|[-,/•]))/i.test(
     withoutPostal,
   );
 }

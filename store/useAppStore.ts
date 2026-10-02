@@ -899,7 +899,44 @@ export const useAppStore = create<AppState>()(
         if (routeDeliveries.some((delivery) => isFutureScheduledDelivery(delivery))) {
           throw new Error('Há pedido agendado nesta rota que ainda não foi liberado para operação.');
         }
-        if (routeStartedAt(current)) return;
+        if (routeStartedAt(current)) {
+          try {
+            const token = await auth.currentUser?.getIdToken();
+
+            if (!token) {
+              throw new Error('Sessão indisponível para sincronizar a rota.');
+            }
+
+            const response = await fetch('/api/integration/route-kick', {
+              method: 'POST',
+              headers: {
+                authorization: `Bearer ${token}`,
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({ routeId }),
+            });
+
+            const result = await response.json().catch(() => null);
+
+            if (!response.ok || result?.ok === false) {
+              throw new Error(
+                result?.error ||
+                `Falha ao sincronizar rota (HTTP ${response.status}).`,
+              );
+            }
+
+            console.info(
+              '[route-kick:recovery] fast lane concluída',
+              result,
+            );
+
+            return;
+          } catch (error) {
+            console.warn('[route-kick:recovery] falhou', error);
+            throw error;
+          }
+        }
+
         const now = new Date().toISOString();
         const actor = get().user;
         const startedByName = actor?.displayName?.trim() || actor?.email?.split('@')[0] || 'Usuário logado';
