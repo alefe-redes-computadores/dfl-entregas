@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/integration/server/admin';
 import { reconcileReverseTrackingOutbox } from '@/lib/integration/server/reverseReconciler';
-import { drainReverseIntegrationOutbox } from '@/lib/integration/server/reverseRelay';
+import { drainReverseIntegrationEventIds } from '@/lib/integration/server/reverseRelay';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,13 +60,33 @@ export async function POST(req: NextRequest) {
         routeId,
       });
 
-    const relay = await drainReverseIntegrationOutbox();
+    const relay = await drainReverseIntegrationEventIds(
+      reconciliation.eventIds,
+    );
 
-    return NextResponse.json({
-      ok: true,
+    const result = {
+      ok: reconciliation.ok && relay.ok,
+      routeId,
       reconciliation,
       relay,
-    });
+    };
+
+    console.info(
+      '[integration/route-kick]',
+      JSON.stringify({
+        routeId,
+        siteDeliveries: reconciliation.siteDeliveries,
+        candidates: reconciliation.candidates,
+        created: reconciliation.created,
+        existing: reconciliation.existing,
+        requested: relay.requested,
+        claimed: relay.claimed,
+        sent: relay.sent,
+        failed: relay.failed,
+      }),
+    );
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('[integration/route-kick]', error);
 

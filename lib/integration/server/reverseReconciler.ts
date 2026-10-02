@@ -173,8 +173,7 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
       targetedRouteId &&
       (
         str(data.route_id).trim() !== targetedRouteId ||
-        str(data.source_system).trim() !== 'dfl_site' ||
-        bool(data.completed)
+        str(data.source_system).trim() !== 'dfl_site'
       )
     ) {
       continue;
@@ -338,5 +337,6 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
     candidates: candidates.length,
     created,
     existing,
+    eventIds: candidates.map((candidate) => candidate.eventId),
   };
 }

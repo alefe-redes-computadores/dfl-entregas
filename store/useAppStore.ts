@@ -937,10 +937,20 @@ export const useAppStore = create<AppState>()(
                 body: JSON.stringify({ routeId }),
               });
 
-              if (!response.ok) {
+              const result = await response
+                .json()
+                .catch(() => null);
+
+              if (!response.ok || result?.ok === false) {
                 console.warn(
                   '[route-kick] resposta não OK; fallback periódico preservado',
                   response.status,
+                  result,
+                );
+              } else {
+                console.info(
+                  '[route-kick] fast lane concluída',
+                  result,
                 );
               }
             } else {
@@ -1744,6 +1754,63 @@ export const useAppStore = create<AppState>()(
           }
           await batch.commit();
           deliveryCommitCompleted = true;
+
+          /*
+           * Mudança logística real:
+           * após persistir a conclusão, acordamos SOMENTE a rota dessa
+           * delivery. O endpoint materializa completed + nova posição
+           * e drena exclusivamente os eventIds produzidos por ela.
+           *
+           * Falha aqui não desfaz a baixa: worker periódico é fallback.
+           */
+          if (
+            isCompleting &&
+            isDeliveryFulfillment(nextDelivery) &&
+            nextDelivery.route_id
+          ) {
+            try {
+              const token = await auth.currentUser?.getIdToken();
+
+              if (token) {
+                const response = await fetch('/api/integration/route-kick', {
+                  method: 'POST',
+                  headers: {
+                    authorization: `Bearer ${token}`,
+                    'content-type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    routeId: nextDelivery.route_id,
+                  }),
+                });
+
+                const result = await response
+                  .json()
+                  .catch(() => null);
+
+                if (!response.ok || result?.ok === false) {
+                  console.warn(
+                    '[route-kick:delivery] resposta não OK; fallback periódico preservado',
+                    response.status,
+                    result,
+                  );
+                } else {
+                  console.info(
+                    '[route-kick:delivery] fast lane concluída',
+                    result,
+                  );
+                }
+              } else {
+                console.warn(
+                  '[route-kick:delivery] usuário sem token; fallback periódico preservado',
+                );
+              }
+            } catch (kickError) {
+              console.warn(
+                '[route-kick:delivery] falhou; fallback periódico preservado',
+                kickError,
+              );
+            }
+          }
 
           if (routeChanged && previousRouteId) {
             const currentState = get();

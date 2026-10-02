@@ -123,6 +123,43 @@ export async function claimReverseOutboxBatch(input: {
   return claimed;
 }
 
+export async function claimReverseOutboxByEventId(input: {
+  eventId: string;
+  workerId: string;
+  lockMs: number;
+}): Promise<Claimed | null> {
+  const ref = adminDb
+    .collection(COLLECTION)
+    .doc(encodeURIComponent(input.eventId));
+
+  return adminDb.runTransaction(async (tx: Transaction) => {
+    const fresh = await tx.get(ref);
+    if (!fresh.exists) return null;
+
+    const data = fresh.data()!;
+    const now = Date.now();
+
+    if (!eligible(data, now, input.lockMs)) return null;
+
+    const attempts = Number(data.attempts || 0) + 1;
+
+    tx.update(ref, {
+      status: 'processing',
+      attempts,
+      locked_by: input.workerId,
+      locked_at: new Date(now).toISOString(),
+      updated_at: new Date(now).toISOString(),
+      last_error: FieldValue.delete(),
+    });
+
+    return {
+      refId: ref.id,
+      event: eventFrom(data),
+      attempts,
+    };
+  });
+}
+
 export async function markReverseOutboxSent(refId: string) {
   const now = new Date().toISOString();
   await adminDb.collection(COLLECTION).doc(refId).update({
