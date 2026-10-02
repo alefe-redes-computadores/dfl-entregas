@@ -42,10 +42,12 @@ function Content(){
   const priorSettlement=useMemo(()=>motoboy?operationalExpenses
     .filter(item=>item.motoboy_id===motoboy.id&&item.source_kind==='motoboy_settlement'&&operationalDateKey(item.occurred_at)<date)
     .sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at))[0]:undefined,[date,motoboy,operationalExpenses]);
-  const priorCarry=useMemo(()=>({
-    storeCredit:Math.max(0,Number(priorSettlement?.settlement_store_credit)||0),
-    motoboyCredit:Math.max(0,Number(priorSettlement?.settlement_motoboy_credit)||0),
-  }),[priorSettlement]);
+  // Somente o último acerto pode carregar saldo, e apenas quando ele foi
+  // explicitamente deixado aberto. Registros antigos sem a flag são quitados.
+  const priorCarry=useMemo(()=>priorSettlement?.settlement_carry_forward===true?({
+    storeCredit:Math.max(0,Number(priorSettlement.settlement_store_credit)||0),
+    motoboyCredit:Math.max(0,Number(priorSettlement.settlement_motoboy_credit)||0),
+  }):({storeCredit:0,motoboyCredit:0}),[priorSettlement]);
   const data=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,adjustments,cashHandedOver,priorCarry):null,[adjustments,cashHandedOver,date,deliveries,motoboy,priorCarry,routes]);
   const days=useMemo(()=>{const first=new Date(month.getFullYear(),month.getMonth(),1);const start=new Date(first.getFullYear(),first.getMonth(),1-first.getDay());return Array.from({length:42},(_,index)=>{const day=new Date(start);day.setDate(start.getDate()+index);return day;});},[month]);
 
@@ -53,17 +55,24 @@ function Content(){
 
   const adjustmentKindLabel=(kind:MotoboySettlementAdjustment['kind'])=>kind==='meal'?'Lanche':kind==='advance'?'Adiantamento':'Outro ajuste';
 
+  // Se o dinheiro já foi entregue ao caixa, confirmar o acerto também quita
+  // a diferença financeira do dia. Saldo só segue aberto quando o motoboy
+  // permanece com o dinheiro das entregas.
+  const carryForward=!cashHandedOver&&data.balance>0;
+
   const settlementTitle=data.settlementDirection==='store_credit'
     ? `VALOR DA LOJA COM ${motoboy.name.toUpperCase()}`
     : data.settlementDirection==='settled'
       ? 'ACERTO ZERADO'
       : `VALOR A PAGAR PARA ${motoboy.name.toUpperCase()}`;
 
-  const settlementExplanation=data.settlementDirection==='store_credit'
-    ? `${motoboy.name} ficou com R$ ${money(data.balance)} da loja neste acerto.`
-    : data.settlementDirection==='settled'
-      ? 'Nenhum valor ficou pendente entre a loja e o motoboy.'
-      : `A loja ainda deve R$ ${money(data.balance)} a ${motoboy.name} neste acerto.`;
+  const settlementExplanation=data.settlementDirection==='settled'
+    ? 'Nenhum valor ficou pendente entre a loja e o motoboy.'
+    : carryForward
+      ? data.settlementDirection==='store_credit'
+        ? `${motoboy.name} permanece com R$ ${money(data.balance)} da loja. O saldo irá para o próximo acerto.`
+        : `A loja permanece devendo R$ ${money(data.balance)} a ${motoboy.name}. O saldo irá para o próximo acerto.`
+      : `R$ ${money(data.balance)} serão quitados neste acerto. Nenhum saldo seguirá para o próximo.`;
 
   const addAdjustment=()=>{
     const amount=Number(adjustmentValue.replace(/\./g,'').replace(',','.'));
@@ -151,9 +160,10 @@ function Content(){
         settlement_cash_retained:data.retainedCash,
         settlement_store_credit:data.storeCredit,
         settlement_motoboy_credit:data.motoboyCredit,
+        settlement_carry_forward:carryForward,
         settlement_direction:data.settlementDirection,
         settlement_cash_handed_over:cashHandedOver,
-        observation:`${data.physicalDeliveryCount} entregas físicas · ${data.orderCount} pedidos · ${data.completedRoutes} rotas · custo bruto R$ ${money(data.fee.amount)} · abatimentos R$ ${money(data.totalVales)} · líquido do motoboy R$ ${money(data.liquidFee)} · caixa R$ ${money(data.balance)}`,
+        observation:`${data.physicalDeliveryCount} entregas físicas · ${data.orderCount} pedidos · ${data.completedRoutes} rotas · custo bruto R$ ${money(data.fee.amount)} · abatimentos R$ ${money(data.totalVales)} · líquido do motoboy R$ ${money(data.liquidFee)} · caixa R$ ${money(data.balance)} · saldo futuro ${carryForward?'sim':'não'}`,
         created_at:now,
         updated_at:now,
       });

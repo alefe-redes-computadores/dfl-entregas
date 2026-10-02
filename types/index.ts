@@ -127,6 +127,8 @@ export interface OperationalExpense {
   settlement_cash_retained?: number;
   settlement_store_credit?: number;
   settlement_motoboy_credit?: number;
+  /** Só transporta o saldo quando o caixa não foi quitado neste fechamento. */
+  settlement_carry_forward?: boolean;
   settlement_direction?: 'store_credit' | 'motoboy_credit' | 'settled';
   settlement_cash_handed_over?: boolean;
   observation?: string;
