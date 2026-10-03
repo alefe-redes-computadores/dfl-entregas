@@ -100,7 +100,8 @@ export type OperationalExpenseType = 'motoboy' | 'frete' | 'manutencao' | 'taxa'
 
 export interface MotoboySettlementAdjustment {
   id: string;
-  kind: 'meal' | 'advance' | 'other';
+  kind: 'meal' | 'advance' | 'tip' | 'extra_service' | 'bread_pickup' | 'addition' | 'other';
+  direction?: 'deduction' | 'addition';
   description: string;
   amount: number;
 }
@@ -143,6 +144,7 @@ export interface TeamMember {
   name: string;
   role: TeamMemberRole;
   phone?: string;
+  photo_url?: string;
   active: boolean;
   observation?: string;
   created_at: string;
@@ -185,6 +187,12 @@ export interface StockMovement {
   supply_id?: string;
   team_member_id?: string;
   team_member_name?: string;
+  team_member_photo_url?: string;
+  presentation_id?: string;
+  presentation_label?: string;
+  presentation_quantity?: number;
+  presentation_unit?: StockSupplyUnit;
+  conversion_quantity?: number;
   occurred_at: string;
   created_at: string;
 }

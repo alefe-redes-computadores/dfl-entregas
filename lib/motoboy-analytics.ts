@@ -46,8 +46,11 @@ export function getMotoboyDayData(
   const orderCount=completedDeliveries.length;
   const cashCollected=completedDeliveries.reduce((sum,delivery)=>sum+deliveryCashCollected(delivery),0);
   const fee=calculateMotoboyFee(motoboy.payment_rule,physicalDeliveryCount);
-  const totalVales=vales.reduce((sum,vale)=>sum+vale.amount,0);
-  const liquidFee=Math.max(0,fee.amount-totalVales);
+  const deductions=vales.filter(item=>item.direction!=='addition').reduce((sum,item)=>sum+item.amount,0);
+  const additions=vales.filter(item=>item.direction==='addition').reduce((sum,item)=>sum+item.amount,0);
+  const totalVales=deductions;
+  const totalAdditions=additions;
+  const liquidFee=Math.max(0,fee.amount-deductions+additions);
   const retainedCash=cashHandedOver?0:cashCollected;
   const priorStoreCredit=Math.max(0,Number(carry.storeCredit)||0);
   const priorMotoboyCredit=Math.max(0,Number(carry.motoboyCredit)||0);
@@ -66,6 +69,7 @@ export function getMotoboyDayData(
     retainedCash,
     fee,
     totalVales,
+    totalAdditions,
     liquidFee,
     priorStoreCredit,
     priorMotoboyCredit,

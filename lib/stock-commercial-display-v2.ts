@@ -81,16 +81,35 @@ export function humanPurchasePlan(args:{purchaseQuantity:number;baseQuantity:num
 
   const detail=presentation
     .replace(/^(pacote|caixa|fardo|unidade)s?\s*/i,'')
+    .replace(/^[-–—]+\s*/,'')
     .trim();
 
   const count=Math.ceil(q);
   const head=`${count} ${noun}`;
   const conversion=Math.max(0,Number(p.conversion_quantity)||0);
   const totalBase=Math.max(0,Number(baseQuantity)||count*conversion);
-  const totalLabel=conversion>0 ? ` (${formatPlanningQuantity(totalBase,baseUnit)} no total)` : '';
-  if(!detail) return `${head}${totalLabel}`;
-  const packageDetail=detail.startsWith('de ')||detail.startsWith('com ') ? detail : `de ${detail}`;
-  return `${head} ${packageDetail}${totalLabel}`;
+
+  // A equivalência só agrega informação quando a apresentação realmente
+  // converte uma embalagem comercial em várias unidades internas.
+  // Ex.: 4 pacotes de 36 un · 144 unidades internas.
+  // Não repetir: 3 unidades (3 unidades no total).
+  const hasRealConversion=
+    conversion>0 &&
+    Math.abs(conversion-1)>1e-9 &&
+    Math.abs(totalBase-count)>1e-9;
+
+  const equivalent=hasRealConversion
+    ? ` · ${formatPlanningQuantity(totalBase,baseUnit)} ${baseUnit==='un'?'internas':'no total'}`
+    : '';
+
+  if(!detail) return `${head}${equivalent}`;
+
+  const packageDetail=
+    detail.startsWith('de ')||detail.startsWith('com ')
+      ? detail
+      : `de ${detail}`;
+
+  return `${head} ${packageDetail}${equivalent}`;
 }
 
 export function physicalStockDisplay(product:StockProduct){

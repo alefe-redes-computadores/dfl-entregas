@@ -420,13 +420,7 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
         'shiftPreClose',
       );
 
-      push(
-        `shift:close:${key}:${index}`,
-        'Fim do expediente',
-        'Horário programado encerrado. Confira se restou alguma pendência operacional.',
-        close,
-        'shiftClose',
-      );
+      // O fechamento real depende da operação: não agendamos encerramento cego por horário.
     });
   }
 
@@ -522,7 +516,7 @@ export const notifyNewSiteOrder = (
     {
       cooldownMs: 30 * 60_000,
       extra: {
-        href: `/entregas/details?id=${encodeURIComponent(deliveryId)}`,
+        href: '/loja?tab=site',
       },
       preferences,
       preferenceKey: 'siteOrderNew',
@@ -616,6 +610,19 @@ export const notifyIfoodRoutePending = (
       },
       preferences,
       preferenceKey: 'ifoodPending',
+    },
+  );
+
+export const notifyShiftFinished = (motoboyId?: string, motoboyName?: string, preferences?: Partial<NotificationPreferences>) =>
+  notifyOperational(
+    `shift-finished:${new Date().toISOString().slice(0,10)}`,
+    'Expediente finalizado',
+    motoboyName ? `Última rota encerrada · ${motoboyName}. Toque para conferir o acerto.` : 'Última rota encerrada. Toque para conferir o acerto.',
+    {
+      cooldownMs: 60_000,
+      extra: { href: motoboyId ? `/motoboys/acerto?id=${encodeURIComponent(motoboyId)}` : '/motoboys' },
+      preferences,
+      preferenceKey: 'shiftClose',
     },
   );
 

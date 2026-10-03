@@ -1376,15 +1376,16 @@ export const useAppStore = create<AppState>()(
           batch.update(doc(db, 'stock_products', product.id), sanitizeForFirebase(productPatch));
           batch.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record));
           await batch.commit();
-          void notifyStockThresholdChanges(
-            [
-              {
-                before: product,
-                after: { ...product, ...productPatch },
-              },
-            ],
-            get().storeSettings.notificationPreferences,
-          );
+          const thresholdChange = { before: product, after: { ...product, ...productPatch } };
+          const reviewActive = typeof window !== 'undefined' && Boolean(sessionStorage.getItem('dfl-stock-review-queue'));
+          if (reviewActive) {
+            try {
+              const current = JSON.parse(sessionStorage.getItem('dfl-stock-review-changes') || '[]');
+              sessionStorage.setItem('dfl-stock-review-changes', JSON.stringify([...current, thresholdChange]));
+            } catch { sessionStorage.setItem('dfl-stock-review-changes', JSON.stringify([thresholdChange])); }
+          } else {
+            void notifyStockThresholdChanges([thresholdChange], get().storeSettings.notificationPreferences);
+          }
         } catch (error) {
           set({ stockProducts: previousProducts, stockMovements: previousMovements });
           throw error;

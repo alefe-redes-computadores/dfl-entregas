@@ -78,11 +78,17 @@ export default function RootLayout({
             <Toaster
               theme="dark"
               position="top-center"
+              closeButton
+              visibleToasts={3}
+              gap={8}
               toastOptions={{
                 style: {
                   background: '#18181b',
                   border: '1px solid #27272a',
                   color: '#fafafa',
+                  borderRadius: '14px',
+                  padding: '10px 12px',
+                  fontSize: '12px',
                 },
               }}
             />

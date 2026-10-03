@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import {
   dateKey,
   routeDate,
   routeStartedAt,
 } from '@/lib/operational-time';
-import { scheduleRouteDurationReminder, syncOpenRouteReminderNotifications } from '@/lib/native/notifications';
+import { notifyShiftFinished, scheduleRouteDurationReminder, syncOpenRouteReminderNotifications } from '@/lib/native/notifications';
 
 export function RouteOperations() {
   const hydrated = useAppStore((state) => state.hasHydrated);
@@ -15,6 +15,8 @@ export function RouteOperations() {
   const deliveries = useAppStore((state) => state.deliveries);
   const settings = useAppStore((state) => state.storeSettings);
   const updateRoute = useAppStore((state) => state.updateRoute);
+  const previousOpenRoutes = useRef<number | null>(null);
+  const previousRoutes = useRef(routes);
 
   useEffect(() => {
     if (!hydrated || settings.autoCloseCompletedRoutes === false) return;
@@ -53,6 +55,20 @@ export function RouteOperations() {
     updateRoute,
   ]);
 
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const open = routes.filter((route) => route.status === 'aberta');
+    const before = previousOpenRoutes.current;
+    if (before !== null && before > 0 && open.length === 0) {
+      const previous = previousRoutes.current;
+      const lastClosed = [...routes].filter((route) => route.status === 'fechada').sort((a,b)=>String(b.end_time||b.updated_at||'').localeCompare(String(a.end_time||a.updated_at||'')))[0] || previous.find((route)=>route.status==='aberta');
+      void notifyShiftFinished(lastClosed?.motoboy_id, lastClosed?.motoboy_name, settings.notificationPreferences);
+    }
+    previousOpenRoutes.current = open.length;
+    previousRoutes.current = routes;
+  }, [hydrated, routes, settings.notificationPreferences]);
+
   useEffect(() => {
     if (!hydrated) return;
 
@@ -62,14 +78,14 @@ export function RouteOperations() {
       pauses: settings.pauses,
       holidaysOverrides: settings.holidaysOverrides,
       notificationPreferences: settings.notificationPreferences,
-    });
+    }).catch((error) => console.warn('[ROUTE_OPERATIONS] Falha ao sincronizar lembretes; operação preservada.', error));
     routes
       .filter((route) => route.status === 'aberta' && Boolean(route.started_at || route.departure_time))
       .forEach((route) => {
         void scheduleRouteDurationReminder(
           route,
           useAppStore.getState().storeSettings.notificationPreferences,
-        );
+        ).catch((error) => console.warn('[ROUTE_OPERATIONS] Lembrete não agendado; rota preservada.', error));
       });
   }, [
     hydrated,

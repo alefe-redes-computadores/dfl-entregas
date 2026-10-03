@@ -42,6 +42,7 @@ import {
 } from '@/lib/stock-quantity';
 
 import { useAppStore } from '@/store/useAppStore';
+import { notifyStockThresholdChanges } from '@/lib/native/notifications';
 
 import type {
   StockMovementType,
@@ -97,25 +98,19 @@ function Content() {
       state.addStockMovement,
   );
 
-  const activeProducts = useAppStore(
-    (state) =>
-      state.stockProducts
-        .filter((item) => item.active)
-        .sort((a, b) =>
-          a.name.localeCompare(
-            b.name,
-            'pt-BR',
-          ),
-        ),
-  );
+  const activeProducts = useAppStore((state) => state.stockProducts.filter((item) => item.active));
 
   const [type, setType] =
     useState<StockMovementType>(
       'saida',
     );
 
-  const [quantity, setQuantity] =
-    useState('');
+  const [quantity, setQuantity] = useState('');
+
+  const [presentationId, setPresentationId] = useState('base');
+  const presentations = (product?.presentations || []).filter((item) => item.active && Number(item.conversion_quantity) > 0);
+  const selectedPresentation = presentations.find((item) => item.id === presentationId);
+  const conversion = selectedPresentation ? Number(selectedPresentation.conversion_quantity) : 1;
 
   const [mode, setMode] =
     useState<
@@ -161,17 +156,10 @@ function Content() {
     type === 'saida' ||
     type === 'perda';
 
-  const amount =
-    canUseRemaining &&
-    mode === 'remaining'
-      ? Number(
-          Math.max(
-            0,
-            product.current_quantity -
-              typed,
-          ).toFixed(4),
-        )
-      : typed;
+  const baseTyped = Number((typed * conversion).toFixed(4));
+  const amount = canUseRemaining && mode === 'remaining'
+    ? Number(Math.max(0, product.current_quantity - baseTyped).toFixed(4))
+    : baseTyped;
 
   const resultingBalance =
     type === 'entrada'
@@ -236,8 +224,6 @@ function Content() {
 
     setBusy(true);
 
-    void feedbackSuccess();
-
     try {
       const operation = add({
         id: `move-${Date.now()}-${Math.random()
@@ -276,8 +262,13 @@ function Content() {
         team_member_id:
           memberId || undefined,
 
-        team_member_name:
-          memberName || undefined,
+        team_member_name: memberName || useAppStore.getState().user?.displayName || undefined,
+        team_member_photo_url: useAppStore.getState().user?.photoURL || undefined,
+        presentation_id: selectedPresentation?.id,
+        presentation_label: selectedPresentation?.label,
+        presentation_quantity: typed,
+        presentation_unit: selectedPresentation?.purchase_unit || product.unit,
+        conversion_quantity: conversion,
 
         occurred_at:
           new Date().toISOString(),
@@ -292,6 +283,8 @@ function Content() {
 
       await operation;
 
+      void feedbackSuccess();
+
       toast.success(
         'Movimentação registrada.',
         {
@@ -305,15 +298,10 @@ function Content() {
       );
 
       if (submitIntent === 'next') {
-        const index =
-          activeProducts.findIndex(
-            (item) =>
-              item.id === product.id,
-          );
-        const next =
-          index >= 0
-            ? activeProducts[index + 1]
-            : undefined;
+        const queue = (()=>{ try { return JSON.parse(sessionStorage.getItem('dfl-stock-review-queue') || '[]') as string[]; } catch { return []; } })();
+        const ordered = queue.length ? queue.map((pid)=>activeProducts.find((item)=>item.id===pid)).filter(Boolean) : activeProducts;
+        const index = ordered.findIndex((item)=>item?.id===product.id);
+        const next = index >= 0 ? ordered[index + 1] : undefined;
 
         if (next) {
           sessionStorage.setItem(
@@ -326,9 +314,13 @@ function Content() {
           return;
         }
 
-        toast.success(
-          'Último produto da lista conferido.',
-        );
+        try {
+          const changes = JSON.parse(sessionStorage.getItem('dfl-stock-review-changes') || '[]');
+          if (changes.length) await notifyStockThresholdChanges(changes, useAppStore.getState().storeSettings.notificationPreferences);
+        } catch {}
+        sessionStorage.removeItem('dfl-stock-review-changes');
+        sessionStorage.removeItem('dfl-stock-review-queue');
+        toast.success('Conferência concluída.', { description: 'Alertas de estoque agrupados em um único resumo.' });
       }
 
       if (from === 'estoque') {
@@ -479,6 +471,15 @@ function Content() {
             </div>
           </div>
         )}
+
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3">
+          <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Apresentação física</p>{(()=>{try{const q=JSON.parse(sessionStorage.getItem('dfl-stock-review-queue')||'[]') as string[];const i=q.indexOf(product.id);return q.length&&i>=0?<span className="text-[10px] font-black text-sky-400">{i+1}/{q.length}</span>:null}catch{return null}})()}</div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" onClick={()=>setPresentationId('base')} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId==='base'?'border-sky-500/40 bg-sky-500/10 text-sky-300':'border-zinc-800 text-zinc-500'}`}>Unidade interna<span className="mt-1 block text-[9px] font-medium">1 {product.unit}</span></button>
+            {presentations.map((item)=><button type="button" key={item.id} onClick={()=>setPresentationId(item.id)} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId===item.id?'border-amber-500/40 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-500'}`}>{item.label}<span className="mt-1 block text-[9px] font-medium">1 = {item.conversion_quantity.toLocaleString('pt-BR',{maximumFractionDigits:4})} {product.unit}</span></button>)}
+          </div>
+          {quantity.trim() && Number.isFinite(typed) && typed>=0 && <p className="mt-3 rounded-xl bg-zinc-950/55 px-3 py-2 text-[10px] font-bold text-zinc-300">Prévia: {typed.toLocaleString('pt-BR',{maximumFractionDigits:4})} × {selectedPresentation?.label || product.unit} = <b className="text-emerald-300">{baseTyped.toLocaleString('pt-BR',{maximumFractionDigits:4})} {product.unit}</b></p>}
+        </section>
 
         <label
           id="stock-movement-quantity"

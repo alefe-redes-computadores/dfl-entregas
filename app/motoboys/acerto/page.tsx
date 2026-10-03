@@ -31,6 +31,7 @@ function Content(){
   const [calendar,setCalendar]=useState(false);
   const [adjustments,setAdjustments]=useState<MotoboySettlementAdjustment[]>([]);
   const [adjustmentKind,setAdjustmentKind]=useState<MotoboySettlementAdjustment['kind']>('meal');
+  const [adjustmentDirection,setAdjustmentDirection]=useState<'deduction'|'addition'>('deduction');
   const [adjustmentDescription,setAdjustmentDescription]=useState('');
   const [adjustmentValue,setAdjustmentValue]=useState('');
   const [cashHandedOver,setCashHandedOver]=useState(true);
@@ -53,7 +54,7 @@ function Content(){
 
   if(!motoboy||!data)return <div><PageHeader title="Acerto indisponível" to="/motoboys"/></div>;
 
-  const adjustmentKindLabel=(kind:MotoboySettlementAdjustment['kind'])=>kind==='meal'?'Lanche':kind==='advance'?'Adiantamento':'Outro ajuste';
+  const adjustmentKindLabel=(kind:MotoboySettlementAdjustment['kind'])=>kind==='meal'?'Lanche':kind==='advance'?'Adiantamento':kind==='tip'?'Gorjeta':kind==='extra_service'?'Serviço extra':kind==='bread_pickup'?'Busca de pães':kind==='addition'?'Outro acréscimo':'Outro ajuste';
 
   // Se o dinheiro já foi entregue ao caixa, confirmar o acerto também quita
   // a diferença financeira do dia. Saldo só segue aberto quando o motoboy
@@ -77,7 +78,7 @@ function Content(){
   const addAdjustment=()=>{
     const amount=Number(adjustmentValue.replace(/\./g,'').replace(',','.'));
     if(!adjustmentDescription.trim()||!Number.isFinite(amount)||amount<=0)return void toast.error('Informe descrição e valor do ajuste.');
-    setAdjustments(current=>[...current,{id:`adj-${Date.now()}`,kind:adjustmentKind,description:adjustmentDescription.trim(),amount}]);
+    setAdjustments(current=>[...current,{id:`adj-${Date.now()}`,kind:adjustmentKind,direction:adjustmentDirection,description:adjustmentDescription.trim(),amount}]);
     setAdjustmentDescription('');
     setAdjustmentValue('');
   };
@@ -111,7 +112,7 @@ function Content(){
         `➖ *ABATIMENTOS: - R$ ${money(data.totalVales)}*`,
         `_Composição do total:_`
       );
-      adjustments.forEach(item=>lines.push(`↳ ${adjustmentKindLabel(item.kind)} · ${item.description} · R$ ${money(item.amount)}`));
+      adjustments.forEach(item=>lines.push(`↳ ${item.direction==='addition'?'+':'-'} ${adjustmentKindLabel(item.kind)} · ${item.description} · R$ ${money(item.amount)}`));
     }
     lines.push(
       '',
@@ -194,7 +195,7 @@ function Content(){
     if(data.totalVales>0){
       row('Abatimentos',`- R$ ${money(data.totalVales)}`,'#fb7185');
       adjustments.slice(0,3).forEach(item=>detail(`${adjustmentKindLabel(item.kind)} · ${item.description.slice(0,25)}`,`R$ ${money(item.amount)}`));
-      if(adjustments.length>3)detail('Outros abatimentos',`${adjustments.length-3} item(ns)`);
+      if(adjustments.length>3)detail('Outros ajustes',`${adjustments.length-3} item(ns)`);
     }
     row('Líquido do motoboy',`R$ ${money(data.liquidFee)}`,'#34d399');
 
@@ -222,13 +223,13 @@ function Content(){
 
     {(data.priorStoreCredit>0||data.priorMotoboyCredit>0)&&<section className="rounded-[22px] border border-amber-500/20 bg-amber-500/[.055] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-amber-400">Saldo trazido do acerto anterior</p><p className="mt-2 text-lg font-black text-amber-200">R$ {money(data.priorStoreCredit||data.priorMotoboyCredit)}</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{data.priorStoreCredit>0?`${motoboy.name} estava com este valor da loja. Ele será compensado automaticamente hoje.`:`A loja devia este valor a ${motoboy.name}. Ele será somado automaticamente ao acerto de hoje.`}</p></section>}
 
-    <section className="rounded-[24px] border border-sky-500/20 bg-sky-500/5 p-5"><p className="text-[10px] font-black uppercase tracking-wider text-sky-400">Prévia do acerto</p><div className="mt-4 space-y-3"><Line label="Acerto bruto" value={`R$ ${money(data.fee.amount)}`}/><p className="text-[10px] text-zinc-500">{data.fee.description}</p>{adjustments.map(item=><div key={item.id} className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-zinc-300">{item.description}</p><p className="text-[9px] text-zinc-600">{item.kind==='meal'?'Lanche':item.kind==='advance'?'Adiantamento':'Outro ajuste'}</p></div><span className="text-xs font-black text-red-400">- R$ {money(item.amount)}</span><button onClick={()=>setAdjustments(current=>current.filter(value=>value.id!==item.id))} className="grid h-8 w-8 place-items-center rounded-xl text-red-500"><Trash2 size={13}/></button></div>)}<div className="border-t border-sky-500/10 pt-3"><Line label="Total dos abatimentos" value={`- R$ ${money(data.totalVales)}`}/><Line label="Líquido do motoboy" value={`R$ ${money(data.liquidFee)}`} strong/></div></div></section>
+    <section className="rounded-[24px] border border-sky-500/20 bg-sky-500/5 p-5"><p className="text-[10px] font-black uppercase tracking-wider text-sky-400">Prévia do acerto</p><div className="mt-4 space-y-3"><Line label="Acerto bruto" value={`R$ ${money(data.fee.amount)}`}/><p className="text-[10px] text-zinc-500">{data.fee.description}</p>{adjustments.map(item=><div key={item.id} className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-zinc-300">{item.description}</p><p className="text-[9px] text-zinc-600">{adjustmentKindLabel(item.kind)} · {item.direction==='addition'?'acréscimo':'abatimento'}</p></div><span className={`text-xs font-black ${item.direction==='addition'?'text-emerald-400':'text-red-400'}`}>{item.direction==='addition'?'+':'-'} R$ {money(item.amount)}</span><button onClick={()=>setAdjustments(current=>current.filter(value=>value.id!==item.id))} className="grid h-8 w-8 place-items-center rounded-xl text-red-500"><Trash2 size={13}/></button></div>)}<div className="border-t border-sky-500/10 pt-3"><Line label="Total dos abatimentos" value={`- R$ ${money(data.totalVales)}`}/><Line label="Total dos acréscimos" value={`+ R$ ${money(data.totalAdditions)}`}/><Line label="Líquido do motoboy" value={`R$ ${money(data.liquidFee)}`} strong/></div></div></section>
 
-    <section><p className="mb-1 px-1 text-[10px] font-black uppercase tracking-wider text-zinc-500">Ajuste do acerto</p><p className="mb-2 px-1 text-[9px] text-zinc-700">Só use quando algo deve realmente ser abatido do pagamento.</p><div className="mb-2 grid grid-cols-3 gap-2">{([['meal','Lanche'],['advance','Adiantamento'],['other','Outro']] as const).map(([value,label])=><button key={value} onClick={()=>setAdjustmentKind(value)} className={`h-10 rounded-xl border text-[10px] font-black ${adjustmentKind===value?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-600'}`}>{label}</button>)}</div><div className="grid grid-cols-[1fr_100px_48px] gap-2"><input value={adjustmentDescription} onChange={e=>setAdjustmentDescription(e.target.value)} placeholder="Ex.: Lanche" className="input"/><input value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)} inputMode="decimal" placeholder="0,00" className="input"/><button onClick={addAdjustment} className="flex h-12 items-center justify-center rounded-xl bg-zinc-800"><Plus size={18}/></button></div></section>
+    <section><p className="mb-1 px-1 text-[10px] font-black uppercase tracking-wider text-zinc-500">Ajuste do acerto</p><div className="mb-2 grid grid-cols-2 gap-2"><button onClick={()=>{setAdjustmentDirection('deduction');setAdjustmentKind('meal')}} className={`h-10 rounded-xl border text-[10px] font-black ${adjustmentDirection==='deduction'?'border-red-500/30 bg-red-500/10 text-red-300':'border-zinc-800 text-zinc-600'}`}>Abatimento</button><button onClick={()=>{setAdjustmentDirection('addition');setAdjustmentKind('tip')}} className={`h-10 rounded-xl border text-[10px] font-black ${adjustmentDirection==='addition'?'border-emerald-500/30 bg-emerald-500/10 text-emerald-300':'border-zinc-800 text-zinc-600'}`}>Acréscimo</button></div><div className="mb-2 grid grid-cols-3 gap-2">{(adjustmentDirection==='deduction'?[['meal','Lanche'],['advance','Adiantamento'],['other','Outro']]:[['tip','Gorjeta'],['extra_service','Serviço extra'],['bread_pickup','Busca pães'],['addition','Outro']]).map(([value,label])=><button key={value} onClick={()=>setAdjustmentKind(value as MotoboySettlementAdjustment['kind'])} className={`h-10 rounded-xl border text-[10px] font-black ${adjustmentKind===value?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-600'}`}>{label}</button>)}</div><div className="grid grid-cols-[1fr_100px_48px] gap-2"><input value={adjustmentDescription} onChange={e=>setAdjustmentDescription(e.target.value)} placeholder="Ex.: Lanche" className="input"/><input value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)} inputMode="decimal" placeholder="0,00" className="input"/><button onClick={addAdjustment} className="flex h-12 items-center justify-center rounded-xl bg-zinc-800"><Plus size={18}/></button></div></section>
 
     <label className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/45 p-4"><div><p className="text-sm font-bold">Dinheiro já entregue ao caixa</p><p className="text-[10px] text-zinc-500">Desative se o dinheiro das entregas ainda estiver com o motoboy</p></div><input type="checkbox" checked={cashHandedOver} onChange={e=>setCashHandedOver(e.target.checked)} className="h-5 w-5 accent-emerald-500"/></label>
 
-    <section className={`rounded-[26px] p-5 ${data.settlementDirection==='store_credit'?'bg-amber-500':'bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.settlementDirection==='store_credit'?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 text-3xl font-black text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black uppercase text-zinc-900">{settlementTitle}</p><p className="mt-2 max-w-[32rem] text-[11px] font-bold leading-relaxed text-zinc-900/80">{settlementExplanation}</p></section>
+    <section className={`rounded-[26px] p-5 ${data.settlementDirection==='store_credit'?'bg-amber-500':'bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.settlementDirection==='store_credit'?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 break-words text-[clamp(1.65rem,8vw,2.25rem)] font-black tabular-nums text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black uppercase text-zinc-900">{settlementTitle}</p><p className="mt-2 max-w-[32rem] text-[11px] font-bold leading-relaxed text-zinc-900/80">{settlementExplanation}</p></section>
 
     <button disabled={saving||Boolean(existing)} onClick={confirm} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-40"><ReceiptText size={17}/>{existing?'Acerto já registrado':saving?'Confirmando...':'Confirmar acerto'}</button>
     <div className="grid grid-cols-3 gap-2"><button onClick={copy} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><Copy size={14}/>Copiar</button><button onClick={share} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300"><Send size={14}/>Compartilhar</button><button disabled={imageBusy} onClick={()=>void image()} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[10px] font-black text-zinc-300 disabled:opacity-40"><ImageIcon size={14}/>{imageBusy?'Gerando...':'Imagem'}</button></div>
