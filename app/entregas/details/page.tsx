@@ -39,6 +39,7 @@ import {
 } from '@/lib/delivery-mode';
 import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
 import { routeStartedAt } from '@/lib/operational-time';
+import { adminOrderIntentUrl } from '@/lib/native/admin-bridge';
 import {
   deliveryChannel,
   deliveryChannelLabel,
@@ -154,6 +155,13 @@ function DeliveryDetailsContent() {
     if (Capacitor.isNativePlatform()) {
       await Haptics.impact({ style });
     }
+  };
+
+  const openDflAdmin = async () => {
+    const target = adminOrderIntentUrl(delivery.external_order_id, delivery.completed ? "concluidos" : "expedicao");
+    if (!target) { toast.error("Este pedido não possui vínculo com o DFL Admin."); return; }
+    await vibrate(ImpactStyle.Light);
+    window.location.href = target;
   };
 
   const openWhatsApp = () => {
@@ -307,6 +315,13 @@ function DeliveryDetailsContent() {
           Editar
         </button>
       </header>
+
+      {channel === 'site' && delivery.external_order_id && (
+        <button type="button" onClick={() => void openDflAdmin()} className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-sky-500/20 bg-sky-500/[0.07] px-4 py-3 text-left active:scale-[0.99]">
+          <span className="min-w-0"><span className="block text-[9px] font-black uppercase tracking-[0.16em] text-sky-400">Ecossistema DFL</span><strong className="mt-1 block truncate text-sm text-zinc-100">Abrir pedido no DFL Admin</strong></span>
+          <ExternalLink size={18} className="shrink-0 text-sky-400" />
+        </button>
+      )}
 
       <section
         className={`rounded-[26px] border p-5 ${

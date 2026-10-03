@@ -8,6 +8,7 @@ import { App } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { nativeBackTarget } from '@/lib/native/navigation';
+import { deliveryDeepLinkToHref } from '@/lib/native/admin-bridge';
 
 function safeInternalHref(value: unknown) {
   return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')
@@ -56,6 +57,19 @@ export function NativeRuntime() {
         removers.push(() => notificationListener.remove());
       } catch (error) {
         console.warn('[NATIVE] Listener de notificação:', error);
+      }
+
+      try {
+        const launch = await App.getLaunchUrl();
+        const initialHref = deliveryDeepLinkToHref(launch?.url);
+        if (initialHref) router.replace(initialHref);
+        const urlListener = await App.addListener('appUrlOpen', ({ url }) => {
+          const href = deliveryDeepLinkToHref(url);
+          if (href) router.replace(href);
+        });
+        removers.push(() => urlListener.remove());
+      } catch (error) {
+        console.warn('[NATIVE] Deep link:', error);
       }
 
       try {

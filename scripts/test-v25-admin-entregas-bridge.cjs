@@ -1,0 +1,4 @@
+const fs=require('fs'); const r=p=>fs.readFileSync(p,'utf8'); const ok=(v,m)=>{if(!v)throw new Error('V25 ENTREGAS: '+m)};
+const rt=r('components/NativeRuntime.tsx'), b=r('lib/native/admin-bridge.ts'), d=r('app/entregas/details/page.tsx'), p=r('scripts/patch-android-admin-bridge.mjs'), w=r('.github/workflows/main.yml');
+ok(JSON.parse(r('capacitor.config.json')).appId==='com.dfl.entregas','package'); ok(b.includes('dflentregas:'),'scheme parser'); ok(b.includes('br.com.dafamilialanches.admin'),'admin package'); ok(rt.includes('App.getLaunchUrl()'),'cold start'); ok(rt.includes("App.addListener('appUrlOpen'"),'appUrlOpen'); ok(d.includes('Abrir pedido no DFL Admin'),'backlink'); ok(p.includes('android:scheme="dflentregas"'),'patch scheme'); ok(w.includes('node scripts/patch-android-admin-bridge.mjs'),'workflow patch');
+console.log('V25 ENTREGAS OK — BRIDGE + PATCH PÓS-CAP-SYNC');

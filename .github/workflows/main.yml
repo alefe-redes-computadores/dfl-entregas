@@ -34,6 +34,7 @@ jobs:
         run: |
           node node_modules/typescript/bin/tsc --noEmit
           node scripts/pre-apk.cjs
+          node scripts/test-v26-bridge-release.cjs
           node scripts/audit-pre-apk-firestore.cjs
           git diff --check
 
@@ -100,6 +101,13 @@ jobs:
           node scripts/patch-android-system-bars.mjs
           grep -F 'WindowCompat.setDecorFitsSystemWindows' android/app/src/main/java/com/dfl/entregas/MainActivity.java
           grep -F 'setAppearanceLightStatusBars(false)' android/app/src/main/java/com/dfl/entregas/MainActivity.java
+
+      - name: Aplicar ponte nativa Admin para Entregas
+        shell: bash
+        run: |
+          node scripts/patch-android-admin-bridge.mjs
+          grep -F 'android:scheme="dflentregas"' android/app/src/main/AndroidManifest.xml
+          grep -F 'android:host="delivery"' android/app/src/main/AndroidManifest.xml
 
       - name: Gerar ícones e splash Android
         run: |
