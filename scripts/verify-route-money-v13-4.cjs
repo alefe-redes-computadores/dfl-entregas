@@ -14,7 +14,7 @@ const checks = [
  ['editar hidrata com máscara',edit.includes('moneyValueToDraft(route.change_money)')],
  ['todas as entregas em dinheiro entram no plano',!plan.includes('.filter((item) => item.requestedChange > 0)')],
  ['mensagem distingue valor exato',whatsapp.includes('Valor exato · sem troco')],
- ['mensagem detalha volta por entrega',whatsapp.includes('Volta desta entrega na bag')],
+ ['mensagem detalha volta física por entrega',whatsapp.includes('formatMoney(line.tendered)')&&whatsapp.indexOf('line.tendered - line.cashChange')<0],
  ['mensagem explica total físico',whatsapp.includes('Deve voltar fisicamente na bag')],
  ['contato substitui chamar no portão',whatsapp.includes('*Contato rápido*')&&!whatsapp.includes('*Chamar no portão*')],
 ];

@@ -561,7 +561,7 @@ export async function generateRouteMessages(
           if (line.cashChange > 0) msg3.push(`  ↳ 💵 Em espécie: *R$ ${formatMoney(line.cashChange)}*`);
           if (line.pixChange > 0) msg3.push(`  ↳ 📱 Via Pix: *R$ ${formatMoney(line.pixChange)}*`);
         }
-        msg3.push(`• Volta desta entrega na bag: *R$ ${formatMoney(line.tendered - line.cashChange)}*`);
+        msg3.push(`• Volta desta entrega na bag: *R$ ${formatMoney(line.tendered)}*`);
         msg3.push('');
       });
       msg3.push(`──────────────`);
