@@ -7,10 +7,10 @@ const f={
 };
 const c=[
  ['3 tipos no copiador',f.route.includes('msgType: 1 | 2 | 3')],
- ['card Trocos no sheet',f.route.includes('Mensagem 3 (Trocos)')],
+ ['card Dinheiro no sheet',f.route.includes('Mensagem 3 (Dinheiro)')],
  ['clipboard msg3',f.route.includes("msgsToCopy[2]")],
  ['msg2 sem troco da bag no rótulo',f.route.includes('Bebidas, maquininha, códigos e dinheiro esperado na volta.')],
- ['msg3 gerada',f.wa.includes('TROCOS · Rota')&&f.wa.includes("msg3.join('\\n')")],
+ ['msg3 gerada',f.wa.includes('DINHEIRO DA ROTA · Rota')&&f.wa.includes("msg3.join('\\n')")],
  ['motor financeiro único',f.change.includes("routeCashFlow")],
  ['telefone central',f.phone.includes('normalizeBrazilPhone')&&f.nova.includes('formatBrazilPhone')&&f.edit.includes('formatBrazilPhone')],
  ['customer central',f.customer.includes('formatBrazilPhone')],

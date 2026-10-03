@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, Globe2, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2
+  Smartphone, Store, Globe2, ArrowUp, ArrowDown, GripVertical, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
@@ -46,7 +46,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const router = useRouter();
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const deleteDelivery = useAppStore((state) => state.deleteDelivery);
-  const reorderDelivery = useAppStore((state) => state.reorderDelivery);
   const moveDeliveryToIndex = useAppStore((state) => state.moveDeliveryToIndex);
   const toggleDeliveryExpansion = useAppStore((state) => state.toggleDeliveryExpansion);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
@@ -78,6 +77,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const touchCurrentY = useRef(0);
   const swipeAxis = useRef<'pending' | 'horizontal' | 'vertical' | null>(null);
   const completionBusyRef = useRef(false);
+  const [completionBusy, setCompletionBusy] = useState(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
 
@@ -85,6 +85,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const [inputCode, setInputCode] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const reorderDragStartY = useRef<number | null>(null);
+  const reorderDragPointerId = useRef<number | null>(null);
+  const [reorderDragOffset, setReorderDragOffset] = useState(0);
 
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
@@ -169,6 +172,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const executeCompletion = async (codeToSave?: string) => {
     if (delivery.completed || completionBusyRef.current) return;
     completionBusyRef.current = true;
+    setCompletionBusy(true);
 
     const updatePayload: Partial<Delivery> = { completed: true };
     if (codeToSave) {
@@ -198,6 +202,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       });
     } finally {
       completionBusyRef.current = false;
+      setCompletionBusy(false);
     }
   };
 
@@ -323,11 +328,41 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const smartLocked = orderLocked && !manualLocked;
   const canReorder =
     !isRecoveryRoute &&
+    !isAwaitingRoute &&
+    route.id !== 'rota-site-aguardando-confirmacao' &&
     route.status === 'aberta' &&
     !delivery.completed &&
     position !== undefined &&
     pendingCount > 1 &&
     !manualLocked;
+
+  const moveStop = async (targetIndex: number) => {
+    if (!canReorder) return;
+    const currentIndex = Math.max(0, (position || 1) - 1);
+    const boundedTarget = Math.max(0, Math.min(targetIndex, pendingCount - 1));
+    if (boundedTarget === currentIndex) {
+      toast.info(targetIndex < currentIndex ? 'Esta parada já é a primeira.' : 'Esta parada já é a última.');
+      return;
+    }
+    try {
+      await moveDeliveryToIndex(route.id, delivery.id, boundedTarget);
+      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a nova posição.');
+    }
+  };
+
+  const finishReorderDrag = async (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (reorderDragPointerId.current !== event.pointerId || reorderDragStartY.current === null) return;
+    const delta = event.clientY - reorderDragStartY.current;
+    reorderDragStartY.current = null;
+    reorderDragPointerId.current = null;
+    setReorderDragOffset(0);
+    if (Math.abs(delta) < 24) return;
+    const steps = Math.max(1, Math.round(Math.abs(delta) / 72));
+    const currentIndex = Math.max(0, (position || 1) - 1);
+    await moveStop(currentIndex + (delta < 0 ? -steps : steps));
+  };
 
   const resetCardSwipe = () => {
     setSwipeOffset(0); setIsSwiping(false);
@@ -635,18 +670,37 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         )}
                       </div>
 
-                      {!isExpanded && !delivery.completed && route.status === 'aberta' && (
+                      {!isExpanded && canReorder && (
                         <div className="flex min-w-0 items-center justify-end gap-1.5">
                           <button type="button" onClick={async(e)=>{e.stopPropagation();try{const nextLocked=!orderLocked;const changedAt=new Date().toISOString();await Promise.all(groupedDeliveries.map((item)=>updateDelivery(item.id,{order_locked:nextLocked,order_source:'manual',order_updated_at:changedAt})));toast.success(nextLocked?'Parada travada na sequência.':'Parada destravada.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Ordem inteligente':'Travar'}</button>
                           <div className="flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
                             <button
                               type="button"
+                              data-no-card-swipe="true"
+                              onPointerDown={(event) => {
+                                reorderDragStartY.current = event.clientY;
+                                reorderDragPointerId.current = event.pointerId;
+                                event.currentTarget.setPointerCapture(event.pointerId);
+                              }}
+                              onPointerMove={(event) => {
+                                if (reorderDragPointerId.current !== event.pointerId || reorderDragStartY.current === null) return;
+                                setReorderDragOffset(event.clientY - reorderDragStartY.current);
+                              }}
+                              onPointerUp={(event) => void finishReorderDrag(event)}
+                              onPointerCancel={(event) => void finishReorderDrag(event)}
+                              style={{ touchAction: 'none', transform: `translateY(${Math.max(-12, Math.min(12, reorderDragOffset * 0.12))}px)` }}
+                              className="flex h-9 w-9 items-center justify-center border-r border-zinc-800 text-sky-400 active:bg-sky-500/10"
+                              aria-label="Arrastar parada para reordenar"
+                              title="Segure e arraste para reordenar"
+                            >
+                              <GripVertical size={14} />
+                            </button>
+                            <button
+                              type="button"
                               disabled={orderLocked}
                               onClick={async (e) => {
                                 e.stopPropagation();
-                                if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                                try { await reorderDelivery(delivery.route_id, delivery.id, 'up'); }
-                                catch { toast.error('Não foi possível salvar a nova posição.'); }
+                                await moveStop(Math.max(0, (position || 1) - 2));
                               }}
                               className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100 disabled:opacity-30"
                               aria-label="Mover uma posição para cima"
@@ -659,9 +713,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                               disabled={orderLocked}
                               onClick={async (e) => {
                                 e.stopPropagation();
-                                if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                                try { await reorderDelivery(delivery.route_id, delivery.id, 'down'); }
-                                catch { toast.error('Não foi possível salvar a nova posição.'); }
+                                await moveStop(position || 1);
                               }}
                               className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100 disabled:opacity-30"
                               aria-label="Mover uma posição para baixo"
@@ -856,14 +908,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         <div
           className="fixed inset-0 z-[120] flex items-end bg-black/70 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-16 backdrop-blur-sm animate-in fade-in duration-150 sm:items-center sm:justify-center"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (event.target === event.currentTarget && !completionBusy) {
               setIsIfoodModalOpen(false);
               setInputCode('');
             }
           }}
         >
           <div
-            className="mx-auto w-full max-w-sm rounded-[20px] border border-zinc-800 bg-zinc-950 p-4 shadow-2xl"
+            className="mx-auto w-full max-w-[340px] rounded-[20px] border border-zinc-800 bg-zinc-950 p-3.5 shadow-2xl"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="flex items-center gap-3">
@@ -883,11 +935,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
               <button
                 type="button"
+                disabled={completionBusy}
                 onClick={() => {
                   setIsIfoodModalOpen(false);
                   setInputCode('');
                 }}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-zinc-900 text-zinc-500"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-zinc-900 text-zinc-500 disabled:opacity-35"
                 aria-label="Fechar"
               >
                 <X size={15} />
@@ -900,6 +953,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 inputMode="numeric"
                 maxLength={4}
                 autoFocus
+                disabled={completionBusy}
                 aria-label="Código de confirmação do cliente"
                 placeholder="0000"
                 value={inputCode}
@@ -913,7 +967,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     void executeCompletion(inputCode);
                   }
                 }}
-                className="h-14 w-full rounded-2xl border border-red-500/30 bg-zinc-900/70 px-4 text-center font-mono text-2xl font-black tracking-[0.35em] text-zinc-50 outline-none focus:border-red-400"
+                className="h-12 w-full rounded-xl border border-red-500/30 bg-zinc-900/70 px-4 text-center font-mono text-xl font-black tracking-[0.35em] text-zinc-50 outline-none focus:border-red-400 disabled:opacity-60"
               />
               <p className="mt-2 text-center text-[9px] leading-relaxed text-zinc-600">
                 O código fica salvo na entrega e no cadastro do cliente.
@@ -923,26 +977,27 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
             <button
               type="button"
-              disabled={inputCode.length !== 4}
+              disabled={inputCode.length !== 4 || completionBusy}
               onClick={async () => {
                 if (inputCode.length !== 4) return;
                 await executeCompletion(inputCode);
               }}
-              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-35"
+              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-35"
             >
-              <CheckCircle2 size={17} />
-              Salvar e finalizar
+              {completionBusy ? <LoaderCircle size={17} className="animate-spin" /> : <CheckCircle2 size={17} />}
+              {completionBusy ? 'Finalizando entrega...' : 'Salvar e finalizar'}
             </button>
 
             <button
               type="button"
+              disabled={completionBusy}
               onClick={async () => {
                 if (Capacitor.isNativePlatform()) {
                   await Haptics.impact({ style: ImpactStyle.Light });
                 }
                 await executeCompletion();
               }}
-              className="mt-1.5 flex h-10 w-full items-center justify-center text-[10px] font-bold text-zinc-500"
+              className="mt-1 flex h-9 w-full items-center justify-center text-[10px] font-bold text-zinc-500 disabled:opacity-35"
             >
               Finalizar sem código
             </button>

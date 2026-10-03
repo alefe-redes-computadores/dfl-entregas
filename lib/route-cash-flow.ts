@@ -106,13 +106,15 @@ export function parseMoneyDraft(raw: string) {
 }
 
 export function normalizeMoneyDraft(raw: string) {
-  const clean = String(raw || '').replace(/[^\d,.]/g, '');
-  if (!clean) return '';
+  const digits = String(raw || '').replace(/\D/g, '').slice(0, 9);
+  if (!digits) return '';
+  const padded = digits.padStart(3, '0');
+  const integer = padded.slice(0, -2).replace(/^0+(?=\d)/, '');
+  const decimal = padded.slice(-2);
+  return `${integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${decimal}`;
+}
 
-  const separatorIndex = Math.max(clean.lastIndexOf(','), clean.lastIndexOf('.'));
-  if (separatorIndex < 0) return clean.replace(/\D/g, '').slice(0, 7);
-
-  const integer = clean.slice(0, separatorIndex).replace(/\D/g, '').slice(0, 7);
-  const decimal = clean.slice(separatorIndex + 1).replace(/\D/g, '').slice(0, 2);
-  return `${integer || '0'},${decimal}`;
+export function moneyValueToDraft(value: number) {
+  const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
+  return normalizeMoneyDraft(String(Math.round(safe * 100)));
 }

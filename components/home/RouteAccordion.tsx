@@ -481,7 +481,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       toast.success('Mensagem 2 copiada!', { description: 'Conferência operacional e dinheiro esperado na volta prontos.' });
     } else {
       await navigator.clipboard.writeText(msgsToCopy[2] || '');
-      toast.success('Trocos copiados!', { description: 'Plano de dinheiro e Pix por parada pronto.' });
+      toast.success('Dinheiro da rota copiado!', { description: 'Recebimentos, trocos e retorno físico por parada prontos.' });
     }
     setIsCopyMenuOpen(false);
   };
@@ -1155,7 +1155,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   <div className="h-14 w-14 rounded-full bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0"><MapPin size={24}/></div>
                   <div className="flex flex-col">
                     <span className="font-black text-zinc-100 text-lg">Mensagem 1 (Logística)</span>
-                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Copia os endereços, IDs, botão de chamar no portão e o link do Mapa otimizado.</span>
+                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Copia endereços, IDs, contato rápido e o link do mapa otimizado.</span>
                   </div>
                 </button>
 
@@ -1170,8 +1170,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 <button onClick={() => handleCopyMessage(3)} className="flex items-center gap-4 bg-zinc-900 border border-amber-500/20 p-5 rounded-3xl active:scale-95 transition-all text-left">
                   <div className="h-14 w-14 rounded-full bg-amber-500/10 text-amber-300 flex items-center justify-center shrink-0"><Wallet size={24}/></div>
                   <div className="flex flex-col">
-                    <span className="font-black text-zinc-100 text-lg">Mensagem 3 (Trocos)</span>
-                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Quanto cada cliente entrega, troco em dinheiro/Pix e retorno físico previsto.</span>
+                    <span className="font-black text-zinc-100 text-lg">Mensagem 3 (Dinheiro)</span>
+                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Toda entrega em dinheiro, troco em espécie/Pix e retorno físico explicado por parada.</span>
                   </div>
                 </button>
              </div>

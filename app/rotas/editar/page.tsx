@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Bike, User, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
-import { parseMoneyDraft } from '@/lib/route-cash-flow';
+import { moneyValueToDraft, parseMoneyDraft } from '@/lib/route-cash-flow';
 import { MoneyDraftInput } from '@/components/routes/MoneyDraftInput';
 
 export default function EditRoutePage() {
@@ -20,9 +20,8 @@ export default function EditRoutePage() {
   const route = useAppStore((state) =>
     state.routes.find((item) => item.id === id),
   );
-  const motoboys = useAppStore((state) =>
-    state.motoboys.filter((item) => item.active),
-  );
+  const allMotoboys = useAppStore((state) => state.motoboys);
+  const motoboys = allMotoboys.filter((item) => item.active);
   const updateRoute = useAppStore((state) => state.updateRoute);
 
   const [name, setName] = useState('');
@@ -40,8 +39,8 @@ export default function EditRoutePage() {
         motoboys.find((item) => item.name === route.motoboy_name)?.id ||
         '',
     );
-    setChange(route.change_money > 0 ? String(route.change_money).replace('.', ',') : '');
-  }, [motoboys, route]);
+    setChange(route.change_money > 0 ? moneyValueToDraft(route.change_money) : '');
+  }, [allMotoboys, route]);
 
   if (!route) {
     return (

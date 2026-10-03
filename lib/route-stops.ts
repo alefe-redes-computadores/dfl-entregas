@@ -91,14 +91,11 @@ export function groupDeliveriesByStop(
     });
   }
 
-  const result = [...groups.values()];
-  // Regra operacional V4: urgência é soberana. Ordem manual continua
-  // preservada DENTRO dos blocos urgente/normal, mas nunca deixa uma
-  // entrega urgente escondida no meio/fim da rota.
-  const urgent = result.filter((group) => group.urgent);
-  if (!urgent.length) return result;
-  const normal = result.filter((group) => !group.urgent);
-  return [...urgent, ...normal];
+  // `order_index` é a autoridade final da sequência. Uma entrega urgente já
+  // entra no topo pelo índice automático definido no store; depois disso, uma
+  // decisão manual precisa continuar valendo. Repartir os grupos novamente
+  // entre urgente/normal aqui fazia a UI desfazer a ordem recém-salva.
+  return [...groups.values()];
 }
 
 export function expandStopOrder(

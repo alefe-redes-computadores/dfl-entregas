@@ -85,7 +85,7 @@ export async function copyDeliveryToClipboard(
 
     if (clientPhone && delivery.notify_whatsapp) {
       const gateMsg = encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.');
-      parts.push(`📲 *Chamar no portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
+      parts.push(`📲 *Contato rápido:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
     }
 
     if (delivery.is_paid) {
@@ -384,7 +384,7 @@ export async function generateRouteMessages(
       if (clientPhone && stopGroup.deliveries.some((item) => item.notify_whatsapp)) {
         stopsNeedingCall.push({ num: stopNumber, name: clientName });
         const gateMsg=encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.');
-        msg1.push(`📲 *Chamar no portão:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
+        msg1.push(`📲 *Contato rápido:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
       }
       msg1.push(`──────────────`);
     });
@@ -456,7 +456,7 @@ export async function generateRouteMessages(
         .filter(Boolean)
         .join(' + ');
       const drinkInfo = groupDrinks ? ` · 🥤 ${groupDrinks}` : '';
-      const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` · 📲 chamar` : '';
+      const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` · 📲 contato` : '';
       const needsCode = groupedDeliveries.some((candidate) => {
         if (candidate.origin !== 'ifood') return false;
         const candidateCustomer = getCustomerById(candidate.customer_id);
@@ -519,18 +519,19 @@ export async function generateRouteMessages(
     }
 
     if (stopsNeedingCall.length > 0) {
-      msg2.push(`📲 *Chamar no portão*`);
+      msg2.push(`📲 *Contato rápido*`);
+      msg2.push(`Se precisar falar com o cliente:`);
       stopsNeedingCall.forEach(s => {
-        msg2.push(`• Parada ${s.num} (${s.name}): Toque no link da Msg 1 para abrir a conversa!`);
+        msg2.push(`• ${getNumberEmoji(s.num)} *${s.name}* · link direto na Mensagem 1`);
       });
       msg2.push(`──────────────`);
     }
 
-    // Troco detalhado pertence exclusivamente à Mensagem 3.
-    // A Mensagem 2 só sinaliza que existe conferência financeira, sem duplicar valores.
+    // O detalhamento do dinheiro pertence à Mensagem 3.
+    // A Mensagem 2 só sinaliza a conferência financeira, sem duplicar valores.
     const cashFlow = routeCashFlow(deliveries, route.change_money);
-    if (cashFlow.requiredChange > 0 || cashFlow.initialCash > 0) {
-      msg2.push(`🪙 *Trocos:* conferir a Mensagem 3`);
+    if (cashFlow.cashOrders.length > 0 || cashFlow.initialCash > 0) {
+      msg2.push(`💰 *Dinheiro da rota:* conferir a Mensagem 3`);
       msg2.push(`──────────────`);
     }
 
@@ -541,28 +542,37 @@ export async function generateRouteMessages(
     );
     const msg3: string[] = [];
     msg3.push(`──────────────`);
-    msg3.push(`🪙 *TROCOS · Rota ${routeNumber}*`);
+    msg3.push(`💰 *DINHEIRO DA ROTA · Rota ${routeNumber}*`);
     msg3.push(`🏍️ ${route.motoboy_name}`);
+    msg3.push(`Valores que o motoboy recebe, devolve e traz para o caixa.`);
     msg3.push(`──────────────`);
 
     if (!changePlan.lines.length) {
-      msg3.push(`✅ Nenhuma parada precisa de troco.`);
+      msg3.push(`✅ Nenhuma entrega será recebida em dinheiro nesta rota.`);
     } else {
       changePlan.lines.forEach((line) => {
         msg3.push(`${getNumberEmoji(line.stop)} *${line.customer}*`);
-        msg3.push(`Pedido: R$ ${formatMoney(line.charge)} · cliente entrega *R$ ${formatMoney(line.tendered)}*`);
-        msg3.push(`Troco: *R$ ${formatMoney(line.change)}*`);
-        if (line.cashChange > 0) msg3.push(`↳ 💵 Dinheiro: R$ ${formatMoney(line.cashChange)}`);
-        if (line.pixChange > 0) msg3.push(`↳ 📱 Pix: R$ ${formatMoney(line.pixChange)}`);
+        msg3.push(`• Pedido: *R$ ${formatMoney(line.charge)}*`);
+        msg3.push(`• Cliente entrega: *R$ ${formatMoney(line.tendered)} em dinheiro*`);
+        if (line.change <= 0) {
+          msg3.push(`• ✅ Valor exato · sem troco`);
+        } else {
+          msg3.push(`• Troco total: *R$ ${formatMoney(line.change)}*`);
+          if (line.cashChange > 0) msg3.push(`  ↳ 💵 Em espécie: *R$ ${formatMoney(line.cashChange)}*`);
+          if (line.pixChange > 0) msg3.push(`  ↳ 📱 Via Pix: *R$ ${formatMoney(line.pixChange)}*`);
+        }
+        msg3.push(`• Volta desta entrega na bag: *R$ ${formatMoney(line.tendered - line.cashChange)}*`);
         msg3.push('');
       });
       msg3.push(`──────────────`);
-      msg3.push(`💵 Troco separado em dinheiro: *R$ ${formatMoney(changePlan.flow.plannedCashChange)}*`);
+      msg3.push(`📊 *RESUMO DO DINHEIRO*`);
+      msg3.push(`👜 Saiu na bag para troco: *R$ ${formatMoney(changePlan.flow.initialCash)}*`);
+      msg3.push(`💵 Clientes entregarão: *R$ ${formatMoney(changePlan.flow.tenderedCash)}*`);
+      msg3.push(`↩️ Troco devolvido em espécie: *R$ ${formatMoney(changePlan.flow.plannedCashChange)}*`);
       if (changePlan.flow.plannedPixChange > 0) {
-        msg3.push(`📱 Troco previsto via Pix: *R$ ${formatMoney(changePlan.flow.plannedPixChange)}*`);
+        msg3.push(`📱 Troco devolvido via Pix: *R$ ${formatMoney(changePlan.flow.plannedPixChange)}*`);
       }
-      msg3.push(`💰 Clientes entregarão em espécie: *R$ ${formatMoney(changePlan.flow.tenderedCash)}*`);
-      msg3.push(`👜 Retorno físico previsto: *R$ ${formatMoney(changePlan.flow.expectedPhysicalReturn)}*`);
+      msg3.push(`🏁 *Deve voltar fisicamente na bag: R$ ${formatMoney(changePlan.flow.expectedPhysicalReturn)}*`);
     }
 
     return {

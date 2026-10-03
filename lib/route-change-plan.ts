@@ -23,7 +23,6 @@ export function buildRouteChangePlan(
   let cashAvailable = flow.initialCash;
 
   const lines: RouteChangeLine[] = flow.cashOrders
-    .filter((item) => item.requestedChange > 0)
     .map((item) => {
       const cashChange = Math.min(cashAvailable, item.requestedChange);
       cashAvailable = Math.max(0, cashAvailable - cashChange);

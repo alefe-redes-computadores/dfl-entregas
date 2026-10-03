@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { PwaInstallPrompt } from '@/components/pwa/PwaInstallPrompt';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { UserAvatar } from '@/components/UserAvatar';
 
 function getGreeting(): string {
@@ -18,6 +19,8 @@ export function Header() {
   const syncError = useAppStore((state) => state.syncError);
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
+  const initData = useAppStore((state) => state.initData);
+  const lastForegroundSyncRef = useRef(0);
   
   const [greeting, setGreeting] = useState('Boa noite');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -25,6 +28,33 @@ export function Header() {
   useEffect(() => {
     setGreeting(getGreeting());
   }, []);
+
+  const refreshNow = useCallback(async (showFeedback = true) => {
+    if (useAppStore.getState().isSyncing) {
+      if (showFeedback) toast.info('A atualização já está em andamento.');
+      return;
+    }
+
+    lastForegroundSyncRef.current = Date.now();
+    const toastId = showFeedback ? toast.loading('Buscando pedidos novos...') : undefined;
+    await initData();
+
+    const failed = useAppStore.getState().syncError;
+    if (showFeedback && toastId !== undefined) {
+      if (failed) toast.error('Não foi possível atualizar agora.', { id: toastId });
+      else toast.success('Operação atualizada.', { id: toastId, duration: 1400 });
+    }
+  }, [initData]);
+
+  useEffect(() => {
+    const refreshOnForeground = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastForegroundSyncRef.current < 120_000) return;
+      void refreshNow(false);
+    };
+    document.addEventListener('visibilitychange', refreshOnForeground);
+    return () => document.removeEventListener('visibilitychange', refreshOnForeground);
+  }, [refreshNow]);
 
   const firstName = user?.displayName?.trim().split(/\s+/)[0] || 'Usuário';
 
@@ -77,7 +107,19 @@ export function Header() {
             </div>
           </div>
 
-          <PwaInstallPrompt />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void refreshNow(true)}
+              disabled={isSyncing}
+              className="grid h-10 w-10 place-items-center rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-300 transition active:scale-95 disabled:opacity-60"
+              aria-label={isSyncing ? 'Atualizando operação' : 'Buscar pedidos novos'}
+              title="Buscar pedidos novos"
+            >
+              <RefreshCw size={17} className={isSyncing ? 'animate-spin text-sky-400' : ''} />
+            </button>
+            <PwaInstallPrompt />
+          </div>
         </div>
       </header>
 
