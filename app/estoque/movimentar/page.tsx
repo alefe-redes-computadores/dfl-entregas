@@ -1,4 +1,5 @@
 // app/estoque/movimentar/page.tsx
+import { commercialPresentationEquation, commercialMovementPreview } from '@/lib/stock-commercial-display-v2';
 'use client';
 
 import {
@@ -476,9 +477,9 @@ function Content() {
           <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Apresentação física</p>{(()=>{try{const q=JSON.parse(sessionStorage.getItem('dfl-stock-review-queue')||'[]') as string[];const i=q.indexOf(product.id);return q.length&&i>=0?<span className="text-[10px] font-black text-sky-400">{i+1}/{q.length}</span>:null}catch{return null}})()}</div>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <button type="button" onClick={()=>setPresentationId('base')} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId==='base'?'border-sky-500/40 bg-sky-500/10 text-sky-300':'border-zinc-800 text-zinc-500'}`}>Unidade interna<span className="mt-1 block text-[9px] font-medium">1 {product.unit}</span></button>
-            {presentations.map((item)=><button type="button" key={item.id} onClick={()=>setPresentationId(item.id)} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId===item.id?'border-amber-500/40 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-500'}`}>{item.label}<span className="mt-1 block text-[9px] font-medium">1 = {item.conversion_quantity.toLocaleString('pt-BR',{maximumFractionDigits:4})} {product.unit}</span></button>)}
+            {presentations.map((item)=><button type="button" key={item.id} onClick={()=>setPresentationId(item.id)} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId===item.id?'border-amber-500/40 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-500'}`}>{item.label}<span className="mt-1 block text-[9px] font-medium">{commercialPresentationEquation(item,product.unit)}</span></button>)}
           </div>
-          {quantity.trim() && Number.isFinite(typed) && typed>=0 && <p className="mt-3 rounded-xl bg-zinc-950/55 px-3 py-2 text-[10px] font-bold text-zinc-300">Prévia: {typed.toLocaleString('pt-BR',{maximumFractionDigits:4})} × {selectedPresentation?.label || product.unit} = <b className="text-emerald-300">{baseTyped.toLocaleString('pt-BR',{maximumFractionDigits:4})} {product.unit}</b></p>}
+          {quantity.trim() && Number.isFinite(typed) && typed>=0 && <p className="mt-3 rounded-xl bg-zinc-950/55 px-3 py-2 text-[10px] font-bold text-zinc-300">Prévia: <b className="text-emerald-300">{commercialMovementPreview(selectedPresentation,product.unit,typed)}</b></p>}
         </section>
 
         <label

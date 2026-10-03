@@ -40,7 +40,16 @@ export function commercialCoverage(products: StockProduct[]) {
 export function commercialOperationalHint(product: StockProduct): string {
   const status = commercialProductStatus(product);
   if (status === 'configured') return 'Compra comercial configurada.';
-  if (status === 'invalid_presentation') return 'Revise a embalagem: existe apresentação sem conversão válida.';
+  if (status === 'invalid_presentation') {
+    const invalid = (product.presentations || []).find((p) => !validPresentation(p));
+    const name = invalid?.label?.trim() || 'apresentação sem nome';
+    const conversion = Number(invalid?.conversion_quantity);
+    if (!invalid?.label?.trim()) return 'Corrigir apresentação: informe um nome para a embalagem.';
+    if (!Number.isFinite(conversion) || conversion <= 0) {
+      return `Corrigir “${name}”: informe quanto existe dentro de cada embalagem.`;
+    }
+    return `Corrigir “${name}”: revise os dados da apresentação comercial.`;
+  }
   if (status === 'fractional_without_presentation') {
     return 'Estoque fracionável sem embalagem de compra. Cadastre a forma real de compra antes de automatizar arredondamentos.';
   }

@@ -39,6 +39,38 @@ export function humanPresentation(p:StockProductPresentation,baseUnit:StockSuppl
   return `${unitWord(p.purchase_unit,1)} de ${formatStockQuantity(q,baseUnit)}`;
 }
 
+export function commercialPresentationEquation(
+  p:StockProductPresentation,
+  baseUnit:StockSupplyUnit,
+  quantity=1,
+){
+  const count=Math.max(0,Number(quantity)||0);
+  const factor=Math.max(0,Number(p.conversion_quantity)||0);
+  const base=count*factor;
+
+  const commercial=unitWord(p.purchase_unit,count);
+  const internal=unitWord(baseUnit,base);
+
+  return `${number(count)} ${commercial} = ${number(base)} ${internal}`;
+}
+
+export function commercialMovementPreview(
+  p:StockProductPresentation|undefined,
+  baseUnit:StockSupplyUnit,
+  quantity:number,
+){
+  const count=Math.max(0,Number(quantity)||0);
+
+  if(!p){
+    return `${number(count)} ${unitWord(baseUnit,count)} do estoque`;
+  }
+
+  const factor=Math.max(0,Number(p.conversion_quantity)||0);
+  const base=count*factor;
+
+  return `${number(count)} ${unitWord(p.purchase_unit,count)} moviment${count===1?'a':'am'} ${number(base)} ${unitWord(baseUnit,base)} do estoque`;
+}
+
 export function humanPurchasePlan(args:{purchaseQuantity:number;baseQuantity:number;baseUnit:StockSupplyUnit;presentation?:StockProductPresentation}){
   const {purchaseQuantity,baseQuantity,baseUnit,presentation:p}=args;
 
