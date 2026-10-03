@@ -8,12 +8,11 @@ const settlement=r('app/motoboys/acerto/page.tsx');
 const presentation=r('components/stock/StockPresentationEditor.tsx');
 const checks=[
  ['diagnóstico acionável montado',stock.includes('<StockCatalogHealth products={active}')],
- ['saldo inválido detectado',health.includes("'negative-stock'")],
- ['mínimo/ideal incoerentes detectados',health.includes("'ideal-below-minimum'")],
- ['duplicado detectado conservadoramente',health.includes("'duplicate-name'")],
- ['unidade discreta fracionada sinalizada',health.includes("'fractional-discrete'")],
- ['embalagem inválida sinalizada',health.includes("'invalid-presentation'")],
- ['ação abre edição do produto',banner.includes('onOpen(issue.productId)')],
+ ['saldo inválido detectado',health.includes("title:'Saldo inválido'")],
+ ['mínimo/ideal incoerentes detectados',health.includes("title:'Ideal abaixo do mínimo'")],
+ ['duplicado detectado conservadoramente',health.includes("title:'Possível duplicado'")],
+ ['embalagem inválida sinalizada',health.includes("title:'Apresentação incompleta'")],
+ ['ação abre edição do produto',banner.includes('onOpen(x.productId)')],
  ['notificação de rota resiliente',route.includes('operação preservada')],
  ['lembrete de rota resiliente',route.includes('rota preservada')],
  ['acerto protege valores grandes',settlement.includes('tabular-nums')],

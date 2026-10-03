@@ -1,6 +1,7 @@
 // app/estoque/movimentar/page.tsx
-import { commercialPresentationEquation, commercialMovementPreview } from '@/lib/stock-commercial-display-v2';
 'use client';
+
+import { commercialPresentationEquation, commercialMovementPreview } from '@/lib/stock-commercial-display-v2';
 
 import {
   Suspense,
