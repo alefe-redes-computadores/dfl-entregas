@@ -300,6 +300,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (actionBusy) return;
     setActionBusy(true);
     try {
+      if (Capacitor.isNativePlatform()) {
+        await Haptics.impact({ style: ImpactStyle.Medium });
+      }
       await startRoute(route.id);
       setDepartureChecklistOpen(false);
       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });

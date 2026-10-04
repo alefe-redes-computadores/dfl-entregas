@@ -1,7 +1,8 @@
 // components/routes/RouteDepartureChecklist.tsx
 'use client';
 
-import { AlertTriangle, CheckCircle2, Wallet, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle2, LoaderCircle, Wallet, X } from 'lucide-react';
 import type { Customer, Delivery, Route } from '@/types';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { routeCashFlow } from '@/lib/route-cash-flow';
@@ -26,8 +27,32 @@ export function RouteDepartureChecklist({
   onClose,
   onConfirm,
 }: Props) {
-  const physicalStops = groupDeliveriesByStop(deliveries).length;
-  const checklist = deliveries.map((delivery) => {
+  const [busySeconds, setBusySeconds] = useState(0);
+
+  useEffect(() => {
+    if (!busy) {
+      setBusySeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const timer = window.setInterval(
+      () => setBusySeconds(Math.floor((Date.now() - startedAt) / 1000)),
+      500,
+    );
+    return () => window.clearInterval(timer);
+  }, [busy]);
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, []);
+
+  const physicalStops = useMemo(
+    () => groupDeliveriesByStop(deliveries).length,
+    [deliveries],
+  );
+  const checklist = useMemo(() => deliveries.map((delivery) => {
     const customer = getCustomerById(delivery.customer_id);
     return {
       id: delivery.id,
@@ -46,14 +71,17 @@ export function RouteDepartureChecklist({
         !delivery.confirmation_code?.trim() &&
         !customer?.last_confirmation_code?.trim(),
     };
-  });
+  }), [deliveries, getCustomerById]);
 
   const drinks = checklist.filter((item) => item.drinks);
   const change = checklist.filter((item) => item.change > 0);
   const warnings = checklist.filter(
     (item) => item.missingAddress || item.missingConfirmation,
   );
-  const cashFlow = routeCashFlow(deliveries, route.change_money);
+  const cashFlow = useMemo(
+    () => routeCashFlow(deliveries, route.change_money),
+    [deliveries, route.change_money],
+  );
   const requiredChange = cashFlow.requiredChange;
   const routeCash = cashFlow.initialCash;
   const routeCashShortage = cashFlow.plannedPixChange;
@@ -62,6 +90,10 @@ export function RouteDepartureChecklist({
     <div
       className="fixed inset-0 z-[120] flex items-end bg-black/80 backdrop-blur-sm"
       onClick={() => !busy && onClose()}
+      role="dialog"
+      aria-modal="true"
+      aria-busy={busy}
+      aria-labelledby="route-departure-title"
     >
       <div
         className="max-h-[88vh] w-full overflow-y-auto rounded-t-[32px] border-t border-zinc-700 bg-[#151515] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]"
@@ -74,7 +106,7 @@ export function RouteDepartureChecklist({
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-sky-400">
               Expedição
             </p>
-            <h3 className="mt-1 font-heading text-xl font-black text-zinc-50">
+            <h3 id="route-departure-title" className="mt-1 font-heading text-xl font-black text-zinc-50">
               Checklist de saída
             </h3>
             <p className="mt-1 text-xs leading-relaxed text-zinc-500">
@@ -190,9 +222,25 @@ export function RouteDepartureChecklist({
           onClick={() => void onConfirm()}
           className="mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 text-sm font-black text-zinc-950 active:scale-[0.98] disabled:opacity-50"
         >
-          <CheckCircle2 size={18} />
-          {busy ? 'Iniciando rota...' : 'Tudo conferido · Iniciar rota'}
+          {busy ? <LoaderCircle size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+          {busy
+            ? busySeconds >= 4
+              ? 'Rota salva · sincronizando em segundo plano'
+              : 'Registrando saída...'
+            : 'Tudo conferido · Iniciar rota'}
         </button>
+        {busy && (
+          <div className="mt-3" aria-live="polite">
+            <div className="h-1 overflow-hidden rounded-full bg-zinc-900">
+              <div className="h-full w-1/2 animate-pulse rounded-full bg-sky-400" />
+            </div>
+            <p className="mt-2 text-center text-[10px] leading-relaxed text-zinc-500">
+              {busySeconds >= 4
+                ? 'A saída já está sendo protegida. Não toque novamente nem feche o aplicativo.'
+                : 'Salvando horário, responsável e estado operacional da rota.'}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

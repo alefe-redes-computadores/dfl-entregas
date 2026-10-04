@@ -938,27 +938,27 @@ export const useAppStore = create<AppState>()(
            * feedback visível e o botão "Sincronizar Site" permanece como
            * recuperação manual.
            */
-          try {
-            const result = await kickSiteRoute(routeId, {
+          void kickSiteRoute(routeId, {
               reason: 'route_started',
               maxAttempts: 3,
-            });
-
+            })
+            .then((result) => {
             console.info(
               '[route-kick] fast lane concluída',
               result,
             );
-          } catch (kickError) {
+            })
+            .catch((kickError) => {
             console.warn(
               '[route-kick] falhou; fallback periódico preservado',
               kickError,
             );
             toast.warning('Rota iniciada; Site aguardando sincronização.', {
               description:
-                'A saída foi salva. Se o aviso não aparecer no Site, use Sincronizar Site.',
+                'A saída foi salva. Se o aviso não aparecer no Site, use Reprocessar integração nas ferramentas da rota.',
               duration: 5000,
             });
-          }
+            });
 
           const stops = groupDeliveriesByStop(routeDeliveries).length;
           void notifyRouteStarted(routeId, current.name || 'Rota', current.motoboy_name || '', startedByName, stops, routeDeliveries.length, get().storeSettings.notificationPreferences);
