@@ -48,7 +48,8 @@ const getOriginLabel = (delivery: Delivery): string => {
 export async function copyDeliveryToClipboard(
   delivery: Delivery,
   customerName?: string,
-  savedCustomerCode?: string
+  savedCustomerCode?: string,
+  relatedDeliveries: Delivery[] = [delivery],
 ): Promise<boolean> {
   try {
     const parts: string[] = [];
@@ -61,6 +62,25 @@ export async function copyDeliveryToClipboard(
     parts.push(`📦 *ENTREGA*`);
     if (isUrgent) parts.push(`🚨 *ATENÇÃO: ENTREGA URGENTE* 🚨`);
     parts.push('');
+
+    const groupedOrders = Array.from(
+      new Map(relatedDeliveries.map((item) => [item.id, item])).values(),
+    );
+    if (groupedOrders.length > 1) {
+      parts.push(`📦 *${groupedOrders.length} PEDIDOS NESTA PARADA*`);
+      groupedOrders.forEach((item, index) => {
+        const itemName = item.customer_name || (item.id === delivery.id ? customerName : '') || 'Cliente';
+        const itemNumber = item.order_id ? `#${item.order_id}` : 'sem número';
+        const itemOrigin = item.source_system === 'dfl_site' ? 'Site' : item.origin === 'ifood' ? 'iFood' : 'Loja';
+        const itemCode = item.confirmation_code?.replace(/\D/g, '').slice(0, 4);
+        const itemPayment = item.is_paid ? 'pago' : (item.payment_method || 'dinheiro').replace(/_/g, ' ');
+        parts.push(`${index + 1}. *${itemName}* · ${itemNumber} · ${itemOrigin}`);
+        parts.push(`   R$ ${formatMoney(deliveryCharge(item))} · ${itemPayment}${itemCode ? ` · código ${itemCode}` : ''}`);
+      });
+      const groupedTotal = groupedOrders.reduce((sum, item) => sum + deliveryCharge(item), 0);
+      parts.push(`💰 *Total da parada: R$ ${formatMoney(groupedTotal)}*`);
+      parts.push('');
+    }
 
     if (customerName) parts.push(`👤 *Cliente:* ${customerName}`);
 

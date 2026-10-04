@@ -19,6 +19,7 @@ const tests=[
   'scripts/verify-motoboy-settlement-carry-v10.cjs',
   'scripts/verify-site-route-experience-v11.cjs',
   'scripts/verify-route-reorder-v13-3.cjs',
+  'scripts/verify-route-grouping-v18-1.cjs',
   'scripts/verify-route-money-v13-4.cjs',
   'scripts/verify-ifood-refresh-v13-5.cjs',
   'scripts/test-v17-5-auto-fastlane-next-stop.cjs',

@@ -2106,7 +2106,7 @@ export const useAppStore = create<AppState>()(
         await get().setDeliveryOrder(
           routeId,
           groups.flatMap((group) => group.deliveries.map((delivery) => delivery.id)),
-          { metadata: { order_source: 'manual', order_updated_at: new Date().toISOString() } },
+          { metadata: { order_locked: false, order_source: 'manual', order_updated_at: new Date().toISOString() } },
         );
       },
 
@@ -2142,7 +2142,7 @@ export const useAppStore = create<AppState>()(
         await get().setDeliveryOrder(
           routeId,
           finalGroups.flatMap((group) => group.deliveries.map((delivery) => delivery.id)),
-          { metadata: { order_source: 'manual', order_updated_at: new Date().toISOString() } },
+          { metadata: { order_locked: false, order_source: 'manual', order_updated_at: new Date().toISOString() } },
         );
       },
 

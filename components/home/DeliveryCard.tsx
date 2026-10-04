@@ -333,8 +333,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     route.status === 'aberta' &&
     !delivery.completed &&
     position !== undefined &&
-    pendingCount > 1 &&
-    !manualLocked;
+    pendingCount > 1;
 
   const moveStop = async (targetIndex: number) => {
     if (!canReorder) return;
@@ -359,7 +358,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     reorderDragPointerId.current = null;
     setReorderDragOffset(0);
     if (Math.abs(delta) < 24) return;
-    const steps = Math.max(1, Math.round(Math.abs(delta) / 72));
+    const steps = 1;
     const currentIndex = Math.max(0, (position || 1) - 1);
     await moveStop(currentIndex + (delta < 0 ? -steps : steps));
   };
@@ -649,7 +648,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           onClick={async (e) => {
                             e.stopPropagation();
                             if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                            copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code);
+                            copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code, groupedDeliveries);
                             toast.success('Entrega copiada com sucesso!');
                           }}
                           className="flex min-w-0 items-center gap-1.5 h-8 px-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/40 active:scale-95 text-[11px] font-bold transition-all shadow-sm"
@@ -677,8 +676,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             <button
                               type="button"
                               data-no-card-swipe="true"
-                              onPointerDown={(event) => {
-                                reorderDragStartY.current = event.clientY;
+                              disabled={manualLocked}
+                        onPointerDown={(event) => {
+                          if (manualLocked) return;
+                          reorderDragStartY.current = event.clientY;
                                 reorderDragPointerId.current = event.pointerId;
                                 event.currentTarget.setPointerCapture(event.pointerId);
                               }}
@@ -697,7 +698,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             </button>
                             <button
                               type="button"
-                              disabled={orderLocked}
+                              disabled={manualLocked}
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 await moveStop(Math.max(0, (position || 1) - 2));
@@ -710,7 +711,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             <div className="h-4 w-px bg-zinc-800" />
                             <button
                               type="button"
-                              disabled={orderLocked}
+                              disabled={manualLocked}
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 await moveStop(position || 1);
@@ -868,7 +869,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   <button
                     onClick={async () => {
                       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                      copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code);
+                      copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code, groupedDeliveries);
                       toast.success('Entrega copiada!');
                     }}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 active:scale-90 transition-all"
