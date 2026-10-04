@@ -1,7 +1,21 @@
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 
 const ADMIN_PACKAGE = "br.com.dafamilialanches.admin";
 const ADMIN_ORIGIN = "https://admin.dafamilialanches.com.br";
+
+export type AdminOpenResult = {
+  opened: boolean;
+  target: "app" | "browser" | "web" | "same-tab" | "none";
+  message?: string;
+};
+
+type NativeAdminLauncherPlugin = {
+  open(options: { url: string }): Promise<AdminOpenResult>;
+};
+
+const NativeAdminLauncher = registerPlugin<NativeAdminLauncherPlugin>(
+  "AdminLauncher",
+);
 
 function cleanId(value: unknown) {
   return String(value ?? "").trim().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 160);
@@ -34,19 +48,36 @@ export function adminWebUrl(externalOrderId?: unknown, stage = "expedicao") {
   return `${ADMIN_ORIGIN}${adminPath(externalOrderId, stage)}`;
 }
 
-export function openDflAdmin(externalOrderId?: unknown, stage = "expedicao") {
-  if (typeof window === "undefined") return false;
-
-  if (!Capacitor.isNativePlatform()) {
-    window.open(adminWebUrl(externalOrderId, stage), "_blank", "noopener,noreferrer");
-    return true;
+export async function openDflAdmin(
+  externalOrderId?: unknown,
+  stage = "expedicao",
+): Promise<AdminOpenResult> {
+  if (typeof window === "undefined") {
+    return { opened: false, target: "none", message: "Janela indisponível." };
   }
 
-  window.location.href = externalOrderId
-    ? adminOrderIntentUrl(externalOrderId, stage)
-    : adminHomeIntentUrl();
+  const url = adminWebUrl(externalOrderId, stage);
 
-  return true;
+  if (!Capacitor.isNativePlatform()) {
+    const popup = window.open(url, "_blank", "noopener,noreferrer");
+    if (popup) return { opened: true, target: "web" };
+
+    window.location.assign(url);
+    return { opened: true, target: "same-tab" };
+  }
+
+  try {
+    return await NativeAdminLauncher.open({ url });
+  } catch (error) {
+    return {
+      opened: false,
+      target: "none",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Não foi possível abrir o DFL Admin.",
+    };
+  }
 }
 
 export function deliveryDeepLinkToHref(value: unknown) {

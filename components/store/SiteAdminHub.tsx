@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { openDflAdmin } from '@/lib/native/admin-bridge';
 import {
@@ -38,6 +39,7 @@ export function SiteAdminHub({
   const searchParams = useSearchParams();
   const focusPending = searchParams.get('site') === 'pending';
   const [expanded, setExpanded] = useState(focusPending);
+  const [openingAdmin, setOpeningAdmin] = useState(false);
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
 
@@ -206,15 +208,24 @@ export function SiteAdminHub({
 
           <button
             type="button"
-            onClick={(event) => {
+            onClick={async (event) => {
               event.stopPropagation();
-              openDflAdmin();
+              if (openingAdmin) return;
+              setOpeningAdmin(true);
+              const result = await openDflAdmin();
+              if (!result.opened) {
+                toast.error(result.message || 'Não foi possível abrir o DFL Admin.');
+              } else if (result.target === 'browser') {
+                toast.info('DFL Admin não instalado. Abrindo no navegador.');
+              }
+              setOpeningAdmin(false);
             }}
+            disabled={openingAdmin}
             className="mt-2 flex h-11 w-full items-center justify-between rounded-2xl border border-amber-400/20 bg-amber-400/[.07] px-3 text-left text-amber-300 active:scale-[.99]"
           >
             <span>
               <strong className="block text-[11px] font-black">
-                Abrir Admin do Site
+                {openingAdmin ? 'Abrindo DFL Admin…' : 'Abrir Admin do Site'}
               </strong>
               <small className="block text-[9px] text-zinc-600">
                 Administração comercial oficial

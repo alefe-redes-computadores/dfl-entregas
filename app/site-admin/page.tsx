@@ -2,12 +2,15 @@
 
 import { ArrowLeft, ExternalLink, ShieldCheck, Store } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { openDflAdmin } from '@/lib/native/admin-bridge';
 
 export default function SiteAdminPage() {
   const router = useRouter();
+  const [openingAdmin, setOpeningAdmin] = useState(false);
 
   const vibrate = async (style: ImpactStyle) => {
     if (Capacitor.isNativePlatform()) {
@@ -21,8 +24,16 @@ export default function SiteAdminPage() {
   };
 
   const openExternal = async () => {
+    if (openingAdmin) return;
+    setOpeningAdmin(true);
     await vibrate(ImpactStyle.Light);
-    openDflAdmin();
+    const result = await openDflAdmin();
+    if (!result.opened) {
+      toast.error(result.message || 'Não foi possível abrir o DFL Admin.');
+    } else if (result.target === 'browser') {
+      toast.info('DFL Admin não instalado. Abrindo no navegador.');
+    }
+    setOpeningAdmin(false);
   };
 
   return (
@@ -71,11 +82,12 @@ export default function SiteAdminPage() {
             <button
               type="button"
               onClick={openExternal}
+              disabled={openingAdmin}
               className="flex items-center gap-1 rounded-lg bg-zinc-800 px-2.5 py-1.5 text-[10px] font-black text-zinc-300 active:scale-95"
               title="Abrir o DFL Admin oficial"
             >
               <ExternalLink size={12} />
-              Externo
+              {openingAdmin ? 'Abrindo…' : 'Externo'}
             </button>
             <button
               type="button"
@@ -98,8 +110,8 @@ export default function SiteAdminPage() {
           <p className="mx-auto mt-2 max-w-xs text-[11px] leading-relaxed text-zinc-500">
             O Admin usa a sessão própria do DFL Site. Abra o DFL Admin oficial. No aplicativo, a ponte tenta abrir diretamente o APK Admin; no navegador, usa o domínio oficial.
           </p>
-          <button type="button" onClick={openExternal} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 font-black text-zinc-950 active:scale-[.99]">
-            <ExternalLink size={17} /> Abrir Admin do Site
+          <button type="button" onClick={openExternal} disabled={openingAdmin} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 font-black text-zinc-950 active:scale-[.99] disabled:cursor-wait disabled:opacity-70">
+            <ExternalLink size={17} /> {openingAdmin ? 'Abrindo DFL Admin…' : 'Abrir Admin do Site'}
           </button>
           <button type="button" onClick={leave} className="mt-2 h-11 w-full rounded-2xl border border-zinc-800 bg-zinc-950/40 text-[11px] font-black text-zinc-400 active:scale-[.99]">
             Voltar para Minha Loja

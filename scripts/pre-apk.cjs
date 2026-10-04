@@ -37,6 +37,7 @@ const tests=[
   'scripts/audit-delivery-inbox-firestore.cjs',
   'scripts/audit-operation-ifood-routes-firestore.cjs',
   'scripts/audit-intelligence-routes-v2.cjs',
+  'scripts/verify-native-admin-launcher-v22.cjs',
 ].filter(fs.existsSync);
 
 let failed=0;

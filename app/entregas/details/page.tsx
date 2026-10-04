@@ -84,6 +84,7 @@ function DeliveryDetailsContent() {
     (state) => state.ifoodPendingConfirmations,
   );
   const [isCompleting, setIsCompleting] = useState(false);
+  const [openingAdmin, setOpeningAdmin] = useState(false);
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
 
@@ -163,11 +164,19 @@ function DeliveryDetailsContent() {
       return;
     }
 
+    if (openingAdmin) return;
+    setOpeningAdmin(true);
     await vibrate(ImpactStyle.Light);
-    openDflAdminBridge(
+    const result = await openDflAdminBridge(
       delivery.external_order_id,
       delivery.completed ? "concluidos" : "expedicao",
     );
+    if (!result.opened) {
+      toast.error(result.message || "Não foi possível abrir o DFL Admin.");
+    } else if (result.target === "browser") {
+      toast.info("DFL Admin não instalado. Abrindo no navegador.");
+    }
+    setOpeningAdmin(false);
   };
 
   const openWhatsApp = () => {
@@ -323,8 +332,8 @@ function DeliveryDetailsContent() {
       </header>
 
       {channel === 'site' && delivery.external_order_id && (
-        <button type="button" onClick={() => void openDflAdmin()} className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-sky-500/20 bg-sky-500/[0.07] px-4 py-3 text-left active:scale-[0.99]">
-          <span className="min-w-0"><span className="block text-[9px] font-black uppercase tracking-[0.16em] text-sky-400">Ecossistema DFL</span><strong className="mt-1 block truncate text-sm text-zinc-100">Abrir pedido no DFL Admin</strong></span>
+        <button type="button" onClick={() => void openDflAdmin()} disabled={openingAdmin} className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-sky-500/20 bg-sky-500/[0.07] px-4 py-3 text-left active:scale-[0.99] disabled:cursor-wait disabled:opacity-70">
+          <span className="min-w-0"><span className="block text-[9px] font-black uppercase tracking-[0.16em] text-sky-400">Ecossistema DFL</span><strong className="mt-1 block truncate text-sm text-zinc-100">{openingAdmin ? 'Abrindo DFL Admin…' : 'Abrir pedido no DFL Admin'}</strong></span>
           <ExternalLink size={18} className="shrink-0 text-sky-400" />
         </button>
       )}
