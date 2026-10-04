@@ -4,7 +4,7 @@ ok(stock.includes('dfl-stock-review-queue')&&move.includes('dfl-stock-review-que
 ok(move.includes("{i+1}/{q.length}"),'progresso da conferência');
 ok(store.includes('dfl-stock-review-changes')&&move.includes('notifyStockThresholdChanges(changes'),'alertas individuais agrupados no final');
 ok(move.includes('presentationId')&&move.includes('conversion_quantity: conversion'),'movimentação por apresentação comercial');
-ok(move.includes('Prévia:')&&move.includes('baseTyped'),'prévia converte embalagem para unidade interna');
+ok(move.includes('Saldo após esta movimentação')&&move.includes('baseTyped')&&move.includes('commercialMovementPreview'),'prévia converte embalagem para unidade interna');
 ok(types.includes('presentation_quantity?: number')&&types.includes('team_member_photo_url?: string'),'movimento preserva snapshot comercial e responsável');
 ok(team.includes('photoURL')&&move.includes('user?.displayName'),'responsável usa usuário/foto como fallback');
 ok(move.indexOf('await operation')<move.lastIndexOf('feedbackSuccess()'),'feedback de sucesso só após persistência');

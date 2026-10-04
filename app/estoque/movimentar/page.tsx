@@ -1,7 +1,8 @@
 // app/estoque/movimentar/page.tsx
 'use client';
 
-import { commercialPresentationEquation, commercialMovementPreview } from '@/lib/stock-commercial-display-v2';
+import { commercialMovementPreview, commercialPresentationEquation, humanPresentation } from '@/lib/stock-commercial-display-v2';
+import { committedStockQuantityMap } from '@/lib/stock-shopping';
 
 import {
   Suspense,
@@ -19,6 +20,7 @@ import {
   AlertCircle,
   Calculator,
   PackageOpen,
+  ShoppingCart,
   Save,
   SkipForward,
 } from 'lucide-react';
@@ -83,6 +85,18 @@ const options: Array<
   ],
 ];
 
+const quantityLabels: Record<string, string> = {
+  un: 'unidades',
+  g: 'gramas',
+  kg: 'quilos',
+  ml: 'mililitros',
+  l: 'litros',
+  cx: 'caixas',
+  pct: 'pacotes',
+  fardo: 'fardos',
+};
+const quantityLabel = (unit: string) => quantityLabels[unit] || unit;
+
 function Content() {
   const router = useRouter();
 
@@ -104,6 +118,7 @@ function Content() {
   );
 
   const activeProducts = useAppStore((state) => state.stockProducts.filter((item) => item.active));
+  const stockSupplies = useAppStore((state) => state.stockSupplies);
 
   const [type, setType] =
     useState<StockMovementType>(
@@ -202,6 +217,21 @@ function Content() {
       typed >
         product.current_quantity);
 
+  const insufficientStock =
+    (type === 'saida' || type === 'perda') &&
+    mode === 'moved' &&
+    amount > product.current_quantity;
+
+  const pendingSupply = stockSupplies.find((supply) =>
+    !supply.stock_integrated_at &&
+    !supply.stock_reversed_at &&
+    supply.items.some((item) => item.stock_product_id === product.id),
+  );
+  const committedQuantity = committedStockQuantityMap(stockSupplies).get(product.id) || 0;
+  const pendingSupplyQuantity = pendingSupply?.items
+    .filter((item) => item.stock_product_id === product.id)
+    .reduce((total, item) => total + Math.max(0, Number(item.quantity) || 0), 0) || committedQuantity;
+
   const quantityInvalid =
     !quantity.trim() ||
     !Number.isFinite(typed) ||
@@ -223,9 +253,8 @@ function Content() {
   ) => {
     event.preventDefault();
 
-    setAttempted(true);
-
     if (quantityInvalid) {
+      setAttempted(true);
       void feedbackError();
 
       document
@@ -239,6 +268,8 @@ function Content() {
 
       return;
     }
+
+    setAttempted(false);
 
     if (savingRef.current) return;
 
@@ -521,12 +552,11 @@ function Content() {
         )}
 
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3">
-          <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Apresentação física</p>{(()=>{try{const q=JSON.parse(sessionStorage.getItem('dfl-stock-review-queue')||'[]') as string[];const i=q.indexOf(product.id);return q.length&&i>=0?<span className="text-[10px] font-black text-sky-400">{i+1}/{q.length}</span>:null}catch{return null}})()}</div>
+          <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Como você vai informar?</p><p className="mt-1 text-[9px] text-zinc-600">Escolha a unidade usada na digitação.</p></div>{(()=>{try{const q=JSON.parse(sessionStorage.getItem('dfl-stock-review-queue')||'[]') as string[];const i=q.indexOf(product.id);return q.length&&i>=0?<span className="text-[10px] font-black text-sky-400">{i+1}/{q.length}</span>:null}catch{return null}})()}</div>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <button type="button" onClick={()=>setPresentationId('base')} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId==='base'?'border-sky-500/40 bg-sky-500/10 text-sky-300':'border-zinc-800 text-zinc-500'}`}>Unidade interna<span className="mt-1 block text-[9px] font-medium">1 {product.unit}</span></button>
-            {presentations.map((item)=><button type="button" key={item.id} onClick={()=>setPresentationId(item.id)} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId===item.id?'border-amber-500/40 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-500'}`}>{item.label}<span className="mt-1 block text-[9px] font-medium">{commercialPresentationEquation(item,product.unit)}</span></button>)}
+            <button type="button" onClick={()=>{setPresentationId('base');setQuantity('');setAttempted(false)}} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId==='base'?'border-sky-500/40 bg-sky-500/10 text-sky-300':'border-zinc-800 text-zinc-500'}`}>Direto em {quantityLabel(product.unit)}<span className="mt-1 block text-[9px] font-medium">Unidade controlada no estoque</span></button>
+            {presentations.map((item)=><button type="button" key={item.id} onClick={()=>{setPresentationId(item.id);setQuantity('');setAttempted(false)}} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId===item.id?'border-amber-500/40 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-500'}`}>{humanPresentation(item,product.unit)}<span className="mt-1 block text-[9px] font-medium">{Math.abs(Number(item.conversion_quantity)-1)<1e-9?`Formato de compra · mesma quantidade`:commercialPresentationEquation(item,product.unit)}</span></button>)}
           </div>
-          {quantity.trim() && Number.isFinite(typed) && typed>=0 && <p className="mt-3 rounded-xl bg-zinc-950/55 px-3 py-2 text-[10px] font-bold text-zinc-300">Prévia: <b className="text-emerald-300">{commercialMovementPreview(selectedPresentation,product.unit,typed)}</b></p>}
         </section>
 
         <label
@@ -540,7 +570,9 @@ function Content() {
                   'contagem' ||
                 type === 'ajuste'
               ? 'Novo saldo*'
-              : 'Quantidade*'}
+              : selectedPresentation
+                ? `Quantidade de ${quantityLabel(selectedPresentation.purchase_unit)}*`
+                : `Quantidade em ${quantityLabel(product.unit)}*`}
 
           <span className="mt-1 block text-[9px] font-normal text-zinc-600">
             {quantityInputHint(
@@ -590,10 +622,32 @@ function Content() {
 
                 {remainingInvalid
                   ? 'O saldo restante não pode ser maior que o saldo atual.'
+                  : insufficientStock
+                    ? `Saldo insuficiente: disponível ${formatStockQuantity(product.current_quantity, product.unit)}.`
                   : 'Informe uma quantidade válida.'}
               </span>
             )}
         </label>
+
+        {quantity.trim() && insufficientStock && (
+          <section className="rounded-2xl border border-red-500/25 bg-red-500/[.055] p-4">
+            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-red-400">
+              <AlertCircle size={14} /> Saldo insuficiente
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-300">
+              Você tentou retirar <b>{formatStockQuantity(amount, product.unit)}</b>, mas existem somente <b>{formatStockQuantity(product.current_quantity, product.unit)}</b> disponíveis.
+            </p>
+            {pendingSupply && pendingSupplyQuantity > 0 && (
+              <button type="button" onClick={()=>router.push(`/abastecimentos/detalhes?id=${pendingSupply.id}`)} className="mt-3 flex w-full items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[.07] p-3 text-left active:scale-[.99]">
+                <ShoppingCart size={17} className="shrink-0 text-amber-400" />
+                <span className="min-w-0 flex-1">
+                  <b className="block text-[10px] text-amber-300">Há {formatStockQuantity(pendingSupplyQuantity, product.unit)} em compra ainda não lançada</b>
+                  <small className="mt-0.5 block text-[9px] leading-relaxed text-zinc-500">Abra a compra, confirme o recebimento e lance no estoque antes de retirar.</small>
+                </span>
+              </button>
+            )}
+          </section>
+        )}
 
         {quantity.trim() &&
           !quantityInvalid && (
@@ -602,8 +656,14 @@ function Content() {
                 <Calculator
                   size={14}
                 />
-                Prévia
+                Saldo após esta movimentação
               </p>
+
+              {selectedPresentation && (
+                <p className="mt-2 text-[10px] font-bold text-sky-200">
+                  {commercialMovementPreview(selectedPresentation,product.unit,typed)}
+                </p>
+              )}
 
               {canUseRemaining &&
                 mode ===

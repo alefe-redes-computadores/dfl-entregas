@@ -33,6 +33,7 @@ const tests=[
   'scripts/verify-v16-2-stock-experience.cjs',
   'scripts/verify-v16-stock-display-polish.cjs',
   'scripts/verify-stock-movement-flow-v21.cjs',
+  'scripts/verify-stock-movement-clarity-v21-1.cjs',
   'scripts/audit-delivery-inbox-firestore.cjs',
   'scripts/audit-operation-ifood-routes-firestore.cjs',
   'scripts/audit-intelligence-routes-v2.cjs',
