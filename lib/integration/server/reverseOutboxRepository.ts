@@ -85,6 +85,7 @@ function eligible(
   now: number,
   lockMs: number,
   allowFailedBeforeNextAttempt = false,
+  allowDeadLetter = false,
 ) {
   if (data.source_system !== 'dfl_entregas') return false;
   if (!REVERSE_EVENT_TYPES.has(String(data.event_type))) return false;
@@ -100,6 +101,7 @@ function eligible(
     const locked = data.locked_at ? Date.parse(String(data.locked_at)) : 0;
     return !Number.isFinite(locked) || locked + lockMs <= now;
   }
+  if (data.status === 'dead_letter' && allowDeadLetter) return true;
   return false;
 }
 
@@ -179,6 +181,7 @@ export async function claimReverseOutboxByEventId(input: {
   workerId: string;
   lockMs: number;
   allowFailedBeforeNextAttempt?: boolean;
+  allowDeadLetter?: boolean;
 }): Promise<ReverseOutboxClaimResult> {
   const ref = adminDb
     .collection(COLLECTION)
@@ -203,6 +206,7 @@ export async function claimReverseOutboxByEventId(input: {
         now,
         input.lockMs,
         input.allowFailedBeforeNextAttempt === true,
+        input.allowDeadLetter === true,
       )
     ) {
       return {
@@ -273,4 +277,32 @@ export async function reverseOutboxStats() {
     })),
   );
   return Object.fromEntries(snapshots.map((item) => [item.status, item.count]));
+}
+
+export async function recentReverseOutboxIssues(limit = 16) {
+  const safeLimit = Math.max(1, Math.min(30, Math.trunc(limit)));
+  const snapshots = await Promise.all(
+    ['pending', 'processing', 'failed', 'dead_letter'].map((status) =>
+      adminDb.collection(COLLECTION).where('status', '==', status).limit(safeLimit).get(),
+    ),
+  );
+  return snapshots
+    .flatMap((snapshot) => snapshot.docs.map((document) => {
+      const data = document.data();
+      const payload = data.payload && typeof data.payload === 'object' ? data.payload as Record<string, unknown> : {};
+      return {
+        eventId: String(data.event_id || decodeURIComponent(document.id)),
+        eventType: String(data.event_type || 'evento'),
+        entityId: String(data.entity_id || ''),
+        routeId: String(payload.route_id || payload.routeId || ''),
+        status: String(data.status || 'unknown'),
+        attempts: Number(data.attempts || 0),
+        occurredAt: String(data.occurred_at || data.created_at || ''),
+        updatedAt: String(data.updated_at || ''),
+        nextAttemptAt: data.next_attempt_at ? String(data.next_attempt_at) : null,
+        lastError: data.last_error ? String(data.last_error).slice(0, 240) : null,
+      };
+    }))
+    .sort((a, b) => Date.parse(b.updatedAt || b.occurredAt) - Date.parse(a.updatedAt || a.occurredAt))
+    .slice(0, safeLimit);
 }

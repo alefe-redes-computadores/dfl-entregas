@@ -43,6 +43,8 @@ import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop } from '@/lib/r
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
+import { markUnreadSiteOrders } from '@/lib/site-order-inbox';
+import { siteCompletionDivergences } from '@/lib/site-integration-health';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 import { kickSiteRoute } from '@/lib/integration/client/routeKick';
 
@@ -762,6 +764,7 @@ export const useAppStore = create<AppState>()(
               delivery.source_system === 'dfl_site' &&
               (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente'
             );
+            markUnreadSiteOrders(newSiteOrders.map((delivery) => delivery.id));
             newSiteOrders.slice(0, 3).forEach((delivery) => {
               const customer = mergedCustomers.find((item) => item.id === delivery.customer_id);
               void notifyNewSiteOrder(
@@ -795,6 +798,13 @@ export const useAppStore = create<AppState>()(
             isSyncing: false,
             syncError: false
           });
+          const divergences = siteCompletionDivergences(mergedDeliveries);
+          if (divergences.length) {
+            toast.warning(
+              `${divergences.length} pedido${divergences.length === 1 ? '' : 's'} concluido${divergences.length === 1 ? '' : 's'} aguardando reflexo no Site.`,
+              { id: 'site-integration-divergence', description: 'Abra o Diagnostico para recuperar somente os eventos pendentes.' },
+            );
+          }
           recordSyncDiagnostic({
             startedAt: syncStartedAt,
             finishedAt: new Date().toISOString(),

@@ -39,6 +39,7 @@ const tests=[
   'scripts/audit-intelligence-routes-v2.cjs',
   'scripts/verify-native-admin-launcher-v22.cjs',
   'scripts/verify-final-integration-polish-v23.cjs',
+  'scripts/verify-site-integration-observability-v24.cjs',
 ].filter(fs.existsSync);
 
 let failed=0;

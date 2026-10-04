@@ -11,6 +11,7 @@ export type SyncDiagnostic = {
 
 const STORAGE_KEY = 'dfl-sync-diagnostics-v1';
 const MAX_ENTRIES = 30;
+export const SYNC_DIAGNOSTIC_EVENT = 'dfl:sync-diagnostic-recorded';
 
 export function readSyncDiagnostics(): SyncDiagnostic[] {
   if (typeof window === 'undefined') return [];
@@ -35,9 +36,14 @@ export function recordSyncDiagnostic(
       STORAGE_KEY,
       JSON.stringify([next, ...readSyncDiagnostics()].slice(0, MAX_ENTRIES)),
     );
+    window.dispatchEvent(new CustomEvent(SYNC_DIAGNOSTIC_EVENT, { detail: next }));
   } catch {
     // Diagnóstico nunca pode interromper a operação.
   }
+}
+
+export function latestSyncDiagnostic() {
+  return readSyncDiagnostics()[0] || null;
 }
 
 export function clearSyncDiagnostics() {

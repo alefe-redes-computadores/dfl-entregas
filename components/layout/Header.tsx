@@ -6,6 +6,16 @@ import { PwaInstallPrompt } from '@/components/pwa/PwaInstallPrompt';
 import { User, LogOut, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { UserAvatar } from '@/components/UserAvatar';
+import { latestSyncDiagnostic, SYNC_DIAGNOSTIC_EVENT } from '@/lib/sync-diagnostics';
+
+function relativeUpdate(value?: string) {
+  if (!value) return 'Ainda nao atualizado';
+  const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 1000));
+  if (seconds < 45) return 'Atualizado agora';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `Atualizado ha ${minutes} min`;
+  return `Atualizado as ${new Date(value).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -24,9 +34,26 @@ export function Header() {
   
   const [greeting, setGreeting] = useState('Boa noite');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<string | undefined>();
+  const [, setClock] = useState(0);
 
   useEffect(() => {
     setGreeting(getGreeting());
+    setLastUpdate(latestSyncDiagnostic()?.finishedAt);
+  }, []);
+
+  useEffect(() => {
+    const update = (event: Event) => setLastUpdate((event as CustomEvent<{ finishedAt?: string }>).detail?.finishedAt);
+    let timer = 0;
+    const tick = () => {
+      timer = window.setTimeout(() => {
+        setClock((value) => value + 1);
+        tick();
+      }, 60_000);
+    };
+    tick();
+    window.addEventListener(SYNC_DIAGNOSTIC_EVENT, update);
+    return () => { window.clearTimeout(timer); window.removeEventListener(SYNC_DIAGNOSTIC_EVENT, update); };
   }, []);
 
   const refreshNow = useCallback(async (showFeedback = true) => {
@@ -104,7 +131,7 @@ export function Header() {
                 </span>
                 
                 <span className={`text-[11px] font-medium tracking-wide ${syncError && !isSyncing ? 'text-red-400' : 'text-zinc-400'}`}>
-                  {isSyncing ? 'Sincronizando...' : syncError ? 'Offline / Erro' : 'Online'}
+                  {isSyncing ? 'Sincronizando...' : syncError ? 'Offline / Erro' : relativeUpdate(lastUpdate)}
                 </span>
 
               </div>

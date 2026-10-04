@@ -11,7 +11,7 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { openDflAdmin } from '@/lib/native/admin-bridge';
@@ -21,6 +21,7 @@ import {
 } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import type { Delivery } from '@/types';
+import { acknowledgeSiteOrders } from '@/lib/site-order-inbox';
 
 const money = (value: number) =>
   value.toLocaleString('pt-BR', {
@@ -104,6 +105,15 @@ export function SiteAdminHub({
   }, [deliveries, routes, selectedDateOrders]);
 
   const hasAttention = stats.awaitingConfirmation > 0 || stats.awaitingRoute > 0;
+
+  useEffect(() => {
+    if (!expanded) return;
+    acknowledgeSiteOrders(
+      deliveries
+        .filter((delivery) => delivery.source_system === 'dfl_site')
+        .map((delivery) => delivery.id),
+    );
+  }, [deliveries, expanded]);
 
   return (
     <section

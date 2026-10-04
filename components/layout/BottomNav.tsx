@@ -12,8 +12,9 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import clsx from 'clsx';
+import { readUnreadSiteOrderIds, SITE_UNREAD_EVENT } from '@/lib/site-order-inbox';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Início', icon: Home },
@@ -32,6 +33,14 @@ export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [showAddSheet, setShowAddSheet] = useState(false);
+  const [siteUnread, setSiteUnread] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setSiteUnread(readUnreadSiteOrderIds().length);
+    refresh();
+    window.addEventListener(SITE_UNREAD_EVENT, refresh);
+    return () => window.removeEventListener(SITE_UNREAD_EVENT, refresh);
+  }, []);
 
   const addMode: AddMode =
     pathname === '/estoque'
@@ -147,7 +156,14 @@ export function BottomNav() {
                   isActive ? 'bg-emerald-500/10 text-emerald-400' : 'text-zinc-600 active:bg-zinc-900',
                 )}
               >
-                <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+                <span className="relative">
+                  <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+                  {siteUnread > 0 && (item.href === '/' || item.href === '/loja') && (
+                    <b className="absolute -right-3 -top-2 grid min-w-[17px] place-items-center rounded-full border-2 border-zinc-950 bg-amber-400 px-1 text-[7px] leading-[13px] text-zinc-950">
+                      {siteUnread > 9 ? '9+' : siteUnread}
+                    </b>
+                  )}
+                </span>
                 <span>{item.label}</span>
               </button>
             );

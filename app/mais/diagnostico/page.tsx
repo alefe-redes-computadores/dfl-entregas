@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { Activity, BellRing, ChevronLeft, Clipboard, Database, RefreshCw, Trash2 } from 'lucide-react';
+import { Activity, AlertTriangle, BellRing, ChevronLeft, Clipboard, Database, RefreshCw, RotateCcw, Send, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { ReportMaintenanceCard } from '@/components/reports/ReportMaintenanceCard';
@@ -14,8 +14,17 @@ import {
   syncDiagnosticText,
   type SyncDiagnostic,
 } from '@/lib/sync-diagnostics';
+import { auth } from '@/lib/firebase';
+import { siteCompletionDivergences } from '@/lib/site-integration-health';
 
 const DIAGNOSTICS_ADMIN_EMAIL = 'alefejohsefe@gmail.com';
+const SERVER_ORIGIN = (process.env.NEXT_PUBLIC_DFL_SERVER_ORIGIN?.trim() || 'https://dfl-entregas.vercel.app').replace(/\/+$/, '');
+
+type RecoveryIssue = {
+  eventId: string; eventType: string; entityId: string; routeId: string;
+  status: string; attempts: number; occurredAt: string; updatedAt: string;
+  nextAttemptAt: string | null; lastError: string | null;
+};
 
 const dateTime = (value: string) =>
   new Intl.DateTimeFormat('pt-BR', {
@@ -35,6 +44,9 @@ export default function OperationalDiagnosticsPage() {
   const [pendingPreview, setPendingPreview] = useState<
     Array<{ id: number; title: string; at?: string }>
   >([]);
+  const deliveries = useAppStore((state) => state.deliveries);
+  const [recovery, setRecovery] = useState<{ stats: Record<string, number>; issues: RecoveryIssue[] } | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState('');
   const isAdmin = user?.email?.trim().toLowerCase() === DIAGNOSTICS_ADMIN_EMAIL;
 
   useEffect(() => {
@@ -73,6 +85,54 @@ export default function OperationalDiagnosticsPage() {
       repeatedHighVolume,
     };
   }, [entries]);
+  const divergences = useMemo(() => siteCompletionDivergences(deliveries), [deliveries]);
+
+  const recoveryUrl = Capacitor.isNativePlatform()
+    ? `${SERVER_ORIGIN}/api/integration/diagnostics`
+    : '/api/integration/diagnostics';
+
+  const loadRecovery = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    setRecoveryBusy('loading');
+    try {
+      const response = await fetch(recoveryUrl, {
+        headers: { authorization: `Bearer ${await currentUser.getIdToken()}` },
+        cache: 'no-store', credentials: 'omit',
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.ok !== true) throw new Error(payload.error || 'Falha no diagnostico remoto.');
+      setRecovery({ stats: payload.stats || {}, issues: Array.isArray(payload.issues) ? payload.issues : [] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel consultar a recuperacao.');
+    } finally {
+      setRecoveryBusy('');
+    }
+  };
+
+  const retryEvent = async (eventId: string) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser || recoveryBusy) return;
+    setRecoveryBusy(eventId);
+    toast.loading('Reprocessando somente este evento...', { id: 'recovery-event' });
+    try {
+      const response = await fetch(recoveryUrl, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${await currentUser.getIdToken()}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ eventId }), cache: 'no-store', credentials: 'omit',
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.ok !== true) throw new Error(payload.error || payload.relay?.results?.[0]?.error || 'Evento ainda nao foi enviado.');
+      toast.success('Evento confirmado pelo Site.', { id: 'recovery-event' });
+      await loadRecovery();
+      await initData();
+      setEntries(readSyncDiagnostics());
+    } catch (error) {
+      toast.error('Reprocessamento nao concluido.', { id: 'recovery-event', description: error instanceof Error ? error.message : undefined });
+    } finally {
+      setRecoveryBusy('');
+    }
+  };
 
   const copy = async () => {
     try {
@@ -155,6 +215,19 @@ export default function OperationalDiagnosticsPage() {
         </p>
         {summary.errors > 0 && <p className="mt-1 text-[10px] text-red-400">{summary.errors} falha(s) no histórico local.</p>}
         {summary.repeatedHighVolume && <p className="mt-2 rounded-xl bg-amber-500/10 p-2 text-[10px] leading-relaxed text-amber-400">Volume alto repetido: duas ou mais sincronizações recentes retornaram pelo menos 300 documentos. Copie o diagnóstico para investigação.</p>}
+      </section>
+
+      <section className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div><div className="flex items-center gap-2"><Send size={17} className="text-violet-400"/><b className="text-sm text-zinc-100">Recuperacao Site</b></div><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Consulta somente ao abrir e reprocessa um evento escolhido. Sem polling.</p></div>
+          <button type="button" disabled={Boolean(recoveryBusy)} onClick={() => void loadRecovery()} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-400 disabled:opacity-50" aria-label="Consultar fila"><RefreshCw size={15} className={recoveryBusy === 'loading' ? 'animate-spin' : ''}/></button>
+        </div>
+        {divergences.length > 0 && <div className="mt-3 flex gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[.07] p-3 text-[10px] leading-relaxed text-amber-300"><AlertTriangle size={15} className="shrink-0"/><span>{divergences.length} pedido{divergences.length === 1 ? '' : 's'} concluido{divergences.length === 1 ? '' : 's'} no Entregas ainda sem confirmacao final do Site.</span></div>}
+        {recovery && <>
+          <div className="mt-3 grid grid-cols-4 gap-1.5">{(['pending','processing','failed','dead_letter'] as const).map((status)=><div key={status} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-2 text-center"><b className="block text-sm text-zinc-100">{recovery.stats[status] || 0}</b><span className="text-[7px] uppercase text-zinc-600">{status === 'dead_letter' ? 'bloqueado' : status}</span></div>)}</div>
+          <div className="mt-3 space-y-2">{recovery.issues.map((issue)=><article key={issue.eventId} className="rounded-xl border border-zinc-800 bg-black/20 p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><b className="block truncate text-[10px] text-zinc-200">{issue.eventType}</b><span className="block truncate text-[8px] text-zinc-600">{issue.entityId} · tentativa {issue.attempts}</span></div><span className={`rounded-md px-1.5 py-1 text-[7px] font-black uppercase ${issue.status === 'failed' || issue.status === 'dead_letter' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>{issue.status}</span></div>{issue.lastError&&<p className="mt-2 line-clamp-2 text-[9px] text-red-300/80">{issue.lastError}</p>}<button type="button" disabled={Boolean(recoveryBusy)} onClick={()=>void retryEvent(issue.eventId)} className="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/[.07] text-[9px] font-black text-violet-300 disabled:opacity-50"><RotateCcw size={13} className={recoveryBusy === issue.eventId ? 'animate-spin' : ''}/>{recoveryBusy === issue.eventId ? 'Reprocessando...' : 'Reprocessar este evento'}</button></article>)}</div>
+          {!recovery.issues.length&&<p className="mt-3 rounded-xl border border-dashed border-zinc-800 p-4 text-center text-[10px] text-emerald-400">Fila reversa saudavel. Nenhuma pendencia.</p>}
+        </>}
       </section>
 
       {pendingPreview.length > 0 && (

@@ -88,6 +88,7 @@ export async function drainReverseIntegrationOutbox() {
  */
 export async function drainReverseIntegrationEventIds(
   eventIds: string[],
+  options?: { allowDeadLetter?: boolean },
 ) {
   const config = assertReverseRelayConfigured();
   const workerId = `reverse-fastlane-${randomUUID()}`;
@@ -122,6 +123,7 @@ export async function drainReverseIntegrationEventIds(
       // Uma ação humana/operacional explícita não precisa aguardar o
       // backoff do recovery global para tentar novamente um evento failed.
       allowFailedBeforeNextAttempt: true,
+      allowDeadLetter: options?.allowDeadLetter === true,
     });
 
     if (claim.kind === 'not_claimed') {
