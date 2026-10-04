@@ -5,6 +5,8 @@ import { commercialPresentationEquation, commercialMovementPreview } from '@/lib
 
 import {
   Suspense,
+  useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -16,6 +18,7 @@ import {
 import {
   AlertCircle,
   Calculator,
+  PackageOpen,
   Save,
   SkipForward,
 } from 'lucide-react';
@@ -134,11 +137,26 @@ function Content() {
   const [busy, setBusy] =
     useState(false);
 
+  const savingRef = useRef(false);
+
   const [submitIntent, setSubmitIntent] =
     useState<'return' | 'next'>('return');
 
   const [attempted, setAttempted] =
     useState(false);
+
+  useEffect(() => {
+    savingRef.current = false;
+    setBusy(false);
+    setSubmitIntent('return');
+    setType('saida');
+    setMode('moved');
+    setQuantity('');
+    setPresentationId('base');
+    setCost('R$ 0,00');
+    setReason('');
+    setAttempted(false);
+  }, [product?.id]);
 
   if (!product) {
     return (
@@ -222,8 +240,9 @@ function Content() {
       return;
     }
 
-    if (busy) return;
+    if (savingRef.current) return;
 
+    savingRef.current = true;
     setBusy(true);
 
     try {
@@ -348,7 +367,8 @@ function Content() {
           id: 'stock-movement-save',
         },
       );
-
+    } finally {
+      savingRef.current = false;
       setBusy(false);
     }
   };
@@ -357,7 +377,7 @@ function Content() {
     <div>
       <PageHeader
         title="Movimentar estoque"
-        subtitle={product.name}
+        subtitle="Registro operacional"
         to={
           from === 'estoque'
             ? '/estoque'
@@ -365,17 +385,43 @@ function Content() {
         }
       />
 
-      <section className="mb-5 rounded-[24px] border border-emerald-500/20 bg-emerald-500/[.05] p-4">
-        <p className="text-[10px] font-black uppercase text-emerald-400">
-          Saldo atual
-        </p>
+      <section className="relative mb-5 overflow-hidden rounded-[26px] border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[.11] via-zinc-950 to-zinc-950 p-4 shadow-[0_18px_60px_rgba(16,185,129,.07)]">
+        <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-emerald-500/10 blur-2xl" />
+        <div className="relative flex items-start gap-3">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400">
+            <PackageOpen size={20} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-400">
+              Movimentando agora
+            </p>
+            <h1 className="mt-1 break-words font-heading text-xl font-black leading-tight text-zinc-50">
+              {product.name}
+            </h1>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] font-bold">
+              {product.category && (
+                <span className="rounded-full border border-zinc-800 bg-zinc-900/80 px-2.5 py-1 text-zinc-400">
+                  {product.category}
+                </span>
+              )}
+              <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-sky-300">
+                Unidade interna · {product.unit}
+              </span>
+            </div>
+          </div>
+        </div>
 
-        <p className="mt-2 font-heading text-3xl font-black text-zinc-100">
-          {formatStockQuantity(
-            product.current_quantity,
-            product.unit,
-          )}
-        </p>
+        <div className="relative mt-4 flex items-end justify-between gap-3 border-t border-white/[.06] pt-3">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-wider text-zinc-600">Saldo atual</p>
+            <p className="mt-1 font-heading text-3xl font-black text-zinc-100">
+              {formatStockQuantity(product.current_quantity, product.unit)}
+            </p>
+          </div>
+          <p className="max-w-[46%] text-right text-[9px] leading-relaxed text-zinc-600">
+            Confira o produto antes de registrar a movimentação.
+          </p>
+        </div>
       </section>
 
       <form
