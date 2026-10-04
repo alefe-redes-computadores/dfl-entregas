@@ -33,6 +33,7 @@ import {
 import { fuelingDate } from '@/lib/fueling-analytics';
 import { INITIAL_STOCK_PRODUCTS, INITIAL_STOCK_SUPPLIERS, STOCK_CATALOG_VERSION } from '@/lib/stock-catalog';
 import {
+  customerIdentityEvidence,
   extractCustomerNeighborhood,
   findExistingCustomer,
   nextCustomerName,
@@ -2696,13 +2697,29 @@ export const useAppStore = create<AppState>()(
         const previousCustomers = get().customers;
         const now = new Date().toISOString();
 
-        const preferredCustomer =
+        const preferredCandidate =
           details?.preferredCustomerId
             ? previousCustomers.find(
                 (customer) =>
                   customer.id ===
                   details.preferredCustomerId,
               )
+            : undefined;
+
+        // Um item escolhido anteriormente no autocomplete não é autoridade.
+        // Se nome, telefone ou endereço mudaram, a identidade deve ser
+        // revalidada antes de reutilizar e enriquecer o cadastro antigo.
+        const preferredCustomer =
+          preferredCandidate &&
+          customerIdentityEvidence(
+            preferredCandidate,
+            rawName,
+            {
+              address: details?.address,
+              phone: details?.phone,
+            },
+          ).reusable
+            ? preferredCandidate
             : undefined;
 
         const existing =

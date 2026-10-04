@@ -119,8 +119,6 @@ const [routeId, setRouteId] = useState('');
     const normalizeIdentity = (value?: string | null) => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g, ' ').trim();
     const query = normalizeIdentity(customerName);
     if (!query) return null;
-    const selected = customers.find((customer) => customer.id === selectedCustomerId);
-    if (selected) return { kind: 'existing' as const, customer: selected, count: 1 };
     const identityDetails = { address: streetAddress || undefined, phone: phone || undefined };
     const reusable = customers.map((customer) => ({ customer, evidence: customerIdentityEvidence(customer, customerName, identityDetails) })).filter((item) => item.evidence.reusable).sort((a,b) => b.evidence.score - a.evidence.score);
     if (reusable.length === 1) return { kind: 'existing' as const, customer: reusable[0].customer, count: 1 };
