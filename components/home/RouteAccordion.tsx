@@ -850,17 +850,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             )}
             {sortedDeliveries.length > 0 && route.status === 'aberta' && !isVirtualRoute && (
               <div className="flex flex-col gap-2">
-                {isInProgress && hasSiteDelivery && (
-                  <button
-                    type="button"
-                    disabled={actionBusy}
-                    onClick={handleSyncSiteRoute}
-                    className="flex h-11 w-full items-center justify-center gap-2 rounded-[16px] border border-sky-500/25 bg-sky-500/10 px-3 text-xs font-black text-sky-300 active:scale-[0.99] disabled:opacity-50"
-                  >
-                    <RotateCcw size={15} />
-                    Sincronizar Site
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setShowRouteTools((current) => !current)}
@@ -884,6 +873,25 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
                 {showRouteTools && (
                 <div className="flex flex-col gap-2 rounded-[18px] border border-zinc-800 bg-zinc-950/55 p-2">
+                {isInProgress && hasSiteDelivery && (
+                  <button
+                    type="button"
+                    disabled={actionBusy}
+                    onClick={handleSyncSiteRoute}
+                    className="flex w-full items-center justify-between rounded-xl border border-sky-500/20 bg-sky-500/[.06] px-3 py-2.5 text-left active:scale-[0.99] disabled:opacity-50"
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-300">
+                        <RotateCcw size={18} />
+                      </span>
+                      <span>
+                        <b className="block text-[11px] text-sky-200">Reprocessar integração do Site</b>
+                        <small className="mt-0.5 block text-[9px] text-zinc-600">Use somente se uma atualização da rota não chegar automaticamente.</small>
+                      </span>
+                    </span>
+                    <ArrowRight size={15} className="text-sky-400" />
+                  </button>
+                )}
                 <button
                   onClick={buildOptimizerPreview}
                   disabled={optimizerBusy || pendingDeliveries.length < 2}

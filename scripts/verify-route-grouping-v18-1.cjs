@@ -12,5 +12,9 @@ ok(c.includes('groupedDeliveries);'),'cópia individual receb todos os pedidos d
 ok(w.includes('PEDIDOS NESTA PARADA'),'mensagem individual enumera grupo');
 ok(w.includes('Total da parada'),'mensagem individual soma o grupo');
 ok(w.includes('stopGroup.deliveries.forEach((item) =>'),'mensagem completa enumera todos os pedidos agrupados');
+const r=fs.readFileSync('components/home/RouteAccordion.tsx','utf8');
+ok(!r.includes('Sincronizar Site'),'botão provisório removido da rota');
+ok(r.includes('Reprocessar integração do Site'),'recuperação preservada nas ferramentas');
+ok(r.indexOf('Reprocessar integração do Site')>r.indexOf('{showRouteTools &&'),'recuperação fica dentro das ferramentas');
 if(errors){console.error('\nV18.1: '+errors+' contrato(s) falharam.');process.exit(1)}
 console.log('\nV18.1 ORDEM + MENSAGENS AGRUPADAS: ZERO ERROS');
