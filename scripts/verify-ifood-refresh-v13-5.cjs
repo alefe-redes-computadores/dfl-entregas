@@ -3,8 +3,8 @@ const card=fs.readFileSync('components/home/DeliveryCard.tsx','utf8');
 const header=fs.readFileSync('components/layout/Header.tsx','utf8');
 const checks=[
  ['modal compacto',card.includes('max-w-[340px]')],
- ['feedback de baixa',card.includes('Finalizando entrega...') && card.includes('setCompletionBusy(true)')],
- ['bloqueio contra toque duplo',card.includes('completionBusyRef.current') && card.includes('disabled={inputCode.length !== 4 || completionBusy}')],
+ ['feedback de baixa',card.includes('Finalizando...') && card.includes('setCompletionBusy(true)') && card.includes('toast.success(')],
+ ['bloqueio contra toque duplo',card.includes('completionBusyRef.current') && card.includes('disabled={groupedCodeDeliveries.some((item)')],
  ['atualização manual',header.includes('Buscar pedidos novos') && header.includes('refreshNow(true)')],
  ['retorno ao primeiro plano',header.includes("visibilitychange")],
  ['sem temporizador de consultas',!header.includes('setInterval(')],

@@ -21,6 +21,7 @@ const tests=[
   'scripts/verify-route-reorder-v13-3.cjs',
   'scripts/verify-route-grouping-v18-1.cjs',
   'scripts/verify-operational-modal-polish-v19.cjs',
+  'scripts/verify-grouped-stop-completion-v20.cjs',
   'scripts/verify-route-money-v13-4.cjs',
   'scripts/verify-ifood-refresh-v13-5.cjs',
   'scripts/test-v17-5-auto-fastlane-next-stop.cjs',

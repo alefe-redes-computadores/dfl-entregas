@@ -83,6 +83,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
+  const [groupedCodeDrafts, setGroupedCodeDrafts] = useState<Record<string, string>>({});
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const reorderDragStartY = useRef<number | null>(null);
@@ -169,33 +170,80 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
   };
 
-  const executeCompletion = async (codeToSave?: string) => {
-    if (delivery.completed || completionBusyRef.current) return;
+  const pendingGroupedDeliveries = groupedDeliveries.filter((item) => !item.completed);
+  const requiresConfirmationCode = (item: Delivery) => {
+    const itemIsIfood = item.origin === 'ifood' || !item.origin;
+    const skipsCode = item.payment_method === 'dinheiro' || item.payment_method?.includes('cartao');
+    return itemIsIfood && !skipsCode;
+  };
+  const storedConfirmationCode = (item: Delivery) => (
+    item.confirmation_code || getCustomerById(item.customer_id)?.last_confirmation_code || ''
+  ).replace(/\D/g, '').slice(0, 4);
+  const groupedCodeDeliveries = pendingGroupedDeliveries.filter(requiresConfirmationCode);
+  const groupedCodeMode = pendingGroupedDeliveries.length > 1;
+
+  const closeConfirmationModal = () => {
+    setIsIfoodModalOpen(false);
+    setInputCode('');
+    setGroupedCodeDrafts({});
+  };
+
+  const executeCompletion = async (codeInput?: string | Record<string, string>) => {
+    const targets = groupedDeliveries.filter((item) => !item.completed);
+    if (targets.length === 0 || completionBusyRef.current) return;
     completionBusyRef.current = true;
     setCompletionBusy(true);
 
-    const updatePayload: Partial<Delivery> = { completed: true };
-    if (codeToSave) {
-      updatePayload.confirmation_code = codeToSave;
-    }
-
     try {
-      await updateDelivery(delivery.id, updatePayload);
+      const failed: Delivery[] = [];
+      const completedIds = new Set<string>();
 
-      toggleDeliveryExpansion(delivery.id, false);
-      setIsIfoodModalOpen(false);
-      setInputCode('');
+      for (const item of targets) {
+        const suppliedCode = typeof codeInput === 'string'
+          ? (item.id === delivery.id ? codeInput : '')
+          : codeInput?.[item.id];
+        const codeToSave = (suppliedCode || storedConfirmationCode(item)).replace(/\D/g, '').slice(0, 4);
+        const updatePayload: Partial<Delivery> = { completed: true };
+        if (codeToSave) updatePayload.confirmation_code = codeToSave;
+
+        try {
+          await updateDelivery(item.id, updatePayload);
+          completedIds.add(item.id);
+          toggleDeliveryExpansion(item.id, false);
+        } catch (error) {
+          console.error(`Erro ao concluir entrega ${item.id}:`, error);
+          failed.push(item);
+        }
+      }
+
+      if (failed.length > 0) {
+        const pendingLabels = failed.map((item) => {
+          const itemCustomer = getCustomerById(item.customer_id);
+          return itemCustomer?.name || item.customer_name || (item.order_id ? `#${item.order_id}` : 'pedido sem nome');
+        });
+        if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+        toast.error(`${failed.length} entrega${failed.length === 1 ? '' : 's'} ficou${failed.length === 1 ? '' : 'aram'} pendente${failed.length === 1 ? '' : 's'}.`, {
+          description: pendingLabels.join(', '),
+          duration: 4500,
+        });
+        return;
+      }
+
+      closeConfirmationModal();
 
       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
-      toast.success('Entrega concluída.', { duration: 1500 });
+      toast.success(
+        targets.length > 1 ? `${targets.length} entregas concluídas na parada.` : 'Entrega concluída.',
+        { duration: 1800 },
+      );
 
       const routeDeliveries = getDeliveriesByRoute(route.id);
-      const remainingPending = routeDeliveries.filter(d => d.id !== delivery.id && !d.completed).length;
+      const remainingPending = routeDeliveries.filter((item) => !completedIds.has(item.id) && !item.completed).length;
       if (remainingPending === 0) {
         toast.success('Todas as entregas foram concluídas. A rota foi fechada automaticamente.');
       }
     } catch (error) {
-      console.error('Erro ao concluir entrega:', error);
+      console.error('Erro inesperado ao concluir parada:', error);
       if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
       toast.error('Não foi possível dar baixa na entrega.', {
         description: 'O estado anterior foi restaurado. Tente novamente.',
@@ -302,15 +350,22 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         return;
       }
 
-      const skipsIfoodCode = delivery.payment_method === 'dinheiro' || delivery.payment_method?.includes('cartao');
-      if (isIfood && !skipsIfoodCode && !delivery.confirmation_code && !customer?.last_confirmation_code) {
-        setInputCode('');
+      const codeDeliveries = pendingGroupedDeliveries.filter(requiresConfirmationCode);
+      const needsGroupedCodeModal = pendingGroupedDeliveries.length > 1 && codeDeliveries.length > 0;
+      const needsSingleCodeModal = codeDeliveries.length === 1 && !storedConfirmationCode(codeDeliveries[0]);
+      if (needsGroupedCodeModal || needsSingleCodeModal) {
+        const initialDrafts = Object.fromEntries(
+          codeDeliveries.map((item) => [item.id, storedConfirmationCode(item)]),
+        );
+        setGroupedCodeDrafts(initialDrafts);
+        setInputCode(codeDeliveries.length === 1 ? initialDrafts[codeDeliveries[0].id] || '' : '');
         setIsIfoodModalOpen(true);
         return;
       }
 
-      const code = delivery.confirmation_code || customer?.last_confirmation_code;
-      await executeCompletion(code);
+      await executeCompletion(
+        Object.fromEntries(codeDeliveries.map((item) => [item.id, storedConfirmationCode(item)])),
+      );
     } else {
       if (!isExpanded) {
       getDeliveriesByRoute(route.id)
@@ -910,8 +965,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           className="fixed inset-0 z-[120] flex items-end bg-black/70 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-16 backdrop-blur-sm animate-in fade-in duration-150 sm:items-center sm:justify-center"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !completionBusy) {
-              setIsIfoodModalOpen(false);
-              setInputCode('');
+              closeConfirmationModal();
             }
           }}
         >
@@ -926,21 +980,19 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-black text-zinc-100">
-                  Código de confirmação
+                  {groupedCodeMode ? 'Códigos desta parada' : 'Código de confirmação'}
                 </h3>
                 <p className="mt-0.5 truncate text-[10px] text-zinc-500">
-                  {customer?.name || delivery.customer_name || 'Cliente iFood'}
-                  {delivery.order_id ? ` · #${delivery.order_id}` : ''}
+                  {groupedCodeMode
+                    ? `${pendingGroupedDeliveries.length} entregas · 1 parada física`
+                    : `${customer?.name || delivery.customer_name || 'Cliente iFood'}${delivery.order_id ? ` · #${delivery.order_id}` : ''}`}
                 </p>
               </div>
 
               <button
                 type="button"
                 disabled={completionBusy}
-                onClick={() => {
-                  setIsIfoodModalOpen(false);
-                  setInputCode('');
-                }}
+                onClick={closeConfirmationModal}
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-zinc-900 text-zinc-500 disabled:opacity-35"
                 aria-label="Fechar"
               >
@@ -948,48 +1000,72 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
               </button>
             </div>
 
-            <div className="mt-4">
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={4}
-                autoFocus
-                disabled={completionBusy}
-                aria-label="Código de confirmação do cliente"
-                placeholder="0000"
-                value={inputCode}
-                onChange={(event) =>
-                  setInputCode(
-                    event.target.value.replace(/\D/g, '').slice(0, 4),
-                  )
-                }
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && inputCode.length === 4) {
-                    void executeCompletion(inputCode);
-                  }
-                }}
-                className="h-12 w-full rounded-xl border border-red-500/30 bg-zinc-900/70 px-4 text-center font-mono text-xl font-black tracking-[0.35em] text-zinc-50 outline-none focus:border-red-400 disabled:opacity-60"
-              />
+            <div className="mt-4 max-h-[52vh] space-y-2 overflow-y-auto pr-0.5">
+              {groupedCodeDeliveries.map((item, index) => {
+                const itemCustomer = getCustomerById(item.customer_id);
+                const itemName = itemCustomer?.name || item.customer_name || 'Cliente iFood';
+                const value = groupedCodeMode ? (groupedCodeDrafts[item.id] || '') : inputCode;
+                return (
+                  <label key={item.id} className="block rounded-xl border border-zinc-800 bg-zinc-900/45 p-2.5">
+                    <span className="mb-2 flex min-w-0 items-center justify-between gap-2">
+                      <span className="truncate text-[11px] font-black text-zinc-200">{index + 1}. {itemName}</span>
+                      {item.order_id && <span className="shrink-0 text-[9px] font-bold text-zinc-600">#{item.order_id}</span>}
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      autoFocus={index === 0}
+                      disabled={completionBusy}
+                      aria-label={`Código de confirmação de ${itemName}`}
+                      placeholder="0000"
+                      value={value}
+                      onChange={(event) => {
+                        const nextCode = event.target.value.replace(/\D/g, '').slice(0, 4);
+                        if (groupedCodeMode) {
+                          setGroupedCodeDrafts((current) => ({ ...current, [item.id]: nextCode }));
+                        } else {
+                          setInputCode(nextCode);
+                          setGroupedCodeDrafts({ [item.id]: nextCode });
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        const drafts = groupedCodeMode ? groupedCodeDrafts : { [item.id]: inputCode };
+                        const allValid = groupedCodeDeliveries.every((codeItem) => (drafts[codeItem.id] || '').length === 4);
+                        if (event.key === 'Enter' && allValid) void executeCompletion(drafts);
+                      }}
+                      className="h-11 w-full rounded-lg border border-red-500/30 bg-zinc-950 px-4 text-center font-mono text-lg font-black tracking-[0.32em] text-zinc-50 outline-none focus:border-red-400 disabled:opacity-60"
+                    />
+                  </label>
+                );
+              })}
               <p className="mt-2 text-center text-[9px] leading-relaxed text-zinc-600">
-                O código fica salvo na entrega e no cadastro do cliente.
+                Cada código fica salvo na entrega e no cliente correspondente.
                 A confirmação externa do iFood continua separada.
               </p>
             </div>
 
             <button
               type="button"
-              disabled={inputCode.length !== 4 || completionBusy}
+              disabled={groupedCodeDeliveries.some((item) => (groupedCodeMode ? groupedCodeDrafts[item.id] : inputCode).length !== 4) || completionBusy}
               onClick={async () => {
-                if (inputCode.length !== 4) return;
-                await executeCompletion(inputCode);
+                const drafts = groupedCodeMode
+                  ? groupedCodeDrafts
+                  : { [groupedCodeDeliveries[0]?.id || delivery.id]: inputCode };
+                if (groupedCodeDeliveries.some((item) => (drafts[item.id] || '').length !== 4)) return;
+                await executeCompletion(drafts);
               }}
               className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-35"
             >
               {completionBusy ? <LoaderCircle size={17} className="animate-spin" /> : <CheckCircle2 size={17} />}
-              {completionBusy ? 'Finalizando entrega...' : 'Salvar e finalizar'}
+              {completionBusy
+                ? 'Finalizando...'
+                : groupedCodeMode
+                  ? `Salvar e finalizar ${pendingGroupedDeliveries.length} entregas`
+                  : 'Salvar e finalizar'}
             </button>
 
-            <button
+            {!groupedCodeMode && <button
               type="button"
               disabled={completionBusy}
               onClick={async () => {
@@ -1001,7 +1077,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
               className="mt-1 flex h-9 w-full items-center justify-center text-[10px] font-bold text-zinc-500 disabled:opacity-35"
             >
               Finalizar sem código
-            </button>
+            </button>}
           </div>
         </div>
       )}
