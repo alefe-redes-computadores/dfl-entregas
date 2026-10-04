@@ -1,0 +1,15 @@
+const fs=require("fs");
+const ok=(v,m)=>{if(!v)throw new Error("V29 ENTREGAS: "+m)};
+const patch=fs.readFileSync("scripts/patch-android-admin-bridge.mjs","utf8");
+const runtime=fs.readFileSync("components/NativeRuntime.tsx","utf8");
+const bridge=fs.readFileSync("lib/native/admin-bridge.ts","utf8");
+const workflow=fs.readFileSync(".github/workflows/main.yml","utf8");
+ok(patch.includes('android:scheme="dflentregas"'),"scheme nativo ausente");
+ok(patch.includes('android:host="delivery"'),"host nativo ausente");
+ok(patch.includes('android:launchMode="singleTask"'),"singleTask não garantido");
+ok(runtime.includes("App.getLaunchUrl()"),"cold start perdido");
+ok(runtime.includes("appUrlOpen"),"warm start perdido");
+ok(runtime.includes("deliveryDeepLinkToHref"),"roteamento do deep link perdido");
+ok(bridge.includes("/entregas/abrir?id="),"resolver robusto perdido");
+ok(workflow.includes("test-v29-admin-bridge-hardening.cjs"),"workflow não valida V29");
+console.log("DFL ENTREGAS V29 — ADMIN BRIDGE HARDENING — ZERO ERROS");

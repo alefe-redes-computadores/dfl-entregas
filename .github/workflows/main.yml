@@ -35,6 +35,7 @@ jobs:
           node node_modules/typescript/bin/tsc --noEmit
           node scripts/pre-apk.cjs
           node scripts/test-v26-bridge-release.cjs
+          node scripts/test-v29-admin-bridge-hardening.cjs
           node scripts/audit-pre-apk-firestore.cjs
           git diff --check
 

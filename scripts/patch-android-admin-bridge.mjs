@@ -10,3 +10,17 @@ if(!x.includes('android:scheme="dflentregas"')){
 }
 for(const t of ['android:scheme="dflentregas"','android:host="delivery"','android.intent.category.BROWSABLE']) if(!fs.readFileSync(p,'utf8').includes(t)) throw new Error('V25: token ausente '+t);
 console.log('V25 ANDROID PATCH OK');
+
+// V29_SINGLE_TASK: deep link deve chegar na Activity existente.
+{
+  let current=fs.readFileSync(p,'utf8');
+  const re=/<activity\b[^>]*android:name="[^"]*MainActivity"[^>]*>/;
+  const m=current.match(re);
+  if(!m) throw new Error('V29: MainActivity não localizada para singleTask');
+  if(!m[0].includes('android:launchMode="singleTask"')){
+    const next=m[0].replace(/>$/, ' android:launchMode="singleTask">');
+    current=current.replace(m[0],next);
+    fs.writeFileSync(p,current);
+  }
+}
+if(!fs.readFileSync(p,'utf8').includes('android:launchMode="singleTask"')) throw new Error('V29: singleTask ausente');
