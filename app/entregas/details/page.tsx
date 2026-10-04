@@ -39,7 +39,7 @@ import {
 } from '@/lib/delivery-mode';
 import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
 import { routeStartedAt } from '@/lib/operational-time';
-import { adminOrderIntentUrl } from '@/lib/native/admin-bridge';
+import { openDflAdmin as openDflAdminBridge } from '@/lib/native/admin-bridge';
 import {
   deliveryChannel,
   deliveryChannelLabel,
@@ -158,10 +158,16 @@ function DeliveryDetailsContent() {
   };
 
   const openDflAdmin = async () => {
-    const target = adminOrderIntentUrl(delivery.external_order_id, delivery.completed ? "concluidos" : "expedicao");
-    if (!target) { toast.error("Este pedido não possui vínculo com o DFL Admin."); return; }
+    if (!delivery.external_order_id) {
+      toast.error("Este pedido não possui vínculo com o DFL Admin.");
+      return;
+    }
+
     await vibrate(ImpactStyle.Light);
-    window.location.href = target;
+    openDflAdminBridge(
+      delivery.external_order_id,
+      delivery.completed ? "concluidos" : "expedicao",
+    );
   };
 
   const openWhatsApp = () => {

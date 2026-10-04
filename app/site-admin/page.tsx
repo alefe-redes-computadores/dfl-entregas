@@ -4,8 +4,7 @@ import { ArrowLeft, ExternalLink, ShieldCheck, Store } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-
-const SITE_ADMIN_URL = 'https://dafamilialanches.com.br/admin';
+import { openDflAdmin } from '@/lib/native/admin-bridge';
 
 export default function SiteAdminPage() {
   const router = useRouter();
@@ -23,7 +22,7 @@ export default function SiteAdminPage() {
 
   const openExternal = async () => {
     await vibrate(ImpactStyle.Light);
-    window.open(SITE_ADMIN_URL, '_blank', 'noopener,noreferrer');
+    openDflAdmin();
   };
 
   return (
@@ -73,7 +72,7 @@ export default function SiteAdminPage() {
               type="button"
               onClick={openExternal}
               className="flex items-center gap-1 rounded-lg bg-zinc-800 px-2.5 py-1.5 text-[10px] font-black text-zinc-300 active:scale-95"
-              title="Abrir o Admin fora do DFL Entregas"
+              title="Abrir o DFL Admin oficial"
             >
               <ExternalLink size={12} />
               Externo
@@ -97,7 +96,7 @@ export default function SiteAdminPage() {
           <p className="mt-4 text-[10px] font-black uppercase tracking-[0.16em] text-amber-400">Administração comercial</p>
           <h2 className="mt-1 font-heading text-xl font-black text-zinc-50">Abrir no DFL Site</h2>
           <p className="mx-auto mt-2 max-w-xs text-[11px] leading-relaxed text-zinc-500">
-            O Admin usa a sessão própria do DFL Site. Abra fora do DFL Entregas para continuar com o login já existente no navegador.
+            O Admin usa a sessão própria do DFL Site. Abra o DFL Admin oficial. No aplicativo, a ponte tenta abrir diretamente o APK Admin; no navegador, usa o domínio oficial.
           </p>
           <button type="button" onClick={openExternal} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 font-black text-zinc-950 active:scale-[.99]">
             <ExternalLink size={17} /> Abrir Admin do Site

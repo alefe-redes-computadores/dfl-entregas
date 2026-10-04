@@ -13,6 +13,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { openDflAdmin } from '@/lib/native/admin-bridge';
 import {
   isSiteOrderAwaitingConfirmation,
   isSiteOrderReleasedToLogistics,
@@ -207,7 +208,7 @@ export function SiteAdminHub({
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              router.push('/site-admin');
+              openDflAdmin();
             }}
             className="mt-2 flex h-11 w-full items-center justify-between rounded-2xl border border-amber-400/20 bg-amber-400/[.07] px-3 text-left text-amber-300 active:scale-[.99]"
           >
