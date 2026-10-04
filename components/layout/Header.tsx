@@ -53,7 +53,11 @@ export function Header() {
       void refreshNow(false);
     };
     document.addEventListener('visibilitychange', refreshOnForeground);
-    return () => document.removeEventListener('visibilitychange', refreshOnForeground);
+    window.addEventListener('dfl:app-foreground', refreshOnForeground);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshOnForeground);
+      window.removeEventListener('dfl:app-foreground', refreshOnForeground);
+    };
   }, [refreshNow]);
 
   const firstName = user?.displayName?.trim().split(/\s+/)[0] || 'Usuário';

@@ -75,6 +75,12 @@ export function NativeRuntime() {
       try {
         const stateListener = await App.addListener('appStateChange', ({ isActive }) => {
           if (isActive) {
+            // O WebView Android nem sempre emite visibilitychange ao voltar
+            // de outro aplicativo. O Header continua sendo o owner da
+            // sincronização/cooldown; este evento apenas sinaliza o resume
+            // nativo, sem criar polling ou uma segunda leitura concorrente.
+            window.dispatchEvent(new Event('dfl:app-foreground'));
+
             // Algumas Activities externas (ex.: seletor Google) podem devolver
             // flags de system bars diferentes. Reaplicamos após o resume.
             window.setTimeout(() => {

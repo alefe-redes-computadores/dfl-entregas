@@ -516,7 +516,7 @@ export const notifyNewSiteOrder = (
     {
       cooldownMs: 30 * 60_000,
       extra: {
-        href: '/loja?tab=site',
+        href: '/loja?site=pending',
       },
       preferences,
       preferenceKey: 'siteOrderNew',

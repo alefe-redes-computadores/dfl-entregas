@@ -212,13 +212,16 @@ export function SiteAdminHub({
               event.stopPropagation();
               if (openingAdmin) return;
               setOpeningAdmin(true);
-              const result = await openDflAdmin();
-              if (!result.opened) {
-                toast.error(result.message || 'Não foi possível abrir o DFL Admin.');
-              } else if (result.target === 'browser') {
-                toast.info('DFL Admin não instalado. Abrindo no navegador.');
+              try {
+                const result = await openDflAdmin();
+                if (!result.opened) {
+                  toast.error(result.message || 'Não foi possível abrir o DFL Admin.');
+                } else if (result.target === 'browser') {
+                  toast.info('DFL Admin não instalado. Abrindo no navegador.');
+                }
+              } finally {
+                setOpeningAdmin(false);
               }
-              setOpeningAdmin(false);
             }}
             disabled={openingAdmin}
             className="mt-2 flex h-11 w-full items-center justify-between rounded-2xl border border-amber-400/20 bg-amber-400/[.07] px-3 text-left text-amber-300 active:scale-[.99]"

@@ -26,14 +26,17 @@ export default function SiteAdminPage() {
   const openExternal = async () => {
     if (openingAdmin) return;
     setOpeningAdmin(true);
-    await vibrate(ImpactStyle.Light);
-    const result = await openDflAdmin();
-    if (!result.opened) {
-      toast.error(result.message || 'Não foi possível abrir o DFL Admin.');
-    } else if (result.target === 'browser') {
-      toast.info('DFL Admin não instalado. Abrindo no navegador.');
+    try {
+      await vibrate(ImpactStyle.Light);
+      const result = await openDflAdmin();
+      if (!result.opened) {
+        toast.error(result.message || 'Não foi possível abrir o DFL Admin.');
+      } else if (result.target === 'browser') {
+        toast.info('DFL Admin não instalado. Abrindo no navegador.');
+      }
+    } finally {
+      setOpeningAdmin(false);
     }
-    setOpeningAdmin(false);
   };
 
   return (
