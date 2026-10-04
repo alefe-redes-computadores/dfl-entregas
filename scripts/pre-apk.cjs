@@ -20,6 +20,7 @@ const tests=[
   'scripts/verify-site-route-experience-v11.cjs',
   'scripts/verify-route-reorder-v13-3.cjs',
   'scripts/verify-route-grouping-v18-1.cjs',
+  'scripts/verify-route-reactive-order-v24-4.cjs',
   'scripts/verify-operational-modal-polish-v19.cjs',
   'scripts/verify-grouped-stop-completion-v20.cjs',
   'scripts/verify-route-money-v13-4.cjs',

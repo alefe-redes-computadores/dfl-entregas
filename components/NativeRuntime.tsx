@@ -38,6 +38,11 @@ export function NativeRuntime() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
+    const rootStyle = document.documentElement.style;
+    if (Capacitor.getPlatform() === 'android') {
+      rootStyle.setProperty('--dfl-native-statusbar-fallback', '44px');
+    }
+
     const removers: Array<() => Promise<void>> = [];
 
     const setup = async () => {
@@ -117,6 +122,9 @@ export function NativeRuntime() {
     void setup();
 
     return () => {
+      document.documentElement.style.removeProperty(
+        '--dfl-native-statusbar-fallback',
+      );
       removers.forEach((remove) => {
         void remove();
       });

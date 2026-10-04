@@ -95,6 +95,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [lastAppliedOrder, setLastAppliedOrder] = useState<string[] | null>(null);
 
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
+  // Assinar somente a função getDeliveriesByRoute não reage a mudanças
+  // em state.deliveries. A rota precisa observar a coleção real para
+  // redesenhar imediatamente após reorder/drag/otimização.
+  const deliveryState = useAppStore((state) => state.deliveries);
+  const selectedDate = useAppStore((state) => state.selectedDate);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const closeRoute = useAppStore((state) => state.closeRoute);
   const reopenRoute = useAppStore((state) => state.reopenRoute);
@@ -115,7 +120,16 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     route.id === 'rota-site-aguardando-confirmacao';
   const isVirtualRoute =
     isRecoveryRoute || isAwaitingRoute || isSiteAwaitingConfirmation;
-  const deliveries = getDeliveriesByRoute(route.id);
+  const deliveries = useMemo(
+    () => getDeliveriesByRoute(route.id),
+    [
+      getDeliveriesByRoute,
+      route.id,
+      deliveryState,
+      selectedDate,
+      allRoutes,
+    ],
+  );
   const totalDeliveries = deliveries.length;
   const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
   const totalStops = groupDeliveriesByStop(deliveries).length;

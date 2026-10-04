@@ -67,6 +67,7 @@ h1, h2, h3, h4, h5, h6 {
 :root {
   --dfl-safe-top: env(safe-area-inset-top, 0px);
   --dfl-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --dfl-native-statusbar-fallback: 0px;
   --dfl-nav-height: 4.85rem;
 
   /*
@@ -116,8 +117,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .dfl-toast {
-  min-height: 58px;
+  min-height: 54px;
   align-items: flex-start !important;
+  padding-block: 10px !important;
 }
 
 .dfl-toast-title {
@@ -127,10 +129,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .dfl-toast-description {
-  margin-top: 3px !important;
+  margin-top: 2px !important;
   color: #a1a1aa !important;
   font-size: 10px !important;
-  line-height: 1.4 !important;
+  line-height: 1.35 !important;
 }
 
 .dfl-toast-close {
@@ -295,4 +297,18 @@ h1, h2, h3, h4, h5, h6 {
 /* DFL V27 — POLIMENTO ESTRUTURAL */
 @layer components {
   .dfl-v27-routes .dfl-search { @apply h-11; }
+}
+
+
+/* DFL V24.3 — TOAST ANDROID SAFE-TOP REAL */
+[data-sonner-toaster].toaster {
+  max-width: calc(100vw - 24px) !important;
+}
+
+[data-sonner-toaster][data-y-position="top"] {
+  pointer-events: none;
+}
+
+[data-sonner-toaster][data-y-position="top"] [data-sonner-toast] {
+  pointer-events: auto;
 }

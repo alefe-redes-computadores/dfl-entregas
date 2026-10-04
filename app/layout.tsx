@@ -82,7 +82,7 @@ export default function RootLayout({
               closeButton
               visibleToasts={2}
               gap={10}
-              offset="calc(env(safe-area-inset-top, 0px) + 12px)"
+              offset="calc(max(env(safe-area-inset-top, 0px), var(--dfl-native-statusbar-fallback, 0px)) + 12px)"
               icons={{
                 success: <CheckCircle2 size={18} strokeWidth={2.2} />,
                 error: <XCircle size={18} strokeWidth={2.2} />,

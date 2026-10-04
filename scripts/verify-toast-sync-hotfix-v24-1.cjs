@@ -9,8 +9,15 @@ const header = read('components/layout/Header.tsx');
 const diagnostics = read('app/mais/diagnostico/page.tsx');
 const toast = read('lib/operational-toast.ts');
 const health = read('lib/site-integration-health.ts');
+const native = read('components/NativeRuntime.tsx');
 
-ok(layout.includes('env(safe-area-inset-top') && css.includes('[data-sonner-toaster]'), 'toast respeita barra do Android');
+ok(
+  layout.includes('max(env(safe-area-inset-top') &&
+  layout.includes('--dfl-native-statusbar-fallback') &&
+  css.includes('[data-sonner-toaster]'),
+  'toast respeita barra do Android com fallback real'
+);
+ok(native.includes("setProperty('--dfl-native-statusbar-fallback', '44px')"), 'APK injeta piso real para Status Bar edge-to-edge');
 ok(layout.includes('CheckCircle2') && layout.includes('AlertTriangle') && layout.includes('LoaderCircle'), 'toast usa iconografia Lucide');
 ok(layout.includes('visibleToasts={2}') && css.includes('.dfl-toast-close'), 'pilha e fechamento compactos');
 ok(toast.includes('Haptics.notification') && toast.includes('Capacitor.isNativePlatform'), 'feedback tatil somente no APK');
