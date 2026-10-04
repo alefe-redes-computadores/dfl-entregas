@@ -2,7 +2,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { Beef, Edit3, Flame, Leaf, Package, Plus, Save, Search, ShoppingCart, Store, Truck, X, Bike, Wheat } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { STOCK_SUPPLIER_STYLE, STOCK_SUPPLIER_TYPE_LABELS } from '@/lib/stock-suppliers';

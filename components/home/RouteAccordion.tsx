@@ -10,14 +10,13 @@ import {
   ArrowRight,
   Bike,
   CheckCircle2,
+  ClipboardCheck,
   ChevronDown,
   Copy,
   Crosshair,
-  MapPin,
   MapPinned,
   MessageCircle,
   Navigation,
-  Receipt,
   RotateCcw,
   Send,
   Sparkles,
@@ -29,7 +28,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import clsx from 'clsx';
 
 import type { Route } from '@/types';
@@ -478,10 +477,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
     if (msgType === 1) {
       await navigator.clipboard.writeText(msgsToCopy[0]);
-      toast.success('Mensagem 1 copiada!', { description: 'Rota e mapas prontos para o WhatsApp.' });
+      toast.success('Rota e contatos copiados!', { description: 'Paradas, endereços, contatos e mapa prontos para o WhatsApp.' });
     } else if (msgType === 2) {
       await navigator.clipboard.writeText(msgsToCopy[1]);
-      toast.success('Mensagem 2 copiada!', { description: 'Conferência operacional e dinheiro esperado na volta prontos.' });
+      toast.success('Checklist de saída copiado!', { description: 'Bebidas, maquininha e códigos prontos para conferência.' });
     } else {
       await navigator.clipboard.writeText(msgsToCopy[2] || '');
       toast.success('Dinheiro da rota copiado!', { description: 'Recebimentos, trocos e retorno físico por parada prontos.' });
@@ -1154,35 +1153,35 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       {/* MODAL BOTTOM SHEET DE CÓPIA DO WHATSAPP */}
       {isCopyMenuOpen && (
         <div className="fixed inset-0 z-[100] flex flex-col justify-end bg-black/80 animate-in fade-in" onClick={() => setIsCopyMenuOpen(false)}>
-          <div className="bg-[#1a1a1a] rounded-t-[32px] p-6 pb-10 flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-300 relative" onClick={(event) => event.stopPropagation()}>
-             <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-zinc-700" />
-             <div className="flex items-center justify-between mb-6">
-               <h3 className="font-bold text-xl text-zinc-50 flex items-center gap-2"><Copy size={20} className="text-emerald-500"/> Enviar para WhatsApp</h3>
-               <button onClick={() => setIsCopyMenuOpen(false)} className="p-2.5 bg-zinc-800 rounded-full text-zinc-400 active:scale-90"><X size={20}/></button>
+          <div className="dfl-bottom-sheet safe-bottom relative flex max-h-[88dvh] flex-col overflow-y-auto rounded-t-[30px] p-5 pb-6 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-200" onClick={(event) => event.stopPropagation()}>
+             <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-zinc-700" />
+             <div className="mb-4 flex items-center justify-between gap-3">
+               <div><h3 className="flex items-center gap-2 font-heading text-lg font-black text-zinc-50"><Copy size={18} className="text-emerald-400"/> Copiar para o motoboy</h3><p className="mt-1 text-[10px] text-zinc-500">Escolha a informação que deseja enviar no WhatsApp.</p></div>
+               <button aria-label="Fechar" onClick={() => setIsCopyMenuOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-800 text-zinc-400 active:scale-90"><X size={18}/></button>
              </div>
 
-             <div className="flex flex-col gap-4">
-                <button onClick={() => handleCopyMessage(1)} className="flex items-center gap-4 bg-zinc-900 border border-zinc-800 p-5 rounded-3xl active:scale-95 transition-all text-left">
-                  <div className="h-14 w-14 rounded-full bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0"><MapPin size={24}/></div>
+             <div className="flex flex-col gap-2.5">
+                <button onClick={() => handleCopyMessage(1)} className="flex items-center gap-3 rounded-2xl border border-sky-500/20 bg-sky-500/[.055] p-4 text-left transition active:scale-[.985]">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-400"><MapPinned size={20}/></div>
                   <div className="flex flex-col">
-                    <span className="font-black text-zinc-100 text-lg">Mensagem 1 (Logística)</span>
-                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Copia endereços, IDs, contato rápido e o link do mapa otimizado.</span>
+                    <span className="text-sm font-black text-zinc-100">Rota e contatos</span>
+                    <span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Paradas, endereços, pedidos, contatos e link do mapa.</span>
                   </div>
                 </button>
 
-                <button onClick={() => handleCopyMessage(2)} className="flex items-center gap-4 bg-zinc-900 border border-zinc-800 p-5 rounded-3xl active:scale-95 transition-all text-left">
-                  <div className="h-14 w-14 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0"><Receipt size={24}/></div>
+                <button onClick={() => handleCopyMessage(2)} className="flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[.055] p-4 text-left transition active:scale-[.985]">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-400"><ClipboardCheck size={20}/></div>
                   <div className="flex flex-col">
-                    <span className="font-black text-zinc-100 text-lg">Mensagem 2 (Acerto)</span>
-                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Bebidas, maquininha, códigos e dinheiro esperado na volta.</span>
+                    <span className="text-sm font-black text-zinc-100">Checklist de saída</span>
+                    <span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Bebidas, maquininha, códigos e contatos que exigem atenção.</span>
                   </div>
                 </button>
 
-                <button onClick={() => handleCopyMessage(3)} className="flex items-center gap-4 bg-zinc-900 border border-amber-500/20 p-5 rounded-3xl active:scale-95 transition-all text-left">
-                  <div className="h-14 w-14 rounded-full bg-amber-500/10 text-amber-300 flex items-center justify-center shrink-0"><Wallet size={24}/></div>
+                <button onClick={() => handleCopyMessage(3)} className="flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[.055] p-4 text-left transition active:scale-[.985]">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-300"><Wallet size={20}/></div>
                   <div className="flex flex-col">
-                    <span className="font-black text-zinc-100 text-lg">Mensagem 3 (Dinheiro)</span>
-                    <span className="text-xs text-zinc-400 font-medium mt-1 leading-relaxed">Toda entrega em dinheiro, troco em espécie/Pix e retorno físico explicado por parada.</span>
+                    <span className="text-sm font-black text-zinc-100">Dinheiro da rota</span>
+                    <span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Recebimentos, trocos e valor físico esperado na volta.</span>
                   </div>
                 </button>
              </div>

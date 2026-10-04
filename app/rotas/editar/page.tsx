@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Bike, User, Wallet } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { moneyValueToDraft, parseMoneyDraft } from '@/lib/route-cash-flow';
 import { MoneyDraftInput } from '@/components/routes/MoneyDraftInput';

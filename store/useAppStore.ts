@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { persist } from 'zustand/middleware';
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField, runTransaction, query, where } from 'firebase/firestore';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
@@ -44,7 +44,6 @@ import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
 import { markUnreadSiteOrders } from '@/lib/site-order-inbox';
-import { siteCompletionDivergences } from '@/lib/site-integration-health';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 import { kickSiteRoute } from '@/lib/integration/client/routeKick';
 
@@ -351,6 +350,8 @@ const waitForStockSupplyWrite = async (id: string) => {
   }
 };
 
+let initDataInFlight = false;
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -483,7 +484,8 @@ export const useAppStore = create<AppState>()(
 
         // AuthGuard já inicializa uma única vez por montagem/login.
         // Chamadas explícitas posteriores são permitidas, mas nunca concorrentes.
-        if (get().isSyncing) return;
+        if (initDataInFlight || get().isSyncing) return;
+        initDataInFlight = true;
 
         const syncStartedAt = new Date().toISOString();
         const knownDeliveryIds = new Set(get().deliveries.map((item) => item.id));
@@ -798,13 +800,6 @@ export const useAppStore = create<AppState>()(
             isSyncing: false,
             syncError: false
           });
-          const divergences = siteCompletionDivergences(mergedDeliveries);
-          if (divergences.length) {
-            toast.warning(
-              `${divergences.length} pedido${divergences.length === 1 ? '' : 's'} concluido${divergences.length === 1 ? '' : 's'} aguardando reflexo no Site.`,
-              { id: 'site-integration-divergence', description: 'Abra o Diagnostico para recuperar somente os eventos pendentes.' },
-            );
-          }
           recordSyncDiagnostic({
             startedAt: syncStartedAt,
             finishedAt: new Date().toISOString(),
@@ -831,6 +826,8 @@ export const useAppStore = create<AppState>()(
           void notifySyncFailure(
             get().storeSettings.notificationPreferences,
           );
+        } finally {
+          initDataInFlight = false;
         }
       },
 

@@ -7,7 +7,7 @@ import {
   Route as RouteIcon,
   Sparkles,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import type { Customer, Delivery, Route } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { useDeliveryIntelligence } from '@/hooks/useDeliveryIntelligence';

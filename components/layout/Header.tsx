@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { PwaInstallPrompt } from '@/components/pwa/PwaInstallPrompt';
 import { User, LogOut, RefreshCw } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { UserAvatar } from '@/components/UserAvatar';
 import { latestSyncDiagnostic, SYNC_DIAGNOSTIC_EVENT } from '@/lib/sync-diagnostics';
 
@@ -31,6 +31,7 @@ export function Header() {
   const logout = useAppStore((state) => state.logout);
   const initData = useAppStore((state) => state.initData);
   const lastForegroundSyncRef = useRef(0);
+  const refreshInFlightRef = useRef(false);
   
   const [greeting, setGreeting] = useState('Boa noite');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -57,19 +58,23 @@ export function Header() {
   }, []);
 
   const refreshNow = useCallback(async (showFeedback = true) => {
-    if (useAppStore.getState().isSyncing) {
-      if (showFeedback) toast.info('A atualização já está em andamento.');
+    if (refreshInFlightRef.current || useAppStore.getState().isSyncing) {
+      if (showFeedback) toast.info('A atualização já está em andamento.', { id: 'operation-sync' });
       return;
     }
 
+    refreshInFlightRef.current = true;
     lastForegroundSyncRef.current = Date.now();
-    const toastId = showFeedback ? toast.loading('Buscando pedidos novos...') : undefined;
-    await initData();
-
-    const failed = useAppStore.getState().syncError;
-    if (showFeedback && toastId !== undefined) {
-      if (failed) toast.error('Não foi possível atualizar agora.', { id: toastId });
-      else toast.success('Operação atualizada.', { id: toastId, duration: 1400 });
+    const toastId = showFeedback ? toast.loading('Buscando pedidos novos...', { id: 'operation-sync' }) : undefined;
+    try {
+      await initData();
+      const failed = useAppStore.getState().syncError;
+      if (showFeedback && toastId !== undefined) {
+        if (failed) toast.error('Não foi possível atualizar agora.', { id: toastId });
+        else toast.success('Operação atualizada.', { id: toastId, duration: 1400 });
+      }
+    } finally {
+      refreshInFlightRef.current = false;
     }
   }, [initData]);
 

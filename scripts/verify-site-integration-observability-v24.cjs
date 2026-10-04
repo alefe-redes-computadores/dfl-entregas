@@ -15,7 +15,7 @@ check('cabecalho exibe atualizacao relativa', header.includes('Atualizado ha ${m
 check('badge nasce apenas de pedidos novos observados no sync', store.includes('markUnreadSiteOrders(newSiteOrders.map') && nav.includes('SITE_UNREAD_EVENT'));
 check('abrir painel reconhece pedidos do Site', read('components/store/SiteAdminHub.tsx').includes('acknowledgeSiteOrders'));
 check('ficha possui quatro estagios de integracao', details.includes('siteIntegrationStages') && details.includes('Site → Entregas → Site'));
-check('divergencia e detectada sem timer remoto', store.includes('siteCompletionDivergences(mergedDeliveries)') && !store.includes('setInterval('));
+check('divergencia usa somente a fila remota real', !store.includes('siteCompletionDivergences(mergedDeliveries)') && diagnostics.includes('recovery.stats'));
 check('diagnostico remoto exige usuario autorizado', api.includes('verifyIdToken') && api.includes('configured.includes(email)'));
 check('reprocessamento e dirigido por eventId', api.includes('drainReverseIntegrationEventIds([eventId]'));
 check('dead letter so e liberada por opcao explicita', outbox.includes('allowDeadLetter?: boolean') && api.includes('allowDeadLetter: true'));

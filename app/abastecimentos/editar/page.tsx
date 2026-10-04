@@ -4,7 +4,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, Undo2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   StockSupplyForm,

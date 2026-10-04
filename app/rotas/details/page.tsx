@@ -16,7 +16,7 @@ import {
   User,
   Wallet,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
 import { RouteOperationalMemory } from '@/components/intelligence/EntityOperationalMemory';

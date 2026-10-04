@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Archive, ArrowDown, ArrowUp, Edit3, History, PackageCheck } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { CommercialMigrationNotice } from '@/components/stock/CommercialMigrationNotice';
 import { useAppStore } from '@/store/useAppStore';

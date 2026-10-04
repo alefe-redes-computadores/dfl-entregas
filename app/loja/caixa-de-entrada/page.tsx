@@ -17,7 +17,7 @@ import {
   X,
   BrainCircuit,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from '@/lib/operational-toast';
 import { Capacitor } from "@capacitor/core";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 

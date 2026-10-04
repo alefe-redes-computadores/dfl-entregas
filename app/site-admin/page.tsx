@@ -3,7 +3,7 @@
 import { ArrowLeft, ExternalLink, ShieldCheck, Store } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { openDflAdmin } from '@/lib/native/admin-bridge';

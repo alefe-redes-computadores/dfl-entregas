@@ -111,6 +111,38 @@ h1, h2, h3, h4, h5, h6 {
   overscroll-behavior: contain;
 }
 
+[data-sonner-toaster].toaster {
+  width: min(420px, calc(100vw - 24px)) !important;
+}
+
+.dfl-toast {
+  min-height: 58px;
+  align-items: flex-start !important;
+}
+
+.dfl-toast-title {
+  font-family: var(--font-poppins), sans-serif;
+  font-weight: 800 !important;
+  line-height: 1.25 !important;
+}
+
+.dfl-toast-description {
+  margin-top: 3px !important;
+  color: #a1a1aa !important;
+  font-size: 10px !important;
+  line-height: 1.4 !important;
+}
+
+.dfl-toast-close {
+  top: 10px !important;
+  right: 10px !important;
+  left: auto !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-color: rgba(82, 82, 91, .8) !important;
+  background: rgba(9, 9, 11, .92) !important;
+}
+
 
 @layer base {
   :root { color-scheme: dark; }

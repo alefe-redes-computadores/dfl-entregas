@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 
 export function PwaInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);

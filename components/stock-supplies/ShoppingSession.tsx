@@ -1,5 +1,5 @@
 'use client';
-import { useEffect,useMemo,useState } from 'react';import { Check,Download,Save,ShoppingCart,TrendingDown,TrendingUp,WifiOff } from 'lucide-react';import { toast } from 'sonner';
+import { useEffect,useMemo,useState } from 'react';import { Check,Download,Save,ShoppingCart,TrendingDown,TrendingUp,WifiOff } from 'lucide-react';import { toast } from '@/lib/operational-toast';
 import type { StockSupply,StockSupplyItem } from '@/types';import { useAppStore } from '@/store/useAppStore';import { shoppingPriceSignal,projectedAverageCost } from '@/lib/stock-shopping';import { formatBRLCents,moneyToNumber,numberToBRLInput } from '@/lib/money-input';import { downloadShoppingListPdf } from '@/lib/shopping-list-pdf';import { formatStockQuantity } from '@/lib/stock-quantity';
 type Draft={checked:Record<string,boolean>;prices:Record<string,string>};const storageKey=(id:string)=>`dfl-shopping-session:${id}`;
 export function ShoppingSession({supply,onFinish,busy}:{supply:StockSupply;onFinish:(items:StockSupplyItem[])=>Promise<void>;busy:boolean}){

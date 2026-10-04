@@ -28,7 +28,7 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { useAppStore } from '@/store/useAppStore';
@@ -49,7 +49,7 @@ import {
   operationalMapsUrl,
   siteStatusLabel,
 } from '@/lib/delivery-presentation';
-import { siteCompletionDivergences, siteIntegrationStages } from '@/lib/site-integration-health';
+import { siteIntegrationStages } from '@/lib/site-integration-health';
 
 const money = (value = 0) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -112,7 +112,6 @@ function DeliveryDetailsContent() {
   const integrationStages = delivery.source_system === 'dfl_site'
     ? siteIntegrationStages(delivery, route)
     : [];
-  const integrationDiverged = siteCompletionDivergences([delivery]).length > 0;
 
   const name = customer?.name || delivery.customer_name || 'Cliente não informado';
   const phone = formatBrazilianPhone(delivery.phone || customer?.phone);
@@ -417,10 +416,9 @@ function DeliveryDetailsContent() {
       </section>
 
       {channel === 'site' && (
-        <section className={`rounded-[24px] border p-4 ${integrationDiverged ? 'border-amber-500/25 bg-amber-500/[.055]' : 'border-cyan-500/20 bg-cyan-500/[.035]'}`}>
-          <div className="flex items-start justify-between gap-3"><div><p className="text-[9px] font-black uppercase tracking-[.14em] text-cyan-400">Integracao operacional</p><h2 className="mt-1 text-sm font-black text-zinc-100">Site → Entregas → Site</h2></div><span className={`rounded-full px-2.5 py-1 text-[8px] font-black ${integrationDiverged ? 'bg-amber-500/10 text-amber-300' : 'bg-cyan-500/10 text-cyan-300'}`}>{integrationDiverged ? 'AGUARDANDO SITE' : 'ACOMPANHADO'}</span></div>
+        <section className="rounded-[24px] border border-cyan-500/20 bg-cyan-500/[.035] p-4">
+          <div className="flex items-start justify-between gap-3"><div><p className="text-[9px] font-black uppercase tracking-[.14em] text-cyan-400">Integracao operacional</p><h2 className="mt-1 text-sm font-black text-zinc-100">Site → Entregas → Site</h2></div><span className="rounded-full bg-cyan-500/10 px-2.5 py-1 text-[8px] font-black text-cyan-300">{delivery.completed ? 'CONCLUSAO REGISTRADA' : 'ACOMPANHADO'}</span></div>
           <div className="mt-4 space-y-2">{integrationStages.map((stage)=><div key={stage.key} className="flex items-center gap-3"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border ${stage.done ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-zinc-800 bg-zinc-950 text-zinc-700'}`}>{stage.done ? <CheckCircle2 size={14}/> : <Clock3 size={13}/>}</span><span className="min-w-0 flex-1"><b className={`block text-[10px] ${stage.done ? 'text-zinc-200' : 'text-zinc-600'}`}>{stage.label}</b><small className="block text-[8px] text-zinc-600">{stage.at ? dateTime(stage.at) : 'Ainda nao confirmado'}</small></span></div>)}</div>
-          {integrationDiverged && <p className="mt-3 rounded-xl bg-amber-500/10 p-2.5 text-[9px] leading-relaxed text-amber-300">A entrega foi concluida aqui ha mais de 5 minutos, mas o Site ainda nao confirmou o estado final. Use a recuperacao dirigida no Diagnostico.</p>}
         </section>
       )}
 

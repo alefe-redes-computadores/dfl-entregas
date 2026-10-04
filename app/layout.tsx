@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Toaster } from 'sonner';
+import { AlertTriangle, CheckCircle2, Info, LoaderCircle, XCircle } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { AuthGuard } from '@/components/auth/AuthGuard';
@@ -79,16 +80,32 @@ export default function RootLayout({
               theme="dark"
               position="top-center"
               closeButton
-              visibleToasts={3}
-              gap={8}
+              visibleToasts={2}
+              gap={10}
+              offset="calc(env(safe-area-inset-top, 0px) + 12px)"
+              icons={{
+                success: <CheckCircle2 size={18} strokeWidth={2.2} />,
+                error: <XCircle size={18} strokeWidth={2.2} />,
+                warning: <AlertTriangle size={18} strokeWidth={2.2} />,
+                info: <Info size={18} strokeWidth={2.2} />,
+                loading: <LoaderCircle size={18} strokeWidth={2.2} className="animate-spin" />,
+              }}
               toastOptions={{
+                classNames: {
+                  toast: 'dfl-toast',
+                  title: 'dfl-toast-title',
+                  description: 'dfl-toast-description',
+                  closeButton: 'dfl-toast-close',
+                },
                 style: {
-                  background: '#18181b',
-                  border: '1px solid #27272a',
+                  background: 'rgba(20, 20, 23, .96)',
+                  border: '1px solid rgba(63, 63, 70, .78)',
                   color: '#fafafa',
-                  borderRadius: '14px',
-                  padding: '10px 12px',
+                  borderRadius: '18px',
+                  padding: '12px 14px',
                   fontSize: '12px',
+                  boxShadow: '0 16px 44px rgba(0, 0, 0, .48)',
+                  backdropFilter: 'blur(18px)',
                 },
               }}
             />

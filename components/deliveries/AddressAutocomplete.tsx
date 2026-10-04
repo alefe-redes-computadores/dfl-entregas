@@ -15,7 +15,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 
 import {
   cancelAddressAutocompleteSession,

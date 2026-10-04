@@ -24,7 +24,7 @@ import {
   Utensils,
   Wrench,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 
 import { useAppStore } from '@/store/useAppStore';
 import type { OperationalExpense, OperationalExpenseType } from '@/types';

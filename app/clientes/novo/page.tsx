@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { CustomerForm, type CustomerFormValue } from '@/components/customers/CustomerForm';
 import { findExistingCustomer } from '@/lib/customer-identity';

@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Calculator, PackagePlus, Plus, Save, Trash2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import type {
   PaymentMethod,
   StockSupply,

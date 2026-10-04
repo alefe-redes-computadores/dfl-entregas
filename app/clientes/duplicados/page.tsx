@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   UsersRound,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { customerDuplicateCandidates } from '@/lib/customer-duplicates';
 import type { Customer } from '@/types';

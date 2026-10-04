@@ -1,6 +1,6 @@
 // app/estoque/editar/page.tsx
 'use client';
-import { Suspense,useState } from 'react'; import { useRouter,useSearchParams } from 'next/navigation'; import { AlertCircle,Save,ShoppingCart } from 'lucide-react'; import { toast } from 'sonner';
+import { Suspense,useState } from 'react'; import { useRouter,useSearchParams } from 'next/navigation'; import { AlertCircle,Save,ShoppingCart } from 'lucide-react'; import { toast } from '@/lib/operational-toast';
 import { commercialPurchasePlan } from '@/lib/stock-shopping'; import { humanPurchasePlan } from '@/lib/stock-commercial-display-v2';
 import { PageHeader } from '@/components/layout/PageHeader'; import { StockCategoryPicker } from '@/components/stock/StockCategoryPicker'; import { StockPresentationEditor } from '@/components/stock/StockPresentationEditor'; import { useAppStore } from '@/store/useAppStore'; import { SUPPLY_UNIT_LABELS } from '@/lib/stock-supply'; import { canonicalStockCategory } from '@/lib/stock-categories'; import { formatStockQuantity, normalizeStockQuantityInput, parseStockQuantityInput, quantityInputHint } from '@/lib/stock-quantity'; import { formatBRLCents,moneyToNumber,numberToBRLInput } from '@/lib/money-input'; import { feedbackError,feedbackSuccess } from '@/lib/ui-feedback'; import type { StockProductPresentation, StockSupplyUnit } from '@/types';
 const num=parseStockQuantityInput; const field='mt-2 h-14 w-full min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 outline-none focus:border-emerald-500';

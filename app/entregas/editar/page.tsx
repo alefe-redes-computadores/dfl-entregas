@@ -8,7 +8,7 @@ import {
   AlertTriangle, Navigation, CheckCircle2, Link2, MessageCircle, Info,
   Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, UsersRound
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';

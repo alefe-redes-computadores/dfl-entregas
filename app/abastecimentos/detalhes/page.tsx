@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CalendarDays, CheckCircle2, Download, Edit3, Store, Trash2, Undo2, UserRound, Wallet } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { money, SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';

@@ -5,7 +5,7 @@ import { StockCategoryIcon } from '@/components/stock/StockCategoryPicker';
 import { stockCategoryVisualClasses } from '@/lib/stock-categories';
 import { useMemo, useState } from 'react';
 import { Beef, CheckCircle2, CupSoda, Flame, Leaf, Package, Sparkles, Warehouse } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { INITIAL_STOCK_PRODUCTS, INITIAL_STOCK_SUPPLIERS } from '@/lib/stock-catalog';
 import { useAppStore } from '@/store/useAppStore';

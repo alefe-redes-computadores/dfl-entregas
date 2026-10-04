@@ -26,7 +26,7 @@ const NAV_ITEMS = [
 
 type AddMode =
   | { kind: 'direct'; href: string; label: string }
-  | { kind: 'sheet'; label: string; options: Array<{ href: string; label: string; description: string; icon: typeof Plus }> }
+  | { kind: 'sheet'; label: string; options: Array<{ href: string; label: string; description: string; icon: typeof Plus; tone: 'sky' | 'emerald' | 'violet' }> }
   | null;
 
 export function BottomNav() {
@@ -69,12 +69,14 @@ export function BottomNav() {
                               label: 'Integrante da loja',
                               description: 'Administração, cozinha, atendimento ou compras',
                               icon: UserPlus,
+                              tone: 'violet',
                             },
                             {
                               href: '/motoboys/novo',
                               label: 'Entregador / motoboy',
                               description: 'Cadastro, regra de pagamento e acerto',
                               icon: Bike,
+                              tone: 'sky',
                             },
                           ],
                         }
@@ -91,6 +93,7 @@ export function BottomNav() {
                                 label: 'Adicionar rota',
                                 description: 'Abrir uma nova rota de entrega',
                                 icon: Bike,
+                                tone: 'sky',
                               },
                               {
                                 href:
@@ -100,6 +103,7 @@ export function BottomNav() {
                                 label: 'Adicionar entrega',
                                 description: 'Lançar um pedido em uma rota aberta',
                                 icon: PackagePlus,
+                                tone: 'emerald',
                               },
                             ],
                           }
@@ -188,6 +192,11 @@ export function BottomNav() {
             <div className="mt-4 space-y-2">
               {addMode.options.map((option) => {
                 const OptionIcon = option.icon;
+                const tone = option.tone === 'sky'
+                  ? 'border-sky-500/20 bg-sky-500/[.055] text-sky-400'
+                  : option.tone === 'emerald'
+                    ? 'border-emerald-500/20 bg-emerald-500/[.055] text-emerald-400'
+                    : 'border-violet-500/20 bg-violet-500/[.055] text-violet-400';
                 return (
                   <button
                     key={option.href}
@@ -196,9 +205,9 @@ export function BottomNav() {
                       setShowAddSheet(false);
                       router.push(option.href);
                     }}
-                    className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 text-left active:scale-[.99]"
+                    className={clsx('flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition active:scale-[.985]', tone)}
                   >
-                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-400">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-current/10">
                       <OptionIcon size={19} />
                     </span>
                     <span className="min-w-0">

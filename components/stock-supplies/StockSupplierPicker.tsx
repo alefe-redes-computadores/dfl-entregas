@@ -1,7 +1,7 @@
 'use client';
 import { useMemo,useState } from 'react';
 import { Beef, Check, Flame, Leaf, Package, Plus, Search, ShoppingCart, Store, Truck, X, Bike, Wheat } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { STOCK_SUPPLIER_STYLE,STOCK_SUPPLIER_TYPE_LABELS } from '@/lib/stock-suppliers';
 import type { StockSupplierType } from '@/types';

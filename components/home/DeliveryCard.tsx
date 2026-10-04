@@ -7,7 +7,7 @@ import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
   Smartphone, Store, Globe2, ArrowUp, ArrowDown, GripVertical, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import clsx from 'clsx';
 import type { Delivery, Customer, Route } from '@/types';
 import { copyDeliveryToClipboard } from '@/lib/whatsapp';

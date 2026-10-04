@@ -18,7 +18,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { Capacitor } from '@capacitor/core';
 
 import { useAppStore } from '@/store/useAppStore';

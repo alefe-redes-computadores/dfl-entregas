@@ -7,7 +7,7 @@ import { BellRing,
   ChevronRight,
   LogOut,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { UserAvatar } from '@/components/UserAvatar';
 
