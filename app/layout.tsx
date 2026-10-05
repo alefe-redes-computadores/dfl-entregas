@@ -77,6 +77,7 @@ export default function RootLayout({
               <BottomNav />
             </div>
             <Toaster
+              className="dfl-toaster"
               theme="dark"
               position="top-center"
               closeButton

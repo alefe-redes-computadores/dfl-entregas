@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, Globe2, ArrowUp, ArrowDown, GripVertical, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle
+  Smartphone, Store, Globe2, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import clsx from 'clsx';
@@ -51,9 +51,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
-  const allDeliveries = useAppStore((state) => state.deliveries);
-
-  const isExpanded = delivery.is_expanded || false;
+  const isExpanded = useAppStore(
+    (state) =>
+      state.deliveries.find((item) => item.id === delivery.id)?.is_expanded ||
+      false,
+  );
   const groupedDeliveries = stopDeliveries?.length ? stopDeliveries : [delivery];
   const isGroupedStop = groupedDeliveries.length > 1;
   const groupedTotal = groupedDeliveries.reduce((sum, item) => sum + (item.customer_charge ?? item.value ?? 0), 0);
@@ -86,9 +88,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const [groupedCodeDrafts, setGroupedCodeDrafts] = useState<Record<string, string>>({});
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const reorderDragStartY = useRef<number | null>(null);
-  const reorderDragPointerId = useRef<number | null>(null);
-  const [reorderDragOffset, setReorderDragOffset] = useState(0);
 
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
@@ -98,8 +97,35 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isDeveloperTest = delivery.developer_test === true;
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
   const isUrgent = groupedDeliveries.some((item) => item.is_urgent);
-  const recurrence = customerRecurrence(allDeliveries, delivery.customer_id, delivery);
-  const customerTier = recurrence.tier;
+  const customerTier = useAppStore(
+    (state) =>
+      customerRecurrence(
+        state.deliveries,
+        delivery.customer_id,
+        delivery,
+      ).tier,
+  );
+  const recurrenceCompletedOrders = useAppStore(
+    (state) =>
+      customerRecurrence(
+        state.deliveries,
+        delivery.customer_id,
+        delivery,
+      ).completedOrders,
+  );
+  const recurrenceMilestoneLabel = useAppStore(
+    (state) =>
+      customerRecurrence(
+        state.deliveries,
+        delivery.customer_id,
+        delivery,
+      ).milestoneLabel,
+  );
+  const recurrence = {
+    tier: customerTier,
+    completedOrders: recurrenceCompletedOrders,
+    milestoneLabel: recurrenceMilestoneLabel,
+  };
   const isVIP = Boolean(customerTier);
 
   const shortAddress = compactAddressForCard(delivery.address_string, customer?.address, customer?.neighborhood);
@@ -209,7 +235,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         try {
           await updateDelivery(item.id, updatePayload);
           completedIds.add(item.id);
-          toggleDeliveryExpansion(item.id, false);
         } catch (error) {
           console.error(`Erro ao concluir entrega ${item.id}:`, error);
           failed.push(item);
@@ -406,17 +431,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
   };
 
-  const finishReorderDrag = async (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (reorderDragPointerId.current !== event.pointerId || reorderDragStartY.current === null) return;
-    const delta = event.clientY - reorderDragStartY.current;
-    reorderDragStartY.current = null;
-    reorderDragPointerId.current = null;
-    setReorderDragOffset(0);
-    if (Math.abs(delta) < 24) return;
-    const steps = 1;
-    const currentIndex = Math.max(0, (position || 1) - 1);
-    await moveStop(currentIndex + (delta < 0 ? -steps : steps));
-  };
 
   const resetCardSwipe = () => {
     setSwipeOffset(0); setIsSwiping(false);
@@ -726,31 +740,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                       {!isExpanded && canReorder && (
                         <div className="flex min-w-0 items-center justify-end gap-1.5">
-                          <button type="button" onClick={async(e)=>{e.stopPropagation();try{const nextLocked=!orderLocked;const changedAt=new Date().toISOString();await Promise.all(groupedDeliveries.map((item)=>updateDelivery(item.id,{order_locked:nextLocked,order_source:'manual',order_updated_at:changedAt})));toast.success(nextLocked?'Parada travada na sequência.':'Parada destravada.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Ordem inteligente':'Travar'}</button>
+                          <button type="button" onClick={async(e)=>{e.stopPropagation();try{const nextLocked=!orderLocked;const changedAt=new Date().toISOString();await Promise.all(groupedDeliveries.map((item)=>updateDelivery(item.id,{order_locked:nextLocked,order_source:'manual',order_updated_at:changedAt})));toast.success(nextLocked?'Parada travada na sequência.':'Parada destravada.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Inteligente':'Fixar'}</button>
                           <div className="flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
-                            <button
-                              type="button"
-                              data-no-card-swipe="true"
-                              disabled={manualLocked}
-                        onPointerDown={(event) => {
-                          if (manualLocked) return;
-                          reorderDragStartY.current = event.clientY;
-                                reorderDragPointerId.current = event.pointerId;
-                                event.currentTarget.setPointerCapture(event.pointerId);
-                              }}
-                              onPointerMove={(event) => {
-                                if (reorderDragPointerId.current !== event.pointerId || reorderDragStartY.current === null) return;
-                                setReorderDragOffset(event.clientY - reorderDragStartY.current);
-                              }}
-                              onPointerUp={(event) => void finishReorderDrag(event)}
-                              onPointerCancel={(event) => void finishReorderDrag(event)}
-                              style={{ touchAction: 'none', transform: `translateY(${Math.max(-12, Math.min(12, reorderDragOffset * 0.12))}px)` }}
-                              className="flex h-9 w-9 items-center justify-center border-r border-zinc-800 text-sky-400 active:bg-sky-500/10"
-                              aria-label="Arrastar parada para reordenar"
-                              title="Segure e arraste para reordenar"
-                            >
-                              <GripVertical size={14} />
-                            </button>
                             <button
                               type="button"
                               disabled={manualLocked}

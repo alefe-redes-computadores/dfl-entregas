@@ -19,8 +19,11 @@ ok(
 
 ok(
   native.includes("Capacitor.getPlatform() === 'android'") &&
-  native.includes("setProperty('--dfl-native-statusbar-fallback', '44px')"),
-  'fallback de 44px só entra no Android nativo'
+  (
+    native.includes("setProperty('--dfl-native-statusbar-fallback', '44px')") ||
+    native.includes("setProperty('--dfl-native-statusbar-fallback', '48px')")
+  ),
+  'fallback nativo entra somente no Android'
 );
 
 ok(

@@ -10,7 +10,7 @@ const checks = [
   ['urgente ainda entra primeiro automaticamente', store.includes('delivery.is_urgent ? minIndex - 1 : maxIndex + 1')],
   ['lote urgente ainda entra primeiro automaticamente', store.includes('delivery.is_urgent ? -1000000 + position : tail + 1')],
   ['ordem manual usa rota exibida', card.includes('moveDeliveryToIndex(route.id, delivery.id, boundedTarget)')],
-  ['arraste móvel preservado', card.includes('finishReorderDrag') && card.includes('GripVertical')],
+  ['setas móveis preservadas como fallback', card.includes('ArrowUp') && card.includes('ArrowDown') && !card.includes('GripVertical')],
   ['filas virtuais não reordenam', card.includes("route.id !== 'rota-site-aguardando-confirmacao'")],
 ];
 

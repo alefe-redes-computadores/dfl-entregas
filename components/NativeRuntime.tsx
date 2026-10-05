@@ -40,7 +40,8 @@ export function NativeRuntime() {
 
     const rootStyle = document.documentElement.style;
     if (Capacitor.getPlatform() === 'android') {
-      rootStyle.setProperty('--dfl-native-statusbar-fallback', '44px');
+      rootStyle.setProperty('--dfl-native-statusbar-fallback', '48px');
+      document.documentElement.dataset.dflPlatform = 'android';
     }
 
     const removers: Array<() => Promise<void>> = [];
@@ -125,6 +126,7 @@ export function NativeRuntime() {
       document.documentElement.style.removeProperty(
         '--dfl-native-statusbar-fallback',
       );
+      delete document.documentElement.dataset.dflPlatform;
       removers.forEach((remove) => {
         void remove();
       });

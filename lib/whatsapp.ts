@@ -132,7 +132,7 @@ export async function copyDeliveryToClipboard(
       }
     }
 
-    if (delivery.drinks) parts.push(`🥤 *Bebida:* ${delivery.drinks.trim()}`);
+    if (delivery.drinks) parts.push(`🥤 *Bebida:* *${delivery.drinks.trim()}*`);
     parts.push('');
 
     if (delivery.maps_link) {
@@ -475,7 +475,7 @@ export async function generateRouteMessages(
         .map((candidate) => candidate.drinks?.trim())
         .filter(Boolean)
         .join(' + ');
-      const drinkInfo = groupDrinks ? ` · 🥤 ${groupDrinks}` : '';
+      const drinkInfo = groupDrinks ? ` · 🥤 *${groupDrinks}*` : '';
       const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` · 📲 contato` : '';
       const needsCode = groupedDeliveries.some((candidate) => {
         if (candidate.origin !== 'ifood') return false;
@@ -496,8 +496,8 @@ export async function generateRouteMessages(
           const candidateName=candidateCustomer?.name||candidate.customer_name||'Cliente';
           const shortId=candidate.order_id?`#${candidate.order_id}`:'#—';
           const code=(candidate.confirmation_code||candidateCustomer?.last_confirmation_code||'').replace(/\D/g,'').slice(0,4);
-          const codeInfo=candidate.origin==='ifood'?(code?` · 🔑 ${code}`:' · 🔑 pedir código'):'';
-          const candidateDrinks=candidate.drinks?.trim()?` · 🥤 ${candidate.drinks.trim()}`:'';
+          const codeInfo=candidate.origin==='ifood'?(code?` · 🔑 *${code}*`:' · 🔑 *pedir código*'):'';
+          const candidateDrinks=candidate.drinks?.trim()?` · 🥤 *${candidate.drinks.trim()}*`:'';
           msg2.push(`   ↳ ${candidateName} · ${shortId}${candidateDrinks}${codeInfo}`);
         });
       }else{
@@ -520,7 +520,7 @@ export async function generateRouteMessages(
 
     msg2.push(`💳 *MAQUININHA*`);
     if (stopsNeedingPosMachine.length > 0) {
-      msg2.push(`⚠️ *Levar maquininha*`);
+      msg2.push(`⚠️ *LEVAR MAQUININHA*`);
       msg2.push(`Cobrança nas paradas: ${stopsNeedingPosMachine.map(getNumberEmoji).join(', ')}`);
     } else {
       msg2.push(`Não precisa levar nesta rota.`);
@@ -530,7 +530,7 @@ export async function generateRouteMessages(
     // LISTA ORGANIZADA DE CÓDIGOS NO FINAL
     if (stopsNeedingCode.length > 0) {
       msg2.push(`🔐 *Códigos iFood*`);
-      msg2.push(`Pegar com o cliente:`);
+      msg2.push(`*Pegar com o cliente:*`);
       stopsNeedingCode.forEach((stop) => {
         const duplicateNeighborhood = neighborhoodCounts[stop.neighborhood] > 1;
         msg2.push(`• ${stop.num}. *${stop.neighborhood}*${duplicateNeighborhood ? ` (${stop.street})` : ''}`);

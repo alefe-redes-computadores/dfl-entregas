@@ -127,6 +127,7 @@ export default function ConfirmacoesPage() {
   const [manualView, setManualView] = useState<'pending' | 'resolved'>('pending');
   const [pendingDeleteManual, setPendingDeleteManual] = useState<IfoodPendingConfirmation | null>(null);
   const [deletingManual, setDeletingManual] = useState(false);
+  const [manualBusyIds, setManualBusyIds] = useState<Set<string>>(() => new Set());
   const [selectedDateKey, setSelectedDateKey] = useState(() => initialDateKey);
   const selectedDate = dateFromKey(selectedDateKey);
   const selectedDateLabel =
@@ -343,26 +344,38 @@ export default function ConfirmacoesPage() {
   const CODE_REVIEW_MARKER='[iFood] Último código informado não funcionou. Conferir novamente com o cliente.';
 
   const markManualResolved = async (item: IfoodPendingConfirmation) => {
+    if (manualBusyIds.has(item.id)) return;
+    setManualBusyIds((current) => new Set(current).add(item.id));
     try {
       await vibrate(ImpactStyle.Medium);
       const delivery=item.delivery_id?deliveries.find((current)=>current.id===item.delivery_id):undefined;
       const customer=delivery?.customer_id?customers.find((current)=>current.id===delivery.customer_id):undefined;
       const code=(item.confirmation_code||delivery?.confirmation_code||'').replace(/\D/g,'').slice(0,4);
+      const resolvedAt = new Date().toISOString();
+      const writes: Promise<unknown>[] = [
+        updateIfoodPendingConfirmation(item.id, {
+          status: 'resolved',
+          resolved_at: resolvedAt,
+          note:'Confirmado externamente no iFood.',
+        }),
+      ];
       if(customer&&code.length===4){
         const cleanObservation=(customer.observation||'').replace(CODE_REVIEW_MARKER,'').replace(/\s{2,}/g,' ').trim();
-        await updateCustomer(customer.id,{
+        writes.push(updateCustomer(customer.id,{
           last_confirmation_code:code,
           observation:cleanObservation||undefined,
-        });
+        }));
       }
-      await updateIfoodPendingConfirmation(item.id, {
-        status: 'resolved',
-        resolved_at: new Date().toISOString(),
-        note:'Confirmado externamente no iFood.',
-      });
+      await Promise.all(writes);
       toast.success('Confirmado no iFood.',{description:code.length===4?'Código validado e mantido como referência do cliente.':undefined});
     } catch {
       toast.error('Não foi possível concluir a pendência.');
+    } finally {
+      setManualBusyIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
     }
   };
 
@@ -1006,8 +1019,9 @@ export default function ConfirmacoesPage() {
 
                       <button
                         type="button"
+                        disabled={manualBusyIds.has(item.id)}
                         onClick={() => markManualResolved(item)}
-                        className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 active:scale-95"
+                        className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 active:scale-95 disabled:cursor-wait disabled:opacity-40"
                         aria-label="Marcar como confirmado no iFood"
                         title="Marcar como confirmado no iFood"
                       >

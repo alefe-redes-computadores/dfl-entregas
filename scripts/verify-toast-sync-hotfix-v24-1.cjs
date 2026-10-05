@@ -17,7 +17,14 @@ ok(
   css.includes('[data-sonner-toaster]'),
   'toast respeita barra do Android com fallback real'
 );
-ok(native.includes("setProperty('--dfl-native-statusbar-fallback', '44px')"), 'APK injeta piso real para Status Bar edge-to-edge');
+ok(
+  native.includes("Capacitor.getPlatform() === 'android'") &&
+  (
+    native.includes("setProperty('--dfl-native-statusbar-fallback', '44px')") ||
+    native.includes("setProperty('--dfl-native-statusbar-fallback', '48px')")
+  ),
+  'APK injeta piso real para Status Bar edge-to-edge'
+);
 ok(layout.includes('CheckCircle2') && layout.includes('AlertTriangle') && layout.includes('LoaderCircle'), 'toast usa iconografia Lucide');
 ok(layout.includes('visibleToasts={2}') && css.includes('.dfl-toast-close'), 'pilha e fechamento compactos');
 ok(toast.includes('Haptics.notification') && toast.includes('Capacitor.isNativePlatform'), 'feedback tatil somente no APK');

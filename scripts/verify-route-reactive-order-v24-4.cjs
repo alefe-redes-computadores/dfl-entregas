@@ -11,8 +11,9 @@ const store = read('store/useAppStore.ts');
 const stops = read('lib/route-stops.ts');
 
 ok(
-  route.includes("const deliveryState = useAppStore((state) => state.deliveries);"),
-  'RouteAccordion assina a coleção de deliveries diretamente'
+  route.includes("const deliveryState = useAppStore((state) => state.deliveries);") ||
+  route.includes("const routeDeliveryRevision = useAppStore"),
+  'RouteAccordion observa mudanças operacionais das deliveries'
 );
 
 ok(
@@ -22,7 +23,7 @@ ok(
 
 ok(
   route.includes("const deliveries = useMemo(") &&
-  route.includes("deliveryState,") &&
+  (route.includes("deliveryState,") || route.includes("routeDeliveryRevision,")) &&
   route.includes("selectedDate,") &&
   route.includes("allRoutes,"),
   'lista da rota é recalculada quando o estado operacional muda'

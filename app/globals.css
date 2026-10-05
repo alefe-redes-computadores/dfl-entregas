@@ -312,3 +312,12 @@ h1, h2, h3, h4, h5, h6 {
 [data-sonner-toaster][data-y-position="top"] [data-sonner-toast] {
   pointer-events: auto;
 }
+
+
+/* DFL V24.5 — TOAST ANDROID: CSS É A AUTORIDADE FINAL */
+html[data-dfl-platform="android"] [data-sonner-toaster].dfl-toaster[data-y-position="top"] {
+  top: calc(var(--dfl-native-statusbar-fallback, 48px) + 10px) !important;
+}
+html[data-dfl-platform="android"] [data-sonner-toaster].dfl-toaster[data-y-position="top"] [data-sonner-toast] {
+  margin-top: 0 !important;
+}

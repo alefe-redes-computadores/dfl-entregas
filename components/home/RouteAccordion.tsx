@@ -95,10 +95,22 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [lastAppliedOrder, setLastAppliedOrder] = useState<string[] | null>(null);
 
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
-  // Assinar somente a função getDeliveriesByRoute não reage a mudanças
-  // em state.deliveries. A rota precisa observar a coleção real para
-  // redesenhar imediatamente após reorder/drag/otimização.
-  const deliveryState = useAppStore((state) => state.deliveries);
+  // Reage a mutações operacionais reais sem acordar a rota inteira
+  // quando apenas o estado transitório is_expanded muda.
+  const routeDeliveryRevision = useAppStore((state) =>
+    state.deliveries
+      .filter((item) => item.route_id === route.id)
+      .map((item) =>
+        [
+          item.id,
+          item.updated_at || item.created_at || item.createdAt || '',
+          item.order_index ?? '',
+          item.completed ? 1 : 0,
+          item.route_id,
+        ].join(':'),
+      )
+      .join('|'),
+  );
   const selectedDate = useAppStore((state) => state.selectedDate);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const closeRoute = useAppStore((state) => state.closeRoute);
@@ -125,7 +137,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     [
       getDeliveriesByRoute,
       route.id,
-      deliveryState,
+      routeDeliveryRevision,
       selectedDate,
       allRoutes,
     ],
