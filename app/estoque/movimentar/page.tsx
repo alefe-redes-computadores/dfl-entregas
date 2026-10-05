@@ -50,6 +50,12 @@ import {
 
 import { useAppStore } from '@/store/useAppStore';
 import { notifyStockThresholdChanges } from '@/lib/native/notifications';
+import {
+  clampStockExit,
+  roundStockQuantity,
+  stockExitExceeds,
+  stockQuantityTolerance,
+} from '@/lib/stock-precision';
 
 import type {
   StockMovementType,
@@ -128,7 +134,15 @@ function Content() {
   const [quantity, setQuantity] = useState('');
 
   const [presentationId, setPresentationId] = useState('base');
-  const presentations = (product?.presentations || []).filter((item) => item.active && Number(item.conversion_quantity) > 0);
+  const operationalPresentations = product?.unit === 'kg'
+    ? [{ id: '__input-g', label: 'Digitar em gramas', purchase_unit: 'g' as const, conversion_quantity: 0.001, active: true }]
+    : product?.unit === 'l'
+      ? [{ id: '__input-ml', label: 'Digitar em ml', purchase_unit: 'ml' as const, conversion_quantity: 0.001, active: true }]
+      : [];
+  const presentations = [
+    ...operationalPresentations,
+    ...(product?.presentations || []).filter((item) => item.active && Number(item.conversion_quantity) > 0),
+  ];
   const selectedPresentation = presentations.find((item) => item.id === presentationId);
   const conversion = selectedPresentation ? Number(selectedPresentation.conversion_quantity) : 1;
 
@@ -191,20 +205,23 @@ function Content() {
     type === 'saida' ||
     type === 'perda';
 
-  const baseTyped = Number((typed * conversion).toFixed(4));
-  const amount = canUseRemaining && mode === 'remaining'
-    ? Number(Math.max(0, product.current_quantity - baseTyped).toFixed(4))
+  const baseTyped = roundStockQuantity(typed * conversion);
+  const rawAmount = canUseRemaining && mode === 'remaining'
+    ? roundStockQuantity(product.current_quantity - baseTyped)
     : baseTyped;
 
-  const resultingBalance =
+  const amount =
+    type === 'saida' || type === 'perda'
+      ? clampStockExit(rawAmount, product.current_quantity, product.unit)
+      : rawAmount;
+
+  const resultingBalance = roundStockQuantity(
     type === 'entrada'
-      ? product.current_quantity +
-        amount
-      : type === 'saida' ||
-          type === 'perda'
-        ? product.current_quantity -
-          amount
-        : amount;
+      ? product.current_quantity + amount
+      : type === 'saida' || type === 'perda'
+        ? product.current_quantity - amount
+        : amount,
+  );
 
   const allowsZero =
     type === 'contagem' ||
@@ -213,14 +230,17 @@ function Content() {
   const remainingInvalid =
     canUseRemaining &&
     mode === 'remaining' &&
-    (typed < 0 ||
-      typed >
-        product.current_quantity);
+    (
+      typed < 0 ||
+      baseTyped < 0 ||
+      baseTyped - product.current_quantity >
+        stockQuantityTolerance(product.unit)
+    );
 
   const insufficientStock =
     (type === 'saida' || type === 'perda') &&
     mode === 'moved' &&
-    amount > product.current_quantity;
+    stockExitExceeds(rawAmount, product.current_quantity, product.unit);
 
   const pendingSupply = stockSupplies.find((supply) =>
     !supply.stock_integrated_at &&
@@ -237,16 +257,12 @@ function Content() {
     !Number.isFinite(typed) ||
     typed < 0 ||
     remainingInvalid ||
-    (!allowsZero &&
+    (
       mode === 'moved' &&
-      amount <= 0) ||
-    (canUseRemaining &&
-      mode === 'remaining' &&
-      amount <= 0) ||
-    ((type === 'saida' ||
-      type === 'perda') &&
-      amount >
-        product.current_quantity);
+      !allowsZero &&
+      amount <= 0
+    ) ||
+    insufficientStock;
 
   const submit = async (
     event: React.FormEvent,
@@ -301,7 +317,7 @@ function Content() {
           (canUseRemaining &&
           mode === 'remaining'
             ? `Saldo informado: ${formatStockQuantity(
-                typed,
+                baseTyped,
                 product.unit,
               )}${
                 reason.trim()
@@ -316,7 +332,7 @@ function Content() {
 
         team_member_name: memberName || useAppStore.getState().user?.displayName || undefined,
         team_member_photo_url: useAppStore.getState().user?.photoURL || undefined,
-        presentation_id: selectedPresentation?.id,
+        presentation_id: selectedPresentation?.id?.startsWith('__input-') ? undefined : selectedPresentation?.id,
         presentation_label: selectedPresentation?.label,
         presentation_quantity: typed,
         presentation_unit: selectedPresentation?.purchase_unit || product.unit,

@@ -34,7 +34,7 @@ export const INITIAL_STOCK_PRODUCTS: StockProduct[] = [
   product('ketchup-sache','Ketchup sachê','Molhos','un','package-open','orange',[p('cx-156','Caixa com 156',156,'cx')]),
   product('maionese-sache','Maionese sachê','Molhos','un','package-open','orange',[p('cx-156','Caixa com 156',156,'cx')]),
   product('milho-verde','Milho-verde','Mercearia','kg','wheat','yellow',[p('lata-170g','Lata 170 g',0.17),p('lata-1-7kg','Lata 1,7 kg',1.7)]),
-  product('batata-palha','Batata palha','Mercearia','kg','wheat','yellow',[p('pct-100g','Pacote 100 g',0.1,'pct'),p('pct-300g','Pacote 300 g',0.3,'pct'),p('pct-800g','Pacote 800 g',0.8,'pct'),p('pct-1kg','Pacote 1 kg',1,'pct')]),
+  product('batata-palha','Batata palha','Mercearia','kg','wheat','yellow',[p('pct-100g','Pacote 100 g',0.1,'pct'),p('pct-300g','Pacote 300 g',0.3,'pct'),p('pct-400g','Pacote 400 g',0.4,'pct'),p('pct-800g','Pacote 800 g',0.8,'pct'),p('pct-1kg','Pacote 1 kg',1,'pct')]),
   product('tomate','Tomate','Hortifrúti','kg','salad','emerald',[p('peso','Peso fracionado',1,'kg')]),
   product('alface','Alface','Hortifrúti','un','leafy-green','emerald',[p('un','Unidade',1)]),
   product('cebolinha','Cebolinha','Hortifrúti','un','sprout','emerald',[p('maco','Maço',1)]),

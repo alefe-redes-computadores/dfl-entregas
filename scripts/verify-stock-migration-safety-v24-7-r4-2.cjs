@@ -1,0 +1,15 @@
+const fs=require('fs');
+const s=fs.readFileSync('scripts/stock-canonicalization-v24-7.cjs','utf8');
+const ok=(v,m)=>{if(!v)throw Error('V24.7 R4.2.3: '+m);console.log('OK:',m)};
+ok(s.includes('V24.7-R4.2 MIGRATION SAFETY GATE'),'safety gate instalado');
+ok(s.includes("rename criaria duplicado histórico indistinguível"),'rename conflitante vai para review');
+ok(s.includes("sc=(linked.get(p.id)||[]).length"),'delete audita stock_supplies');
+ok(s.includes("mc===0&&sc===0&&Math.abs(q)<1e-9"),'delete exige zero movimento + zero supply + saldo zero');
+ok(s.includes('const writeBlockingReview=review.filter'),'denylist é classificada por motivo');
+ok(s.includes("startsWith('unidade histórica ambígua')"),'unidade ambígua bloqueia escrita');
+ok(s.includes("startsWith('rename criaria duplicado histórico indistinguível')"),'rename conflitante bloqueia escrita');
+ok(s.includes('const writablePlan=plan.filter(op=>!reviewIds.has(op.id))'),'plano gravável exclui somente safety review');
+ok(s.includes('for(const op of writablePlan)'),'merge usa plano gravável');
+ok(s.includes("version:'V24.7-R4.2'"),'relatório R4.2');
+ok(s.includes("canonicalization_version:'v24.7-r4.2'"),'apply R4.2');
+console.log('\nV24.7 R4.2.3 SAFETY GATE: CONTRATOS OK');

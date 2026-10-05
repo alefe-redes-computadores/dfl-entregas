@@ -1,0 +1,14 @@
+const fs=require('fs');
+const s=fs.readFileSync('scripts/stock-canonicalization-v24-7.cjs','utf8');
+const ok=(v,m)=>{if(!v)throw new Error('V24.7 R4.1: '+m);console.log('OK:',m)};
+ok(s.includes('V24.7-R4.1 PRESENTATION EQUIVALENCE'),'helper R4.1 instalado');
+ok(s.includes('presentationSemanticKey'),'chave semântica instalada');
+ok(s.includes("return 'fardo:'"),'fardos equivalentes reconhecidos');
+ok(s.includes("return 'peso:300g'"),'300g equivalente reconhecido');
+ok(s.includes('samePresentation(x,desired)'),'planner usa equivalência semântica');
+ok(s.includes('arr[idx]={...x,label,conversion_quantity:conv,purchase_unit:pu,active:true}'),'corrige apresentação existente preservando ID');
+ok(!s.includes('arr[idx]={...x,id,label,conversion_quantity:conv,purchase_unit:pu,active:true}'),'não substitui ID histórico ao corrigir');
+ok(s.includes('assertPresentationConsistency(p.name,arr)'),'conflitos são validados');
+ok(s.includes("version:'V24.7-R4.1'")||s.includes("version:'V24.7-R4.2'"),'relatório identifica R4.1 ou sucessora R4.2');
+ok(s.includes("canonicalization_version:'v24.7-r4.1'")||s.includes("canonicalization_version:'v24.7-r4.2'"),'apply marca R4.1 ou sucessora R4.2');
+console.log('\nV24.7 R4.1 PRESENTATION EQUIVALENCE: CONTRATOS OK');

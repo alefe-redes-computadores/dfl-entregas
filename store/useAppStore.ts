@@ -46,6 +46,11 @@ import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
 import { markUnreadSiteOrders } from '@/lib/site-order-inbox';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 import { kickSiteRoute } from '@/lib/integration/client/routeKick';
+import {
+  clampStockExit,
+  roundStockQuantity,
+  stockExitExceeds,
+} from '@/lib/stock-precision';
 
 
 async function autoOrganizeLoadedRouteAfterInsert(
@@ -730,6 +735,57 @@ export const useAppStore = create<AppState>()(
             });
           }
 
+          // V24.6: completa apenas apresentações canônicas ausentes.
+          // Nunca apaga/reescreve opções personalizadas nem altera saldo/histórico.
+          const normalizeCatalogKey = (value: string) =>
+            value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g, ' ').trim();
+
+          const canonicalById = new Map(INITIAL_STOCK_PRODUCTS.map((item) => [item.id, item]));
+          const canonicalByName = new Map(INITIAL_STOCK_PRODUCTS.map((item) => [normalizeCatalogKey(item.name), item]));
+
+          const presentationMigrations = mergedStockProducts
+            .map((product) => {
+              const canonical = canonicalById.get(product.id) || canonicalByName.get(normalizeCatalogKey(product.name));
+              if (!canonical?.presentations?.length) return null;
+              // V24.7: conversões são expressas na unidade-base do produto.
+              // Nunca injete apresentação de um catálogo canônico com unidade diferente
+              // em um cadastro legado (ex.: 0,4 kg não pode virar 0,4 g).
+              if (canonical.unit !== product.unit) return null;
+              const existing = [...(product.presentations || [])];
+              let changed = false;
+              for (const item of canonical.presentations) {
+                const equivalent = existing.some((current) =>
+                  current.id === item.id ||
+                  (
+                    current.purchase_unit === item.purchase_unit &&
+                    Math.abs(Number(current.conversion_quantity) - Number(item.conversion_quantity)) < 1e-7
+                  )
+                );
+                if (!equivalent) {
+                  existing.push({ ...item });
+                  changed = true;
+                }
+              }
+              return changed ? { product, presentations: existing } : null;
+            })
+            .filter((item): item is { product: StockProduct; presentations: NonNullable<StockProduct['presentations']> } => Boolean(item));
+
+          if (presentationMigrations.length) {
+            const presentationBatch = writeBatch(db);
+            const migratedAt = new Date().toISOString();
+            presentationMigrations.forEach(({ product, presentations }) => {
+              product.presentations = presentations;
+              product.updated_at = migratedAt;
+              presentationBatch.update(
+                doc(db, 'stock_products', product.id),
+                sanitizeForFirebase({ presentations, updated_at: migratedAt }),
+              );
+            });
+            void presentationBatch.commit().catch((error) => {
+              console.error('Falha ao padronizar apresentações comerciais do estoque:', error);
+            });
+          }
+
           const mergedStockMovements = mergeById(fbStockMovements, get().stockMovements).sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
 
           const mergedPendingConfirmations = [...fbPendingConfirmations];
@@ -1354,23 +1410,29 @@ export const useAppStore = create<AppState>()(
       addStockMovement: async (movement) => {
         const product = get().stockProducts.find((item) => item.id === movement.product_id);
         if (!product) throw new Error('Produto de estoque não encontrado.');
-        const before = product.current_quantity;
-        if ((movement.type === 'saida' || movement.type === 'perda') && movement.quantity > before) {
+        const before = roundStockQuantity(product.current_quantity);
+        const isExit = movement.type === 'saida' || movement.type === 'perda';
+        if (isExit && stockExitExceeds(movement.quantity, before, product.unit)) {
           throw new Error(`Saldo insuficiente. Disponível: ${before.toLocaleString('pt-BR')} ${product.unit}.`);
         }
-        const after = movement.type === 'contagem' || movement.type === 'ajuste'
-          ? movement.quantity
-          : movement.type === 'entrada'
-            ? before + movement.quantity
-            : before - movement.quantity;
+        const effectiveQuantity = isExit
+          ? clampStockExit(movement.quantity, before, product.unit)
+          : roundStockQuantity(movement.quantity);
+        const after = roundStockQuantity(
+          movement.type === 'contagem' || movement.type === 'ajuste'
+            ? effectiveQuantity
+            : movement.type === 'entrada'
+              ? before + effectiveQuantity
+              : before - effectiveQuantity,
+        );
         const createdAt = new Date().toISOString();
-        const record: StockMovement = { ...movement, balance_before: before, balance_after: after, created_at: createdAt };
+        const record: StockMovement = { ...movement, quantity: effectiveQuantity, balance_before: before, balance_after: after, created_at: createdAt };
         const previousProducts = get().stockProducts;
         const previousMovements = get().stockMovements;
         const productPatch: Partial<StockProduct> = {
           current_quantity: after,
           average_cost: movement.type === 'entrada' && movement.unit_cost
-            ? Number((((before * (product.average_cost || 0)) + (movement.quantity * movement.unit_cost)) / Math.max(after, movement.quantity)).toFixed(4))
+            ? Number((((before * (product.average_cost || 0)) + (effectiveQuantity * movement.unit_cost)) / Math.max(after, effectiveQuantity)).toFixed(4))
             : product.average_cost,
           last_counted_at: movement.type === 'contagem' ? movement.occurred_at : product.last_counted_at,
           updated_at: createdAt,

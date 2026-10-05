@@ -1,0 +1,10 @@
+const fs=require('fs'); const r=p=>fs.readFileSync(p,'utf8'); const ok=(v,m)=>{if(!v)throw Error('V24.7: '+m);console.log('OK:',m)};
+const store=r('store/useAppStore.ts'),mig=r('scripts/stock-canonicalization-v24-7.cjs');
+ok(store.includes('canonical.unit !== product.unit'),'autoapresentação bloqueia unidade-base incompatível');
+ok(mig.includes("DRY-RUN: nenhuma escrita realizada"),'migrador é dry-run por padrão');
+ok(mig.includes("/esponja.*louca/i")&&mig.includes("factor=4"),'esponja possui transformação matemática explícita');
+ok(mig.includes('unidade histórica ambígua')&&mig.includes('file.*frango')&&mig.includes('/ovos/i'),'casos ambíguos ficam fora da escrita automática');
+ok(mig.includes("mc===0&&sc===0&&Math.abs(q)<1e-9"),'duplicado só é apagável sem saldo, sem histórico e sem vínculo de compra');
+ok(mig.includes('v24-7-firestore-'),'apply cria snapshot Firestore antes das escritas');
+ok(mig.includes("writes>=400"),'escritas respeitam lotes seguros');
+console.log('\nV24.7 R2 STOCK CANONICALIZATION: CONTRATOS OK');

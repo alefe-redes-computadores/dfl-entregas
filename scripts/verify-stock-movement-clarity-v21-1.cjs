@@ -18,7 +18,7 @@ check('prévia duplicada foi removida', !source.includes('Prévia: <b'));
 check('resultado possui título semântico', source.includes('Saldo após esta movimentação'));
 check('campo acompanha apresentação escolhida', source.includes('Quantidade de ${quantityLabel(selectedPresentation.purchase_unit)}'));
 check('saldo insuficiente aparece durante digitação', source.includes('quantity.trim() && insufficientStock'));
-check('saída maior permanece bloqueada', source.includes('amount >\n        product.current_quantity'));
+check('saída maior permanece bloqueada', source.includes('stockExitExceeds(rawAmount, product.current_quantity, product.unit)'));
 check('compra pendente é vinculada pelo produto', source.includes('item.stock_product_id === product.id'));
 check('ação abre a compra exata', source.includes('/abastecimentos/detalhes?id=${pendingSupply.id}'));
 check('mercadoria pendente não é somada ao saldo', source.includes('ainda não lançada'));
