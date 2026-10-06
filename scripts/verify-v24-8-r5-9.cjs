@@ -1,0 +1,10 @@
+const fs=require("fs");
+const ok=(v,m)=>{if(!v)throw Error("R5.9: "+m);console.log("OK:",m)};
+const d=fs.readFileSync("app/estoque/detalhes/page.tsx","utf8");
+const l=fs.readFileSync("app/estoque/page.tsx","utf8");
+const f=fs.readFileSync("components/stock-supplies/StockSupplyForm.tsx","utf8");
+ok(d.includes("StockSemanticReviewNotice")&&d.includes("data-r59-semantic-details"),"detalhes integra explicação semântica");
+if(l.includes("StockSemanticReviewNotice")) ok(l.includes("compact"),"lista usa estado compacto");
+ok(!f.includes("StockSemanticReviewNotice"),"compra permanece sem poluição visual");
+ok(!d.includes("0 dias")&&!l.includes("data-r59-semantic-list>0 dias"),"estado semântico não inventa zero dias");
+ok(fs.existsSync("lib/stock-semantic-confidence-v24-8.ts"),"guard R5.7 preservado");

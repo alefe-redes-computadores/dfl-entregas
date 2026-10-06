@@ -1,0 +1,12 @@
+const fs=require('fs');
+const ok=(v,m)=>{if(!v)throw new Error('V24.8 R4A: '+m);console.log('OK:',m)};
+const radar=fs.readFileSync('components/home/OperationalRadar.tsx','utf8');
+const cats=fs.readFileSync('lib/stock-categories.ts','utf8');
+const picker=fs.readFileSync('components/stock/StockCategoryPicker.tsx','utf8');
+ok(/chooseHomeSignal|visibleHighlights/.test(radar),'Home mantém seleção de sinal em vez de despejar todos os insights');
+ok(/StockCategoryIcon|stockCategoryIconKey/.test(picker+cats),'ícones de estoque permanecem centralizados');
+ok(/embalagens/i.test(cats),'categoria Embalagens possui tratamento central');
+ok(/limpeza/i.test(cats),'categoria Limpeza possui tratamento central');
+const report=fs.readFileSync('lib/reports/buildReportModel.ts','utf8');
+ok(/motoboy/i.test(report),'modelo central de relatórios localizado');
+console.log('\nV24.8 R4A CONTRATOS OK');

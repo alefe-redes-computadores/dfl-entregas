@@ -1,0 +1,17 @@
+const fs=require('fs');
+const editor=fs.readFileSync('components/stock/StockPresentationEditor.tsx','utf8');
+const page=fs.readFileSync('app/estoque/page.tsx','utf8');
+const cats=fs.readFileSync('lib/stock-categories.ts','utf8');
+const ok=(v,m)=>{if(!v)throw new Error(`V24.8 R4C: ${m}`);console.log('OK:',m)};
+ok(editor.includes('function PremiumUnitPicker'),'seletor premium DFL existe');
+ok(!editor.includes('<select'),'editor não usa select nativo Android');
+ok(editor.includes('role="listbox"')&&editor.includes('role="option"'),'seletor premium possui semântica acessível');
+ok(editor.includes('LockKeyhole')&&editor.includes('Unidade física controlada'),'unidade física permanece travada e explicada');
+ok(editor.includes("'Ativa':'Pausada'")&&editor.includes("'Pausar':'Ativar'"),'estado da forma de compra é visual');
+ok(editor.includes('Como o app vai entender'),'prévia semântica foi preservada');
+ok(editor.includes('PLURAL_LABELS:Partial<Record<StockSupplyUnit,string>>'),'plural possui tipagem segura');
+ok(page.includes('stockCategoryVisualClasses'),'estoque usa identidade visual canônica');
+ok(!page.includes('categoryToneClasses('),'mapa visual duplicado foi removido da página');
+ok(cats.includes("if (value === 'Embalagens') return 'teal'"),'Embalagens usa identidade teal');
+ok(cats.includes("if (value === 'Limpeza e higiene') return 'sky'"),'Limpeza e higiene usa identidade sky');
+console.log('\n============================================================\n V24.8 R4C VISUAL — CONTRATOS OK\n============================================================');

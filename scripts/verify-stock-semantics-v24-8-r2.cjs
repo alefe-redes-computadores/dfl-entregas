@@ -1,0 +1,14 @@
+'use strict';
+const fs=require('fs'),read=p=>fs.readFileSync(p,'utf8'),ok=(v,m)=>{if(!v)throw new Error(`V24.8 R2: ${m}`);console.log('OK:',m)};
+const a=read('scripts/audit-stock-semantics-v24-8-r2.cjs');
+const e=read('components/stock/StockPresentationEditor.tsx');
+const c=read('components/stock/StockCategoryPicker.tsx');
+ok(a.includes("mode:'READ_ONLY'"),'tomografia global somente leitura');
+ok(!/\b(updateDoc|deleteDoc|setDoc|writeBatch)\b/.test(a),'sem primitivas de escrita');
+ok(a.includes("pack=new Set(['pct','cx','fardo'])"),'embalagens comerciais entram na triagem');
+ok(a.includes("score+=2;reasons.push('base_em_embalagem_comercial')"),'embalagem isolada tem peso baixo, não condenação');
+ok(a.includes('brain_guard_recommended'),'auditoria marca onde inteligência deve ser protegida');
+ok(a.includes('Nenhum fator físico é inferido automaticamente'),'não inventa conversão');
+ok(e.includes('purchase_unit')&&e.includes('conversion_quantity')&&e.includes('baseUnit'),'editor atual mistura embalagem, fator e unidade-base');
+ok(c.includes('StockCategoryIcon'),'ícones possuem autoridade central para futura padronização');
+console.log('\nV24.8 R2 SEMÂNTICA GLOBAL — CONTRATOS OK');

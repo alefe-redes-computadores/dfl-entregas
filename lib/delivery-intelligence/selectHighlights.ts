@@ -30,8 +30,18 @@ function insightFamily(insight: OperationalInsight): string {
   }
 
   if (insight.category === 'data-quality') {
+    if (insight.id.includes('quality-good') || insight.id.includes('coverage')) {
+      return 'quality-coverage';
+    }
     return `quality:${insight.id}`;
   }
+
+  if (insight.category === 'stock' && insight.id.includes('coverage')) {
+    return 'stock-coverage';
+  }
+
+  if (insight.category === 'demand') return 'demand';
+  if (insight.category === 'geography') return 'geography';
 
   return insight.id;
 }
@@ -109,16 +119,39 @@ export function selectOperationalHighlights(
 
   const selected: OperationalInsight[] = [];
   const families = new Set<string>();
+  const categories = new Map<string, number>();
 
   for (const insight of eligible) {
     const family = insightFamily(insight);
-
     if (families.has(family)) continue;
 
+    const categoryCount = categories.get(insight.category) ?? 0;
+
+    /*
+     * Na primeira passada, no máximo um destaque por categoria.
+     * Warning pode furar a regra: segurança operacional tem prioridade.
+     */
+    if (categoryCount > 0 && insight.severity !== 'warning') continue;
+
     families.add(family);
+    categories.set(insight.category, categoryCount + 1);
     selected.push(insight);
 
     if (selected.length >= limit) break;
+  }
+
+  /*
+   * Se a diversidade deixou vagas, completa com o melhor restante sem
+   * repetir família. Assim o limite continua útil em amostras pequenas.
+   */
+  if (selected.length < limit) {
+    for (const insight of eligible) {
+      const family = insightFamily(insight);
+      if (families.has(family)) continue;
+      families.add(family);
+      selected.push(insight);
+      if (selected.length >= limit) break;
+    }
   }
 
   return selected;

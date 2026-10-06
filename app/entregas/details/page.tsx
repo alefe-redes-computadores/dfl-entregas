@@ -254,6 +254,13 @@ function DeliveryDetailsContent() {
             ? 'Pedido de balcão concluído.'
             : 'Entrega concluída com sucesso.',
       );
+
+      // V25.2: atendimentos sem logística não pertencem ao ciclo de uma rota.
+      // Após a baixa persistida, devolvemos o operador à lista do mesmo dia em
+      // vez de deixar a ficha dependente da reconciliação visual do registro.
+      if (!logistics) {
+        router.replace(deliveriesReturn);
+      }
     } catch {
       await vibrate(ImpactStyle.Heavy);
       toast.error('Não foi possível concluir o pedido.', {

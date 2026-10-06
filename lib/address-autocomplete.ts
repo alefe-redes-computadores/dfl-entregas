@@ -1,5 +1,6 @@
 // lib/address-autocomplete.ts
 import { normalizeAddressText } from '@/lib/maps';
+import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 
 export interface AddressSuggestion {
   id: string;
@@ -235,6 +236,13 @@ export async function fetchAddressSuggestions(
 
   if (query.length < 3) return [];
 
+  // A API responde melhor quando a cidade/UF fazem parte da intenção textual.
+  // O endereço persistido continua compacto: cidade, UF, Brasil e CEP são
+  // removidos pela autoridade canônica antes de entrar na operação.
+  const localizedQuery = /patos\s+de\s+minas/i.test(query)
+    ? query
+    : `${query}, Patos de Minas, MG`;
+
   const cacheKey = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
   const cached = suggestionCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.items;
@@ -243,7 +251,7 @@ export async function fetchAddressSuggestions(
   activeController = new AbortController();
 
   const params = new URLSearchParams({
-    text: query,
+    text: localizedQuery,
     apiKey: getApiKey(),
     format: 'geojson',
     lang: 'pt',
@@ -339,10 +347,13 @@ export async function resolveAddressSuggestion(
       ? `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
       : undefined;
 
+  const operationalAddress = canonicalizeOperationalAddress(
+    address || props.formatted || suggestion.label,
+    neighborhood,
+  ).address;
+
   return {
-    address:
-      address ||
-      normalizeAddressText(suggestion.label),
+    address: operationalAddress,
     formattedAddress:
       props.formatted ||
       suggestion.label,

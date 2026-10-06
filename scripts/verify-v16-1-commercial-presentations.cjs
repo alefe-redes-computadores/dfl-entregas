@@ -9,7 +9,13 @@ const checks=[
  ['editor compartilhado preservado no Novo',novo.includes('StockPresentationEditor')],
  ['editor compartilhado preservado no Editar',editar.includes('StockPresentationEditor')],
  ['edição recebe apresentações existentes',editar.includes('product?.presentations||[]')],
- ['apresentações existentes não são migradas automaticamente',!editor.includes('useEffect(')],
+ ['apresentações existentes não são migradas automaticamente',
+   !editor.includes('useAppStore') &&
+   !editor.includes('updateStockProduct') &&
+   !editor.includes('setStockProducts') &&
+   !editor.includes('firebase') &&
+   !editor.includes('firestore')
+ ],
  ['forma comercial continua independente',editor.includes('purchase_unit')],
  ['conversão continua na unidade histórica',editor.includes('conversion_quantity')],
  ['texto explica cada embalagem',editor.includes('Cada {singular(item.purchase_unit)} contém')],

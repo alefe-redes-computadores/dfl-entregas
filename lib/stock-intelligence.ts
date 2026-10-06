@@ -1,3 +1,4 @@
+import { shouldSuppressStockConsumptionIntelligence } from "./stock-semantic-confidence-v24-8";
 // lib/stock-intelligence.ts
 import type { StockMovement, StockProduct } from '@/types';
 import { purchaseSuggestion, replenishmentTarget } from '@/lib/stock';
@@ -25,7 +26,7 @@ export interface StockRecommendation {
   observedDays: number;
   confidence: StockRecommendationConfidence;
   usesHistory: boolean;
-  dataQuality: 'ok' | 'sem_consumo' | 'sem_alerta';
+  dataQuality: 'ok' | 'sem_consumo' | 'sem_alerta' | 'revisar_unidade';
   explanation: string;
 }
 
@@ -62,6 +63,26 @@ const isOperationalConsumption = (movement: StockMovement) => {
 
   return movement.quantity > 0;
 };
+
+const PACKAGE_UNITS = new Set(['pct', 'cx', 'fardo']);
+
+function hasSemanticUnitRisk(product: StockProduct): boolean {
+  /*
+   * Heurística conservadora: embalagem como unidade-base NÃO é erro sozinha.
+   * O risco nasce quando uma apresentação ativa declara que outra embalagem
+   * contém várias unidades dessa mesma base. Ex.: caixa -> 156 pacotes.
+   * Nesse cenário o cérebro para de extrapolar consumo até revisão humana.
+   */
+  if (!PACKAGE_UNITS.has(product.unit)) return false;
+
+  return (product.presentations || []).some(
+    (presentation) =>
+      presentation.active &&
+      presentation.purchase_unit !== product.unit &&
+      Number.isFinite(Number(presentation.conversion_quantity)) &&
+      Number(presentation.conversion_quantity) > 1,
+  );
+}
 
 const consumptionMovements = (
   movements: StockMovement[],
@@ -132,12 +153,36 @@ export function buildStockRecommendation(
 
   const minimumReached =
     product.current_quantity <= product.minimum_quantity;
+  const semanticUnitRisk = hasSemanticUnitRisk(product);
   const leadTimeDays = Math.max(
     0,
     Number.isFinite(product.lead_time_days)
       ? Number(product.lead_time_days)
       : DEFAULT_LEAD_TIME_DAYS,
   );
+
+  if (semanticUnitRisk) {
+    return {
+      productId: product.id,
+      configuredQuantity,
+      recommendedQuantity: configuredQuantity,
+      targetQuantity: configuredTarget,
+      averageDailyConsumption: 0,
+      coverageDays: null,
+      daysUntilMinimum: minimumReached ? 0 : null,
+      minimumReached,
+      leadTimeDays,
+      reorderDue: minimumReached,
+      consumptionEvents: events.length,
+      distinctConsumptionDays: 0,
+      observedDays: 0,
+      confidence: 'baixa',
+      usesHistory: false,
+      dataQuality: 'revisar_unidade',
+      explanation:
+        'Consumo aguardando revisão da unidade. O histórico foi preservado, mas a inteligência não extrapola quantidade, custo ou cobertura enquanto unidade-base e apresentação comercial estiverem semanticamente ambíguas.',
+    };
+  }
 
   if (events.length === 0) {
     return {
@@ -344,3 +389,5 @@ export function stockIntelligenceSummary(
     ).length,
   };
 }
+
+export const isStockSemanticIntelligenceBlocked = (productId?: string | null) => shouldSuppressStockConsumptionIntelligence(productId);

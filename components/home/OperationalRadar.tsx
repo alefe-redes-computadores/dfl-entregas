@@ -59,18 +59,35 @@ const meta: Record<
 };
 
 function chooseHomeSignal(insights: OperationalInsight[]): OperationalInsight | null {
-  const actionable = insights.find(
-    (item) => item.severity === 'warning' || item.severity === 'attention',
+  const warning = insights.find((item) => item.severity === 'warning');
+  if (warning) return warning;
+
+  const attention = insights.find(
+    (item) =>
+      item.severity === 'attention' &&
+      item.category !== 'data-quality',
   );
-  if (actionable) return actionable;
+  if (attention) return attention;
+
+  const qualityAttention = insights.find(
+    (item) => item.severity === 'attention',
+  );
+  if (qualityAttention) return qualityAttention;
 
   return (
     insights.find((item) => item.category === 'demand') ??
     insights.find((item) => item.category === 'routes') ??
+    insights.find((item) => item.category === 'geography') ??
     insights.find((item) => item.severity === 'positive') ??
     insights[0] ??
     null
   );
+}
+
+function confidenceLabel(confidence: OperationalInsight['confidence']): string {
+  if (confidence === 'high') return 'confiança alta';
+  if (confidence === 'medium') return 'confiança média';
+  return 'amostra inicial';
 }
 
 export function OperationalRadar() {
@@ -78,7 +95,7 @@ export function OperationalRadar() {
   const intelligence = useDeliveryIntelligence({
     lookbackDays: 30,
     minimumSample: 5,
-    highlightLimit: 3,
+    highlightLimit: 2,
   });
   const routes = useAppStore((state) => state.routes);
   const { hiddenIds, hideForToday } = useHiddenInsightsToday();
@@ -143,7 +160,7 @@ export function OperationalRadar() {
               {signal.summary}
             </p>
             <p className="mt-2 text-[9px] font-bold text-zinc-700">
-              Base: {signal.sampleSize} · abrir leitura completa
+              Base: {signal.sampleSize} · {confidenceLabel(signal.confidence)} · abrir leitura completa
             </p>
           </button>
 

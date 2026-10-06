@@ -105,6 +105,8 @@ export function stockCategoryTone(category?:string):StockCategoryTone{
   if(/horti/.test(value))return'emerald';
   if(/bebida/.test(value))return'violet';
   if(/molho/.test(value))return'lime';
+  if(/embalagem/.test(value))return'cyan';
+  if(/limpeza/.test(value))return'sky';
   if(/gas/.test(value))return'orange';
   return'zinc';
 }

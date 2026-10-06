@@ -512,22 +512,30 @@ export function buildReportModel(input: {
     input.customers.map((customer) => [customer.id, customer]),
   );
 
-  const normalized: ReportDelivery[] = input.deliveries.map((delivery) => {
-    const reportDate = deliveryOperationalTimestamp(delivery);
-    const customer = customerMap.get(delivery.customer_id) ?? null;
+  const normalized: ReportDelivery[] = input.deliveries
+    .map((delivery) => {
+      const reportDate = deliveryOperationalTimestamp(delivery);
+      const customer = customerMap.get(delivery.customer_id) ?? null;
+      const route = routeMap.get(delivery.route_id) ?? null;
 
-    return {
-      ...delivery,
-      reportDate,
-      reportDateKey: reportDate ? saoPauloDateKey(reportDate) : null,
-      reportHour: reportDate ? saoPauloHour(reportDate) : null,
-      route: routeMap.get(delivery.route_id) ?? null,
-      customer,
-      neighborhood: normalizeNeighborhood(customer),
-      originLabel: normalizeOrigin(delivery),
-      paymentLabel: normalizePayment(delivery),
-    };
-  });
+      return {
+        ...delivery,
+        reportDate,
+        reportDateKey: reportDate ? saoPauloDateKey(reportDate) : null,
+        reportHour: reportDate ? saoPauloHour(reportDate) : null,
+        route,
+        customer,
+        neighborhood: normalizeNeighborhood(customer),
+        originLabel: normalizeOrigin(delivery),
+        paymentLabel: normalizePayment(delivery),
+      };
+    })
+    .filter(
+      (delivery) =>
+        !delivery.exclude_customer_metrics &&
+        !isInternalOperationalCustomer(delivery.customer) &&
+        (!delivery.route || !isInternalOperationalRoute(delivery.route)),
+    );
 
   const period = buildPeriod(input.periodKey, normalized);
 
@@ -588,19 +596,11 @@ export function buildReportModel(input: {
 
   const logisticsCurrent = current.filter((delivery) => isDeliveryFulfillment(delivery));
 
-  // Comercial permanece íntegro; apenas os recortes operacionais ignoram
-  // pedidos do perfil interno.
-  const customerOperationalCurrent = logisticsCurrent.filter(
-    (delivery) =>
-      !delivery.exclude_customer_metrics &&
-      !isInternalOperationalCustomer(delivery.customer),
-  );
-
-  const motoboyOperationalCurrent = customerOperationalCurrent.filter(
-    (delivery) =>
-      !delivery.route ||
-      !isInternalOperationalRoute(delivery.route),
-  );
+  // O conjunto `normalized` já remove perfis internos antes de qualquer
+  // agregação. Estes aliases deixam explícito que os recortes abaixo usam
+  // exatamente a mesma população limpa das métricas gerais/financeiras.
+  const customerOperationalCurrent = logisticsCurrent;
+  const motoboyOperationalCurrent = logisticsCurrent;
 
   const neighborhoods = aggregate(
     customerOperationalCurrent,

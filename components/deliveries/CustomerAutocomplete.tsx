@@ -36,26 +36,12 @@ export function CustomerAutocomplete({
     useState(false);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const openTimerRef = useRef<number>();
-  const closeTimerRef = useRef<number>();
-
   const closeSuggestions = () => {
-    window.clearTimeout(openTimerRef.current);
-    window.clearTimeout(closeTimerRef.current);
     setShowSuggestions(false);
   };
 
-  const scheduleSuggestions = () => {
-    window.clearTimeout(openTimerRef.current);
-    window.clearTimeout(closeTimerRef.current);
-    setShowSuggestions(false);
-    openTimerRef.current = window.setTimeout(() => {
-      setShowSuggestions(true);
-      closeTimerRef.current = window.setTimeout(
-        () => setShowSuggestions(false),
-        3_000,
-      );
-    }, 450);
+  const openSuggestions = () => {
+    setShowSuggestions(true);
   };
 
   const suggestions = useMemo(() => {
@@ -143,8 +129,6 @@ export function CustomerAutocomplete({
         'mousedown',
         handleClickOutside,
       );
-      window.clearTimeout(openTimerRef.current);
-      window.clearTimeout(closeTimerRef.current);
     };
   }, []);
 
@@ -175,9 +159,9 @@ export function CustomerAutocomplete({
           value={value}
           onChange={(event) => {
             onChange(event.target.value);
-            scheduleSuggestions();
+            openSuggestions();
           }}
-          onFocus={scheduleSuggestions}
+          onFocus={openSuggestions}
           className="h-14 w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 pl-11 pr-4 text-zinc-100 placeholder:text-zinc-600 transition-colors focus:border-emerald-500 focus:outline-none"
           autoComplete="off"
         />
