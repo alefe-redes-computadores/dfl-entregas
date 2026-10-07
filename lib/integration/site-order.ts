@@ -401,6 +401,16 @@ export function siteOrderItemsFromPayload(value:unknown):import('@/types').SiteO
   selectedAddons,
 }]});
 }
+const siteDrinkCategory=(v:unknown)=>siteText(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()==='bebidas';
+const SITE_DRINK_NAME=/\b(coca(?:-cola)?|guaran[aá]|kuat|fanta|sprite|suco|refrigerante|[aá]gua|schweppes|del\s+valle|pepsi)\b/i;
+export function siteOrderDrinksFromPayload(value:unknown):string{
+ if(!Array.isArray(value))return '';
+ const drinks=new Map<string,{name:string;qty:number}>();
+ const add=(name:string,qty:number)=>{const clean=siteText(name);if(!clean)return;const key=clean.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const prev=drinks.get(key);drinks.set(key,{name:prev?.name||clean,qty:(prev?.qty||0)+Math.max(1,Math.trunc(qty||1))})};
+ value.forEach(raw=>{const i=siteRecord(raw),qty=Math.max(1,Math.trunc(siteMoney(i.quantity)||1)),name=siteText(i.name);if(siteDrinkCategory(i.category)||SITE_DRINK_NAME.test(name))add(name,qty);if(Array.isArray(i.components))i.components.forEach(rawComponent=>{const c=siteRecord(rawComponent),cn=siteText(c.name??c.id);if(siteDrinkCategory(c.category)||SITE_DRINK_NAME.test(cn))add(cn,Math.max(1,Math.trunc(siteMoney(c.quantity)||1)))})});
+ return [...drinks.values()].map(item=>`${item.qty}x ${item.name}`).join(', ');
+}
+
 export function normalizeSiteOrderStatus(value?: string | null): string {
   return (value || '')
     .normalize('NFD')
@@ -476,6 +486,7 @@ export function deliveryDraftFromSite(
     scheduled_label: typeof payload.scheduledLabel === 'string' ? payload.scheduledLabel : null,
     schedule_window_minutes: typeof payload.scheduleWindowMinutes === 'number' ? payload.scheduleWindowMinutes : null,
     site_order_items: siteOrderItemsFromPayload(payload.itens),
+    drinks: siteOrderDrinksFromPayload(payload.itens),
     site_order_subtotal: payload.subtotal,
     site_order_delivery_fee: payload.taxaEntrega,
     site_order_discount: payload.desconto,

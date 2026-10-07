@@ -6,6 +6,13 @@ import { assertSignedIntegrationRequest } from '@/lib/integration/server/signatu
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+export async function GET() {
+  return NextResponse.json(
+    { ok: true, service: 'dfl-entregas-integration-events', accepts: ['order.created', 'order.updated'] },
+    { status: 200, headers: { 'cache-control': 'no-store' } },
+  );
+}
+
 function errorResponse(error: unknown, status = 400) {
   const message = error instanceof Error ? error.message : 'Falha de integração.';
   console.error('[integration/inbound]', message);
@@ -33,12 +40,18 @@ export async function POST(request: NextRequest) {
 
     if (event.event_type === 'order.created') {
       const result = await consumeDflSiteOrderCreatedPersisted(event);
-      return NextResponse.json({ ok: true, accepted: true, ...result }, { status: result.already_processed ? 200 : 201 });
+      return NextResponse.json(
+        { ok: true, accepted: true, ...result },
+        { status: result.already_processed ? 200 : 201, headers: { 'x-dfl-event-id': event.event_id } },
+      );
     }
 
     if (event.event_type === 'order.updated') {
       const result = await consumeDflSiteOrderUpdatedPersisted(event);
-      return NextResponse.json({ ok: true, accepted: true, ...result }, { status: result.already_processed ? 200 : 201 });
+      return NextResponse.json(
+        { ok: true, accepted: true, ...result },
+        { status: result.already_processed ? 200 : 201, headers: { 'x-dfl-event-id': event.event_id } },
+      );
     }
 
     return errorResponse(new Error(`event_type não suportado no inbound: ${event.event_type}`), 400);
