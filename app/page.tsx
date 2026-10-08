@@ -1,7 +1,7 @@
 'use client';
+import { useRouter } from 'next/navigation';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
 import { TrendingUp, Package, Eye, EyeOff, Filter, Users, UserRound, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
@@ -14,7 +14,7 @@ import { ShiftBriefing } from '@/components/home/ShiftBriefing';
 import { OperationalCommandCenter } from '@/components/home/OperationalCommandCenter';
 import { OperationalDatePicker } from '@/components/home/OperationalDatePicker';
 import { deliveryEconomicValue } from '@/lib/delivery-finance';
-import { isSiteOrderAwaitingConfirmation, normalizeSiteOrderStatus } from '@/lib/integration/site-order';
+import { isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
 
 function formatDateLabel(date: Date): string {
   const todayKey = saoPauloDateKey(new Date());
@@ -51,33 +51,6 @@ export default function HomePage() {
   const [globalMotoboy, setGlobalMotoboy] = useState<string | null>(null);
 
   const selectedDateKey = saoPauloDateKey(selectedDate);
-
-  // V56.6: vitrine informativa; nenhuma rota é criada.
-  const siteScheduledForDay = useMemo(() =>
-    deliveries.filter((delivery) => {
-      if (
-        globalMotoboy ||
-        delivery.source_system !== 'dfl_site' ||
-        delivery.completed === true ||
-        delivery.operational_dismissed_at ||
-        delivery.route_id ||
-        !delivery.scheduled_for
-      ) return false;
-
-      const status = normalizeSiteOrderStatus(delivery.site_order_status);
-      if (status !== 'agendado' && !isFutureScheduledDelivery(delivery))
-        return false;
-
-      const scheduled = new Date(delivery.scheduled_for);
-      return !Number.isNaN(scheduled.getTime()) &&
-        saoPauloDateKey(scheduled) === selectedDateKey;
-    }).sort((a, b) =>
-      Date.parse(a.scheduled_for || '') -
-      Date.parse(b.scheduled_for || '')
-    ),
-    [deliveries, globalMotoboy, selectedDateKey]
-  );
-
 
   /*
    * Tomografia operacional da Home.
@@ -189,10 +162,11 @@ export default function HomePage() {
     const operationalDeliveriesDoDia = deliveriesDoDia.filter(
       (delivery) =>
         !delivery.operational_dismissed_at &&
-        !isFutureScheduledDelivery(delivery),
+        (!isFutureScheduledDelivery(delivery) ||
+          (!delivery.route_id && isSiteOrderAwaitingHomeReview(delivery))),
     );
-    const awaitingConfirmationDeliveries = operationalDeliveriesDoDia.filter((delivery) => !delivery.route_id && isSiteOrderAwaitingConfirmation(delivery));
-    const awaitingRouteDeliveries = operationalDeliveriesDoDia.filter((delivery) => !delivery.route_id && !isSiteOrderAwaitingConfirmation(delivery));
+    const awaitingConfirmationDeliveries = operationalDeliveriesDoDia.filter((delivery) => !delivery.route_id && isSiteOrderAwaitingHomeReview(delivery));
+    const awaitingRouteDeliveries = operationalDeliveriesDoDia.filter((delivery) => !delivery.route_id && !isSiteOrderAwaitingHomeReview(delivery));
     const orphanedDeliveries = operationalDeliveriesDoDia.filter(
       (delivery) => Boolean(delivery.route_id) && !allRouteIds.has(delivery.route_id),
     );
@@ -515,56 +489,6 @@ export default function HomePage() {
         </div>
       )}
 
-
-      {siteScheduledForDay.length > 0 && (
-        <section className="space-y-3 rounded-2xl border border-amber-500/20 bg-zinc-900/60 p-3">
-          <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-amber-300">
-              <Clock3 size={16} /> Site · agendados
-            </h2>
-            <span className="text-xs text-zinc-400">
-              {siteScheduledForDay.length} pedido(s)
-            </span>
-          </div>
-          <p className="text-xs text-zinc-500">
-            Programação comercial. Ainda não são rotas liberadas.
-          </p>
-          {siteScheduledForDay.map((delivery) => (
-            <button
-              key={delivery.id}
-              type="button"
-              onClick={() => router.push(
-                '/entregas/details?id=' +
-                encodeURIComponent(delivery.id) +
-                '&date=' + encodeURIComponent(selectedDateKey)
-              )}
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-left"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <strong className="truncate text-sm text-zinc-100">
-                  {delivery.customer_name || 'Cliente do Site'}
-                </strong>
-                <span className="shrink-0 text-xs font-bold text-amber-300">
-                  {new Date(delivery.scheduled_for!).toLocaleTimeString('pt-BR', {
-                    timeZone: 'America/Sao_Paulo',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </span>
-              </div>
-              <p className="mt-1 truncate text-xs text-zinc-400">
-                {delivery.address_string || 'Conferir endereço'}
-              </p>
-              <p className="mt-1 text-xs text-zinc-500">
-                Sem rota · {isPrivacyMode ? 'Valor oculto' :
-                  deliveryEconomicValue(delivery).toLocaleString('pt-BR', {
-                    style: 'currency', currency: 'BRL'
-                  })}
-              </p>
-            </button>
-          ))}
-        </section>
-      )}
 
       <OperationalRadar />
 

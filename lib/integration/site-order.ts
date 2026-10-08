@@ -439,6 +439,17 @@ export function isSiteOrderAwaitingConfirmation(
   );
 }
 
+
+/** Agrupamento visual: não altera confirmação nem liberação logística. */
+export function isSiteOrderAwaitingHomeReview(
+  delivery: Pick<Delivery, 'source_system' | 'site_order_status' | 'completed'>,
+): boolean {
+  if (delivery.source_system !== 'dfl_site' || delivery.completed === true)
+    return false;
+  const status = normalizeSiteOrderStatus(delivery.site_order_status);
+  return status === 'pendente' || status === 'agendado';
+}
+
 export function isSiteOrderReleasedToLogistics(
   delivery: Pick<Delivery, 'source_system' | 'site_order_status'>,
 ): boolean {

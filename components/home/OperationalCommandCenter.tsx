@@ -68,6 +68,7 @@ export function OperationalCommandCenter({
 
   const addressOnly = pending.filter(
     (delivery) =>
+      Boolean(delivery.route_id) &&
       Boolean(delivery.address_string?.trim()) &&
       !extractLatLngFromMapsUrl(delivery.maps_link),
   );

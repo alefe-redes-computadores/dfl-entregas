@@ -41,7 +41,7 @@ import {
 import { stockProductCategory, suggestStockCategory } from '@/lib/stock-categories';
 import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop } from '@/lib/route-stops';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
-import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
+import { isSiteOrderAwaitingConfirmation, isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
 import { markUnreadSiteOrders } from '@/lib/site-order-inbox';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
@@ -912,8 +912,8 @@ export const useAppStore = create<AppState>()(
             const value = deliveryDate(delivery);
             const isSelectedDate = Boolean(value) && dateKey(value) === selectedDateKey;
             if (!isSelectedDate) return false;
-            if (routeId === 'rota-site-aguardando-confirmacao') return !delivery.route_id && isSiteOrderAwaitingConfirmation(delivery);
-            if (routeId === 'rota-aguardando-vinculo') return !delivery.route_id && !isSiteOrderAwaitingConfirmation(delivery);
+            if (routeId === 'rota-site-aguardando-confirmacao') return !delivery.route_id && isSiteOrderAwaitingHomeReview(delivery);
+            if (routeId === 'rota-aguardando-vinculo') return !delivery.route_id && !isSiteOrderAwaitingHomeReview(delivery);
             return Boolean(delivery.route_id) && !validRouteIds.has(delivery.route_id);
           });
         }
