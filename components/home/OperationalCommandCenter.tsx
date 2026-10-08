@@ -189,7 +189,7 @@ export function OperationalCommandCenter({
     {
       key: 'location',
       label: 'Revisar localização',
-      description: 'Endereço existe, mas não há ponto preciso salvo',
+      description: 'Endereço informado; coordenadas precisas ainda não verificadas',
       count: addressOnly.length,
       href: '/entregas',
       icon: MapPin,
