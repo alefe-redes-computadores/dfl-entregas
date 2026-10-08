@@ -194,9 +194,9 @@ async function findCustomerByPhone(
   const matches = uniqueCustomers(snapshots);
   if (matches.length === 0) return null;
   if (matches.length > 1) {
-    throw new Error(
-      'Mais de um Customer local possui o mesmo telefone; associação automática recusada.',
-    );
+    // Telefone compartilhado/duplicado nao autoriza vinculo automatico.
+    // O chamador criara um Customer deterministico para a identidade do Site.
+    return null;
   }
 
   return matches[0];
@@ -428,14 +428,13 @@ export async function consumeDflSiteOrderCreatedPersisted(
           byPhone.address &&
           !customerMatchesAddress(byPhone, address)
         ) {
-          throw new Error(
-            'Customer com mesmo telefone possui endereço divergente; associação automática recusada.',
-          );
+          // Enderecos divergentes nao sao prova de identidade.
+          // Nao associar ao Customer existente: usar identidade deterministica.
+        } else {
+          customer = byPhone;
+          customerRef = adminDb.collection('customers').doc(byPhone.id);
+          createCustomerIdentity = Boolean(externalCustomerId);
         }
-
-        customer = byPhone;
-        customerRef = adminDb.collection('customers').doc(byPhone.id);
-        createCustomerIdentity = Boolean(externalCustomerId);
       }
     }
 
