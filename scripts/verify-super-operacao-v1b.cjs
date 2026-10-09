@@ -15,7 +15,7 @@ const c=[
  ['telefone central',f.phone.includes('normalizeBrazilPhone')&&f.nova.includes('formatBrazilPhone')&&f.edit.includes('formatBrazilPhone')],
  ['customer central',f.customer.includes('formatBrazilPhone')],
 ['smart não trava tudo', !fs.readFileSync('components/home/RouteAccordion.tsx','utf8').includes('order_locked: optimizerEdited')],
-['reorder pula trava', fs.readFileSync('store/useAppStore.ts','utf8').includes('const freeIndices = groups.map') && fs.readFileSync('store/useAppStore.ts','utf8').includes('[groups[currentIndex], groups[targetIndex]] = [groups[targetIndex], groups[currentIndex]]')],
+['reorder usa autoridade única por parada', f.store.includes('moveStopToIndex(pending, deliveryId') && !f.store.includes("throw new Error('Destrave a parada antes de reordenar.')")],
  ['helpers sem firestore',!f.phone.includes('firebase')&&!f.change.includes('firebase')&&!f.change.includes('getDocs(')],
 ];
 let bad=0;for(const [n,ok] of c){console.log(`${ok?'OK':'ERRO'}: ${n}`);if(!ok)bad++}

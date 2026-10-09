@@ -39,7 +39,7 @@ import {
   nextCustomerName,
 } from '@/lib/customer-identity';
 import { stockProductCategory, suggestStockCategory } from '@/lib/stock-categories';
-import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop } from '@/lib/route-stops';
+import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop, moveStopToIndex, stopDeliveryIds } from '@/lib/route-stops';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingConfirmation, isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
@@ -51,6 +51,25 @@ import {
   roundStockQuantity,
   stockExitExceeds,
 } from '@/lib/stock-precision';
+
+const routeCreateLocks = new Set<string>();
+const deliveryMutationLocks = new Set<string>();
+
+const routeOperationKey = (route: Pick<Route, 'motoboy_id' | 'motoboy_name' | 'created_at'>) => {
+  const operationalDay = route.created_at ? dateKey(route.created_at) : dateKey(new Date());
+  const owner = route.motoboy_id || route.motoboy_name.trim().toLocaleLowerCase('pt-BR');
+  return `${operationalDay}:${owner}`;
+};
+
+const sameExternalDelivery = (left: Delivery, right: Delivery) => {
+  if (left.id === right.id) return true;
+  if (left.external_order_id && right.external_order_id) {
+    return left.source_system === right.source_system && left.external_order_id === right.external_order_id;
+  }
+  const leftIfood = (left.ifood_id || '').replace(/\D/g, '');
+  const rightIfood = (right.ifood_id || '').replace(/\D/g, '');
+  return Boolean(leftIfood && rightIfood && leftIfood === rightIfood);
+};
 
 
 async function autoOrganizeLoadedRouteAfterInsert(
@@ -925,6 +944,15 @@ export const useAppStore = create<AppState>()(
       addRoute: async (route) => {
         const now = new Date().toISOString();
         const routeWithTimestamp: Route = { ...route, created_at: route.created_at || now, updated_at: now };
+        const operationKey = routeOperationKey(routeWithTimestamp);
+        if (routeCreateLocks.has(operationKey)) {
+          throw new Error('Esta rota já está sendo criada. Aguarde um instante.');
+        }
+        const equivalent = get().routes.find((current) =>
+          current.status === 'aberta' && routeOperationKey(current) === operationKey
+        );
+        if (equivalent) throw new Error(`ROUTE_ALREADY_EXISTS:${equivalent.id}`);
+        routeCreateLocks.add(operationKey);
         set((state) => ({ routes: [routeWithTimestamp, ...state.routes] }));
         try {
           const safeData = sanitizeForFirebase(routeWithTimestamp);
@@ -933,6 +961,8 @@ export const useAppStore = create<AppState>()(
           set((state) => ({ routes: state.routes.filter((r) => r.id !== route.id) }));
           console.error(error);
           throw error;
+        } finally {
+          routeCreateLocks.delete(operationKey);
         }
       },
 
@@ -1593,6 +1623,12 @@ export const useAppStore = create<AppState>()(
       },
 
       addDelivery: async (delivery) => {
+        const mutationKey = `delivery:add:${delivery.id}`;
+        if (deliveryMutationLocks.has(mutationKey)) return;
+        if (get().deliveries.some((current) => sameExternalDelivery(current, delivery))) {
+          throw new Error('Este pedido já foi importado. Abra a entrega existente.');
+        }
+        deliveryMutationLocks.add(mutationKey);
         const now = new Date().toISOString();
         const siblings = get().deliveries.filter((item) => item.route_id === delivery.route_id && !item.completed);
         const siblingIndexes = siblings.map((item) => item.order_index).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
@@ -1625,11 +1661,21 @@ export const useAppStore = create<AppState>()(
           set((state) => ({ deliveries: state.deliveries.filter((item) => item.id !== delivery.id) }));
           console.error(error);
           throw error;
+        } finally {
+          deliveryMutationLocks.delete(mutationKey);
         }
       },
 
       addDeliveries: async (items) => {
         if (!items.length) return;
+        const existing = get().deliveries;
+        const duplicated = items.find((item, index) =>
+          existing.some((current) => sameExternalDelivery(current, item)) ||
+          items.slice(0, index).some((current) => sameExternalDelivery(current, item))
+        );
+        if (duplicated) {
+          throw new Error('Um dos pedidos deste lote já foi importado. Revise os IDs antes de salvar.');
+        }
         const now = new Date().toISOString();
         const routeTail = new Map<string, number>();
         get().deliveries.filter((item)=>!item.completed).forEach((item)=>{
@@ -1729,6 +1775,20 @@ export const useAppStore = create<AppState>()(
         const now = new Date().toISOString();
         const isCompleting = updatedData.completed === true && deliveryToUpdate.completed !== true;
         const isReopening = updatedData.completed === false && deliveryToUpdate.completed === true;
+        const urgencyChanged =
+          updatedData.is_urgent !== undefined &&
+          updatedData.is_urgent !== deliveryToUpdate.is_urgent;
+        const targetRoutePending = routeChanged && nextRouteId
+          ? state.deliveries.filter((item) => item.id !== id && item.route_id === nextRouteId && !item.completed)
+          : [];
+        const targetIndexes = targetRoutePending
+          .map((item) => item.order_index)
+          .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+        const movedOrderIndex = routeChanged && nextRouteId
+          ? updatedData.is_urgent
+            ? (targetIndexes.length ? Math.min(...targetIndexes) : 0) - 1
+            : (targetIndexes.length ? Math.max(...targetIndexes) : -1) + 1
+          : undefined;
 
         if (isCompleting && isDeliveryFulfillment(deliveryToUpdate)) {
           const operationalRouteId = nextRouteId?.trim();
@@ -1764,6 +1824,14 @@ export const useAppStore = create<AppState>()(
 
         const dataWithTimestamp: Partial<Delivery> = {
           ...updatedData,
+          ...(routeChanged && nextRouteId
+            ? {
+                order_index: movedOrderIndex,
+                order_locked: false,
+                order_source: 'smart' as const,
+                order_updated_at: now,
+              }
+            : {}),
           ...(isCompleting ? { completed_at: now } : {}),
           ...(isCompleting && !isDeliveryFulfillment(deliveryToUpdate) && deliveryToUpdate.source_system !== 'dfl_site'
             ? { analytics_sync_pending: true, analytics_sync_requested_at: now }
@@ -1820,6 +1888,42 @@ export const useAppStore = create<AppState>()(
           await batch.commit();
           deliveryCommitCompleted = true;
 
+          // Urgência pertence à parada física. Todos os pedidos do mesmo
+          // endereço recebem o mesmo estado e, ao ativar, a parada inteira vai
+          // para o topo por meio da mesma autoridade usada por setas e drag.
+          if (urgencyChanged && nextDelivery.route_id && !nextDelivery.completed) {
+            const currentState = get();
+            const routeItems = currentState.deliveries.filter(
+              (item) => item.route_id === nextDelivery.route_id && !item.completed,
+            );
+            const groupedIds = stopDeliveryIds(routeItems, nextDelivery.id);
+            const siblingIds = groupedIds.filter((groupedId) => groupedId !== nextDelivery.id);
+            if (siblingIds.length) {
+              const urgencyBatch = writeBatch(db);
+              siblingIds.forEach((groupedId) => urgencyBatch.update(
+                doc(db, 'deliveries', groupedId),
+                { is_urgent: updatedData.is_urgent === true, updated_at: now },
+              ));
+              set((current) => ({
+                deliveries: current.deliveries.map((item) =>
+                  siblingIds.includes(item.id)
+                    ? { ...item, is_urgent: updatedData.is_urgent === true, updated_at: now }
+                    : item
+                ),
+              }));
+              await urgencyBatch.commit();
+            }
+            if (updatedData.is_urgent === true) {
+              await get().setDeliveryOrder(
+                nextDelivery.route_id,
+                moveStopToIndex(get().deliveries.filter(
+                  (item) => item.route_id === nextDelivery.route_id && !item.completed,
+                ), nextDelivery.id, 0),
+                { metadata: { order_source: 'manual', order_updated_at: now } },
+              );
+            }
+          }
+
           /*
            * Mudança logística real:
            * após persistir a conclusão, acordamos SOMENTE a rota dessa
@@ -1835,30 +1939,33 @@ export const useAppStore = create<AppState>()(
             isDeliveryFulfillment(nextDelivery) &&
             nextDelivery.route_id
           ) {
-            try {
-              const result = await kickSiteRoute(nextDelivery.route_id, {
+            /*
+             * A baixa já está persistida neste ponto. A ponte com o Site é
+             * pós-processamento resiliente e não pode manter o botão/modal
+             * esperando até três tentativas de rede.
+             */
+            void kickSiteRoute(nextDelivery.route_id, {
                 reason: 'delivery_completed',
                 maxAttempts: 3,
-              });
-
-              console.info(
+              })
+              .then((result) => console.info(
                 '[route-kick:delivery] fast lane concluída',
                 result,
-              );
-            } catch (kickError) {
-              console.warn(
+              ))
+              .catch((kickError) => {
+                console.warn(
                 '[route-kick:delivery] falhou; fallback periódico preservado',
                 kickError,
-              );
-              toast.warning(
-                'Entrega concluída; Site aguardando sincronização.',
-                {
-                  description:
-                    'A baixa foi salva. Use Sincronizar Site na rota se a atualização não aparecer.',
-                  duration: 5000,
-                },
-              );
-            }
+                );
+                toast.warning(
+                  'Entrega concluída; Site aguardando sincronização.',
+                  {
+                    description:
+                      'A baixa foi salva. Use Sincronizar Site na rota se a atualização não aparecer.',
+                    duration: 5000,
+                  },
+                );
+              });
           }
 
           if (routeChanged && previousRouteId) {
@@ -1878,7 +1985,10 @@ export const useAppStore = create<AppState>()(
               );
 
             if (previousRouteReadyToClose && previousRoute) {
-              await currentState.closeRoute(previousRoute.id);
+              void currentState.closeRoute(previousRoute.id).catch((closeError) => {
+                console.warn('Baixa salva; fechamento da rota anterior ficou pendente:', closeError);
+                toast.warning('Entrega movida; fechamento da rota anterior ficou pendente.');
+              });
             }
           }
 
@@ -1904,7 +2014,14 @@ export const useAppStore = create<AppState>()(
                 route.status === 'aberta' &&
                 Boolean(routeStartedAt(route))
               ) {
-                await currentState.closeRoute(route.id);
+                // O fechamento começa otimista, mas fila iFood/notificações e
+                // integrações posteriores continuam fora do caminho crítico.
+                void currentState.closeRoute(route.id).catch((closeError) => {
+                  console.warn('Baixa salva; fechamento automático ficou pendente:', closeError);
+                  toast.warning('Entregas concluídas; finalize a rota novamente.', {
+                    description: 'A baixa foi preservada e nenhuma confirmação do iFood foi perdida.',
+                  });
+                });
               }
             }
           }
@@ -2160,22 +2277,14 @@ export const useAppStore = create<AppState>()(
         const groups = groupDeliveriesByStop(pending);
         const currentIndex = groups.findIndex((group) => group.key === deliveryStopKey(selected));
         if (currentIndex < 0) return;
-        const isLocked = (group: (typeof groups)[number]) => group.deliveries.some(
-          (delivery) => delivery.order_locked === true && delivery.order_source !== 'smart',
-        );
-        if (isLocked(groups[currentIndex])) throw new Error('Destrave a parada antes de reordenar.');
-
-        const freeIndices = groups.map((group, index) => isLocked(group) ? -1 : index).filter((index) => index >= 0);
-        const freeRank = freeIndices.indexOf(currentIndex);
-        const targetRank = freeRank + (direction === 'up' ? -1 : 1);
-        if (freeRank < 0 || targetRank < 0 || targetRank >= freeIndices.length) return;
-        const targetIndex = freeIndices[targetRank];
-        [groups[currentIndex], groups[targetIndex]] = [groups[targetIndex], groups[currentIndex]];
+        const targetIndex = currentIndex + (direction === 'up' ? -1 : 1);
+        if (targetIndex < 0 || targetIndex >= groups.length) return;
+        const orderedIds = moveStopToIndex(pending, deliveryId, targetIndex);
 
         await get().setDeliveryOrder(
           routeId,
-          groups.flatMap((group) => group.deliveries.map((delivery) => delivery.id)),
-          { metadata: { order_locked: false, order_source: 'manual', order_updated_at: new Date().toISOString() } },
+          orderedIds,
+          { metadata: { order_source: 'manual', order_updated_at: new Date().toISOString() } },
         );
       },
 
@@ -2188,30 +2297,14 @@ export const useAppStore = create<AppState>()(
         const groups = groupDeliveriesByStop(pending);
         const currentIndex = groups.findIndex((group) => group.key === deliveryStopKey(selected));
         if (currentIndex < 0) return;
-        const isLocked = (group: (typeof groups)[number]) => group.deliveries.some(
-          (delivery) => delivery.order_locked === true && delivery.order_source !== 'smart',
-        );
-        if (isLocked(groups[currentIndex])) throw new Error('Destrave a parada antes de reordenar.');
-
-        const freeIndices = groups.map((group, index) => isLocked(group) ? -1 : index).filter((index) => index >= 0);
-        const freeGroups = freeIndices.map((index) => groups[index]);
-        const currentRank = freeIndices.indexOf(currentIndex);
-        if (currentRank < 0) return;
         const rawTarget = Math.max(0, Math.min(targetIndex, groups.length - 1));
-        let targetRank = 0;
-        for (const index of freeIndices) if (index <= rawTarget) targetRank += 1;
-        targetRank = Math.max(0, Math.min(targetRank - 1, freeGroups.length - 1));
-        if (targetRank === currentRank) return;
-
-        const [moved] = freeGroups.splice(currentRank, 1);
-        freeGroups.splice(targetRank, 0, moved);
-        const finalGroups = [...groups];
-        freeIndices.forEach((absoluteIndex, rank) => { finalGroups[absoluteIndex] = freeGroups[rank]; });
+        if (rawTarget === currentIndex) return;
+        const orderedIds = moveStopToIndex(pending, deliveryId, rawTarget);
 
         await get().setDeliveryOrder(
           routeId,
-          finalGroups.flatMap((group) => group.deliveries.map((delivery) => delivery.id)),
-          { metadata: { order_locked: false, order_source: 'manual', order_updated_at: new Date().toISOString() } },
+          orderedIds,
+          { metadata: { order_source: 'manual', order_updated_at: new Date().toISOString() } },
         );
       },
 

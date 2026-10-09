@@ -77,6 +77,33 @@ export default function NovaEntregaPage() {
 
   const [magicText, setMagicText] = useState('');
   const [isParserOpen, setIsParserOpen] = useState(true);  const inboxParsedRef = useRef<ReturnType<typeof parseIfoodOrdersText>[number] | null>(null);
+  const liveParsedOrders = useMemo(
+    () => magicText.trim().length < 2
+      ? []
+      : parseIfoodOrdersText(magicText, {
+          knownNeighborhoods,
+          knownCustomerNames: customers.map((customer) => customer.name),
+        }),
+    [customers, knownNeighborhoods, magicText],
+  );
+  const liveParseQuality = useMemo(
+    () => assessIfoodParseQuality(liveParsedOrders),
+    [liveParsedOrders],
+  );
+  const liveRecognition = useMemo(() => {
+    const parsed = liveParsedOrders[0];
+    if (!parsed) return [];
+    return [
+      parsed.orderId && { label: `Pedido #${parsed.orderId}`, tone: 'ok' as const },
+      parsed.ifoodId && { label: `ID ${parsed.ifoodId}`, tone: 'ok' as const },
+      parsed.confirmationCode && { label: `Código ${parsed.confirmationCode}`, tone: 'ok' as const },
+      parsed.customerName && { label: parsed.customerName, tone: 'ok' as const },
+      (parsed.address || parsed.mapsLink) && { label: 'Endereço identificado', tone: 'ok' as const },
+      parsed.paymentMethod && { label: parsed.isPaid ? 'Pago no app' : 'Pagamento identificado', tone: 'ok' as const },
+      (parsed.customerCharge || parsed.value) && { label: `R$ ${parsed.customerCharge || parsed.value}`, tone: 'ok' as const },
+      parsed.drinks.length > 0 && { label: 'Bebidas identificadas', tone: 'ok' as const },
+    ].filter((item): item is { label: string; tone: 'ok' } => Boolean(item));
+  }, [liveParsedOrders]);
 
 
   const [origin, setOrigin] = useState<OrderOrigin>('ifood');
@@ -315,7 +342,7 @@ const [routeId, setRouteId] = useState('');
         duration:4500
       });
     }
-    setMagicText('');setIsParserOpen(false);
+    if(parseQuality.review===0){setMagicText('');setIsParserOpen(false)}else{setIsParserOpen(true)}
   };
 
   const handlePasteFromClipboard = async () => {
@@ -544,12 +571,52 @@ const [routeId, setRouteId] = useState('');
             className="w-full rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-red-500/50 outline-none resize-none font-mono"
           />
 
+          {magicText.trim().length > 0 && (
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
+                  Reconhecimento ao vivo
+                </p>
+                <span className="text-[10px] font-black text-red-300">
+                  {liveRecognition.length} dados identificados
+                </span>
+              </div>
+              {liveRecognition.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {liveRecognition.map((item) => (
+                    <span key={item.label} className="flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/[.08] px-2.5 py-1 text-[9px] font-black text-emerald-300">
+                      <CheckCircle2 size={11} /> {item.label}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-[10px] text-zinc-600">Continue digitando ou cole o pedido completo.</p>
+              )}
+              {liveParseQuality.issues.length > 0 && liveRecognition.length > 0 && (
+                <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[.06] px-3 py-2 text-[9px] leading-relaxed text-amber-200">
+                  <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                  <span>
+                    Falta conferir: {Array.from(new Set(liveParseQuality.issues.flatMap((item) => item.fields))).join(', ')}.
+                  </span>
+                </div>
+              )}
+              {liveParsedOrders.length > 1 && (
+                <p className="mt-2 text-[9px] font-bold text-violet-300">
+                  {liveParsedOrders.length} pedidos encontrados · serão revisados separadamente.
+                </p>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleExecuteMagicParse}
             className="h-11 w-full rounded-xl bg-red-500 hover:bg-red-400 font-bold text-white text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-red-500/20"
           >
-            <Sparkles size={15} /> Ler pedido e preencher campos
+            <Sparkles size={15} />
+            {liveParseQuality.review > 0 && liveRecognition.length > 0
+              ? 'Preencher e revisar o que falta'
+              : 'Revisar e preencher pedido'}
           </button>
         </div>
       )}

@@ -137,6 +137,50 @@ export function expandStopOrder(
   );
 }
 
+/**
+ * Reordena paradas físicas, nunca pedidos isolados de uma mesma parada.
+ *
+ * `targetIndex` sempre representa a posição visual entre paradas. A função é
+ * pura para que setas, gesto, urgência e otimizador compartilhem exatamente o
+ * mesmo contrato e possam ser testados sem Firestore.
+ */
+export function moveStopToIndex(
+  deliveries: Delivery[],
+  deliveryId: string,
+  targetIndex: number,
+): string[] {
+  const groups = groupDeliveriesByStop(deliveries.filter((item) => !item.completed));
+  const selected = deliveries.find((item) => item.id === deliveryId);
+  if (!selected || groups.length < 2) {
+    return groups.flatMap((group) => group.deliveries.map((item) => item.id));
+  }
+
+  const currentIndex = groups.findIndex(
+    (group) => group.key === deliveryStopKey(selected),
+  );
+  if (currentIndex < 0) {
+    return groups.flatMap((group) => group.deliveries.map((item) => item.id));
+  }
+
+  const boundedTarget = Math.max(0, Math.min(targetIndex, groups.length - 1));
+  if (boundedTarget === currentIndex) {
+    return groups.flatMap((group) => group.deliveries.map((item) => item.id));
+  }
+
+  const [moved] = groups.splice(currentIndex, 1);
+  groups.splice(boundedTarget, 0, moved);
+  return groups.flatMap((group) => group.deliveries.map((item) => item.id));
+}
+
+export function stopDeliveryIds(deliveries: Delivery[], deliveryId: string) {
+  const selected = deliveries.find((item) => item.id === deliveryId);
+  if (!selected) return [];
+  const key = deliveryStopKey(selected);
+  return deliveries
+    .filter((item) => deliveryStopKey(item) === key)
+    .map((item) => item.id);
+}
+
 export function stopNumberMap(deliveries: Delivery[]) {
   return new Map(
     groupDeliveriesByStop(deliveries).map(

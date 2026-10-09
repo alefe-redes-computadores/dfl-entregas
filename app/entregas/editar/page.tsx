@@ -19,6 +19,7 @@ import { geocodeAddress } from '@/lib/store-geocoding';
 import { getFulfillmentMode } from '@/lib/delivery-mode';
 import { dateKey, deliveryDate, routeDate } from '@/lib/operational-time';
 import { paymentStateForInput } from '@/lib/delivery-finance';
+import { deliveryStopKey } from '@/lib/route-stops';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
@@ -78,6 +79,7 @@ const [routeId, setRouteId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [moveWholeStop, setMoveWholeStop] = useState(true);
 
   const currentDelivery = useMemo(
     () => deliveries.find((delivery) => delivery.id === deliveryId),
@@ -85,8 +87,9 @@ const [routeId, setRouteId] = useState('');
   );
 
   const sameStopDeliveries = useMemo(() => {
-    if (!currentDelivery?.stop_group_id) return currentDelivery ? [currentDelivery] : [];
-    return deliveries.filter((delivery) => delivery.stop_group_id === currentDelivery.stop_group_id);
+    if (!currentDelivery) return [];
+    const key = deliveryStopKey(currentDelivery);
+    return deliveries.filter((delivery) => deliveryStopKey(delivery) === key);
   }, [currentDelivery, deliveries]);
 
   const deliveryOperationalDateKey = useMemo(() => {
@@ -594,7 +597,23 @@ const [routeId, setRouteId] = useState('');
         drinks,
       } as any);
 
-      toast.success('Entrega atualizada com sucesso!');
+      if (routeChanged && moveWholeStop && sameStopDeliveries.length > 1) {
+        const siblings = sameStopDeliveries.filter(
+          (item) => item.id !== deliveryId && item.completed !== true,
+        );
+        for (const sibling of siblings) {
+          await updateDelivery(sibling.id, {
+            route_id: routeId,
+            fulfillment_mode: fulfillmentMode,
+          });
+        }
+      }
+
+      toast.success(
+        routeChanged && moveWholeStop && sameStopDeliveries.length > 1
+          ? `${sameStopDeliveries.length} pedidos movidos com esta parada.`
+          : 'Entrega atualizada com sucesso!',
+      );
       router.replace(detailsReturn);
     } catch (error) {
       console.error('Erro ao atualizar entrega:', error);
@@ -857,6 +876,21 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}
         </div>
+        {routeChanged && sameStopDeliveries.length > 1 && !currentDelivery?.completed && (
+          <div className="mt-3 rounded-2xl border border-violet-500/20 bg-violet-500/[.06] p-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-300">
+              Esta parada possui {sameStopDeliveries.length} pedidos
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setMoveWholeStop(false)} className={`min-h-11 rounded-xl border px-2 text-[10px] font-black ${!moveWholeStop ? 'border-sky-500/40 bg-sky-500/10 text-sky-300' : 'border-zinc-800 text-zinc-500'}`}>
+                Só este pedido
+              </button>
+              <button type="button" onClick={() => setMoveWholeStop(true)} className={`min-h-11 rounded-xl border px-2 text-[10px] font-black ${moveWholeStop ? 'border-violet-500/40 bg-violet-500/10 text-violet-300' : 'border-zinc-800 text-zinc-500'}`}>
+                Toda a parada
+              </button>
+            </div>
+          </div>
+        )}
         </section>
 
           </>

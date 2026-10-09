@@ -89,6 +89,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
+  const impact = (style: ImpactStyle) => {
+    if (!Capacitor.isNativePlatform()) return;
+    // Feedback tátil nunca pode bloquear abertura de modal, baixa ou navegação.
+    void Haptics.impact({ style }).catch(() => undefined);
+  };
+
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
   const paymentStateLabel = deliveryPaymentStateLabel(delivery);
@@ -246,7 +252,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           const itemCustomer = getCustomerById(item.customer_id);
           return itemCustomer?.name || item.customer_name || (item.order_id ? `#${item.order_id}` : 'pedido sem nome');
         });
-        if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+        impact(ImpactStyle.Heavy);
         toast.error(`${failed.length} entrega${failed.length === 1 ? '' : 's'} ficou${failed.length === 1 ? '' : 'aram'} pendente${failed.length === 1 ? '' : 's'}.`, {
           description: pendingLabels.join(', '),
           duration: 4500,
@@ -256,7 +262,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
       closeConfirmationModal();
 
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+      impact(ImpactStyle.Medium);
       toast.success(
         targets.length > 1 ? `${targets.length} entregas concluídas na parada.` : 'Entrega concluída.',
         { duration: 1800 },
@@ -269,7 +275,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       }
     } catch (error) {
       console.error('Erro inesperado ao concluir parada:', error);
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+      impact(ImpactStyle.Heavy);
       toast.error('Não foi possível dar baixa na entrega.', {
         description: 'O estado anterior foi restaurado. Tente novamente.',
       });
@@ -285,7 +291,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     try {
       await deleteDelivery(delivery.id);
       setDeleteOpen(false);
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+      impact(ImpactStyle.Medium);
       toast.success('Entrega excluída.', { description: 'A rota foi reconciliada e o cadastro do cliente foi preservado.' });
     } catch (error) {
       console.error('Erro ao excluir entrega:', error);
@@ -327,7 +333,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   };
 
   async function handleTriggerAction(actionType: 'complete' | 'expand') {
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+    impact(ImpactStyle.Light);
 
     if (actionType === 'complete') {
       if (
@@ -744,7 +750,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           <div className="flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
                             <button
                               type="button"
-                              disabled={manualLocked}
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 await moveStop(Math.max(0, (position || 1) - 2));
@@ -757,7 +762,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             <div className="h-4 w-px bg-zinc-800" />
                             <button
                               type="button"
-                              disabled={manualLocked}
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 await moveStop(position || 1);

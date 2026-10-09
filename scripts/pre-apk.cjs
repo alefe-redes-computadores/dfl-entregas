@@ -59,6 +59,8 @@ const tests=[
   'scripts/verify-site-integration-observability-v24.cjs',
   'scripts/verify-toast-sync-hotfix-v24-1.cjs',
   'scripts/verify-action-semantics-v24-2.cjs',
+  'scripts/verify-operation-integrity-v57.cjs',
+  'scripts/verify-ifood-completion-latency-v58.cjs',
 ].filter(fs.existsSync);
 
 let failed=0;

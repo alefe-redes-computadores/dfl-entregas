@@ -427,6 +427,7 @@ export default function NotificationSettingsPage() {
               description="Confirma quem iniciou, motoboy, pedidos e paradas."
               checked={preferences.routeStarted}
               onChange={() => toggle('routeStarted')}
+              disabled={masterDisabled}
             />
             <ToggleRow
             title="Rota finalizada"

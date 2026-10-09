@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, User, Plus, X } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
@@ -32,6 +32,7 @@ export default function NovaRotaPage() {
   const [changeMoney, setChangeMoney] = useState('');
 
   const [isSavingRoute, setIsSavingRoute] = useState(false);
+  const routeSubmitLockRef = useRef(false);
 
   // Estados do Modal de Novo Motoboy
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -76,6 +77,7 @@ export default function NovaRotaPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (routeSubmitLockRef.current) return;
 
     const selectedMotoboy = motoboys.find((motoboy) => motoboy.id === motoboySelection);
     if (!name.trim() || !selectedMotoboy) {
@@ -83,6 +85,7 @@ export default function NovaRotaPage() {
       return;
     }
 
+    routeSubmitLockRef.current = true;
     setIsSavingRoute(true);
     try {
       const now = new Date().toISOString();
@@ -105,8 +108,18 @@ export default function NovaRotaPage() {
       );
     } catch (error) {
       console.error('Erro ao criar rota:', error);
+      const message = error instanceof Error ? error.message : '';
+      if (message.startsWith('ROUTE_ALREADY_EXISTS:')) {
+        const existingId = message.slice('ROUTE_ALREADY_EXISTS:'.length);
+        toast.info('Esta rota já estava aberta.', {
+          description: 'Em vez de duplicar, abrimos a rota existente.',
+        });
+        router.replace(`/rotas/details?id=${encodeURIComponent(existingId)}&date=${encodeURIComponent(todayDateKey)}`);
+        return;
+      }
       toast.error('Não foi possível criar a rota.');
     } finally {
+      routeSubmitLockRef.current = false;
       setIsSavingRoute(false);
     }
   };
