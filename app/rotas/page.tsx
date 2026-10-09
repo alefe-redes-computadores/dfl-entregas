@@ -7,6 +7,7 @@ import { Bike, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Ma
 import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { deliveryCustomerCharge, deliveryEconomicValue } from '@/lib/delivery-finance';
 import {
   dateKey,
@@ -61,7 +62,7 @@ export default function RoutesPage() {
     const map = new Map<string, typeof deliveries>();
 
     for (const delivery of deliveries) {
-      if (!delivery.route_id) continue;
+      if (!delivery.route_id || isCancelledSiteDelivery(delivery)) continue;
 
       const bucket = map.get(delivery.route_id) || [];
       bucket.push(delivery);

@@ -1,5 +1,6 @@
 // lib/route-stops.ts
 import type { Delivery } from '@/types';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 import { normalizeCustomerAddress } from '@/lib/customer-identity';
 
@@ -54,7 +55,7 @@ export type DeliveryStopGroup = {
 export function groupDeliveriesByStop(
   deliveries: Delivery[],
 ): DeliveryStopGroup[] {
-  const sorted = [...deliveries].sort((a, b) => {
+  const sorted = deliveries.filter((item) => !isCancelledSiteDelivery(item)).sort((a, b) => {
     if (a.completed !== b.completed) {
       return a.completed ? 1 : -1;
     }

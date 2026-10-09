@@ -131,6 +131,7 @@ function eventOccurredAt(
 }
 
 function eventTypes(delivery: Raw, route: Raw | undefined, pendingIndex: number, pendingStops: number, totalStops: number) {
+  if (str(delivery.source_system) === 'dfl_site' && /cancel/i.test(str(delivery.site_order_status))) return [] as const;
   if (bool(delivery.completed)) return ['delivery.completed'] as const;
   if (routeClosed(route)) return ['route.completed'] as const;
 

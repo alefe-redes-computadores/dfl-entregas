@@ -692,7 +692,18 @@ export async function consumeDflSiteOrderUpdatedPersisted(
     const now = new Date().toISOString();
     const incoming = eventClock(event);
     const current = storedCommercialClock(delivery);
-    const applyIncoming = incomingWins(incoming, current);
+    // Um cancelamento comercial ja persistido e terminal para a operacao.
+    // Eventos de confirmacao/preparo atrasados (mesmo com relogio divergente)
+    // nao podem reabrir uma entrega cancelada. O recibo ainda e persistido
+    // como ignored_stale para preservar idempotencia e auditoria.
+    const currentCancelled = String(delivery.site_order_status || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR').includes('cancel');
+    const incomingCancelled = event.payload.status
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR').includes('cancel');
+    const applyIncoming = incomingWins(incoming, current) &&
+      (!currentCancelled || incomingCancelled);
 
     if (applyIncoming) {
       const normalizedIncomingStatus = event.payload.status
@@ -700,6 +711,7 @@ export async function consumeDflSiteOrderUpdatedPersisted(
         .replace(/[\u0300-\u036f]/g, '')
         .toLocaleLowerCase('pt-BR')
         .trim();
+      const siteCancelled = normalizedIncomingStatus.includes('cancel');
       const siteFinalized =
         normalizedIncomingStatus.includes('final') ||
         normalizedIncomingStatus.includes('conclu');
@@ -720,6 +732,7 @@ export async function consumeDflSiteOrderUpdatedPersisted(
         deliveryRef,
         firestoreData({
           site_order_status: event.payload.status,
+          ...(siteCancelled ? { site_order_cancelled_at: incoming.timestamp } : {}),
           // V49: o DFL Site é o owner do estado comercial do pedido.
           // Se o Site informa Finalizado/Concluído, a delivery correspondente
           // não pode permanecer operacionalmente ativa só por não ter route_id.

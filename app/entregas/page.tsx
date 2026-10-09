@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { deliveryCustomerCharge, deliveryIfoodSubsidy } from '@/lib/delivery-finance';
 import { fulfillmentLabel, getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
@@ -154,9 +155,9 @@ export default function DeliveriesPage() {
         .filter(({ delivery, incomplete, haystack, mode }) => {
           const matchesStatus =
             status === 'todas' ||
-            (status === 'pendentes' && !delivery.completed) ||
+            (status === 'pendentes' && !delivery.completed && !isCancelledSiteDelivery(delivery)) ||
             (status === 'concluidas' && delivery.completed) ||
-            (status === 'incompletas' && incomplete);
+            (status === 'incompletas' && incomplete && !isCancelledSiteDelivery(delivery));
 
           const matchesOrigin = origin === 'todas' || delivery.origin === origin;
           const matchesFulfillment = fulfillment === 'todas' || mode === fulfillment;
@@ -173,6 +174,7 @@ export default function DeliveriesPage() {
 
   const totals = useMemo(() => {
     const attention = dayDeliveries.filter((delivery) => {
+      if (isCancelledSiteDelivery(delivery)) return false;
       const route = routes.find((item) => item.id === delivery.route_id);
       const logistics = isDeliveryFulfillment(delivery);
       return (
@@ -183,7 +185,7 @@ export default function DeliveriesPage() {
 
     return {
       all: dayDeliveries.length,
-      pending: dayDeliveries.filter((item) => !item.completed).length,
+      pending: dayDeliveries.filter((item) => !item.completed && !isCancelledSiteDelivery(item)).length,
       completed: dayDeliveries.filter((item) => item.completed).length,
       attention,
     };

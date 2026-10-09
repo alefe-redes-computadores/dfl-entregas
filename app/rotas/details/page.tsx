@@ -21,6 +21,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
 import { RouteOperationalMemory } from '@/components/intelligence/EntityOperationalMemory';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { sumDeliveryFinance } from '@/lib/delivery-finance';
 import { RouteDepartureChecklist } from '@/components/routes/RouteDepartureChecklist';
 
@@ -54,7 +55,7 @@ export default function RouteDetailsPage() {
   const deliveries = useMemo(
     () =>
       allDeliveries
-        .filter((item) => item.route_id === id)
+        .filter((item) => item.route_id === id && !isCancelledSiteDelivery(item))
         .sort(
           (a, b) =>
             (a.order_index ?? 9999) -

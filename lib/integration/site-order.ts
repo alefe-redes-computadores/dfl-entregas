@@ -429,6 +429,12 @@ export function normalizeSiteOrderStatus(value?: string | null): string {
  * textual ainda permanece `pendente`. Esse resíduo não pode gerar alerta,
  * rota sintética ou contador fantasma.
  */
+/** Cancelamento comercial nao equivale a entrega concluida. */
+export function isCancelledSiteDelivery(delivery: Pick<Delivery, 'source_system' | 'site_order_status'>): boolean {
+  return delivery.source_system === 'dfl_site' &&
+    normalizeSiteOrderStatus(delivery.site_order_status) === 'cancelado';
+}
+
 export function isSiteOrderAwaitingConfirmation(
   delivery: Pick<Delivery, 'source_system' | 'site_order_status' | 'completed'>,
 ): boolean {
@@ -456,7 +462,8 @@ export function isSiteOrderReleasedToLogistics(
   return (
     delivery.source_system === 'dfl_site' &&
     Boolean(normalizeSiteOrderStatus(delivery.site_order_status)) &&
-    !isSiteOrderAwaitingConfirmation(delivery)
+    !isSiteOrderAwaitingConfirmation(delivery) &&
+    !isCancelledSiteDelivery(delivery)
   );
 }
 
