@@ -1,5 +1,6 @@
 'use client';
 import { useRouter } from 'next/navigation';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 
 import { useMemo, useState } from 'react';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
@@ -129,6 +130,7 @@ export default function HomePage() {
 
     const deliveriesDoDia = deliveries.filter(
       (delivery) => {
+        if (isCancelledSiteDelivery(delivery)) return false;
         if (!isDeliveryFulfillment(delivery)) {
           return false;
         }
@@ -161,6 +163,7 @@ export default function HomePage() {
 
     const operationalDeliveriesDoDia = deliveriesDoDia.filter(
       (delivery) =>
+        !isCancelledSiteDelivery(delivery) &&
         !delivery.operational_dismissed_at &&
         (!isFutureScheduledDelivery(delivery) ||
           (!delivery.route_id && isSiteOrderAwaitingHomeReview(delivery))),
@@ -210,6 +213,7 @@ export default function HomePage() {
     const storeOrdersDoDia = ordersDoDia
       .filter(
         (order) =>
+          !isCancelledSiteDelivery(order) &&
           !isDeliveryFulfillment(order),
       )
       .sort((a, b) => {
@@ -242,7 +246,7 @@ export default function HomePage() {
       ).length;
 
     const faturamentoTotal = ordersDoDia.reduce(
-      (acc, order) => acc + deliveryEconomicValue(order),
+      (acc, order) => acc + (isCancelledSiteDelivery(order) ? 0 : deliveryEconomicValue(order)),
       0,
     );
 

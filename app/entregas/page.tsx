@@ -34,7 +34,7 @@ import {
 } from '@/lib/operational-time';
 import type { FulfillmentMode } from '@/types';
 
-type StatusFilter = 'todas' | 'pendentes' | 'concluidas' | 'incompletas';
+type StatusFilter = 'todas' | 'pendentes' | 'concluidas' | 'incompletas' | 'canceladas';
 type OriginFilter = 'todas' | 'ifood' | 'loja';
 type FulfillmentFilter = 'todas' | FulfillmentMode;
 
@@ -131,8 +131,10 @@ export default function DeliveriesPage() {
           const logistics = isDeliveryFulfillment(delivery);
 
           const incomplete =
-            (logistics && (!delivery.route_id || !route || !delivery.address_string)) ||
-            (delivery.origin === 'ifood' && !delivery.order_id);
+            !isCancelledSiteDelivery(delivery) && (
+              (logistics && (!delivery.route_id || !route || !delivery.address_string)) ||
+              (delivery.origin === 'ifood' && !delivery.order_id)
+            );
 
           const haystack = normalize(
             [
@@ -157,7 +159,8 @@ export default function DeliveriesPage() {
             status === 'todas' ||
             (status === 'pendentes' && !delivery.completed && !isCancelledSiteDelivery(delivery)) ||
             (status === 'concluidas' && delivery.completed) ||
-            (status === 'incompletas' && incomplete && !isCancelledSiteDelivery(delivery));
+            (status === 'incompletas' && incomplete && !isCancelledSiteDelivery(delivery)) ||
+            (status === 'canceladas' && isCancelledSiteDelivery(delivery));
 
           const matchesOrigin = origin === 'todas' || delivery.origin === origin;
           const matchesFulfillment = fulfillment === 'todas' || mode === fulfillment;
@@ -188,6 +191,7 @@ export default function DeliveriesPage() {
       pending: dayDeliveries.filter((item) => !item.completed && !isCancelledSiteDelivery(item)).length,
       completed: dayDeliveries.filter((item) => item.completed).length,
       attention,
+      cancelled: dayDeliveries.filter(isCancelledSiteDelivery).length,
     };
   }, [dayDeliveries, routes]);
 
@@ -321,6 +325,7 @@ export default function DeliveriesPage() {
               ['todas', 'Todos'],
               ['pendentes', 'Pendentes'],
               ['concluidas', 'Concluídos'],
+              ['canceladas', `Cancelados (${totals.cancelled})`],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -461,7 +466,9 @@ export default function DeliveriesPage() {
               key={delivery.id}
               onClick={() => router.push(`/entregas/details?id=${delivery.id}&date=${encodeURIComponent(selectedDate)}`)}
               className={`w-full rounded-[20px] border p-3.5 text-left active:scale-[0.99] ${
-                incomplete
+                isCancelledSiteDelivery(delivery)
+                  ? 'border-zinc-700/50 bg-zinc-900/25 opacity-70'
+                  : incomplete
                   ? 'border-amber-500/30 bg-amber-500/[.045]'
                   : delivery.completed
                     ? 'border-emerald-500/15 bg-emerald-500/[.025]'

@@ -432,7 +432,7 @@ export function normalizeSiteOrderStatus(value?: string | null): string {
 /** Cancelamento comercial nao equivale a entrega concluida. */
 export function isCancelledSiteDelivery(delivery: Pick<Delivery, 'source_system' | 'site_order_status'>): boolean {
   return delivery.source_system === 'dfl_site' &&
-    normalizeSiteOrderStatus(delivery.site_order_status) === 'cancelado';
+    ['cancelado', 'cancelada', 'cancelled', 'canceled'].includes(normalizeSiteOrderStatus(delivery.site_order_status));
 }
 
 export function isSiteOrderAwaitingConfirmation(

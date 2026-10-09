@@ -18,6 +18,7 @@ import { openDflAdmin } from '@/lib/native/admin-bridge';
 import {
   isSiteOrderAwaitingConfirmation,
   isSiteOrderReleasedToLogistics,
+  isCancelledSiteDelivery,
 } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import type { Delivery } from '@/types';
@@ -71,6 +72,7 @@ export function SiteAdminHub({
     const routed = site.filter(
       (delivery) =>
         !delivery.completed &&
+        !isCancelledSiteDelivery(delivery) &&
         isDeliveryFulfillment(delivery) &&
         Boolean(delivery.route_id) &&
         routeIds.has(delivery.route_id),
@@ -80,9 +82,11 @@ export function SiteAdminHub({
       (delivery) => delivery.completed,
     ).length;
     const active = selectedDateSite.filter(
-      (delivery) => !delivery.completed,
+      (delivery) => !delivery.completed && !isCancelledSiteDelivery(delivery),
     ).length;
+    const cancelled = selectedDateSite.filter(isCancelledSiteDelivery).length;
     const totalValue = selectedDateSite.reduce((sum, delivery) => {
+      if (isCancelledSiteDelivery(delivery)) return sum;
       const commercialTotal = delivery.site_order_commercial?.total;
       const value =
         typeof commercialTotal === 'number'
@@ -96,6 +100,7 @@ export function SiteAdminHub({
     return {
       total: selectedDateSite.length,
       active,
+      cancelled,
       awaitingConfirmation,
       awaitingRoute,
       routed,
@@ -146,7 +151,7 @@ export function SiteAdminHub({
           <span className="mt-0.5 block text-[10px] text-zinc-500">
             {stats.total === 0
               ? 'Nenhum pedido recebido'
-              : `${stats.active} ativo${stats.active === 1 ? '' : 's'} · ${stats.completed} concluído${stats.completed === 1 ? '' : 's'}`}
+              : `${stats.active} ativo${stats.active === 1 ? '' : 's'} · ${stats.completed} concluído${stats.completed === 1 ? '' : 's'} · ${stats.cancelled} cancelado${stats.cancelled === 1 ? '' : 's'}`}
           </span>
 
           {hasAttention && (

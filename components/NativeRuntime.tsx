@@ -66,9 +66,16 @@ export function NativeRuntime() {
       }
 
       try {
+        // O retorno assíncrono de getLaunchUrl não pode sobrescrever
+        // uma navegação que ocorreu enquanto o Android inicializava.
+        const launchPath = window.location.pathname + window.location.search;
         const launch = await App.getLaunchUrl();
         const initialHref = deliveryDeepLinkToHref(launch?.url);
-        if (initialHref) router.replace(initialHref);
+        const currentPath = window.location.pathname + window.location.search;
+
+        if (initialHref && currentPath === launchPath) {
+          router.replace(initialHref);
+        }
         const urlListener = await App.addListener('appUrlOpen', ({ url }) => {
           const href = deliveryDeepLinkToHref(url);
           if (href) router.replace(href);

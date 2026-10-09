@@ -61,6 +61,7 @@ const tests=[
   'scripts/verify-action-semantics-v24-2.cjs',
   'scripts/verify-operation-integrity-v57.cjs',
   'scripts/verify-ifood-completion-latency-v58.cjs',
+  'scripts/verify-v64-1-native-cancellation.cjs',
 ].filter(fs.existsSync);
 
 let failed=0;

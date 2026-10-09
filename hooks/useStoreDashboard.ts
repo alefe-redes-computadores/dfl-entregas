@@ -10,6 +10,7 @@ import {
 } from '@/lib/operational-time';
 import type { Delivery, Route } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 
 export interface StoreDashboardData {
   selectedDate: Date;
@@ -102,7 +103,7 @@ export function useStoreDashboard(): StoreDashboardData {
      * individual perdeu timestamp. Esse comportamento já existia.
      */
     const selectedDateDeliveries = deliveries.filter((delivery) => {
-      if (!isDeliveryFulfillment(delivery)) return false;
+      if (!isDeliveryFulfillment(delivery) || isCancelledSiteDelivery(delivery)) return false;
 
       if (
         delivery.route_id &&
@@ -129,6 +130,7 @@ export function useStoreDashboard(): StoreDashboardData {
     }
 
     for (const order of selectedDateOrders) {
+      if (isCancelledSiteDelivery(order)) continue;
       const value = order.value || 0;
 
       faturamentoTotal += value;
@@ -172,8 +174,9 @@ export function useStoreDashboard(): StoreDashboardData {
       faturamentoTotal - receivedTotal,
     );
 
-    const ticketMedio = selectedDateOrders.length
-      ? faturamentoTotal / selectedDateOrders.length
+    const validOrderCount = selectedDateOrders.filter((order) => !isCancelledSiteDelivery(order)).length;
+    const ticketMedio = validOrderCount
+      ? faturamentoTotal / validOrderCount
       : 0;
 
     return {
