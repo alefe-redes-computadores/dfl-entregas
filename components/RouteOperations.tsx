@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import {
   dateKey,
   routeDate,
@@ -17,6 +18,8 @@ export function RouteOperations() {
   const updateRoute = useAppStore((state) => state.updateRoute);
   const previousOpenRoutes = useRef<number | null>(null);
   const previousRoutes = useRef(routes);
+  // Evita múltiplas gravações da mesma rota enquanto o Firestore confirma.
+  const autoClosing = useRef(new Set<string>());
 
   useEffect(() => {
     if (!hydrated || settings.autoCloseCompletedRoutes === false) return;
@@ -31,11 +34,14 @@ export function RouteOperations() {
           dateKey(routeDate(route) || new Date()) < today,
       )
       .forEach((route) => {
+        // Pedidos cancelados não são entregas pendentes e não devem
+        // impedir o fechamento; rotas só de cancelados NÃO fecham sozinhas.
         const linked = deliveries.filter(
-          (delivery) => delivery.route_id === route.id,
+          (delivery) => delivery.route_id === route.id && !isCancelledSiteDelivery(delivery),
         );
 
-        if (linked.length && linked.every((delivery) => delivery.completed)) {
+        if (linked.length && linked.every((delivery) => delivery.completed) && !autoClosing.current.has(route.id)) {
+          autoClosing.current.add(route.id);
           const base = routeDate(route) || new Date();
           const end = new Date(base);
           end.setHours(23, 59, 0, 0);
@@ -44,6 +50,10 @@ export function RouteOperations() {
             status: 'fechada',
             end_time: route.end_time || end.toISOString(),
             auto_closed_at: new Date().toISOString(),
+          }).catch((error) => {
+            console.warn('[ROUTE_OPERATIONS] Fechamento automático falhou; rota preservada.', error);
+          }).finally(() => {
+            autoClosing.current.delete(route.id);
           });
         }
       });

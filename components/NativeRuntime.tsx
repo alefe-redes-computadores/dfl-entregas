@@ -44,98 +44,116 @@ export function NativeRuntime() {
       document.documentElement.dataset.dflPlatform = 'android';
     }
 
+    let disposed = false;
     const removers: Array<() => Promise<void>> = [];
+    let lastNavigation = { href: '', at: 0 };
+
+    // O setup é assíncrono: um listener criado depois do unmount deve
+    // ser removido imediatamente, não permanecer vivo até outro reload.
+    const registerRemoval = (remove: () => Promise<void>) => {
+      if (disposed) {
+        void remove().catch((error) => console.warn('[NATIVE] Cleanup tardio:', error));
+      } else {
+        removers.push(remove);
+      }
+    };
+
+    const navigate = (href: string, reason: string) => {
+      if (disposed) return;
+      const current = window.location.pathname + window.location.search;
+      if (href === current) return;
+      const now = Date.now();
+      if (lastNavigation.href === href && now - lastNavigation.at < 900) return;
+      lastNavigation = { href, at: now };
+      console.info('[NATIVE] Navegação', { reason, from: current, to: href });
+      router.replace(href);
+    };
 
     const setup = async () => {
       await configureStatusBar();
+      if (disposed) return;
 
       try {
         const notificationListener = await LocalNotifications.addListener(
           'localNotificationActionPerformed',
           (event) => {
             const href = safeInternalHref(event.notification.extra?.href);
-            if (href) {
-              // Replace evita voltar para uma tela antiga ao entrar pelo aviso.
-              router.replace(href);
-            }
+            if (href) navigate(href, 'notification');
           },
         );
-        removers.push(() => notificationListener.remove());
+        registerRemoval(() => notificationListener.remove());
       } catch (error) {
         console.warn('[NATIVE] Listener de notificação:', error);
       }
+      if (disposed) return;
 
       try {
-        // O retorno assíncrono de getLaunchUrl não pode sobrescrever
-        // uma navegação que ocorreu enquanto o Android inicializava.
         const launchPath = window.location.pathname + window.location.search;
         const launch = await App.getLaunchUrl();
         const initialHref = deliveryDeepLinkToHref(launch?.url);
         const currentPath = window.location.pathname + window.location.search;
-
         if (initialHref && currentPath === launchPath) {
-          router.replace(initialHref);
+          navigate(initialHref, 'launch-url');
         }
+        if (disposed) return;
         const urlListener = await App.addListener('appUrlOpen', ({ url }) => {
           const href = deliveryDeepLinkToHref(url);
-          if (href) router.replace(href);
+          if (href) navigate(href, 'app-url-open');
         });
-        removers.push(() => urlListener.remove());
+        registerRemoval(() => urlListener.remove());
       } catch (error) {
         console.warn('[NATIVE] Deep link:', error);
       }
+      if (disposed) return;
 
       try {
         const stateListener = await App.addListener('appStateChange', ({ isActive }) => {
-          if (isActive) {
-            // O WebView Android nem sempre emite visibilitychange ao voltar
-            // de outro aplicativo. O Header continua sendo o owner da
-            // sincronização/cooldown; este evento apenas sinaliza o resume
-            // nativo, sem criar polling ou uma segunda leitura concorrente.
-            window.dispatchEvent(new Event('dfl:app-foreground'));
-
-            // Algumas Activities externas (ex.: seletor Google) podem devolver
-            // flags de system bars diferentes. Reaplicamos após o resume.
-            window.setTimeout(() => {
-              void configureStatusBar();
-            }, 80);
-          }
+          if (!isActive || disposed) return;
+          window.dispatchEvent(new Event('dfl:app-foreground'));
+          window.setTimeout(() => {
+            if (!disposed) void configureStatusBar();
+          }, 80);
         });
-        removers.push(() => stateListener.remove());
+        registerRemoval(() => stateListener.remove());
       } catch (error) {
         console.warn('[NATIVE] Ciclo de vida:', error);
       }
+      if (disposed) return;
 
       try {
+        let lastBackAt = 0;
         const backListener = await App.addListener('backButton', () => {
+          if (disposed) return;
+          const now = Date.now();
+          if (now - lastBackAt < 650) return;
+          lastBackAt = now;
           const target = nativeBackTarget(
             window.location.pathname,
             window.location.search,
           );
-
           if (target) {
-            router.replace(target);
+            navigate(target, 'android-back');
             return;
           }
-
-          // Home/Loja são raízes do app. No Android, voltar minimiza.
+          console.info('[NATIVE] Minimizar app pelo botão Voltar');
           void App.minimizeApp();
         });
-        removers.push(() => backListener.remove());
+        registerRemoval(() => backListener.remove());
       } catch (error) {
         console.warn('[NATIVE] Botão voltar:', error);
       }
     };
 
-    void setup();
+    void setup().catch((error) => console.warn('[NATIVE] Setup:', error));
 
     return () => {
+      disposed = true;
       document.documentElement.style.removeProperty(
         '--dfl-native-statusbar-fallback',
       );
       delete document.documentElement.dataset.dflPlatform;
       removers.forEach((remove) => {
-        void remove();
+        void remove().catch((error) => console.warn('[NATIVE] Cleanup:', error));
       });
     };
   }, [router]);

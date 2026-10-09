@@ -62,6 +62,11 @@ const tests=[
   'scripts/verify-operation-integrity-v57.cjs',
   'scripts/verify-ifood-completion-latency-v58.cjs',
   'scripts/verify-v64-1-native-cancellation.cjs',
+  'scripts/verify-v64-4-cancellation-gate.cjs',
+  'scripts/verify-v67-stock-weekday.cjs',
+  'scripts/verify-v66-route-cancellation.cjs',
+  'scripts/verify-v66-customer-concurrency.cjs',
+  'scripts/verify-v66-balcao-haptics.cjs',
 ].filter(fs.existsSync);
 
 let failed=0;

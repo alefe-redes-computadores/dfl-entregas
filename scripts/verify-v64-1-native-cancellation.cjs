@@ -27,7 +27,14 @@ check(
 check(
   'deep links recebidos em execução continuam ativos',
   native.includes("App.addListener('appUrlOpen'") &&
-  native.includes('if (href) router.replace(href)')
+  (
+    native.includes('if (href) router.replace(href)') ||
+    (
+      native.includes("navigate(href, 'app-url-open')") &&
+      native.includes('if (disposed) return;') &&
+      native.includes('router.replace(href)')
+    )
+  )
 );
 
 check(

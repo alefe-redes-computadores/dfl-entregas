@@ -17,6 +17,7 @@ import { normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { getFulfillmentMode } from '@/lib/delivery-mode';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { dateKey, deliveryDate, routeDate } from '@/lib/operational-time';
 import { paymentStateForInput } from '@/lib/delivery-finance';
 import { deliveryStopKey } from '@/lib/route-stops';
@@ -478,6 +479,10 @@ const [routeId, setRouteId] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentDelivery && isCancelledSiteDelivery(currentDelivery)) {
+      toast.error('Pedido cancelado: edição bloqueada.');
+      return;
+    }
     if (!deliveryId || !value || (fulfillmentMode === 'delivery' && (!routeId || !streetAddress))) {
       toast.error(
         fulfillmentMode === 'delivery'
@@ -627,6 +632,10 @@ const [routeId, setRouteId] = useState('');
 
   const handleDelete = async () => {
     if (!deliveryId || !currentDelivery) return;
+    if (isCancelledSiteDelivery(currentDelivery)) {
+      toast.error('Pedido cancelado: exclusão bloqueada.');
+      return;
+    }
 
     if (currentDelivery.completed === true) {
       toast.error('Desfaça a baixa antes de excluir este pedido.', {
@@ -652,6 +661,23 @@ const [routeId, setRouteId] = useState('');
   };
 
   const routeOptions = selectableRoutes;
+
+  if (currentDelivery && isCancelledSiteDelivery(currentDelivery)) {
+    return (
+      <section className="rounded-2xl border border-red-500/30 bg-red-500/[.06] p-5">
+        <h1 className="font-black text-red-400">Pedido cancelado</h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          Registro protegido. Edição e exclusão indisponíveis.
+        </p>
+        <button
+          onClick={() => router.replace(detailsReturn)}
+          className="mt-4 rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold"
+        >
+          Voltar à ficha
+        </button>
+      </section>
+    );
+  }
 
   return (
     <div className="relative flex flex-col gap-5 pb-28 animate-in fade-in duration-300">

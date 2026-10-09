@@ -50,6 +50,7 @@ import {
   siteStatusLabel,
 } from '@/lib/delivery-presentation';
 import { siteIntegrationStages } from '@/lib/site-integration-health';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 
 const money = (value = 0) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -113,6 +114,7 @@ function DeliveryDetailsContent() {
     ? siteIntegrationStages(delivery, route)
     : [];
 
+  const cancelled = isCancelledSiteDelivery(delivery);
   const name = customer?.name || delivery.customer_name || 'Cliente não informado';
   const phone = formatBrazilianPhone(delivery.phone || customer?.phone);
   const mode = getFulfillmentMode(delivery);
@@ -157,9 +159,13 @@ function DeliveryDetailsContent() {
   const routeNotStarted =
     logistics && route?.status === 'aberta' && !operationalStartedAt;
 
+  // Feedback tátil nunca deve impedir persistência, confirmação ou navegação.
   const vibrate = async (style: ImpactStyle) => {
-    if (Capacitor.isNativePlatform()) {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
       await Haptics.impact({ style });
+    } catch {
+      // Android sem haptics ou plugin indisponível: operação continua normalmente.
     }
   };
 
@@ -234,7 +240,7 @@ function DeliveryDetailsContent() {
   };
 
   const executeCompletion = async (codeToSave?: string) => {
-    if (delivery.completed || isCompleting) return;
+    if (cancelled || delivery.completed || isCompleting) return;
 
     setIsCompleting(true);
     const payload = {
@@ -244,7 +250,8 @@ function DeliveryDetailsContent() {
 
     try {
       await updateDelivery(delivery.id, payload);
-      await vibrate(ImpactStyle.Medium);
+      // Após persistir, falha do plugin não pode ser tratada como falha da baixa.
+      void vibrate(ImpactStyle.Medium);
       setIsIfoodModalOpen(false);
       setInputCode('');
       toast.success(
@@ -262,7 +269,7 @@ function DeliveryDetailsContent() {
         router.replace(deliveriesReturn);
       }
     } catch {
-      await vibrate(ImpactStyle.Heavy);
+      void vibrate(ImpactStyle.Heavy);
       toast.error('Não foi possível concluir o pedido.', {
         description: 'O estado anterior foi restaurado. Tente novamente.',
       });
@@ -272,7 +279,7 @@ function DeliveryDetailsContent() {
   };
 
   const handleCompletionAction = async () => {
-    if (isCompleting) return;
+    if (cancelled || isCompleting) return;
     await vibrate(ImpactStyle.Light);
 
     if (delivery.completed) {
@@ -338,7 +345,8 @@ function DeliveryDetailsContent() {
         </div>
 
         <button
-          onClick={() => router.push(`/entregas/editar?id=${delivery.id}${dateSuffix}`)}
+          disabled={cancelled}
+          onClick={() => { if (!cancelled) router.push(`/entregas/editar?id=${delivery.id}${dateSuffix}`); }}
           className="flex h-10 items-center gap-2 rounded-xl bg-amber-500 px-3 text-xs font-black text-zinc-950"
         >
           <Edit3 size={15} />
@@ -346,6 +354,15 @@ function DeliveryDetailsContent() {
         </button>
       </header>
 
+      {cancelled && (
+        <section className="rounded-2xl border border-red-500/30 bg-red-500/[.06] p-4">
+          <p className="font-black uppercase text-red-400">Pedido cancelado</p>
+          <p className="mt-2 text-xs text-zinc-400">
+            Registro histórico somente leitura. Valor operacional zerado.
+            Edição, exclusão e conclusão bloqueadas.
+          </p>
+        </section>
+      )}
       {channel === 'site' && delivery.external_order_id && (
         <button type="button" onClick={() => void openDflAdmin()} disabled={openingAdmin} className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-sky-500/20 bg-sky-500/[0.07] px-4 py-3 text-left active:scale-[0.99] disabled:cursor-wait disabled:opacity-70">
           <span className="min-w-0"><span className="block text-[9px] font-black uppercase tracking-[0.16em] text-sky-400">Ecossistema DFL</span><strong className="mt-1 block truncate text-sm text-zinc-100">{openingAdmin ? 'Abrindo DFL Admin…' : 'Abrir pedido no DFL Admin'}</strong></span>
@@ -391,7 +408,7 @@ function DeliveryDetailsContent() {
                 : 'bg-amber-500/15 text-amber-400'
             }`}
           >
-            {delivery.completed ? 'Concluído' : 'Pendente'}
+            {cancelled ? 'Cancelado' : delivery.completed ? 'Concluído' : 'Pendente'}
           </span>
         </div>
 
@@ -410,7 +427,7 @@ function DeliveryDetailsContent() {
         <div className="mt-5 grid grid-cols-2 gap-3">
           <div>
             <p className="text-[10px] uppercase text-zinc-500">Valor</p>
-            <p className="text-xl font-black text-emerald-400">{money(customerCharge)}</p>{subsidy > 0 && <p className="mt-1 text-[10px] text-zinc-500">Total econômico {money(delivery.value)} · iFood {money(subsidy)}</p>}
+            <p className="text-xl font-black text-emerald-400">{cancelled ? money(0) : money(customerCharge)}</p>{cancelled && <p className="mt-1 text-xs text-zinc-500">Valor original: {money(customerCharge)}</p>}{!cancelled && subsidy > 0 && <p className="mt-1 text-[10px] text-zinc-500">Total econômico {money(delivery.value)} · iFood {money(subsidy)}</p>}
           </div>
           <div>
             <p className="text-[10px] uppercase text-zinc-500">Pagamento</p>
@@ -550,7 +567,7 @@ function DeliveryDetailsContent() {
               Baixa operacional
             </p>
             <p className="mt-1 text-sm font-black text-zinc-100">
-              {delivery.completed ? 'Pedido já concluído' : 'Finalizar atendimento'}
+              {cancelled ? 'Pedido cancelado · Somente leitura' : delivery.completed ? 'Pedido já concluído' : 'Finalizar atendimento'}
             </p>
           </div>
           {logistics && (
@@ -568,7 +585,7 @@ function DeliveryDetailsContent() {
 
         <button
           onClick={handleCompletionAction}
-          disabled={isCompleting}
+          disabled={isCompleting || cancelled}
           className={`flex h-14 w-full items-center justify-center gap-2 rounded-2xl font-black active:scale-[0.98] disabled:opacity-60 ${
             delivery.completed
               ? 'border border-zinc-700 bg-zinc-900 text-zinc-300'
@@ -648,7 +665,7 @@ function DeliveryDetailsContent() {
         <InfoRow
           icon={CheckCircle2}
           label="Conclusão"
-          value={delivery.completed ? dateTime(delivery.completed_at) : 'Ainda pendente'}
+          value={cancelled ? 'Não aplicável — cancelado' : delivery.completed ? dateTime(delivery.completed_at) : 'Ainda pendente'}
         />
 
         {delivery.ifood_id && (

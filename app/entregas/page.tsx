@@ -542,7 +542,7 @@ export default function DeliveriesPage() {
                           : 'bg-amber-500/10 text-amber-400'
                       }`}
                     >
-                      {delivery.completed ? 'Concluído' : 'Pendente'}
+                      {isCancelledSiteDelivery(delivery) ? 'Cancelado' : delivery.completed ? 'Concluído' : 'Pendente'}
                     </span>
                   </div>
                 </div>
@@ -550,7 +550,7 @@ export default function DeliveriesPage() {
                 <div className="shrink-0 text-right">
                   <p className="text-sm font-black text-emerald-400">
                     R${' '}
-                    {deliveryCustomerCharge(delivery).toLocaleString('pt-BR', {
+                    {(isCancelledSiteDelivery(delivery) ? 0 : deliveryCustomerCharge(delivery)).toLocaleString('pt-BR', {
                       minimumFractionDigits: 2,
                     })}
                   </p>

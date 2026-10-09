@@ -51,9 +51,12 @@ import {
   roundStockQuantity,
   stockExitExceeds,
 } from '@/lib/stock-precision';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 
 const routeCreateLocks = new Set<string>();
 const deliveryMutationLocks = new Set<string>();
+// Serializa cadastros do mesmo nome dentro desta sessão, sem presumir identidade.
+const customerCreationFlights = new Map<string, Promise<string>>();
 
 const routeOperationKey = (route: Pick<Route, 'motoboy_id' | 'motoboy_name' | 'created_at'>) => {
   const operationalDay = route.created_at ? dateKey(route.created_at) : dateKey(new Date());
@@ -80,7 +83,7 @@ async function autoOrganizeLoadedRouteAfterInsert(
 ) {
   if (!routeId) return;
   const items = deliveries
-    .filter((delivery) => delivery.route_id === routeId && !delivery.completed)
+    .filter((delivery) => delivery.route_id === routeId && !delivery.completed && !isCancelledSiteDelivery(delivery))
     .sort((a, b) => (a.order_index ?? 999999) - (b.order_index ?? 999999));
   const groups = groupDeliveriesByStop(items);
   if (groups.length < 2) return;
@@ -988,7 +991,7 @@ export const useAppStore = create<AppState>()(
           throw new Error('Este agrupador operacional não é uma rota real. Vincule os pedidos a uma rota antes de iniciar.');
         }
         if (current.status === 'fechada') throw new Error('Reabra a rota antes de iniciá-la.');
-        const routeDeliveries = get().deliveries.filter((delivery) => delivery.route_id === routeId);
+        const routeDeliveries = get().deliveries.filter((delivery) => delivery.route_id === routeId && !isCancelledSiteDelivery(delivery));
         if (routeDeliveries.length === 0) throw new Error('Adicione pelo menos uma entrega antes de iniciar a rota.');
         if (routeDeliveries.some(isSiteOrderAwaitingConfirmation)) throw new Error('Há pedido do Site aguardando confirmação da loja. Confirme no Admin antes de iniciar a rota.');
         if (routeDeliveries.some((delivery) => isFutureScheduledDelivery(delivery))) {
@@ -1623,6 +1626,7 @@ export const useAppStore = create<AppState>()(
       },
 
       addDelivery: async (delivery) => {
+        if (isCancelledSiteDelivery(delivery)) throw new Error('Pedido cancelado não pode ser importado como entrega ativa.');
         const mutationKey = `delivery:add:${delivery.id}`;
         if (deliveryMutationLocks.has(mutationKey)) return;
         if (get().deliveries.some((current) => sameExternalDelivery(current, delivery))) {
@@ -1630,7 +1634,7 @@ export const useAppStore = create<AppState>()(
         }
         deliveryMutationLocks.add(mutationKey);
         const now = new Date().toISOString();
-        const siblings = get().deliveries.filter((item) => item.route_id === delivery.route_id && !item.completed);
+        const siblings = get().deliveries.filter((item) => item.route_id === delivery.route_id && !item.completed && !isCancelledSiteDelivery(item));
         const siblingIndexes = siblings.map((item) => item.order_index).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
         const minIndex = siblingIndexes.length ? Math.min(...siblingIndexes) : 0;
         const maxIndex = siblingIndexes.length ? Math.max(...siblingIndexes) : -1;
@@ -1668,6 +1672,7 @@ export const useAppStore = create<AppState>()(
 
       addDeliveries: async (items) => {
         if (!items.length) return;
+        if (items.some(isCancelledSiteDelivery)) throw new Error('O lote contém pedido cancelado. Revise antes de importar.');
         const existing = get().deliveries;
         const duplicated = items.find((item, index) =>
           existing.some((current) => sameExternalDelivery(current, item)) ||
@@ -1678,7 +1683,7 @@ export const useAppStore = create<AppState>()(
         }
         const now = new Date().toISOString();
         const routeTail = new Map<string, number>();
-        get().deliveries.filter((item)=>!item.completed).forEach((item)=>{
+        get().deliveries.filter((item)=>!item.completed && !isCancelledSiteDelivery(item)).forEach((item)=>{
           const current=routeTail.get(item.route_id) ?? -1;
           routeTail.set(item.route_id, Math.max(current, item.order_index ?? current));
         });
@@ -1729,6 +1734,12 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const deliveryToUpdate = state.deliveries.find((d) => d.id === id);
         if (!deliveryToUpdate) throw new Error('Entrega não encontrada.');
+
+        if (isCancelledSiteDelivery(deliveryToUpdate)) {
+          throw new Error(
+            'Pedido cancelado: alterações operacionais bloqueadas. O histórico comercial deve ser preservado.',
+          );
+        }
 
         const nextRouteId =
           updatedData.route_id !== undefined
@@ -2042,6 +2053,12 @@ export const useAppStore = create<AppState>()(
         const deliveryToDelete = state.deliveries.find((delivery) => delivery.id === id);
         if (!deliveryToDelete) throw new Error('Entrega não encontrada.');
 
+        if (isCancelledSiteDelivery(deliveryToDelete)) {
+          throw new Error(
+            'Pedido cancelado: exclusão bloqueada para preservar o histórico.',
+          );
+        }
+
         if (deliveryToDelete.completed === true) {
           throw new Error(
             'Desfaça a baixa antes de excluir uma entrega concluída.',
@@ -2270,7 +2287,7 @@ export const useAppStore = create<AppState>()(
 
       reorderDelivery: async (routeId, deliveryId, direction) => {
         const pending = get().deliveries
-          .filter((delivery) => delivery.route_id === routeId && !delivery.completed)
+          .filter((delivery) => delivery.route_id === routeId && !delivery.completed && !isCancelledSiteDelivery(delivery))
           .map((delivery) => ({ ...delivery }));
         const selected = pending.find((delivery) => delivery.id === deliveryId);
         if (!selected) return;
@@ -2290,7 +2307,7 @@ export const useAppStore = create<AppState>()(
 
       moveDeliveryToIndex: async (routeId, deliveryId, targetIndex) => {
         const pending = get().deliveries
-          .filter((delivery) => delivery.route_id === routeId && !delivery.completed)
+          .filter((delivery) => delivery.route_id === routeId && !delivery.completed && !isCancelledSiteDelivery(delivery))
           .map((delivery) => ({ ...delivery }));
         const selected = pending.find((delivery) => delivery.id === deliveryId);
         if (!selected || pending.length < 2) return;
@@ -2314,8 +2331,8 @@ export const useAppStore = create<AppState>()(
           .filter((delivery) => delivery.route_id === routeId)
           .map((delivery) => ({ ...delivery }));
 
-        const pending = routeDeliveries.filter((delivery) => !delivery.completed);
-        const completed = routeDeliveries.filter((delivery) => delivery.completed);
+        const pending = routeDeliveries.filter((delivery) => !delivery.completed && !isCancelledSiteDelivery(delivery));
+        const completed = routeDeliveries.filter((delivery) => delivery.completed || isCancelledSiteDelivery(delivery));
         const pendingById = new Map(pending.map((delivery) => [delivery.id, delivery]));
 
         const uniqueIds = Array.from(new Set(orderedPendingIds));
@@ -2852,9 +2869,22 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      findOrCreateCustomer: async (name, details) => {
+      findOrCreateCustomer: (name, details) => {
         const rawName = name.trim();
-        if (!rawName) return '';
+        if (!rawName) return Promise.resolve('');
+        // Mesmo nome pode representar pessoas diferentes: a fila apenas serializa.
+        // A decisão de reutilização permanece em customerIdentityEvidence.
+        const flightKey = rawName.normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLocaleLowerCase('pt-BR')
+          .replace(/\s*\(\d+\)\s*$/, '')
+          .replace(/\s+/g, ' ').trim();
+        const pending = customerCreationFlights.get(flightKey);
+        if (pending) {
+          return pending.catch(() => '').then(() =>
+            get().findOrCreateCustomer(name, details));
+        }
+        const operation = (async (): Promise<string> => {
 
         const previousCustomers = get().customers;
         const now = new Date().toISOString();
@@ -3080,6 +3110,14 @@ export const useAppStore = create<AppState>()(
 
           throw error;
         }
+        })();
+        customerCreationFlights.set(flightKey, operation);
+        void operation.finally(() => {
+          if (customerCreationFlights.get(flightKey) === operation) {
+            customerCreationFlights.delete(flightKey);
+          }
+        }).catch(() => {});
+        return operation;
       },
     }),
     {

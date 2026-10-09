@@ -58,7 +58,13 @@ export function Header() {
   }, []);
 
   const refreshNow = useCallback(async (showFeedback = true) => {
-    if (refreshInFlightRef.current || useAppStore.getState().isSyncing) {
+    // Não iniciar leituras antes da autenticação e hidratação local.
+    const snapshot = useAppStore.getState();
+    if (!snapshot.user || !snapshot.authLoaded || !snapshot.hasHydrated) {
+      if (showFeedback) toast.info('Aguarde o carregamento da sessão.');
+      return;
+    }
+    if (refreshInFlightRef.current || snapshot.isSyncing) {
       if (showFeedback) toast.info('A atualização já está em andamento.', { id: 'operation-sync' });
       return;
     }
