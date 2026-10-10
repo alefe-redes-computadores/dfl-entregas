@@ -64,8 +64,14 @@ export function groupDeliveriesByStop(
   deliveries: Delivery[],
 ): DeliveryStopGroup[] {
   const sorted = deliveries.filter((item) => !isCancelledSiteDelivery(item)).sort((a, b) => {
-    if (a.completed !== b.completed) {
-      return a.completed ? 1 : -1;
+    // Firestore e integrações antigas podem representar uma entrega pendente
+    // tanto com completed=false quanto sem o campo. Comparar false com
+    // undefined diretamente viola a antissimetria do Array.sort e separava,
+    // na prática, pedidos locais e pedidos do Site em blocos diferentes.
+    const aCompleted = a.completed === true;
+    const bCompleted = b.completed === true;
+    if (aCompleted !== bCompleted) {
+      return aCompleted ? 1 : -1;
     }
 
     const diff = orderValue(a) - orderValue(b);
