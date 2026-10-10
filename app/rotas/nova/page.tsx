@@ -109,12 +109,8 @@ export default function NovaRotaPage() {
     } catch (error) {
       console.error('Erro ao criar rota:', error);
       const message = error instanceof Error ? error.message : '';
-      if (message.startsWith('ROUTE_ALREADY_EXISTS:')) {
-        const existingId = message.slice('ROUTE_ALREADY_EXISTS:'.length);
-        toast.info('Esta rota já estava aberta.', {
-          description: 'Em vez de duplicar, abrimos a rota existente.',
-        });
-        router.replace(`/rotas/details?id=${encodeURIComponent(existingId)}&date=${encodeURIComponent(todayDateKey)}`);
+      if (message === 'ROUTE_ID_COLLISION') {
+        toast.error('Não foi possível criar: identificador de rota repetido. Tente novamente.');
         return;
       }
       toast.error('Não foi possível criar a rota.');

@@ -316,32 +316,12 @@ export function customerIdentityEvidence(
    * - nome igual permite enriquecer um cadastro realmente
    *   incompleto, desde que não exista identidade contraditória.
    */
+  // V61: nunca reutilizar apenas por nome semelhante ou telefone.
   const reusable =
     !addressConflict &&
-    (
-      (
-        samePhone &&
-        similarity >= 0.5
-      ) ||
-      (
-        sameAddress &&
-        (
-          exactName ||
-          similarity >= 0.82
-        ) &&
-        !phoneConflict
-      ) ||
-      (
-        exactName &&
-        !phoneConflict &&
-        (
-          !incomingHasIdentity ||
-          storedMissingIncomingIdentity ||
-          samePhone ||
-          sameAddress
-        )
-      )
-    );
+    exactName &&
+    sameAddress &&
+    !phoneConflict;
 
   return {
     score: Math.max(0, Math.min(100, score)),

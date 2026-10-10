@@ -788,13 +788,8 @@ export function parseIfoodOrderText(
       const cleanedCandidate = line
         .replace(/^[-•*]\s*/, '')
         .trim();
-      const knownCandidate =
-        longestKnownMatch(
-          cleanedCandidate,
-          context.knownCustomerNames,
-        );
-
-      result.customerName = knownCandidate || cleanedCandidate;
+      // V61: preservar nome literal do pedido, sem fuzzy matching.
+      result.customerName = cleanedCandidate;
       return;
     }
 

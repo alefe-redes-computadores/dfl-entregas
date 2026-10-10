@@ -673,8 +673,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       toast.success(optimizerEdited ? 'Ordem manual aplicada.' : 'Ordem inteligente aplicada.', {
         description: optimizerEdited ? 'A sequência foi salva sem criar travas automáticas.' : 'A sequência continua livre para encaixar novas paradas.',
       });
-    } catch {
-      toast.error('Não foi possível aplicar a ordem sugerida.');
+    } catch (error) {
+      console.error('[DFL V60] Falha ao persistir ordem mista:', error);
+      toast.error(error instanceof Error ? error.message : 'Não foi possível aplicar a ordem sugerida.');
     } finally {
       setOptimizerBusy(false);
     }

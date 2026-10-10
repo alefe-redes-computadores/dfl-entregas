@@ -58,11 +58,8 @@ const deliveryMutationLocks = new Set<string>();
 // Serializa cadastros do mesmo nome dentro desta sessão, sem presumir identidade.
 const customerCreationFlights = new Map<string, Promise<string>>();
 
-const routeOperationKey = (route: Pick<Route, 'motoboy_id' | 'motoboy_name' | 'created_at'>) => {
-  const operationalDay = route.created_at ? dateKey(route.created_at) : dateKey(new Date());
-  const owner = route.motoboy_id || route.motoboy_name.trim().toLocaleLowerCase('pt-BR');
-  return `${operationalDay}:${owner}`;
-};
+// A chave do lock representa a tentativa/ID, não o motoboy: o mesmo motoboy pode ter várias rotas no dia.
+const routeOperationKey = (route: Pick<Route, 'id'>) => route.id;
 
 const sameExternalDelivery = (left: Delivery, right: Delivery) => {
   if (left.id === right.id) return true;
@@ -951,10 +948,9 @@ export const useAppStore = create<AppState>()(
         if (routeCreateLocks.has(operationKey)) {
           throw new Error('Esta rota já está sendo criada. Aguarde um instante.');
         }
-        const equivalent = get().routes.find((current) =>
-          current.status === 'aberta' && routeOperationKey(current) === operationKey
-        );
-        if (equivalent) throw new Error(`ROUTE_ALREADY_EXISTS:${equivalent.id}`);
+        // Bloqueia apenas colisão real de ID; rotas distintas podem coexistir, inclusive com o mesmo motoboy.
+        const equivalent = get().routes.find((current) => current.id === routeWithTimestamp.id);
+        if (equivalent) throw new Error('ROUTE_ID_COLLISION');
         routeCreateLocks.add(operationKey);
         set((state) => ({ routes: [routeWithTimestamp, ...state.routes] }));
         try {
@@ -2350,7 +2346,12 @@ export const useAppStore = create<AppState>()(
           throw new Error('A ordem recebida não corresponde às entregas pendentes da rota.');
         }
 
+        // O pedido do Site e o pedido local compartilham a mesma autoridade de ordem.
+        // Falhar explicitamente evita informar sucesso quando uma parada não mudou.
         const orderedPending = finalPendingIds.map((id) => pendingById.get(id)!);
+        if (new Set(finalPendingIds).size !== pending.length) {
+          throw new Error('A sequência contém IDs repetidos ou pedidos ausentes.');
+        }
         const completedSorted = [...completed].sort((a, b) => {
           const aOrder = a.order_index ?? Number.MAX_SAFE_INTEGER;
           const bOrder = b.order_index ?? Number.MAX_SAFE_INTEGER;

@@ -39,8 +39,16 @@ const fallbackOrder = (delivery: Delivery) => {
     : Number.MAX_SAFE_INTEGER;
 };
 
-const orderValue = (delivery: Delivery) =>
-  delivery.order_index ?? fallbackOrder(delivery);
+// Valores legados do Site podem chegar como string ou índice não finito.
+// Todos os canais precisam participar da mesma sequência numérica.
+const orderValue = (delivery: Delivery) => {
+  const raw = delivery.order_index;
+  if (raw !== undefined && raw !== null) {
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return fallbackOrder(delivery);
+};
 
 export type DeliveryStopGroup = {
   key: string;
