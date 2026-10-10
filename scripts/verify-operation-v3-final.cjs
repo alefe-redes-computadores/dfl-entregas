@@ -12,7 +12,7 @@ const files={
   acerto:read('app/motoboys/acerto/page.tsx'),
 };
 const checks=[
- ['identidade exige nome forte no mesmo endereço',files.identity.includes('similarity >= 0.82')],
+ ['identidade exige nome exato e endereço igual sem conflito',files.identity.includes('exactName &&')&&files.identity.includes('sameAddress &&')&&files.identity.includes('!phoneConflict')],
  ['UI usa evidência canônica',files.nova.includes('customerIdentityEvidence(customer, customerName')],
  ['mesmo endereço/nome diferente é revisão',files.nova.includes("kind: 'same_address'")],
  ['parser aceita iFood sem palavra ID',files.parser.includes('ifood(?:\\s+id)?')],

@@ -10,8 +10,8 @@ const confirmations=read('lib/ifood-confirmations.ts');
 ok(nova.includes("fulfillmentMode==='counter'"),'Balcão é modalidade explícita');
 ok((nova.match(/exclude_customer_metrics:excludeCustomerMetrics\|\|fulfillmentMode==='counter'/g)||[]).length>=2,
    'Balcão fica fora das métricas de cliente em pedido único e multi-pedido');
-ok(nova.includes("preferredCustomerId:selectedCustomerId&&sameCustomerAddress"),
-   'multi-pedido pode reutilizar seleção explícita apenas na mesma parada');
+ok(nova.includes('preferredCustomerId:undefined') && nova.includes('sameCustomerAddress'),
+   'multi-pedido revalida identidade por pedido e preserva agrupamento físico');
 ok(nova.includes('sameCustomerAddress'), 'agrupamento físico continua baseado em endereço canônico');
 ok(nova.includes('stop_group_id:draftStopGroupId'), 'pedidos da mesma parada preservam stop_group_id');
 ok(nova.includes('await addDeliveries(deliveriesToCreate)'), 'multi-pedido continua gravado em lote');

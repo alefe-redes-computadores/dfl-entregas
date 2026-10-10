@@ -19,7 +19,12 @@ ok(store.includes('order_index: movedOrderIndex') && store.includes("order_sourc
 ok(store.includes('Urgência pertence à parada física') && store.includes('moveStopToIndex(get().deliveries.filter'), 'urgência move toda a parada ao topo');
 ok(deliveryForm.includes('Só este pedido') && deliveryForm.includes('Toda a parada'), 'troca de rota agrupada exige escolha explícita');
 ok(store.includes('routeCreateLocks') && routeForm.includes('routeSubmitLockRef'), 'criação de rota possui trava síncrona em duas camadas');
-ok(store.includes('ROUTE_ALREADY_EXISTS:') && routeForm.includes('abrimos a rota existente'), 'rota equivalente é reutilizada em vez de duplicada');
+ok(
+  store.includes("routeOperationKey = (route: Pick<Route, 'id'>)") &&
+  store.includes("throw new Error('ROUTE_ID_COLLISION')") &&
+  routeForm.includes("message === 'ROUTE_ID_COLLISION'"),
+  'rotas paralelas são permitidas e colisão real de ID é bloqueada',
+);
 ok(store.includes('sameExternalDelivery') && store.includes('Este pedido já foi importado'), 'importação possui identidade idempotente');
 ok(newDelivery.includes('Reconhecimento ao vivo') && newDelivery.includes('Falta conferir:'), 'parser iFood revela dados e ausências progressivamente');
 ok(newDelivery.includes('Preencher e revisar o que falta'), 'parser conduz revisão somente quando necessária');
