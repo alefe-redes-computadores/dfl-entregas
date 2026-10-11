@@ -1439,6 +1439,9 @@ export const useAppStore = create<AppState>()(
       },
 
       addStockMovement: async (movement) => {
+        // IDs operacionais determinísticos tornam a baixa repetível com segurança.
+        // Reabrir a revisão ou tocar duas vezes nunca altera o saldo novamente.
+        if (get().stockMovements.some((item) => item.id === movement.id)) return;
         const product = get().stockProducts.find((item) => item.id === movement.product_id);
         if (!product) throw new Error('Produto de estoque não encontrado.');
         const before = roundStockQuantity(product.current_quantity);

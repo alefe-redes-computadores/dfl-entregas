@@ -49,6 +49,7 @@ function readState(): HiddenInsightState {
     return {
       dateKey: today,
       ids: parsed.ids.filter((id): id is string => typeof id === 'string'),
+      muted: parsed.muted === true,
     };
   } catch {
     return { dateKey: today, ids: [] };

@@ -203,6 +203,11 @@ export interface StockMovement {
   balance_after: number;
   unit_cost?: number;
   reason?: string;
+  /** Rastreabilidade de baixas sugeridas pela operação, sem nova consulta. */
+  source_kind?: 'delivery_beverage_review';
+  source_delivery_ids?: string[];
+  source_labels?: string[];
+  source_confidence?: 'alta' | 'media';
   supply_id?: string;
   team_member_id?: string;
   team_member_name?: string;

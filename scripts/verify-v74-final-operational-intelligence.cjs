@@ -1,0 +1,11 @@
+const fs=require('fs');const r=f=>fs.readFileSync(f,'utf8');const ok=(v,l)=>{if(!v)throw new Error('V74: '+l);console.log('OK:',l)};
+const lib=r('lib/stock-beverage-reconciliation.ts'),ui=r('components/stock/BeverageStockReview.tsx'),store=r('store/useAppStore.ts'),types=r('types/index.ts'),hidden=r('hooks/useHiddenInsightsToday.ts'),server=r('lib/integration/server/siteOrderPersistence.ts');
+ok(store.includes("stockMovements.some((item) => item.id === movement.id)"),'idempotência protegida na autoridade do estoque');
+ok(ui.includes('useAppStore.getState().stockMovements.some')&&ui.includes('não foi duplicada'),'duplo toque protegido e explicado');
+ok(types.includes("source_kind?: 'delivery_beverage_review'")&&types.includes('source_delivery_ids?: string[]'),'rastreabilidade tipada');
+ok(ui.includes('Ver pedidos e origem')&&ui.includes('recebido do Site')&&ui.includes('corrigido por você'),'origem e evidências visíveis');
+ok(lib.includes('unresolved.push')&&ui.includes('nenhuma baixa foi inventada'),'bebida ambígua não é adivinhada');
+ok(ui.includes('confidenceReason')&&ui.includes('humanQuantity'),'confiança explicada e quantidade humana');
+ok(hidden.includes('muted: parsed.muted === true'),'silêncio diário sobrevive ao reinício');
+ok(server.includes('delivery.drinks_manual_override === true'),'autoridade humana preservada');
+console.log('V74 INTELIGÊNCIA FINAL: 8 contratos aprovados.');
