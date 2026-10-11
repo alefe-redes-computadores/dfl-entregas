@@ -19,7 +19,7 @@ check('modal lista um campo por pedido com código', source.includes('groupedCod
 check('finalização agrupada exige todos os códigos', source.includes('groupedCodeDeliveries.some((item)'));
 check('parada permanece identificada como uma parada física', source.includes('entregas · 1 parada física'));
 check('falha parcial informa exatamente quem ficou pendente', source.includes('pendingLabels.join'));
-check('fluxo unitário continua disponível', source.includes("!groupedCodeMode && <button"));
+check('fluxos unitário e agrupado permitem finalizar sem código', !source.includes("!groupedCodeMode && <button") && source.includes('Finalizar ${pendingGroupedDeliveries.length} entregas sem código'));
 check('nenhum listener ou polling foi introduzido', !/onSnapshot|setInterval/.test(source));
 
 if (failed) {

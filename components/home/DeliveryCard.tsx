@@ -1060,7 +1060,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   : 'Salvar e finalizar'}
             </button>
 
-            {!groupedCodeMode && <button
+            <button
               type="button"
               disabled={completionBusy}
               onClick={async () => {
@@ -1071,8 +1071,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
               }}
               className="mt-1 flex h-9 w-full items-center justify-center text-[10px] font-bold text-zinc-500 disabled:opacity-35"
             >
-              Finalizar sem código
-            </button>}
+              {groupedCodeMode
+                ? `Finalizar ${pendingGroupedDeliveries.length} entregas sem código`
+                : 'Finalizar sem código'}
+            </button>
           </div>
         </div>
       )}

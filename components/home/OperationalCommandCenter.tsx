@@ -19,6 +19,7 @@ type ActionRow = {
   label: string;
   description: string;
   count: number;
+  badge?: string;
   href: string;
   icon: typeof AlertTriangle;
   tone: 'red' | 'amber' | 'sky';
@@ -73,10 +74,20 @@ export function OperationalCommandCenter({
       !extractLatLngFromMapsUrl(delivery.maps_link),
   );
 
-  const missingCode = pending.filter(
+  const openRouteIds = new Set(openRoutes.map((route) => route.id));
+  const activeRouteIfood = deliveries.filter(
     (delivery) =>
       delivery.origin === 'ifood' &&
-      !delivery.confirmation_code?.replace(/\D/g, '').length,
+      Boolean(delivery.route_id) &&
+      openRouteIds.has(delivery.route_id as string),
+  );
+  const collectedRouteCodes = activeRouteIfood.filter(
+    (delivery) =>
+      delivery.confirmation_code?.replace(/\D/g, '').length === 4,
+  ).length;
+  const missingRouteCodes = Math.max(
+    0,
+    activeRouteIfood.length - collectedRouteCodes,
   );
 
   const externalPending = confirmationBacklog.filter(
@@ -179,12 +190,16 @@ export function OperationalCommandCenter({
     },
     {
       key: 'ifood-code',
-      label: 'Completar código iFood',
-      description: 'Pedido na operação ainda sem código de confirmação',
-      count: missingCode.length,
+      label: 'Códigos iFood da rota',
+      description:
+        missingRouteCodes > 0
+          ? `${collectedRouteCodes} de ${activeRouteIfood.length} coletados · acompanhe durante a rota`
+          : 'Todos os códigos foram coletados · confirme após finalizar a rota',
+      count: activeRouteIfood.length,
+      badge: `${collectedRouteCodes}/${activeRouteIfood.length}`,
       href: '/confirmacoes',
       icon: ShieldAlert,
-      tone: 'amber',
+      tone: 'sky',
       priority: 80,
     },
     {
@@ -276,7 +291,7 @@ export function OperationalCommandCenter({
                 </p>
               </div>
 
-              <span className="shrink-0 text-xs font-black">{item.count}</span>
+              <span className="shrink-0 text-xs font-black">{item.badge ?? item.count}</span>
               <ChevronRight size={14} className="shrink-0 opacity-60" />
             </button>
           );
