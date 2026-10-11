@@ -16,6 +16,8 @@ const tests=[
   'scripts/verify-super-operacao-v1b.cjs',
   'scripts/verify-super-operacao-v2.cjs',
   'scripts/verify-route-notifications-v3.cjs',
+  'scripts/verify-v72-settlement-experience.cjs',
+  'scripts/verify-v73-operational-intelligence.cjs',
   'scripts/verify-motoboy-settlement-semantics-final.cjs',
   'scripts/verify-motoboy-settlement-carry-v10.cjs',
   'scripts/verify-site-route-experience-v11.cjs',

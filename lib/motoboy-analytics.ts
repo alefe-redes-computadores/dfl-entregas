@@ -35,7 +35,7 @@ export function getMotoboyDayData(
   routes:Route[],
   deliveries:Delivery[],
   vales:ValeInput[]=[],
-  cashHandedOver=true,
+  cashHandedOver:boolean|number=true,
   carry:{storeCredit?:number;motoboyCredit?:number}={},
 ){
   const dayRoutes=getMotoboyRoutes(motoboy,routes).filter(route=>{const value=routeOperationalDate(route);return value?operationalDateKey(value)===date:false;});
@@ -44,14 +44,23 @@ export function getMotoboyDayData(
   const completedStops=groupDeliveriesByStop(completedDeliveries);
   const physicalDeliveryCount=completedStops.length;
   const orderCount=completedDeliveries.length;
-  const cashCollected=completedDeliveries.reduce((sum,delivery)=>sum+deliveryCashCollected(delivery),0);
+  const cashDeliveries=completedDeliveries.filter(delivery=>delivery.payment_method==='dinheiro'&&!delivery.is_paid);
+  const cashCollected=cashDeliveries.reduce((sum,delivery)=>sum+deliveryCashCollected(delivery),0);
+  const cashTendered=cashDeliveries.reduce((sum,delivery)=>{
+    const charge=deliveryCashCollected(delivery);
+    return sum+Math.max(charge,Number(delivery.change_for)||0);
+  },0);
+  const cashChange=Math.max(0,cashTendered-cashCollected);
   const fee=calculateMotoboyFee(motoboy.payment_rule,physicalDeliveryCount);
   const deductions=vales.filter(item=>item.direction!=='addition').reduce((sum,item)=>sum+item.amount,0);
   const additions=vales.filter(item=>item.direction==='addition').reduce((sum,item)=>sum+item.amount,0);
   const totalVales=deductions;
   const totalAdditions=additions;
   const liquidFee=Math.max(0,fee.amount-deductions+additions);
-  const retainedCash=cashHandedOver?0:cashCollected;
+  const cashHandedOverAmount=typeof cashHandedOver==='number'
+    ? Math.min(cashCollected,Math.max(0,Number(cashHandedOver)||0))
+    : cashHandedOver?cashCollected:0;
+  const retainedCash=Math.max(0,cashCollected-cashHandedOverAmount);
   const priorStoreCredit=Math.max(0,Number(carry.storeCredit)||0);
   const priorMotoboyCredit=Math.max(0,Number(carry.motoboyCredit)||0);
   const difference=retainedCash+priorStoreCredit-liquidFee-priorMotoboyCredit;
@@ -66,6 +75,9 @@ export function getMotoboyDayData(
     physicalDeliveryCount,
     orderCount,
     cashCollected,
+    cashTendered,
+    cashChange,
+    cashHandedOverAmount,
     retainedCash,
     fee,
     totalVales,

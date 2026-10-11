@@ -98,8 +98,9 @@ export function OperationalRadar() {
     highlightLimit: 2,
   });
   const routes = useAppStore((state) => state.routes);
-  const { hiddenIds, hideForToday } = useHiddenInsightsToday();
+  const { hiddenIds, hideForToday, mutedToday, muteForToday } = useHiddenInsightsToday();
 
+  if (mutedToday) return null;
   const visibleHighlights = intelligence.highlights.filter(
     (insight) => !hiddenIds.has(insight.id),
   );
@@ -191,7 +192,10 @@ export function OperationalRadar() {
               className="flex h-9 items-center gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/35 px-3 text-[9px] font-black text-zinc-600 active:scale-95"
             >
               <EyeOff size={13} />
-              Ocultar por hoje
+              Ocultar este
+            </button>
+            <button type="button" onClick={muteForToday} className="flex h-9 items-center gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/35 px-3 text-[9px] font-black text-zinc-600 active:scale-95">
+              <EyeOff size={13} /> Silenciar radar hoje
             </button>
           </div>
         </div>

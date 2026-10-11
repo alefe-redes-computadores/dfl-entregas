@@ -8,6 +8,7 @@ const STORAGE_KEY = 'dfl-hidden-operational-insights';
 type HiddenInsightState = {
   dateKey: string;
   ids: string[];
+  muted?: boolean;
 };
 
 function saoPauloDateKey(date = new Date()) {
@@ -92,6 +93,10 @@ export function useHiddenInsightsToday() {
     });
   }, []);
 
+  const muteForToday = useCallback(() => {
+    setState(() => { const next = { dateKey: saoPauloDateKey(), ids: [], muted: true }; writeState(next); return next; });
+  }, []);
+
   const isHiddenToday = useCallback(
     (insightId: string) => hiddenIds.has(insightId),
     [hiddenIds],
@@ -101,5 +106,7 @@ export function useHiddenInsightsToday() {
     hiddenIds,
     hideForToday,
     isHiddenToday,
+    mutedToday: Boolean(state.muted),
+    muteForToday,
   };
 }

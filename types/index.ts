@@ -98,10 +98,22 @@ export interface StockSupply {
 
 export type OperationalExpenseType = 'motoboy' | 'frete' | 'manutencao' | 'taxa' | 'alimentacao' | 'servico' | 'material' | 'outro';
 
+export type MotoboySettlementAdjustmentDirection = 'deduction' | 'addition';
+
+export interface MotoboySettlementCategory {
+  id: string;
+  label: string;
+  direction: MotoboySettlementAdjustmentDirection;
+  position: number;
+  custom?: boolean;
+}
+
 export interface MotoboySettlementAdjustment {
   id: string;
-  kind: 'meal' | 'advance' | 'tip' | 'extra_service' | 'bread_pickup' | 'addition' | 'other';
-  direction?: 'deduction' | 'addition';
+  kind: 'meal' | 'advance' | 'fuel' | 'consumption' | 'tip' | 'extra_fee' | 'gratification' | 'extra_service' | 'bread_pickup' | 'addition' | 'other' | 'custom';
+  direction?: MotoboySettlementAdjustmentDirection;
+  category_id?: string;
+  category_label?: string;
   description: string;
   amount: number;
 }
@@ -124,7 +136,14 @@ export interface OperationalExpense {
   settlement_adjustments?: MotoboySettlementAdjustment[];
   settlement_delivery_count?: number;
   settlement_route_count?: number;
+  /** Valor líquido das vendas em dinheiro que pertence à loja. */
   settlement_cash_collected?: number;
+  /** Dinheiro bruto recebido dos clientes, antes do troco. */
+  settlement_cash_tendered?: number;
+  /** Troco devolvido aos clientes nas entregas. */
+  settlement_cash_change?: number;
+  /** Parcela do caixa líquido efetivamente entregue à loja. */
+  settlement_cash_handed_over_amount?: number;
   settlement_cash_retained?: number;
   settlement_store_credit?: number;
   settlement_motoboy_credit?: number;
@@ -338,6 +357,11 @@ export interface Delivery {
   maps_link: string;
   observation?: string;
   drinks?: string;
+  /** A edição humana de Bebidas prevalece sobre projeções posteriores do Site. */
+  drinks_manual_override?: boolean;
+  drinks_manual_override_at?: string;
+  /** Último texto calculado do Site, mantido para auditoria sem apagar a correção humana. */
+  site_order_drinks_snapshot?: string;
   completed?: boolean;
   order_index?: number;
   order_locked?: boolean;

@@ -8,7 +8,7 @@ ok(move.includes('Saldo após esta movimentação')&&move.includes('baseTyped')&
 ok(types.includes('presentation_quantity?: number')&&types.includes('team_member_photo_url?: string'),'movimento preserva snapshot comercial e responsável');
 ok(team.includes('photoURL')&&move.includes('user?.displayName'),'responsável usa usuário/foto como fallback');
 ok(move.indexOf('await operation')<move.lastIndexOf('feedbackSuccess()'),'feedback de sucesso só após persistência');
-ok(types.includes("direction?: 'deduction' | 'addition'")&&analytics.includes('totalAdditions'),'acréscimos e abatimentos separados');
+ok(types.includes("MotoboySettlementAdjustmentDirection = 'deduction' | 'addition'")&&types.includes('direction?: MotoboySettlementAdjustmentDirection')&&analytics.includes("item.direction==='addition'")&&analytics.includes('totalAdditions'),'acréscimos e abatimentos separados');
 ok(settle.includes('Gorjeta')&&settle.includes('Serviço extra')&&settle.includes('Busca de pães'),'gorjeta serviço e busca de pães no acerto');
 ok(settle.includes('data.totalAdditions')&&settle.includes('settlement_adjustments:adjustments'),'acréscimos chegam à prévia e registro');
 ok(!notify.includes("'Fim do expediente',\n        'Horário programado encerrado"),'fim do expediente não dispara cegamente por horário');

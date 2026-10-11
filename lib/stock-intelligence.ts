@@ -1,6 +1,12 @@
 import { shouldSuppressStockConsumptionIntelligence } from "./stock-semantic-confidence-v24-8";
 // lib/stock-intelligence.ts
 import type { StockMovement, StockProduct } from '@/types';
+
+export function practicalStockQuantity(unit: StockProduct['unit'], value: number) {
+  const safe = Math.max(0, Number(value) || 0);
+  if (unit === 'kg' || unit === 'l') return Math.ceil((safe - Number.EPSILON) * 10) / 10;
+  return Math.ceil(safe - Number.EPSILON);
+}
 import { purchaseSuggestion, replenishmentTarget } from '@/lib/stock';
 
 export type StockRecommendationConfidence = 'baixa' | 'media' | 'alta';
@@ -266,10 +272,12 @@ export function buildStockRecommendation(
     historyTarget,
   );
 
-  const recommendedQuantity = Math.max(
+  const rawRecommendedQuantity = Math.max(
     0,
     targetQuantity - product.current_quantity,
   );
+  // A análise mantém precisão; a ação exibida usa uma medida humana e comprável.
+  const recommendedQuantity = practicalStockQuantity(product.unit, rawRecommendedQuantity);
 
   const coverageDays =
     averageDailyConsumption > 0

@@ -78,8 +78,14 @@ export async function copyDeliveryToClipboard(
         parts.push(`   R$ ${formatMoney(deliveryCharge(item))} · ${itemPayment}${itemCode ? ` · código ${itemCode}` : ''}`);
       });
       const groupedTotal = groupedOrders.reduce((sum, item) => sum + deliveryCharge(item), 0);
-      parts.push(`💰 *Total da parada: R$ ${formatMoney(groupedTotal)}*`);
+      const equation = groupedOrders.map(item => `R$ ${formatMoney(deliveryCharge(item))}`).join(' + ');
+      parts.push(`💰 *Total da parada:* ${equation} = *R$ ${formatMoney(groupedTotal)}*`);
+      parts.push('📍 *Uma parada física · conferir e entregar cada pedido separadamente*');
+      const address = routeAddressParts(delivery.address_string);
+      parts.push(`📍 *Destino:* ${address.neighborhood} · ${address.streetWithNumber}`);
       parts.push('');
+      await navigator.clipboard.writeText(parts.join('\n'));
+      return true;
     }
 
     if (customerName) parts.push(`👤 *Cliente:* ${customerName}`);
@@ -498,8 +504,14 @@ export async function generateRouteMessages(
           const code=(candidate.confirmation_code||candidateCustomer?.last_confirmation_code||'').replace(/\D/g,'').slice(0,4);
           const codeInfo=candidate.origin==='ifood'?(code?` · 🔑 *${code}*`:' · 🔑 *pedir código*'):'';
           const candidateDrinks=candidate.drinks?.trim()?` · 🥤 *${candidate.drinks.trim()}*`:'';
-          msg2.push(`   ↳ ${candidateName} · ${shortId}${candidateDrinks}${codeInfo}`);
+          const amount=deliveryCharge(candidate);
+          const payment=candidate.is_paid?'pago':(candidate.payment_method||'dinheiro').replace(/_/g,' ');
+          msg2.push(`   ↳ *${candidateName}* · ${shortId} · *R$ ${formatMoney(amount)}* · ${payment}${candidateDrinks}${codeInfo}`);
         });
+        const groupedTotal=groupedDeliveries.reduce((sum,item)=>sum+deliveryCharge(item),0);
+        const equation=groupedDeliveries.map(item=>`R$ ${formatMoney(deliveryCharge(item))}`).join(' + ');
+        msg2.push(`   💰 ${equation} = *R$ ${formatMoney(groupedTotal)}*`);
+        msg2.push('   📍 *1 parada física · pedidos e códigos separados*');
       }else{
         msg2.push(`${getNumberEmoji(num)} *${neighborhood}*${streetLabel}${drinkInfo}${flags}${zapWarning}`);
       }

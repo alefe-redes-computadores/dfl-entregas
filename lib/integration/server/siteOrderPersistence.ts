@@ -755,7 +755,10 @@ export async function consumeDflSiteOrderUpdatedPersisted(
           site_order_timeline: siteOrderTimeline,
           external_order_schema_version: event.payload.orderSchemaVersion,
           site_order_items: siteOrderItemsFromPayload(event.payload.itens),
-          drinks: siteOrderDrinksFromPayload(event.payload.itens),
+          site_order_drinks_snapshot: siteOrderDrinksFromPayload(event.payload.itens),
+          ...(delivery.drinks_manual_override === true
+            ? {}
+            : { drinks: siteOrderDrinksFromPayload(event.payload.itens) }),
           site_order_subtotal: event.payload.subtotal,
           site_order_delivery_fee: event.payload.taxaEntrega,
           site_order_discount: event.payload.desconto,

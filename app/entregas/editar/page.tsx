@@ -3,7 +3,7 @@
 import { formatBrazilPhone, normalizeBrazilPhone } from '@/lib/phone';
 
 import {
-  useState, useEffect, useMemo, Suspense } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store,
+  useState, useEffect, useMemo, useRef, Suspense } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store,
   Smartphone, Trash2, Banknote, QrCode, CreditCard, ChevronDown,
   AlertTriangle, Navigation, CheckCircle2, Link2, MessageCircle, Info,
   Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, UsersRound
@@ -81,6 +81,7 @@ const [routeId, setRouteId] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moveWholeStop, setMoveWholeStop] = useState(true);
+  const hydratedDeliveryId = useRef<string | null>(null);
 
   const currentDelivery = useMemo(
     () => deliveries.find((delivery) => delivery.id === deliveryId),
@@ -437,10 +438,11 @@ const [routeId, setRouteId] = useState('');
   };
 
   useEffect(() => {
-    if (!deliveryId) return;
+    if (!deliveryId || hydratedDeliveryId.current === deliveryId) return;
 
     const delivery = deliveries.find(d => d.id === deliveryId);
     if (delivery) {
+      hydratedDeliveryId.current = deliveryId;
       setOrigin(delivery.origin || 'ifood');
       setFulfillmentMode(getFulfillmentMode(delivery));
       const linkedRoute = routes.find((route) => route.id === delivery.route_id);
@@ -599,7 +601,13 @@ const [routeId, setRouteId] = useState('');
         phone: rawPhone || undefined,
         notify_whatsapp: notifyWhatsapp,
         observation,
-        drinks,
+        drinks: drinks.trim(),
+        ...(drinks.trim() !== (currentDelivery?.drinks || '').trim()
+          ? {
+              drinks_manual_override: true,
+              drinks_manual_override_at: new Date().toISOString(),
+            }
+          : {}),
       } as any);
 
       if (routeChanged && moveWholeStop && sameStopDeliveries.length > 1) {

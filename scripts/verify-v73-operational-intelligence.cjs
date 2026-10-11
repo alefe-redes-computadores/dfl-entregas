@@ -1,0 +1,11 @@
+const fs=require('fs');const r=f=>fs.readFileSync(f,'utf8');const ok=(v,l)=>{if(!v)throw new Error('FALHOU: '+l);console.log('OK: '+l)};
+const types=r('types/index.ts'),server=r('lib/integration/server/siteOrderPersistence.ts'),edit=r('app/entregas/editar/page.tsx'),stock=r('lib/stock-beverage-reconciliation.ts'),review=r('components/stock/BeverageStockReview.tsx'),brief=r('components/home/ShiftBriefing.tsx'),radar=r('components/home/OperationalRadar.tsx'),wa=r('lib/whatsapp.ts');
+ok(types.includes('drinks_manual_override'), 'autoridade manual tipada');
+ok(server.includes("delivery.drinks_manual_override === true")&&server.includes('site_order_drinks_snapshot'), 'integração não sobrescreve bebida corrigida');
+ok(edit.includes('hydratedDeliveryId')&&edit.includes('drinks_manual_override: true'), 'formulário não reidrata nem perde correção');
+ok(stock.includes("previous=[...new Set")&&stock.includes("d.completed&&d.drinks"), 'último dia operacional com bebida');
+ok(review.includes('Nada será alterado sem sua confirmação')&&review.includes('Aplicar baixa'), 'revisão humana antes da baixa');
+ok(brief.includes('Conferência de abertura')&&brief.includes("/estoque?review=beverages"), 'abertura útil e acionável');
+ok(radar.includes('Silenciar radar hoje'), 'radar pode ser silenciado de uma vez');
+ok(wa.includes('1 parada física · pedidos e códigos separados')&&wa.includes("join(' + ')"), 'mensagem agrupada inequívoca');
+console.log('V73 INTELIGÊNCIA OPERACIONAL: 8 contratos aprovados.');

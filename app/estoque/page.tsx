@@ -11,6 +11,7 @@ import { SUPPLY_UNIT_LABELS } from '@/lib/stock-supply';
 import { stockCategoryOrder, stockProductCategory, stockCategoryVisualClasses } from '@/lib/stock-categories';
 import { StockCategoryIcon } from '@/components/stock/StockCategoryPicker';
 import { StockCriticalBanner } from '@/components/stock/StockCriticalBanner';
+import { BeverageStockReview } from '@/components/stock/BeverageStockReview';
 import { formatStockQuantity } from '@/lib/stock-quantity';
 import { commercialPurchasePlan, committedStockQuantityMap } from '@/lib/stock-shopping';
 import { formatCommercialPlan } from '@/lib/stock-commercial';
@@ -71,6 +72,7 @@ export default function StockPage() {
   return <div className="dfl-page">
     <header className="flex items-center justify-between"><div className="flex items-center gap-3"><button onClick={leaveStock} className="grid h-12 w-12 place-items-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400"><ChevronLeft size={21}/></button><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-emerald-400">Controle físico</p><h1 className="font-heading text-2xl font-black text-zinc-100">Estoque</h1></div></div></header>
     <StockCriticalBanner products={active} />
+    <BeverageStockReview />
     <section className="grid grid-cols-2 gap-2">
       <CompactMetric label="Produtos ativos" value={String(active.length)} />
       <CompactMetric label="Pedem atenção" value={String(suggested.length)} alert={suggested.length>0} />

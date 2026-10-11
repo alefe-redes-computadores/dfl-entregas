@@ -21,7 +21,7 @@ import {
   scheduleStockSupplyCheckReminder,
   type NotificationPreferences,
 } from '@/lib/native/notifications';
-import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, StockSupplier, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation, OperationalExpense } from '@/types';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, StockSupplier, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation, OperationalExpense, MotoboySettlementCategory } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
   dateKey,
@@ -173,6 +173,8 @@ interface AppState {
     notificationPreferences?: NotificationPreferences;
     purchasePlanningTime?: string;
     stockReviewTime?: string;
+    /** Categorias personalizadas do acerto, sincronizadas no documento da loja. */
+    settlementAdjustmentCategories?: MotoboySettlementCategory[];
     // 🔥 NOVOS CAMPOS DE EXPEDIENTE AVANÇADO
     schedule?: Record<number, DaySchedule>;
     pauses?: StorePause[];
