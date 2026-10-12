@@ -10,6 +10,7 @@ import { StoreAutomation } from '@/components/StoreAutomation';
 import { RouteOperations } from '@/components/RouteOperations';
 import { NativeRuntime } from '@/components/NativeRuntime';
 import { PwaRuntime } from '@/components/pwa/PwaRuntime';
+import { SiteOrderNotificationWatcher } from '@/components/SiteOrderNotificationWatcher';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -71,6 +72,7 @@ export default function RootLayout({
           <StoreAutomation />
           <RouteOperations />
           <AuthGuard>
+            <SiteOrderNotificationWatcher />
             <div className="dfl-shell relative mx-auto flex w-full flex-col overflow-x-hidden bg-zinc-950/95 text-zinc-100">
               <Header />
               <main className="dfl-main relative flex-1 px-3.5 pt-3.5 sm:px-4">{children}</main>
