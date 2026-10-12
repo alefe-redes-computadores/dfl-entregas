@@ -168,11 +168,11 @@ function Content(){
     }
     lines.push(
       '',
-      `💵 *DINHEIRO DAS ENTREGAS*`,
-      `Recebido dos clientes: *R$ ${money(data.cashTendered)}*`,
-      `Troco devolvido: *- R$ ${money(data.cashChange)}*`,
-      `Caixa líquido: *R$ ${money(data.cashCollected)}*`,
-      `Entregue à loja: *R$ ${money(data.cashHandedOverAmount)}*`,
+      `💵 *DINHEIRO EM MÃOS*`,
+      `Recebido fisicamente dos clientes: *R$ ${money(data.cashInHand)}*`,
+      `Valor econômico dos pedidos: *R$ ${money(data.cashCollected)}*`,
+      `Troco resolvido pela loja: *R$ ${money(data.cashChange)}*`,
+      `Devolvido fisicamente à loja: *R$ ${money(data.cashHandedOverAmount)}*`,
       data.retainedCash>0 ? `↳ Com o motoboy: *R$ ${money(data.retainedCash)}*` : `↳ Caixa conferido integralmente na loja`,
       '',
       `🏪 *RESULTADO DO ACERTO*`,
@@ -215,6 +215,7 @@ function Content(){
         settlement_route_count:data.completedRoutes,
         settlement_cash_collected:data.cashCollected,
         settlement_cash_tendered:data.cashTendered,
+        settlement_cash_in_hand:data.cashInHand,
         settlement_cash_change:data.cashChange,
         settlement_cash_handed_over_amount:data.cashHandedOverAmount,
         settlement_cash_retained:data.retainedCash,
@@ -259,8 +260,8 @@ function Content(){
       row('Acréscimos',`+ R$ ${money(data.totalAdditions)}`,'#34d399');
       adjustments.filter(item=>item.direction==='addition').slice(0,2).forEach(item=>detail(`${adjustmentKindLabel(item.kind)} · ${item.category_label||item.description.slice(0,25)}`,`R$ ${money(item.amount)}`));
     }
-    row('Troco devolvido',`- R$ ${money(data.cashChange)}`,'#fb7185');
-    row('Caixa líquido',`R$ ${money(data.cashCollected)}`,'#fbbf24');
+    row('Recebido em mãos',`R$ ${money(data.cashInHand)}`,'#fbbf24');
+    row('Valor dos pedidos',`R$ ${money(data.cashCollected)}`,'#a1a1aa');
     row('Líquido do motoboy',`R$ ${money(data.liquidFee)}`,'#34d399');
 
     const resultColor=data.settlementDirection==='store_credit'?'#f59e0b':'#10b981';
@@ -291,7 +292,7 @@ function Content(){
 
     <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4"><p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Ajuste do acerto</p><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={()=>{setAdjustmentDirection('deduction');setAdjustmentCategoryId('advance');setAdjustmentKind('advance')}} className={`h-11 rounded-xl border text-xs font-black ${adjustmentDirection==='deduction'?'border-red-500/35 bg-red-500/10 text-red-300':'border-zinc-800 text-zinc-500'}`}>− Abatimento</button><button onClick={()=>{setAdjustmentDirection('addition');setAdjustmentCategoryId('tip');setAdjustmentKind('tip')}} className={`h-11 rounded-xl border text-xs font-black ${adjustmentDirection==='addition'?'border-emerald-500/35 bg-emerald-500/10 text-emerald-300':'border-zinc-800 text-zinc-500'}`}>+ Acréscimo</button></div><div className="mt-3 grid grid-cols-2 gap-2">{directionCategories.map(category=><button key={category.id} onClick={()=>{setAdjustmentCategoryId(category.id);setAdjustmentKind(category.custom?'custom':category.id as MotoboySettlementAdjustment['kind'])}} className={`min-h-12 rounded-xl border px-3 text-[11px] font-black ${selectedCategory?.id===category.id?'border-amber-500/40 bg-amber-500/10 text-amber-200':'border-zinc-800 text-zinc-500'}`}>{category.label}</button>)}<button onClick={()=>setCategoryManager(true)} className="min-h-12 rounded-xl border border-dashed border-sky-500/35 bg-sky-500/5 px-3 text-[11px] font-black text-sky-300"><Plus size={14} className="mx-auto mb-1"/>Nova categoria</button></div><div className="mt-3 grid grid-cols-[1fr_112px_48px] gap-2"><input value={adjustmentDescription} onChange={e=>setAdjustmentDescription(e.target.value)} placeholder="Observação opcional" className="input"/><input value={adjustmentValue} onChange={e=>setAdjustmentValue(normalizeMoneyDraft(e.target.value))} inputMode="numeric" placeholder="0,00" className="input text-right font-black"/><button onClick={addAdjustment} aria-label="Adicionar ajuste" className="flex h-12 items-center justify-center rounded-xl bg-amber-400 text-zinc-950"><Plus size={18}/></button></div></section>
 
-    <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4"><p className="text-sm font-black">Conferência do dinheiro</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Recebido R$ {money(data.cashTendered)} · troco R$ {money(data.cashChange)} · caixa líquido R$ {money(data.cashCollected)}</p><div className="mt-3 grid grid-cols-3 gap-2">{([['all','Entregou tudo'],['partial','Entregou parte'],['none','Não entregou']] as const).map(([value,label])=><button key={value} onClick={()=>{setCashMode(value);if(value==='partial'&&!cashHandedDraft)setCashHandedDraft(moneyValueToDraft(data.cashCollected))}} className={`min-h-11 rounded-xl border px-2 text-[10px] font-black ${cashMode===value?'border-emerald-500/35 bg-emerald-500/10 text-emerald-300':'border-zinc-800 text-zinc-600'}`}>{label}</button>)}</div>{cashMode==='partial'&&<label className="mt-3 block text-[10px] font-bold text-zinc-500">Valor entregue à loja<input value={cashHandedDraft} onChange={e=>setCashHandedDraft(normalizeMoneyDraft(e.target.value))} inputMode="numeric" className="input mt-2 w-full text-right text-sm font-black text-zinc-100" placeholder="0,00"/></label>}<div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-zinc-950/60 p-3"><Line label="Entregue" value={`R$ ${money(data.cashHandedOverAmount)}`}/><Line label="Ficou com o motoboy" value={`R$ ${money(data.retainedCash)}`}/></div></section>
+    <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4"><p className="text-sm font-black">Conferência do dinheiro físico</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">O motoboy recebeu R$ {money(data.cashInHand)} em mãos. O troco de R$ {money(data.cashChange)} é resolvido pela loja e não reduz este total.</p><div className="mt-3 grid grid-cols-3 gap-2">{([['all','Devolveu tudo'],['partial','Informar valor'],['none','Não devolveu']] as const).map(([value,label])=><button key={value} onClick={()=>{setCashMode(value);if(value==='partial'&&!cashHandedDraft)setCashHandedDraft(moneyValueToDraft(data.cashInHand))}} className={`min-h-11 rounded-xl border px-2 text-[10px] font-black ${cashMode===value?'border-emerald-500/35 bg-emerald-500/10 text-emerald-300':'border-zinc-800 text-zinc-600'}`}>{label}</button>)}</div>{cashMode==='partial'&&<label className="mt-3 block text-[10px] font-bold text-zinc-500">Quanto voltou fisicamente para a loja?<input value={cashHandedDraft} onChange={e=>setCashHandedDraft(normalizeMoneyDraft(e.target.value))} inputMode="numeric" className="input mt-2 w-full text-right text-sm font-black text-zinc-100" placeholder="0,00"/></label>}<div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-zinc-950/60 p-3"><Line label="Voltou para a loja" value={`R$ ${money(data.cashHandedOverAmount)}`}/><Line label="Permaneceu com ele" value={`R$ ${money(data.retainedCash)}`}/></div><p className="mt-2 text-[9px] leading-relaxed text-zinc-600">Pix enviado ao motoboy deve ser lançado como Adiantamento para aparecer separado e abater o pagamento dele.</p></section>
 
     <section className={`rounded-[26px] p-5 ${data.settlementDirection==='store_credit'?'bg-amber-500':'bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.settlementDirection==='store_credit'?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 break-words text-[clamp(1.65rem,8vw,2.25rem)] font-black tabular-nums text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black uppercase text-zinc-900">{settlementTitle}</p><p className="mt-2 max-w-[32rem] text-[11px] font-bold leading-relaxed text-zinc-900/80">{settlementExplanation}</p></section>
 

@@ -35,14 +35,30 @@ export interface CommercialPurchasePlan {
   presentation?: StockProductPresentation;
 }
 
-export function activeStockPresentation(product: StockProduct, presentationId?: string) {
+export function activeStockPresentation(product: StockProduct, presentationId?: string, needInBaseUnit = 0) {
   const active = (product.presentations || []).filter((item) => item.active && item.conversion_quantity > 0);
-  return active.find((item) => item.id === presentationId) || active[0];
+  const explicit = active.find((item) => item.id === presentationId);
+  if (explicit || active.length < 2 || !(needInBaseUnit > 0)) return explicit || active[0];
+
+  // A recomendação automática escolhe a embalagem que cobre a falta com o
+  // menor excesso. Em empate, prefere menos volumes físicos. Assim, faltar
+  // 2 un escolhe 2 unidades, não 1 fardo com 6; faltar 12 un pode escolher
+  // 2 fardos em vez de 12 unidades avulsas.
+  return [...active].sort((left, right) => {
+    const score = (presentation: StockProductPresentation) => {
+      const quantity = normalizeCommercialPurchaseQuantity(needInBaseUnit, presentation, product.unit);
+      const base = quantity * Number(presentation.conversion_quantity);
+      return { surplus: Math.max(0, base - needInBaseUnit), quantity };
+    };
+    const a = score(left);
+    const b = score(right);
+    return a.surplus - b.surplus || a.quantity - b.quantity;
+  })[0];
 }
 
 export function commercialPurchasePlan(product: StockProduct, rawNeed: number, committedQuantity = 0, presentationId?: string): CommercialPurchasePlan {
   const netNeed = netStockPurchaseQuantity(rawNeed, committedQuantity);
-  const presentation = activeStockPresentation(product, presentationId);
+  const presentation = activeStockPresentation(product, presentationId, netNeed);
   const factor = presentation?.conversion_quantity || 1;
   const purchaseQuantity = netNeed > 0
     ? normalizeCommercialPurchaseQuantity(netNeed, presentation, product.unit)

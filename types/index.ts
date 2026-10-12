@@ -140,9 +140,11 @@ export interface OperationalExpense {
   settlement_cash_collected?: number;
   /** Dinheiro bruto recebido dos clientes, antes do troco. */
   settlement_cash_tendered?: number;
+  /** Total físico que ficou sob responsabilidade do motoboy. */
+  settlement_cash_in_hand?: number;
   /** Troco devolvido aos clientes nas entregas. */
   settlement_cash_change?: number;
-  /** Parcela do caixa líquido efetivamente entregue à loja. */
+  /** Parcela do dinheiro físico recebido efetivamente entregue à loja. */
   settlement_cash_handed_over_amount?: number;
   settlement_cash_retained?: number;
   settlement_store_credit?: number;

@@ -51,6 +51,10 @@ export function getMotoboyDayData(
     return sum+Math.max(charge,Number(delivery.change_for)||0);
   },0);
   const cashChange=Math.max(0,cashTendered-cashCollected);
+  // Regra operacional da DFL: o troco é resolvido pela loja. No acerto, a
+  // responsabilidade física do motoboy é tudo que ele recebeu dos clientes,
+  // e não apenas o valor econômico dos pedidos.
+  const cashInHand=cashTendered;
   const fee=calculateMotoboyFee(motoboy.payment_rule,physicalDeliveryCount);
   const deductions=vales.filter(item=>item.direction!=='addition').reduce((sum,item)=>sum+item.amount,0);
   const additions=vales.filter(item=>item.direction==='addition').reduce((sum,item)=>sum+item.amount,0);
@@ -58,9 +62,9 @@ export function getMotoboyDayData(
   const totalAdditions=additions;
   const liquidFee=Math.max(0,fee.amount-deductions+additions);
   const cashHandedOverAmount=typeof cashHandedOver==='number'
-    ? Math.min(cashCollected,Math.max(0,Number(cashHandedOver)||0))
-    : cashHandedOver?cashCollected:0;
-  const retainedCash=Math.max(0,cashCollected-cashHandedOverAmount);
+    ? Math.min(cashInHand,Math.max(0,Number(cashHandedOver)||0))
+    : cashHandedOver?cashInHand:0;
+  const retainedCash=Math.max(0,cashInHand-cashHandedOverAmount);
   const priorStoreCredit=Math.max(0,Number(carry.storeCredit)||0);
   const priorMotoboyCredit=Math.max(0,Number(carry.motoboyCredit)||0);
   const difference=retainedCash+priorStoreCredit-liquidFee-priorMotoboyCredit;
@@ -77,6 +81,7 @@ export function getMotoboyDayData(
     cashCollected,
     cashTendered,
     cashChange,
+    cashInHand,
     cashHandedOverAmount,
     retainedCash,
     fee,

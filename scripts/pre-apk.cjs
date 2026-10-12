@@ -19,6 +19,7 @@ const tests=[
   'scripts/verify-v72-settlement-experience.cjs',
   'scripts/verify-v73-operational-intelligence.cjs',
   'scripts/verify-v74-final-operational-intelligence.cjs',
+  'scripts/verify-v75-stock-settlement-messages.cjs',
   'scripts/verify-motoboy-settlement-semantics-final.cjs',
   'scripts/verify-motoboy-settlement-carry-v10.cjs',
   'scripts/verify-site-route-experience-v11.cjs',
