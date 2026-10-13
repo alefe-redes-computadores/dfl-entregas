@@ -21,6 +21,7 @@ import { auditOperationalAddress } from '@/lib/address-quality';
 import { SiteOrderSnapshot } from '@/components/home/SiteOrderSnapshot';
 import { customerRecurrence } from '@/lib/customer-recurrence';
 import { deliveryPaymentStateLabel } from '@/lib/delivery-finance';
+import { ownerContextLabel } from '@/lib/owner-order-context';
 
 interface DeliveryCardProps {
   delivery: Delivery & { is_expanded?: boolean };
@@ -78,6 +79,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const touchCurrentX = useRef(0);
   const touchCurrentY = useRef(0);
   const swipeAxis = useRef<'pending' | 'horizontal' | 'vertical' | null>(null);
+  const suppressCardClick = useRef(false);
   const completionBusyRef = useRef(false);
   const [completionBusy, setCompletionBusy] = useState(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -100,7 +102,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const paymentStateLabel = deliveryPaymentStateLabel(delivery);
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const isSiteOrder = delivery.source_system === 'dfl_site';
-  const isDeveloperTest = delivery.developer_test === true;
+  const operationalContextLabel = ownerContextLabel(delivery);
+  const isDeveloperTest = delivery.developer_test === true || delivery.owner_order_context === 'owner_provisional';
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
   const isUrgent = groupedDeliveries.some((item) => item.is_urgent);
   const customerTier = useAppStore(
@@ -465,6 +468,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const handleTouchEnd = async () => {
     if (swipeAxis.current !== 'horizontal') { resetCardSwipe(); return; }
     const dx=touchCurrentX.current-touchStartX.current; const finalOffset=swipeOffset; resetCardSwipe();
+    suppressCardClick.current = true;
+    window.setTimeout(() => { suppressCardClick.current = false; }, 250);
     if (dx <= -76 || finalOffset <= -62) await handleTriggerAction('complete');
     else if (dx >= 76 || finalOffset >= 62) await handleTriggerAction('expand');
   };
@@ -503,6 +508,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         </div>
 
         <div
+          onClick={(event) => {
+            const target = event.target as HTMLElement;
+            if (isSwiping || suppressCardClick.current || target.closest('button, a, input, textarea, select, [data-no-card-swipe="true"]')) return;
+            void handleTriggerAction('expand');
+          }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -544,7 +554,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {isSiteOrder && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-sky-300">Site</span>}
                   {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
-                  {!isGroupedStop && isDeveloperTest && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black text-sky-300">DEV · teste</span>}
+                  {!isGroupedStop && operationalContextLabel && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black text-sky-300">{operationalContextLabel}</span>}
                   {!isGroupedStop && !isDeveloperTest && customerTier && <span className="rounded-md border border-amber-500/20 bg-amber-500/[.08] px-2 py-0.5 text-[9px] font-black text-amber-300">{customerTier === 'super' ? 'Supercliente' : 'Frequente'} · {recurrence.completedOrders} concluídos</span>}
                   {!isGroupedStop && recurrence.milestoneLabel && <button type="button" onClick={(event) => { event.stopPropagation(); toast.info('Marco de cliente direto', { description: recurrence.milestoneLabel || undefined }); }} className="rounded-md border border-violet-500/25 bg-violet-500/[.08] px-2 py-0.5 text-[9px] font-black text-violet-300">{recurrence.milestoneLabel}</button>}
                   {isGroupedStop ? (

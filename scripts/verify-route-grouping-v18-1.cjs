@@ -9,8 +9,9 @@ ok(!c.includes('pendingCount > 1 &&\n    !manualLocked'),'controle não desapare
 ok(!c.includes('disabled={manualLocked}'),'setas continuam disponíveis para decisão manual explícita');
 ok(!s.includes("{ metadata: { order_locked: false, order_source: 'manual'"),'movimento manual preserva trava do otimizador');
 ok(c.includes('groupedDeliveries);'),'cópia individual receb todos os pedidos da parada');
-ok(w.includes('PEDIDOS NESTA PARADA'),'mensagem individual enumera grupo');
-ok(w.includes('Total da parada'),'mensagem individual soma o grupo');
+ok(w.includes('PEDIDOS · 1 PARADA'),'mensagem individual enumera grupo');
+ok(w.includes('groupedPending')&&w.includes('Cobrar na parada'),'mensagem individual resume pago e cobrança');
+ok(w.includes("parts.push('', '🗺️ *Abrir no mapa:*', mapLink)"),'mensagem individual agrupada preserva mapa');
 ok(w.includes('stopGroup.deliveries.forEach((item) =>'),'mensagem completa enumera todos os pedidos agrupados');
 const r=fs.readFileSync('components/home/RouteAccordion.tsx','utf8');
 ok(!r.includes('Sincronizar Site'),'botão provisório removido da rota');

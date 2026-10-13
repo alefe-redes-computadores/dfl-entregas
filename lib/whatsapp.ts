@@ -67,7 +67,10 @@ export async function copyDeliveryToClipboard(
       new Map(relatedDeliveries.map((item) => [item.id, item])).values(),
     );
     if (groupedOrders.length > 1) {
-      parts.push(`📦 *${groupedOrders.length} PEDIDOS NESTA PARADA*`);
+      const groupedPending = groupedOrders.filter(item => !item.is_paid);
+      const groupedTotal = groupedPending.reduce((sum, item) => sum + deliveryCharge(item), 0);
+      parts.push(`📦 *${groupedOrders.length} PEDIDOS · 1 PARADA*`);
+      parts.push(groupedPending.length===0?'✅ *Todos os pedidos estão pagos*':groupedPending.length===groupedOrders.length?`💵 *Cobrar na parada: R$ ${formatMoney(groupedTotal)}*`:`⚠️ *Pagamento misto · cobrar R$ ${formatMoney(groupedTotal)}*`);
       groupedOrders.forEach((item, index) => {
         const itemName = item.customer_name || (item.id === delivery.id ? customerName : '') || 'Cliente';
         const itemOrigin = item.source_system === 'dfl_site' ? 'Site' : item.origin === 'ifood' ? 'iFood' : 'Loja';
@@ -75,16 +78,18 @@ export async function copyDeliveryToClipboard(
           ? `ID *${item.ifood_id}*`
           : item.order_id ? `pedido *#${item.order_id}*` : 'sem identificador';
         const itemCode = item.confirmation_code?.replace(/\D/g, '').slice(0, 4);
+        const payment = item.is_paid
+          ? (item.payment_method==='pix'?'PIX confirmado ✅':'Pago no app ✅')
+          : `Cobrar R$ ${formatMoney(deliveryCharge(item))} · ${(item.payment_method||'dinheiro').replace(/_/g,' ')}`;
         parts.push(`${index + 1}. *${itemName}* · ${itemOrigin} · ${itemReference}`);
-        if (item.origin === 'ifood') parts.push(itemCode ? `   🔑 Código: *${itemCode}*` : '   🚨 *PEDIR O CÓDIGO DE 4 DÍGITOS*');
-        if (!item.is_paid) parts.push(`   💵 Cobrar *R$ ${formatMoney(deliveryCharge(item))}* · ${(item.payment_method || 'dinheiro').replace(/_/g, ' ')}`);
+        if(item.origin==='ifood')parts.push(itemCode?`   🔑 Código: *${itemCode}*`:'   🚨 *PEDIR O CÓDIGO DE 4 DÍGITOS*');
+        parts.push(`   ${item.is_paid?'✅':'💵'} ${payment}`);
       });
-      const groupedTotal = groupedOrders.filter(item => !item.is_paid).reduce((sum, item) => sum + deliveryCharge(item), 0);
-      if (groupedTotal > 0) parts.push(`💰 *Total da parada a cobrar:* R$ ${formatMoney(groupedTotal)}`);
-      parts.push('📍 *Uma parada física · conferir e entregar cada pedido separadamente*');
+      parts.push('📍 *Uma parada física · entregar cada pedido separadamente*');
       const address = routeAddressParts(delivery.address_string);
       parts.push(`📍 *Destino:* ${address.neighborhood} · ${address.streetWithNumber}`);
-      parts.push('');
+      const mapLink=delivery.maps_link||`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanAddressForMaps(delivery.address_string))}`;
+      parts.push('', '🗺️ *Abrir no mapa:*', mapLink);
       await navigator.clipboard.writeText(parts.join('\n'));
       return true;
     }
@@ -375,7 +380,13 @@ export async function generateRouteMessages(
       msg1.push(`*${emojiNum} ${clientName}*`);
       msg1.push(`📍 *${neighborhood}* · ${addressParts.streetWithNumber}`);
       const stopToCollect = stopGroup.deliveries.filter((item) => !item.is_paid).reduce((sum, item) => sum + deliveryCharge(item), 0);
-      if (stopGroup.deliveries.length > 1) msg1.push(`📦 *${stopGroup.deliveries.length} pedidos nesta parada*${stopToCollect > 0 ? ` · cobrar R$ ${formatMoney(stopToCollect)}` : ''}`);
+      if (stopGroup.deliveries.length > 1) {
+        const paidCount=stopGroup.deliveries.filter(item=>item.is_paid).length;
+        const paymentSummary=stopToCollect>0
+          ? paidCount>0?`⚠️ pagamento misto · cobrar R$ ${formatMoney(stopToCollect)}`: `💵 cobrar R$ ${formatMoney(stopToCollect)}`
+          : '✅ tudo pago';
+        msg1.push(`📦 *${stopGroup.deliveries.length} pedidos nesta parada* · ${paymentSummary}`);
+      }
 
       const codes = Array.from(new Set(ifoodOrders.map((item) => item.confirmation_code || customer?.last_confirmation_code || '').map((value) => value.replace(/\D/g, '').slice(0, 4)).filter(Boolean)));
       if (ifoodOrders.length > 0 && stopGroup.deliveries.length === 1) {
@@ -404,7 +415,7 @@ export async function generateRouteMessages(
         const codeText = item.origin === 'ifood'
           ? specificCode ? ` · 🔑 *${specificCode}*` : ' · 🚨 *pedir código*'
           : '';
-        const paymentAction = item.is_paid ? '' : ` · ${paymentText}`;
+        const paymentAction = ` · ${paymentText}`;
         msg1.push(`• ${customerText}${reference}${codeText}${paymentAction}`);
 
         if (item.drinks?.trim()) parseDrinkItems(item.drinks.trim()).forEach(({ qty, name }) => { const key=name.toLowerCase(); if(!drinksSummary[key]) drinksSummary[key]={qty:0,name}; drinksSummary[key].qty+=qty; });

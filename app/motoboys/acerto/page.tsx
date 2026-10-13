@@ -49,6 +49,7 @@ function Content(){
   const [categoryManager,setCategoryManager]=useState(false);
   const [newCategoryName,setNewCategoryName]=useState('');
   const [savingCategory,setSavingCategory]=useState(false);
+  const [settlementStrategy,setSettlementStrategy]=useState<'separate'|'offset'|'manual'>('separate');
   const [cashMode,setCashMode]=useState<'all'|'none'|'partial'>('all');
   const [cashHandedDraft,setCashHandedDraft]=useState('');
   const [saving,setSaving]=useState(false);
@@ -57,7 +58,7 @@ function Content(){
   const customCategories=(storeSettings.settlementAdjustmentCategories||[]).filter(item=>item.custom!==false).sort((a,b)=>a.position-b.position);
   const directionCategories=[...DEFAULT_CATEGORIES.filter(item=>item.direction===adjustmentDirection),...customCategories.filter(item=>item.direction===adjustmentDirection)];
   const selectedCategory=directionCategories.find(item=>item.id===adjustmentCategoryId)||directionCategories[0];
-  const cashSettlementInput=cashMode==='all'?true:cashMode==='none'?false:parseMoneyDraft(cashHandedDraft);
+  const manualCashInput=cashMode==='all'?true:cashMode==='none'?false:parseMoneyDraft(cashHandedDraft);
 
   const sourceId=motoboy?`motoboy:${motoboy.id}:${date}`:'';
   const existing=operationalExpenses.find(item=>item.source_id===sourceId);
@@ -70,6 +71,9 @@ function Content(){
     storeCredit:Math.max(0,Number(priorSettlement.settlement_store_credit)||0),
     motoboyCredit:Math.max(0,Number(priorSettlement.settlement_motoboy_credit)||0),
   }):({storeCredit:0,motoboyCredit:0}),[priorSettlement]);
+  const baseData=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,adjustments,true,priorCarry):null,[adjustments,date,deliveries,motoboy,priorCarry,routes]);
+  const offsetReturn=baseData?Math.max(0,baseData.cashInHand-Math.min(baseData.cashCollected,Math.max(0,baseData.liquidFee+baseData.priorMotoboyCredit-baseData.priorStoreCredit))):0;
+  const cashSettlementInput=settlementStrategy==='separate'?true:settlementStrategy==='offset'?offsetReturn:manualCashInput;
   const data=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,adjustments,cashSettlementInput,priorCarry):null,[adjustments,cashSettlementInput,date,deliveries,motoboy,priorCarry,routes]);
   const days=useMemo(()=>{const first=new Date(month.getFullYear(),month.getMonth(),1);const start=new Date(first.getFullYear(),first.getMonth(),1-first.getDay());return Array.from({length:42},(_,index)=>{const day=new Date(start);day.setDate(start.getDate()+index);return day;});},[month]);
 
@@ -87,6 +91,15 @@ function Content(){
   // permanece com o dinheiro das entregas.
   const cashHandedOver=data.retainedCash<=0;
   const carryForward=!cashHandedOver&&data.balance>0;
+
+  const groupedExplanation=data.groupedOrderCount>0
+    ? `${data.orderCount} pedidos viraram ${data.physicalDeliveryCount} paradas físicas porque ${data.groupedOrderCount} ${data.groupedOrderCount===1?'pedido compartilhou':'pedidos compartilharam'} endereço com outro pedido.`
+    : `${data.orderCount} pedidos correspondem a ${data.physicalDeliveryCount} paradas físicas.`;
+  const settlementEquation=data.settlementDirection==='motoboy_credit'
+    ? `Diária líquida R$ ${money(data.liquidFee)} − dinheiro retido R$ ${money(data.retainedCash)} = loja paga R$ ${money(data.balance)}.`
+    : data.settlementDirection==='store_credit'
+      ? `Dinheiro retido R$ ${money(data.retainedCash)} − diária líquida R$ ${money(data.liquidFee)} = motoboy devolve R$ ${money(data.balance)}.`
+      : `Dinheiro retido R$ ${money(data.retainedCash)} compensou exatamente a diária líquida.`;
 
   const settlementTitle=data.settlementDirection==='store_credit'
     ? `VALOR DA LOJA COM ${motoboy.name.toUpperCase()}`
@@ -138,7 +151,11 @@ function Content(){
       `🏍️ *Entregador:* ${motoboy.name}`,
       `📅 *Data:* ${day}/${monthValue}/${year}`,
       '',
-      `📦 *${data.physicalDeliveryCount} entregas*${data.orderCount!==data.physicalDeliveryCount?` · ${data.orderCount} pedidos`:''} · 🔁 *${data.completedRoutes} rotas*`,
+      `📦 *${data.orderCount} pedidos · ${data.physicalDeliveryCount} paradas físicas* · 🔁 *${data.completedRoutes} rotas*`,
+      groupedExplanation,
+      '',
+      `🛣️ *CONTAGEM POR ROTA*`,
+      ...data.routeBreakdown.map(item=>`↳ *${item.label}:* ${item.orderCount} pedido${item.orderCount===1?'':'s'} → ${item.physicalDeliveryCount} parada${item.physicalDeliveryCount===1?'':'s'}${item.groupedOrderCount>0?` · ${item.groupedOrderCount} agrupado${item.groupedOrderCount===1?'':'s'}`:''}`),
       '',
       `💰 *DIÁRIA*`,
       data.fee.description,
@@ -169,14 +186,16 @@ function Content(){
     lines.push(
       '',
       `💵 *DINHEIRO EM MÃOS*`,
-      `Recebido fisicamente dos clientes: *R$ ${money(data.cashInHand)}*`,
-      `Valor econômico dos pedidos: *R$ ${money(data.cashCollected)}*`,
-      `Troco resolvido pela loja: *R$ ${money(data.cashChange)}*`,
+      `Clientes entregaram em espécie: *R$ ${money(data.cashInHand)}*`,
+      `(-) Troco bancado pela loja: *R$ ${money(data.cashChange)}*`,
+      `(=) Vendas líquidas em dinheiro: *R$ ${money(data.cashCollected)}*`,
       `Devolvido fisicamente à loja: *R$ ${money(data.cashHandedOverAmount)}*`,
+      `Modo: *${settlementStrategy==='separate'?'caixa separado':settlementStrategy==='offset'?'compensar diária':'ajuste manual'}*`,
       data.retainedCash>0 ? `↳ Com o motoboy: *R$ ${money(data.retainedCash)}*` : `↳ Caixa conferido integralmente na loja`,
       '',
       `🏪 *RESULTADO DO ACERTO*`,
       `*R$ ${money(data.balance)} · ${settlementTitle}*`,
+      settlementEquation,
       settlementExplanation
     );
     return lines.join('\n');
@@ -224,6 +243,7 @@ function Content(){
         settlement_carry_forward:carryForward,
         settlement_direction:data.settlementDirection,
         settlement_cash_handed_over:cashHandedOver,
+        settlement_strategy:settlementStrategy,
         observation:`${data.physicalDeliveryCount} entregas físicas · ${data.orderCount} pedidos · ${data.completedRoutes} rotas · custo bruto R$ ${money(data.fee.amount)} · abatimentos R$ ${money(data.totalVales)} · líquido do motoboy R$ ${money(data.liquidFee)} · caixa R$ ${money(data.balance)} · saldo futuro ${carryForward?'sim':'não'}`,
         created_at:now,
         updated_at:now,
@@ -246,7 +266,7 @@ function Content(){
     ctx.fillStyle='#10b981';ctx.fillRect(0,0,1080,16);ctx.globalAlpha=.16;ctx.beginPath();ctx.arc(960,70,290,0,Math.PI*2);ctx.fillStyle='#10b981';ctx.fill();ctx.globalAlpha=1;
     round(64,64,952,190,38,'rgba(24,24,27,.88)','#27332f');round(88,88,76,76,22,'#10b981');ctx.fillStyle='#052e22';ctx.font='900 29px Arial';ctx.textAlign='center';ctx.fillText('DFL',126,137);ctx.textAlign='left';
     ctx.fillStyle='#f4f4f5';ctx.font='900 45px Arial';ctx.fillText('ACERTO DO MOTOBOY',190,125);ctx.fillStyle='#a1a1aa';ctx.font='600 28px Arial';ctx.fillText(motoboy.name,190,170);ctx.fillStyle='#6ee7b7';ctx.font='700 25px Arial';ctx.fillText(fromKey(date).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}),190,210);
-    round(64,286,952,156,34,'rgba(14,165,233,.07)','#173947');const stat=(x:number,label:string,value:string)=>{ctx.fillStyle='#71717a';ctx.font='700 22px Arial';ctx.fillText(label.toUpperCase(),x,337);ctx.fillStyle='#f4f4f5';ctx.font='900 38px Arial';ctx.fillText(value,x,392);};stat(100,'Entregas',String(data.physicalDeliveryCount));stat(405,'Rotas',String(data.completedRoutes));stat(700,'Recebido dos clientes',`R$ ${money(data.cashTendered)}`);
+    round(64,286,952,156,34,'rgba(14,165,233,.07)','#173947');const stat=(x:number,label:string,value:string)=>{ctx.fillStyle='#71717a';ctx.font='700 22px Arial';ctx.fillText(label.toUpperCase(),x,337);ctx.fillStyle='#f4f4f5';ctx.font='900 38px Arial';ctx.fillText(value,x,392);};stat(100,'Paradas físicas',String(data.physicalDeliveryCount));stat(405,'Pedidos',String(data.orderCount));stat(700,'Vendas em dinheiro',`R$ ${money(data.cashCollected)}`);
     round(64,474,952,720,34,'rgba(24,24,27,.9)','#27272a');ctx.fillStyle='#d4d4d8';ctx.font='900 25px Arial';ctx.fillText('RESUMO FINANCEIRO',100,526);
     let y=590;
     const row=(label:string,value:string,tone='#f4f4f5')=>{ctx.fillStyle='#8b8b94';ctx.font='600 27px Arial';ctx.fillText(label,100,y);ctx.fillStyle=tone;ctx.font='800 30px Arial';ctx.textAlign='right';ctx.fillText(value,980,y);ctx.textAlign='left';ctx.strokeStyle='#242429';ctx.beginPath();ctx.moveTo(100,y+25);ctx.lineTo(980,y+25);ctx.stroke();y+=72;};
@@ -260,8 +280,9 @@ function Content(){
       row('Acréscimos',`+ R$ ${money(data.totalAdditions)}`,'#34d399');
       adjustments.filter(item=>item.direction==='addition').slice(0,2).forEach(item=>detail(`${adjustmentKindLabel(item.kind)} · ${item.category_label||item.description.slice(0,25)}`,`R$ ${money(item.amount)}`));
     }
-    row('Recebido em mãos',`R$ ${money(data.cashInHand)}`,'#fbbf24');
-    row('Valor dos pedidos',`R$ ${money(data.cashCollected)}`,'#a1a1aa');
+    row('Clientes entregaram',`R$ ${money(data.cashInHand)}`,'#fbbf24');
+    row('Troco da loja',`- R$ ${money(data.cashChange)}`,'#fb7185');
+    row('Vendas líquidas',`R$ ${money(data.cashCollected)}`,'#a1a1aa');
     row('Líquido do motoboy',`R$ ${money(data.liquidFee)}`,'#34d399');
 
     const resultColor=data.settlementDirection==='store_credit'?'#f59e0b':'#10b981';
@@ -292,7 +313,7 @@ function Content(){
 
     <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4"><p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Ajuste do acerto</p><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={()=>{setAdjustmentDirection('deduction');setAdjustmentCategoryId('advance');setAdjustmentKind('advance')}} className={`h-11 rounded-xl border text-xs font-black ${adjustmentDirection==='deduction'?'border-red-500/35 bg-red-500/10 text-red-300':'border-zinc-800 text-zinc-500'}`}>− Abatimento</button><button onClick={()=>{setAdjustmentDirection('addition');setAdjustmentCategoryId('tip');setAdjustmentKind('tip')}} className={`h-11 rounded-xl border text-xs font-black ${adjustmentDirection==='addition'?'border-emerald-500/35 bg-emerald-500/10 text-emerald-300':'border-zinc-800 text-zinc-500'}`}>+ Acréscimo</button></div><div className="mt-3 grid grid-cols-2 gap-2">{directionCategories.map(category=><button key={category.id} onClick={()=>{setAdjustmentCategoryId(category.id);setAdjustmentKind(category.custom?'custom':category.id as MotoboySettlementAdjustment['kind'])}} className={`min-h-12 rounded-xl border px-3 text-[11px] font-black ${selectedCategory?.id===category.id?'border-amber-500/40 bg-amber-500/10 text-amber-200':'border-zinc-800 text-zinc-500'}`}>{category.label}</button>)}<button onClick={()=>setCategoryManager(true)} className="min-h-12 rounded-xl border border-dashed border-sky-500/35 bg-sky-500/5 px-3 text-[11px] font-black text-sky-300"><Plus size={14} className="mx-auto mb-1"/>Nova categoria</button></div><div className="mt-3 grid grid-cols-[1fr_112px_48px] gap-2"><input value={adjustmentDescription} onChange={e=>setAdjustmentDescription(e.target.value)} placeholder="Observação opcional" className="input"/><input value={adjustmentValue} onChange={e=>setAdjustmentValue(normalizeMoneyDraft(e.target.value))} inputMode="numeric" placeholder="0,00" className="input text-right font-black"/><button onClick={addAdjustment} aria-label="Adicionar ajuste" className="flex h-12 items-center justify-center rounded-xl bg-amber-400 text-zinc-950"><Plus size={18}/></button></div></section>
 
-    <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4"><p className="text-sm font-black">Conferência do dinheiro físico</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">O motoboy recebeu R$ {money(data.cashInHand)} em mãos. O troco de R$ {money(data.cashChange)} é resolvido pela loja e não reduz este total.</p><div className="mt-3 grid grid-cols-3 gap-2">{([['all','Devolveu tudo'],['partial','Informar valor'],['none','Não devolveu']] as const).map(([value,label])=><button key={value} onClick={()=>{setCashMode(value);if(value==='partial'&&!cashHandedDraft)setCashHandedDraft(moneyValueToDraft(data.cashInHand))}} className={`min-h-11 rounded-xl border px-2 text-[10px] font-black ${cashMode===value?'border-emerald-500/35 bg-emerald-500/10 text-emerald-300':'border-zinc-800 text-zinc-600'}`}>{label}</button>)}</div>{cashMode==='partial'&&<label className="mt-3 block text-[10px] font-bold text-zinc-500">Quanto voltou fisicamente para a loja?<input value={cashHandedDraft} onChange={e=>setCashHandedDraft(normalizeMoneyDraft(e.target.value))} inputMode="numeric" className="input mt-2 w-full text-right text-sm font-black text-zinc-100" placeholder="0,00"/></label>}<div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-zinc-950/60 p-3"><Line label="Voltou para a loja" value={`R$ ${money(data.cashHandedOverAmount)}`}/><Line label="Permaneceu com ele" value={`R$ ${money(data.retainedCash)}`}/></div><p className="mt-2 text-[9px] leading-relaxed text-zinc-600">Pix enviado ao motoboy deve ser lançado como Adiantamento para aparecer separado e abater o pagamento dele.</p></section>
+    <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4"><p className="text-sm font-black">Como fechar o caixa?</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Clientes entregaram R$ {money(data.cashInHand)}. Tirando R$ {money(data.cashChange)} de troco bancado pela loja, as vendas líquidas são R$ {money(data.cashCollected)}.</p><div className="mt-3 grid gap-2"><button onClick={()=>setSettlementStrategy('separate')} className={`rounded-2xl border p-3 text-left ${settlementStrategy==='separate'?'border-emerald-500/40 bg-emerald-500/10':'border-zinc-800'}`}><span className="block text-xs font-black">Caixa separado</span><span className="mt-1 block text-[9px] text-zinc-500">Devolve R$ {money(data.cashInHand)} e a diária é paga à parte.</span></button><button onClick={()=>setSettlementStrategy('offset')} className={`rounded-2xl border p-3 text-left ${settlementStrategy==='offset'?'border-sky-500/40 bg-sky-500/10':'border-zinc-800'}`}><span className="block text-xs font-black">Compensar diária nas vendas</span><span className="mt-1 block text-[9px] text-zinc-500">Retém no máximo R$ {money(data.cashCollected)} das vendas; dinheiro do troco nunca entra na diária.</span></button><button onClick={()=>setSettlementStrategy('manual')} className={`rounded-2xl border p-3 text-left ${settlementStrategy==='manual'?'border-amber-500/40 bg-amber-500/10':'border-zinc-800'}`}><span className="block text-xs font-black">Conferência manual</span><span className="mt-1 block text-[9px] text-zinc-500">Use somente quando o valor físico devolvido for diferente.</span></button></div>{settlementStrategy==='manual'&&<><div className="mt-3 grid grid-cols-3 gap-2">{([['all','Tudo'],['partial','Informar'],['none','Nada']] as const).map(([value,label])=><button key={value} onClick={()=>{setCashMode(value);if(value==='partial'&&!cashHandedDraft)setCashHandedDraft(moneyValueToDraft(data.cashInHand))}} className={`min-h-11 rounded-xl border px-2 text-[10px] font-black ${cashMode===value?'border-amber-500/35 bg-amber-500/10 text-amber-200':'border-zinc-800 text-zinc-600'}`}>{label}</button>)}</div>{cashMode==='partial'&&<label className="mt-3 block text-[10px] font-bold text-zinc-500">Quanto voltou fisicamente para a loja?<input value={cashHandedDraft} onChange={e=>setCashHandedDraft(normalizeMoneyDraft(e.target.value))} inputMode="numeric" className="input mt-2 w-full text-right text-sm font-black text-zinc-100" placeholder="0,00"/></label>}</>}<div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-zinc-950/60 p-3"><Line label="Voltou para a loja" value={`R$ ${money(data.cashHandedOverAmount)}`}/><Line label="Retido pelo motoboy" value={`R$ ${money(data.retainedCash)}`}/></div><p className="mt-2 text-[10px] font-bold leading-relaxed text-sky-300">{settlementEquation}</p><p className="mt-2 text-[9px] leading-relaxed text-zinc-600">Pix enviado ao motoboy deve ser lançado como Adiantamento.</p></section>
 
     <section className={`rounded-[26px] p-5 ${data.settlementDirection==='store_credit'?'bg-amber-500':'bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.settlementDirection==='store_credit'?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 break-words text-[clamp(1.65rem,8vw,2.25rem)] font-black tabular-nums text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black uppercase text-zinc-900">{settlementTitle}</p><p className="mt-2 max-w-[32rem] text-[11px] font-bold leading-relaxed text-zinc-900/80">{settlementExplanation}</p></section>
 

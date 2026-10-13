@@ -1,0 +1,27 @@
+const fs=require('node:fs');
+const vm=require('node:vm');
+const ts=require('typescript');
+const ok=(value,label)=>{if(!value)throw new Error('V76: '+label);console.log('OK:',label)};
+function moduleFrom(file,stubs){const source=fs.readFileSync(file,'utf8');const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;const sandbox={module:{exports:{}},exports:{},require(id){if(id in stubs)return stubs[id];throw new Error('stub ausente: '+id)}};sandbox.exports=sandbox.module.exports;vm.runInNewContext(code,sandbox,{filename:file});return sandbox.module.exports;}
+const group=items=>{const map=new Map;for(const item of items){const key=item.address_string;const list=map.get(key)||[];list.push(item);map.set(key,list)}return [...map.entries()].map(([key,deliveries])=>({key,deliveries,representative:deliveries[0]}))};
+const analytics=moduleFrom('lib/motoboy-analytics.ts',{'@/lib/route-stops':{groupDeliveriesByStop:group}});
+const motoboy={id:'m1',name:'Bruno',payment_rule:{type:'fixed_plus_variable',fixed_amount:100,threshold:15,extra_fee:7}};
+const routes=[1,2,3,4].map(n=>({id:'r'+n,name:'Rota '+n,motoboy_id:'m1',motoboy_name:'Bruno',status:'fechada',created_at:'2026-10-12T12:00:00-03:00'}));
+const deliveries=Array.from({length:30},(_,i)=>({id:'d'+i,route_id:i<2?'r1':routes[i%4].id,completed:true,address_string:i<2?'Mesmo endereço':'Rua '+i,payment_method:i===0?'dinheiro':'pix',is_paid:i!==0,value:i===0?174:0,change_for:i===0?225:undefined}));
+const separate=analytics.getMotoboyDayData(motoboy,'2026-10-12',routes,deliveries,[],true);
+ok(separate.orderCount===30&&separate.physicalDeliveryCount===29&&separate.groupedOrderCount===1,'30 pedidos explicam 29 paradas');
+ok(separate.fee.amount===198,'diária usa 29 paradas físicas');
+ok(separate.cashInHand===225&&separate.cashCollected===174&&separate.cashChange===51,'dinheiro bruto troco e venda líquida separados');
+const offsetReturn=separate.cashInHand-Math.min(separate.cashCollected,separate.liquidFee);
+const offset=analytics.getMotoboyDayData(motoboy,'2026-10-12',routes,deliveries,[],offsetReturn);
+ok(offset.cashHandedOverAmount===51&&offset.retainedCash===174&&offset.motoboyCredit===24,'compensação preserva troco e paga somente diferença');
+const repeatedAcrossRoutes=analytics.getMotoboyDayData(motoboy,'2026-10-12',routes,[{...deliveries[2],id:'x',route_id:'r1',address_string:'Rua repetida'},{...deliveries[3],id:'y',route_id:'r2',address_string:'Rua repetida'}],[],true);
+ok(repeatedAcrossRoutes.physicalDeliveryCount===2,'mesmo endereço em rotas diferentes conta duas paradas');
+const page=fs.readFileSync('app/motoboys/acerto/page.tsx','utf8');
+const whatsapp=fs.readFileSync('lib/whatsapp.ts','utf8');
+ok(page.includes('Caixa separado')&&page.includes('Compensar diária nas vendas')&&page.includes('Conferência manual'),'três estratégias explícitas');
+ok(page.includes('CONTAGEM POR ROTA')&&page.includes('groupedExplanation'),'comprovante explica pedidos paradas e agrupamentos');
+ok(page.includes('settlementEquation')&&page.includes('settlement_strategy:settlementStrategy'),'equação visível e estratégia auditável');
+ok(whatsapp.includes("groupedPending.length===0?'✅ *Todos os pedidos estão pagos*'")&&whatsapp.includes('const paymentAction ='),'pago não desaparece em grupos');
+ok(whatsapp.includes("parts.push('', '🗺️ *Abrir no mapa:*', mapLink)"),'mensagem agrupada individual preserva mapa');
+console.log('\nV76 ACERTO + MENSAGENS COMPLETAS: CONTRATOS OK');

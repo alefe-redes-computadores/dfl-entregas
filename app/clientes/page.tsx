@@ -23,9 +23,13 @@ export default function CustomersPage(){
   const ranked=useMemo(()=>[...items].filter(item=>item.stats.orderCount>0&&!isOperationalCustomer(item.customer)).sort((a,b)=>b.stats.orderCount-a.stats.orderCount||b.stats.totalValue-a.stats.totalValue),[items]);
   const filtered=useMemo(()=>items.filter(({customer,stats})=>{
     const term=normalizeCustomerName(query);
+    const searchedDigits=query.replace(/\D/g,'');
     const haystack=normalizeCustomerName(`${customer.name} ${customer.phone||''} ${customer.address||''} ${customer.neighborhood||''}`);
+    const customerDigits=(customer.phone||'').replace(/\D/g,'');
     const origin=customer.origin||'ifood';
-    return (!term||haystack.includes(term))&&(filter==='todos'||filter===origin||(filter==='com-pedidos'&&stats.orderCount>0)||(filter==='sem-pedidos'&&stats.orderCount===0));
+    const matchesText=!term||haystack.includes(term);
+    const matchesPhone=Boolean(searchedDigits&&customerDigits.includes(searchedDigits));
+    return (matchesText||matchesPhone)&&(filter==='todos'||filter===origin||(filter==='com-pedidos'&&stats.orderCount>0)||(filter==='sem-pedidos'&&stats.orderCount===0));
   }).sort((a,b)=>a.customer.name.localeCompare(b.customer.name,'pt-BR')),[filter,items,query]);
   const maxOrders=ranked[0]?.stats.orderCount||1;
   const duplicateCount=useMemo(()=>customerDuplicateCandidates(customers,deliveries).length,[customers,deliveries]);

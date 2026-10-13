@@ -153,6 +153,8 @@ export interface OperationalExpense {
   settlement_carry_forward?: boolean;
   settlement_direction?: 'store_credit' | 'motoboy_credit' | 'settled';
   settlement_cash_handed_over?: boolean;
+  /** Caixa separado, compensação da diária ou conferência manual. */
+  settlement_strategy?: 'separate' | 'offset' | 'manual';
   observation?: string;
   created_at: string;
   updated_at: string;
@@ -382,6 +384,8 @@ export interface Delivery {
   exclude_customer_metrics?: boolean;
   /** Pedido criado pelo proprietário para teste; nunca entra em métricas de cliente. */
   developer_test?: boolean;
+  /** Contexto explícito quando a identidade do proprietário/loja é usada no pedido. */
+  owner_order_context?: 'customer' | 'owner_test' | 'owner_provisional' | 'store_pickup';
   external_customer_id?: string;
   customer_email?: string;
   createdAt?: string; // Campo legado ainda lido pelos relatórios atuais

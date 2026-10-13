@@ -7,8 +7,8 @@ const normalizedStart=report.indexOf('const normalized: ReportDelivery[]');
 const periodStart=report.indexOf('const period = buildPeriod', normalizedStart);
 ok(normalizedStart >= 0 && periodStart > normalizedStart, 'bloco normalized do relatório localizado');
 const normalizedBlock=report.slice(normalizedStart, periodStart);
-ok(normalizedBlock.includes('!delivery.exclude_customer_metrics'), 'flag de exclusão aplicada antes das agregações');
-ok(normalizedBlock.includes('!isInternalOperationalCustomer(delivery.customer)'), 'cliente interno excluído antes das agregações');
+ok(normalizedBlock.includes('delivery.developer_test !== true'), 'teste explícito excluído antes das agregações gerais');
+ok(report.includes('customerOperationalCurrent = logisticsCurrent.filter')&&report.includes('delivery.exclude_customer_metrics !== true'), 'exclusão de cliente aplicada somente aos recortes de cliente');
 ok(normalizedBlock.includes('!isInternalOperationalRoute(delivery.route)'), 'rota interna excluída antes das agregações');
 ok(!report.includes('Comercial permanece íntegro; apenas os recortes operacionais'), 'regra antiga de exclusão parcial removida');
 

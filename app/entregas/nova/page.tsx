@@ -2,7 +2,7 @@
 import { formatBrazilPhone, normalizeBrazilPhone } from '@/lib/phone';
 
 import {
-  useEffect, useRef, useState, useMemo } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store, Smartphone, Banknote, QrCode,
+  useEffect, useRef, useState, useMemo, useDeferredValue } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store, Smartphone, Banknote, QrCode,
   CreditCard, ChevronDown, AlertTriangle, Navigation, CheckCircle2, Link2,
   MessageCircle, Info, Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, Trash2, UsersRound, TicketPercent,
 } from 'lucide-react';
@@ -14,7 +14,7 @@ import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomple
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrdersText } from '@/lib/ifood-order-parser';
-import { assessIfoodParseQuality } from '@/lib/ifood-parser-quality';
+import { assessIfoodParseQuality, buildIfoodParseGuide } from '@/lib/ifood-parser-quality';
 import { loadInboxDay, markInboxDraft } from '@/lib/delivery-inbox';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
@@ -26,6 +26,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
+import { hasOwnerIdentity, ownerContextFlags, type OwnerOrderContext } from '@/lib/owner-order-context';
 
 type ExtraIfoodOrderDraft = { id:string; orderId:string; ifoodId:string; confirmationCode:string; customerName:string; customerCharge:string; subsidy:string; paymentMethod:Delivery['payment_method']; isPaid:boolean; changeFor:string; address:string; phone:string; mapsLink:string; };
 
@@ -76,20 +77,24 @@ export default function NovaEntregaPage() {
   );
 
   const [magicText, setMagicText] = useState('');
+  const deferredMagicText = useDeferredValue(magicText);
   const [isParserOpen, setIsParserOpen] = useState(true);  const inboxParsedRef = useRef<ReturnType<typeof parseIfoodOrdersText>[number] | null>(null);
   const liveParsedOrders = useMemo(
-    () => magicText.trim().length < 2
+    () => deferredMagicText.trim().length < 2
       ? []
-      : parseIfoodOrdersText(magicText, {
+      : parseIfoodOrdersText(deferredMagicText, {
           knownNeighborhoods,
           knownCustomerNames: customers.map((customer) => customer.name),
         }),
-    [customers, knownNeighborhoods, magicText],
+    [customers, knownNeighborhoods, deferredMagicText],
   );
   const liveParseQuality = useMemo(
     () => assessIfoodParseQuality(liveParsedOrders),
     [liveParsedOrders],
   );
+  const liveGuide = useMemo(() => buildIfoodParseGuide(magicText, liveParsedOrders[0]), [magicText, liveParsedOrders]);
+  const parserGuideRef = useRef<HTMLDivElement | null>(null);
+  const parserInputRef = useRef<HTMLTextAreaElement | null>(null);
   const liveRecognition = useMemo(() => {
     const parsed = liveParsedOrders[0];
     if (!parsed) return [];
@@ -120,6 +125,8 @@ const [routeId, setRouteId] = useState('');
   const [phone, setPhone] = useState('');
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
   const [excludeCustomerMetrics, setExcludeCustomerMetrics] = useState(false);
+  const [ownerOrderContext, setOwnerOrderContext] = useState<OwnerOrderContext | ''>('');
+  const ownerIdentityDetected = useMemo(() => hasOwnerIdentity({ name: customerName, phone }), [customerName, phone]);
 
   const [streetAddress, setStreetAddress] = useState('');
   const [mapsLink, setMapsLink] = useState('');
@@ -411,6 +418,7 @@ const [routeId, setRouteId] = useState('');
       const invalid=drafts.find(d=>!d.orderId.trim()||(d.ifoodId&&d.ifoodId.replace(/\D/g,'').length!==8)||(d.confirmationCode&&d.confirmationCode.replace(/\D/g,'').length!==4));
       if(invalid){toast.error('Revise os identificadores iFood.',{description:'Cada pedido precisa de número; ID deve ter 8 dígitos e código deve ter 4 quando informados.'});return}
     }
+    if(ownerIdentityDetected&&!ownerOrderContext){toast.error('Classifique este pedido no seu nome.',{description:'Informe se é teste, pedido real provisório ou retirada real na loja.'});return}
     setIsSaving(true);
     try{
       const normalizedAddress=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(streetAddress):{address:'',neighborhood:undefined,phone:undefined,observations:[] as string[]};
@@ -457,11 +465,12 @@ const [routeId, setRouteId] = useState('');
         const stopGroups=new Map<string,string>();
         for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));const draftNormalized=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(draft.address||streetAddress):{address:'',phone:undefined};const draftAddress=draftNormalized.address||cleanStreet;const draftPhone=normalizeBrazilPhone(draft.phone)||draftNormalized.phone||'';const draftMaps=(draft.mapsLink||'').trim()||(index===0?resolvedMapsLink:'');const addressKey=canonicalizeOperationalAddress(draftAddress).address.toLocaleLowerCase('pt-BR');let draftStopGroupId=stopGroupId;if(fulfillmentMode==='delivery'&&drafts.length>1){const sameAddressCount=drafts.filter(item=>sameCustomerAddress(item.address||streetAddress,draftAddress)).length;if(sameAddressCount>1){draftStopGroupId=stopGroups.get(addressKey)||`stop-${Date.now()}-${stopGroups.size}-${Math.random().toString(36).slice(2,7)}`;stopGroups.set(addressKey,draftStopGroupId)}else if(!stopSource){draftStopGroupId=undefined}}let customerId='';if(draftName){customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?draftAddress:undefined,phone:draftPhone||undefined,mapsLink:fulfillmentMode==='delivery'?draftMaps:undefined,confirmationCode:draft.confirmationCode||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:undefined})}
           deliveriesToCreate.push({id:index===0?Date.now().toString():`${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:draftStopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:draft.paymentMethod,payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid),change_for:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?draftAddress:'',maps_link:fulfillmentMode==='delivery'?draftMaps:'',phone:draftPhone||undefined,notify_whatsapp:index===0?notifyWhatsapp:false,observation:cleanObservation||undefined,drinks:index===0?drinks:'',createdAt:now,created_at:now,updated_at:now});
+          if(ownerOrderContext) Object.assign(deliveriesToCreate[deliveriesToCreate.length-1],ownerContextFlags(ownerOrderContext));
         }
         await addDeliveries(deliveriesToCreate);toast.success(drafts.length>1?`${drafts.length} pedidos cadastrados nos endereços conferidos.`:'Entrega cadastrada com sucesso!');
       }else{
         let customerId='';if(customerName.trim())customerId=await findOrCreateCustomer(customerName,{address:fulfillmentMode==='delivery'?cleanStreet:undefined,phone:rawPhone||undefined,mapsLink:fulfillmentMode==='delivery'?resolvedMapsLink:undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});
-        const cleanValue=parseMoney(value);await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:stopGroupId,origin,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),value:cleanValue,customer_charge:cleanValue,is_paid:isPaid,is_urgent:isUrgent,payment_method:paymentMethod,payment_state:paymentStateForInput(paymentMethod,isPaid),change_for:changeFor?parseMoney(changeFor):undefined,address_string:fulfillmentMode==='delivery'?cleanStreet:'',maps_link:fulfillmentMode==='delivery'?resolvedMapsLink:'',phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success(stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+        const cleanValue=parseMoney(value);await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:stopGroupId,origin,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue,customer_charge:cleanValue,is_paid:isPaid,is_urgent:isUrgent,payment_method:paymentMethod,payment_state:paymentStateForInput(paymentMethod,isPaid),change_for:changeFor?parseMoney(changeFor):undefined,address_string:fulfillmentMode==='delivery'?cleanStreet:'',maps_link:fulfillmentMode==='delivery'?resolvedMapsLink:'',phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success(stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
       }
       if (inboxDraftId && inboxDay) {
         markInboxDraft(inboxDay, inboxDraftId, 'launched');
@@ -563,50 +572,46 @@ const [routeId, setRouteId] = useState('');
             </button>
           </div>
 
-          <textarea
-            rows={3}
-            placeholder="Cole aqui o texto do iFood..."
-            value={magicText}
-            onChange={(e) => setMagicText(e.target.value)}
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-red-500/50 outline-none resize-none font-mono"
-          />
-
           {magicText.trim().length > 0 && (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
-                  Reconhecimento ao vivo
-                </p>
-                <span className="text-[10px] font-black text-red-300">
-                  {liveRecognition.length} dados identificados
-                </span>
+            <div ref={parserGuideRef} className="sticky top-[calc(var(--dfl-safe-top)+8px)] z-20 rounded-2xl border border-zinc-700/80 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur-xl">
+              <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[.14em] text-zinc-400">Guia de preenchimento</p><span className="text-[9px] font-bold text-zinc-600">fica visível com o teclado</span></div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <span className="text-[10px] font-bold text-zinc-400">Reconhecimento ao vivo</span>
+                <span className="text-[10px] font-bold text-emerald-300">{liveRecognition.length} dados identificados</span>
               </div>
-              {liveRecognition.length > 0 ? (
+              {liveRecognition.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {liveRecognition.map((item) => (
-                    <span key={item.label} className="flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/[.08] px-2.5 py-1 text-[9px] font-black text-emerald-300">
+                    <span key={item.label} className="flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/[.08] px-2.5 py-1 text-[9px] font-bold text-emerald-300">
                       <CheckCircle2 size={11} /> {item.label}
                     </span>
                   ))}
                 </div>
-              ) : (
-                <p className="mt-2 text-[10px] text-zinc-600">Continue digitando ou cole o pedido completo.</p>
               )}
               {liveParseQuality.issues.length > 0 && liveRecognition.length > 0 && (
-                <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[.06] px-3 py-2 text-[9px] leading-relaxed text-amber-200">
+                <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[.06] px-3 py-2 text-[10px] text-amber-200">
                   <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                  <span>
-                    Falta conferir: {Array.from(new Set(liveParseQuality.issues.flatMap((item) => item.fields))).join(', ')}.
-                  </span>
+                  <span>Falta conferir: {Array.from(new Set(liveParseQuality.issues.flatMap((item) => item.fields))).join(', ')}.</span>
                 </div>
               )}
-              {liveParsedOrders.length > 1 && (
-                <p className="mt-2 text-[9px] font-bold text-violet-300">
-                  {liveParsedOrders.length} pedidos encontrados · serão revisados separadamente.
-                </p>
-              )}
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                {liveGuide.map((item)=><div key={item.key} className={`min-w-0 rounded-xl border px-2.5 py-2 ${item.state==='complete'?'border-emerald-500/25 bg-emerald-500/[.08]':item.state==='partial'?'border-amber-500/25 bg-amber-500/[.07]':'border-zinc-800 bg-zinc-900/55'}`}><div className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.state==='complete'?'bg-emerald-400':item.state==='partial'?'bg-amber-400':'bg-zinc-700'}`}/><b className={`truncate text-[9px] ${item.state==='complete'?'text-emerald-300':item.state==='partial'?'text-amber-300':'text-zinc-500'}`}>{item.label}</b></div><p className="mt-1 truncate text-[9px] text-zinc-300">{item.value||item.hint}</p></div>)}
+              </div>
+              {liveParsedOrders.length>1&&<p className="mt-2 text-[9px] font-bold text-violet-300">{liveParsedOrders.length} pedidos detectados · revisão individual antes de salvar</p>}
             </div>
           )}
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/55 px-3 py-2 font-mono text-[9px] leading-relaxed text-zinc-600">Modelo: #1234 12345678 · Cliente · Rua, número, bairro · Pago/Pix/Dinheiro</div>
+
+          <textarea
+            ref={parserInputRef}
+            rows={3}
+            placeholder="Cole aqui o texto do iFood..."
+            value={magicText}
+            onChange={(e) => setMagicText(e.target.value)}
+            onFocus={()=>window.setTimeout(()=>parserInputRef.current?.scrollIntoView({behavior:'smooth',block:'center'}),180)}
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-red-500/50 outline-none resize-none font-mono"
+          />
 
           <button
             type="button"
@@ -977,6 +982,8 @@ const [routeId, setRouteId] = useState('');
           </div>
         </section>
 
+
+        {ownerIdentityDetected && <section className="rounded-[24px] border border-sky-500/25 bg-sky-500/[.055] p-4"><p className="text-[10px] font-black uppercase tracking-[.16em] text-sky-400">Identidade da loja detectada</p><p className="mt-1 text-sm font-black text-zinc-100">Como este lançamento deve contar?</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Isso separa testes de vendas reais sem apagar faturamento legítimo.</p><div className="mt-3 grid gap-2">{([['owner_test','DEV / teste','Sai dos relatórios, ranking e fidelidade.'],['owner_provisional','Pedido real provisório','Conta na venda e operação; não vira pedido do Álefe.'],['store_pickup','Retirada real na loja','Conta normalmente; vincule ao cliente verdadeiro.']] as const).map(([context,label,description])=><button key={context} type="button" onClick={()=>setOwnerOrderContext(context)} className={`rounded-2xl border p-3 text-left ${ownerOrderContext===context?'border-sky-400/50 bg-sky-500/10':'border-zinc-800 bg-zinc-950/40'}`}><b className="block text-xs text-zinc-100">{label}</b><span className="mt-1 block text-[10px] text-zinc-500">{description}</span></button>)}</div></section>}
 
         <button type="button" onClick={() => setExcludeCustomerMetrics(v => !v)} className={`flex w-full items-start gap-3 rounded-2xl border p-3.5 text-left ${excludeCustomerMetrics ? 'border-violet-500/30 bg-violet-500/[.08]' : 'border-zinc-800 bg-zinc-900/45'}`}>
           <span className="mt-0.5">{excludeCustomerMetrics ? <CheckCircle2 size={16} className="text-violet-400"/> : <span className="block h-4 w-4 rounded border border-zinc-700"/>}</span>

@@ -282,6 +282,16 @@ function idTokens(line: string) {
     .filter(Boolean);
 }
 
+function looksLikeCustomerNameLine(line: string) {
+  const clean = spaces(line.replace(/^[-•*]\s*/, ''));
+  if (!clean || clean.length < 2 || clean.length > 64) return false;
+  if (/\d/.test(clean) || /https?:\/\//i.test(clean) || STREET.test(clean) || POSTAL.test(clean)) return false;
+  if (FINANCIAL.test(clean) || OBS_PREFIX.test(clean) || INSTRUCTION.test(clean) || DRINK_WORD.test(clean)) return false;
+  if (/\b(?:pedido|ifood|c[oó]digo|id|rota|motoboy|entregador|cep|bairro|total)\b/i.test(clean)) return false;
+  const words = clean.split(/\s+/).filter(Boolean);
+  return words.length >= 1 && words.length <= 6 && words.every((word) => /^[A-Za-zÀ-ÿ'.-]+$/.test(word));
+}
+
 function cleanAddress(
   source: string,
   observations: string[],
@@ -710,7 +720,7 @@ export function parseIfoodOrderText(
           token.length === 5,
       );
 
-      if (!result.orderId && idLine === index) {
+      if (!result.orderId && (idLine === index || tokens.some((token) => token.length === 8))) {
         result.orderId =
           short.find(
             (token) =>
@@ -772,24 +782,12 @@ export function parseIfoodOrderText(
       return;
     }
 
-    if (
-      !result.customerName &&
-      idLine >= 0 &&
-      index > idLine &&
-      index <= idLine + 2 &&
-      !looksLikeAddress(line) &&
-      !POSTAL.test(line) &&
-      !FINANCIAL.test(line) &&
-      !OBS_PREFIX.test(line) &&
-      !INSTRUCTION.test(line) &&
-      !DRINK_WORD.test(line) &&
-      !/\d+[.,]\d{2}/.test(line)
-    ) {
-      const cleanedCandidate = line
-        .replace(/^[-•*]\s*/, '')
-        .trim();
-      // V61: preservar nome literal do pedido, sem fuzzy matching.
-      result.customerName = cleanedCandidate;
+    if (!result.customerName && looksLikeCustomerNameLine(line)) {
+      const known = longestKnownMatch(line, context.knownCustomerNames);
+      const cleanedCandidate = line.replace(/^[-•*]\s*/, '').trim();
+      // Nome explícito conhecido ganha prioridade; nome literal continua
+      // preservado mesmo quando aparece antes ou várias linhas após o ID.
+      result.customerName = known || cleanedCandidate;
       return;
     }
 

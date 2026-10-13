@@ -19,7 +19,7 @@ const checks=[
  ['pedido curto limitado ao dia',files.inbox.includes('já lançado hoje')],
  ['rota ativa persistida',files.route.includes('dfl-active-operational-route-v1')],
  ['nova entrega recupera rota ativa',files.nova.includes("localStorage.getItem('dfl-active-operational-route-v1')")],
- ['acerto agrupa paradas',files.analytics.includes('groupDeliveriesByStop(completedDeliveries)')],
+ ['acerto agrupa paradas dentro de cada rota',files.analytics.includes('dayRoutes.flatMap(route=>')&&files.analytics.includes("delivery.route_id===route.id")],
  ['taxa usa parada física',files.analytics.includes('calculateMotoboyFee(motoboy.payment_rule,physicalDeliveryCount)')],
  ['acerto carrega saldo anterior',files.acerto.includes('priorSettlement')],
  ['saldo anterior entra na matemática',files.analytics.includes('retainedCash+priorStoreCredit-liquidFee-priorMotoboyCredit')],

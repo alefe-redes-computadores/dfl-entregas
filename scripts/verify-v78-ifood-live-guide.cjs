@@ -1,0 +1,15 @@
+const fs=require('node:fs');
+const read=(file)=>fs.readFileSync(file,'utf8');
+const ok=(value,label)=>{if(!value)throw new Error(`V78: ${label}`);console.log('OK:',label)};
+const quality=read('lib/ifood-parser-quality.ts');
+const page=read('app/entregas/nova/page.tsx');
+ok(quality.includes("IfoodGuideState = 'missing' | 'partial' | 'complete'"),'guia possui estados ausente, parcial e completo');
+ok(quality.includes('Faltam ${Math.max(0, 8-idDigits.length)} dígitos'),'ID informa exatamente quantos dígitos faltam');
+ok(quality.includes("key: 'customer'")&&quality.includes("key: 'address'")&&quality.includes("key: 'payment'"),'guia cobre cliente, endereço e pagamento');
+ok(page.includes('Guia de preenchimento')&&page.includes('fica visível com o teclado'),'feedback fica acima do campo e visível com teclado');
+ok(page.includes('Modelo: #1234 12345678'),'modelo de preenchimento aparece antes da digitação');
+ok(page.includes("item.state==='partial'")&&page.includes("item.state==='complete'"),'estados possuem semântica visual distinta');
+ok(page.includes('scrollIntoView')&&page.includes("block:'center'"),'foco reposiciona o campo na área visível');
+ok(page.includes('useDeferredValue')&&page.includes('deferredMagicText'),'parser pesado não disputa cada tecla com a interface');
+ok(!/\b(getDocs|getDoc|onSnapshot|collection|query)\s*\(/.test(quality),'guia não cria leitura Firestore');
+console.log('\nV78 GUIA IFOOD AO VIVO: CONTRATOS OK');

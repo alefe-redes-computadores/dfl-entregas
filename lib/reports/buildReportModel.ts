@@ -532,8 +532,7 @@ export function buildReportModel(input: {
     })
     .filter(
       (delivery) =>
-        !delivery.exclude_customer_metrics &&
-        !isInternalOperationalCustomer(delivery.customer) &&
+        delivery.developer_test !== true &&
         (!delivery.route || !isInternalOperationalRoute(delivery.route)),
     );
 
@@ -599,7 +598,11 @@ export function buildReportModel(input: {
   // O conjunto `normalized` já remove perfis internos antes de qualquer
   // agregação. Estes aliases deixam explícito que os recortes abaixo usam
   // exatamente a mesma população limpa das métricas gerais/financeiras.
-  const customerOperationalCurrent = logisticsCurrent;
+  const customerOperationalCurrent = logisticsCurrent.filter(
+    (delivery) =>
+      delivery.exclude_customer_metrics !== true &&
+      !isInternalOperationalCustomer(delivery.customer),
+  );
   const motoboyOperationalCurrent = logisticsCurrent;
 
   const neighborhoods = aggregate(
@@ -617,6 +620,19 @@ export function buildReportModel(input: {
   );
   const routeTiming = buildRouteTimings(operationalRoutes, motoboyOperationalCurrent);
   const stock = buildStockReport(input.stockSupplies, period);
+  const firstEligibleOrder = new Map<string, string>();
+  normalized.forEach((delivery) => {
+    if (!delivery.customer_id || delivery.exclude_customer_metrics || !delivery.reportDateKey || isInternalOperationalCustomer(delivery.customer)) return;
+    const previousKey = firstEligibleOrder.get(delivery.customer_id);
+    if (!previousKey || compareDateKeys(delivery.reportDateKey, previousKey) < 0) firstEligibleOrder.set(delivery.customer_id, delivery.reportDateKey);
+  });
+  const currentCustomerIds = new Set(customerOperationalCurrent.map((delivery) => delivery.customer_id).filter(Boolean));
+  const newCustomerCount = Array.from(currentCustomerIds).filter((customerId) => {
+    const key = firstEligibleOrder.get(customerId);
+    if (!key) return false;
+    if (!period.start) return true;
+    return compareDateKeys(key, saoPauloDateKey(period.start)) >= 0 && compareDateKeys(key, saoPauloDateKey(period.end)) <= 0;
+  }).length;
 
   return {
     period,
@@ -641,6 +657,7 @@ export function buildReportModel(input: {
           : variation(currentRevenue, previousRevenue),
       validDateCount: current.filter((delivery) => delivery.reportDate).length,
       ignoredDateCount: current.filter((delivery) => !delivery.reportDate).length,
+      newCustomerCount,
     },
     dailyVolume: daily,
     dailyRevenue: daily,

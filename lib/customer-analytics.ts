@@ -41,7 +41,11 @@ export function deliveryBelongsToCustomer(delivery: Delivery, customer: Customer
 
 export function getCustomerStats(customer: Customer, deliveries: Delivery[]): CustomerStats {
   const linked = deliveries
-    .filter(delivery => deliveryBelongsToCustomer(delivery, customer))
+    .filter(delivery =>
+      deliveryBelongsToCustomer(delivery, customer) &&
+      delivery.exclude_customer_metrics !== true &&
+      delivery.developer_test !== true
+    )
     .sort((a,b) => new Date(getDeliveryCreatedAt(b) || 0).getTime() - new Date(getDeliveryCreatedAt(a) || 0).getTime());
   const totalValue = linked.reduce((total, delivery) => total + deliveryCustomerCharge(delivery), 0);
   const completedCount = linked.filter(delivery => delivery.completed).length;

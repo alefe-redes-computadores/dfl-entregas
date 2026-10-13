@@ -11,7 +11,7 @@ ok(page.includes('Nova categoria')&&page.includes('updateStoreSettings({settleme
 ok(page.includes('moveCustomCategory')&&page.includes('ArrowUp')&&page.includes('ArrowDown'),'reordenação persistente');
 ok(store.includes('settlementAdjustmentCategories?: MotoboySettlementCategory[]'),'configuração tipada no documento da loja');
 ok(page.includes("normalizeMoneyDraft(e.target.value)")&&page.includes('inputMode="numeric"'),'máscara monetária central');
-ok(page.includes("'all'|'none'|'partial'")&&page.includes('Quanto voltou fisicamente para a loja?'),'entrega integral parcial ou nenhuma');
+ok(page.includes("'all'|'none'|'partial'")&&page.includes("'separate'|'offset'|'manual'")&&page.includes('Quanto voltou fisicamente para a loja?'),'entrega integral parcial ou nenhuma');
 ok(analytics.includes('cashTendered')&&analytics.includes('cashChange')&&analytics.includes('cashHandedOverAmount'),'dinheiro recebido troco e caixa separados');
 ok(types.includes('settlement_cash_tendered?: number')&&types.includes('settlement_cash_change?: number'),'auditoria financeira persistida');
 ok(page.includes("text:summary()"),'compartilhamento inclui data e resumo descritivo');

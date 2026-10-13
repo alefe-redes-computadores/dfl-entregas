@@ -201,6 +201,13 @@ export default function RelatoriosPage() {
             icon={<Wallet size={20} />}
             accentColor="amber"
           />
+          <SummaryCard
+            title="Clientes novos"
+            value={model.metrics.newCustomerCount}
+            subtitle="Primeiro pedido real no período"
+            icon={<UserRound size={20} />}
+            accentColor="blue"
+          />
         </section>
 
         {model.metrics.ignoredDateCount > 0 && periodKey === 'all' && (

@@ -2,6 +2,8 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/verify-v78-ifood-live-guide.cjs',
+  'scripts/verify-v77-client-identity-parser-ux.cjs',
   'scripts/verify-delivery-inbox-money-v9.cjs',
   'scripts/verify-pre-apk-stability-v8.cjs',
   'scripts/verify-customer-identity-conservative-v18.cjs',
@@ -21,6 +23,7 @@ const tests=[
   'scripts/verify-v74-final-operational-intelligence.cjs',
   'scripts/verify-v76-live-site-order-notification.cjs',
   'scripts/verify-v75-stock-settlement-messages.cjs',
+  'scripts/verify-v76-settlement-and-messages.cjs',
   'scripts/verify-motoboy-settlement-semantics-final.cjs',
   'scripts/verify-motoboy-settlement-carry-v10.cjs',
   'scripts/verify-site-route-experience-v11.cjs',

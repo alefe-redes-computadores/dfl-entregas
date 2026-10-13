@@ -7,6 +7,8 @@ import {
   sameCustomerAddress,
 } from '@/lib/customer-identity';
 
+const phoneDigits = (value?: string) => (value || '').replace(/\D/g, '');
+
 export interface CustomerDuplicateCandidate {
   left: Customer;
   right: Customer;
@@ -61,8 +63,11 @@ export function customerDuplicateCandidates(
        * Isso já trata "Maria" e "Maria (2)" como o mesmo nome-base.
        */
       const sameBaseName = leftName === rightName;
+      const leftPhone = phoneDigits(left.phone);
+      const rightPhone = phoneDigits(right.phone);
+      const samePhone = leftPhone.length >= 10 && leftPhone === rightPhone;
 
-      if (!sameBaseName) continue;
+      if (!sameBaseName && !samePhone) continue;
 
       /*
        * Na tela de possíveis duplicados exigimos endereço dos dois
@@ -70,28 +75,25 @@ export function customerDuplicateCandidates(
        *
        * Mesmo nome em endereços diferentes NÃO entra na lista.
        */
-      if (!left.address?.trim() || !right.address?.trim()) {
-        continue;
-      }
-
-      const sameAddress = sameCustomerAddress(
-        left.address,
-        right.address,
+      const sameAddress = Boolean(
+        left.address?.trim() && right.address?.trim() &&
+        sameCustomerAddress(left.address, right.address),
       );
 
-      if (!sameAddress) continue;
+      if (!sameAddress && !samePhone) continue;
 
       const similarity = customerNameSimilarity(
         left.name,
         right.name,
       );
 
-      if (similarity < 0.95) continue;
+      if (!sameBaseName && similarity < 0.72) continue;
 
       const reasons = [
-        'Mesmo nome-base',
-        'Mesmo endereço',
-      ];
+        sameBaseName ? 'Mesmo nome-base' : '',
+        samePhone ? 'Mesmo telefone' : '',
+        sameAddress ? 'Mesmo endereço' : '',
+      ].filter(Boolean);
 
       /*
        * 95 significa "candidato muito forte", mas a tela continua
@@ -100,7 +102,7 @@ export function customerDuplicateCandidates(
       result.push({
         left,
         right,
-        score: 95,
+        score: samePhone && sameAddress ? 99 : samePhone ? 97 : 95,
         reasons,
         leftOrders: orderCounts.get(left.id) || 0,
         rightOrders: orderCounts.get(right.id) || 0,

@@ -89,6 +89,7 @@ export interface ReportModel {
     revenueVariation: number | null;
     validDateCount: number;
     ignoredDateCount: number;
+    newCustomerCount: number;
   };
   dailyVolume: DailyBucket[];
   dailyRevenue: DailyBucket[];

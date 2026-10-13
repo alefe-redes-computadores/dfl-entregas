@@ -41,9 +41,25 @@ export function getMotoboyDayData(
   const dayRoutes=getMotoboyRoutes(motoboy,routes).filter(route=>{const value=routeOperationalDate(route);return value?operationalDateKey(value)===date:false;});
   const routeIds=new Set(dayRoutes.map(route=>route.id));
   const completedDeliveries=deliveries.filter(delivery=>routeIds.has(delivery.route_id)&&delivery.completed===true);
-  const completedStops=groupDeliveriesByStop(completedDeliveries);
+  // Agrupamento é por rota: visitar o mesmo endereço novamente em outra rota
+  // representa uma nova parada física e precisa ser remunerado novamente.
+  const completedStops=dayRoutes.flatMap(route=>
+    groupDeliveriesByStop(completedDeliveries.filter(delivery=>delivery.route_id===route.id))
+  );
   const physicalDeliveryCount=completedStops.length;
   const orderCount=completedDeliveries.length;
+  const groupedOrderCount=Math.max(0,orderCount-physicalDeliveryCount);
+  const routeBreakdown=dayRoutes.map((route,index)=>{
+    const routeDeliveries=completedDeliveries.filter(delivery=>delivery.route_id===route.id);
+    const routeStops=groupDeliveriesByStop(routeDeliveries);
+    return {
+      routeId:route.id,
+      label:route.name?.trim()||`Rota ${index+1}`,
+      orderCount:routeDeliveries.length,
+      physicalDeliveryCount:routeStops.length,
+      groupedOrderCount:Math.max(0,routeDeliveries.length-routeStops.length),
+    };
+  }).filter(item=>item.orderCount>0);
   const cashDeliveries=completedDeliveries.filter(delivery=>delivery.payment_method==='dinheiro'&&!delivery.is_paid);
   const cashCollected=cashDeliveries.reduce((sum,delivery)=>sum+deliveryCashCollected(delivery),0);
   const cashTendered=cashDeliveries.reduce((sum,delivery)=>{
@@ -78,6 +94,8 @@ export function getMotoboyDayData(
     completedStops,
     physicalDeliveryCount,
     orderCount,
+    groupedOrderCount,
+    routeBreakdown,
     cashCollected,
     cashTendered,
     cashChange,
