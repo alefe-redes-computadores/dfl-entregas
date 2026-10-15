@@ -92,7 +92,8 @@ export default function NovaEntregaPage() {
     () => assessIfoodParseQuality(liveParsedOrders),
     [liveParsedOrders],
   );
-  const liveGuide = useMemo(() => buildIfoodParseGuide(magicText, liveParsedOrders[0]), [magicText, liveParsedOrders]);
+  const parserUpdating = magicText !== deferredMagicText;
+  const liveGuide = useMemo(() => buildIfoodParseGuide(deferredMagicText, liveParsedOrders[0]), [deferredMagicText, liveParsedOrders]);
   const parserGuideRef = useRef<HTMLDivElement | null>(null);
   const parserInputRef = useRef<HTMLTextAreaElement | null>(null);
   const liveRecognition = useMemo(() => {
@@ -293,7 +294,7 @@ const [routeId, setRouteId] = useState('');
 
   const handleExecuteMagicParse = async () => {
     if (!magicText.trim()) { toast.error('Cole o texto do pedido antes de processar.'); return; }
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+    if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
     const parsedOrders = inboxParsedRef.current
       ? [inboxParsedRef.current]
       : parseIfoodOrdersText(magicText,{
@@ -332,7 +333,7 @@ const [routeId, setRouteId] = useState('');
     const routeResolution=resolveParsedRoute(parsed.routeNumber,parsed.motoboyHint);if(routeResolution.routeId&&!routeSelectionTouched.current){setRouteId(routeResolution.routeId);identified.push(`Rota ${routeResolution.candidates[0].name}`)}
     if(parsedOrders.length>1){setExtraIfoodOrders(parsedOrders.slice(1).map((item,index)=>({id:`extra-${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,orderId:item.orderId,ifoodId:item.ifoodId,confirmationCode:item.confirmationCode||parsed.confirmationCode,customerName:item.customerName||parsed.customerName,customerCharge:item.customerCharge||item.value||charge,subsidy:item.subsidy,paymentMethod:item.paymentMethod||'dinheiro',isPaid:item.isPaid,changeFor:item.changeFor?formatCurrencyInput(item.changeFor.replace(/\D/g,'')):'',address:item.address||parsed.address,phone:item.phone||'',mapsLink:item.mapsLink||''})));setMultiOrderReviewOpen(true);identified.push(`${parsedOrders.length} pedidos reconhecidos`)}else setExtraIfoodOrders([]);
     if(!identified.length){toast.error('Nenhum dado reconhecido no texto.');return}
-    if(Capacitor.isNativePlatform())await Haptics.impact({style:ImpactStyle.Heavy});
+    if(Capacitor.isNativePlatform())void Haptics.impact({style:ImpactStyle.Heavy}).catch(()=>undefined);
     const parseQuality=assessIfoodParseQuality(parsedOrders);
     const qualitySummary=parseQuality.review>0
       ? `${parseQuality.complete} prontos · ${parseQuality.review} para revisar`
@@ -573,20 +574,20 @@ const [routeId, setRouteId] = useState('');
           </div>
 
           {magicText.trim().length > 0 && (
-            <div ref={parserGuideRef} className="sticky top-[calc(var(--dfl-safe-top)+8px)] z-20 rounded-2xl border border-zinc-700/80 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur-xl">
+            <div ref={parserGuideRef} aria-busy={parserUpdating} className="dfl-parser-guide sticky top-[calc(var(--dfl-safe-top)+8px)] z-20 rounded-2xl border border-zinc-700/80 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur-xl">
               <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[.14em] text-zinc-400">Guia de preenchimento</p><span className="text-[9px] font-bold text-zinc-600">fica visível com o teclado</span></div>
               <div className="mt-2 flex items-center justify-between gap-2">
                 <span className="text-[10px] font-bold text-zinc-400">Reconhecimento ao vivo</span>
-                <span className="text-[10px] font-bold text-emerald-300">{liveRecognition.length} dados identificados</span>
+                <span role="status" className="text-[10px] font-bold text-emerald-300">{parserUpdating ? 'Atualizando leitura…' : `${liveRecognition.length} dados identificados`}</span>
               </div>
               {liveRecognition.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
+                <details className="mt-2 text-xs text-zinc-400"><summary className="cursor-pointer py-1">Ver dados reconhecidos</summary><div className="mt-2 flex flex-wrap gap-1.5">
                   {liveRecognition.map((item) => (
                     <span key={item.label} className="flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/[.08] px-2.5 py-1 text-[9px] font-bold text-emerald-300">
                       <CheckCircle2 size={11} /> {item.label}
                     </span>
                   ))}
-                </div>
+                </div></details>
               )}
               {liveParseQuality.issues.length > 0 && liveRecognition.length > 0 && (
                 <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[.06] px-3 py-2 text-[10px] text-amber-200">
@@ -594,8 +595,8 @@ const [routeId, setRouteId] = useState('');
                   <span>Falta conferir: {Array.from(new Set(liveParseQuality.issues.flatMap((item) => item.fields))).join(', ')}.</span>
                 </div>
               )}
-              <div className="mt-2 grid grid-cols-2 gap-1.5">
-                {liveGuide.map((item)=><div key={item.key} className={`min-w-0 rounded-xl border px-2.5 py-2 ${item.state==='complete'?'border-emerald-500/25 bg-emerald-500/[.08]':item.state==='partial'?'border-amber-500/25 bg-amber-500/[.07]':'border-zinc-800 bg-zinc-900/55'}`}><div className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.state==='complete'?'bg-emerald-400':item.state==='partial'?'bg-amber-400':'bg-zinc-700'}`}/><b className={`truncate text-[9px] ${item.state==='complete'?'text-emerald-300':item.state==='partial'?'text-amber-300':'text-zinc-500'}`}>{item.label}</b></div><p className="mt-1 truncate text-[9px] text-zinc-300">{item.value||item.hint}</p></div>)}
+              <div className="mt-2 grid grid-cols-2 gap-1.5 min-[390px]:grid-cols-3">
+                {liveGuide.map((item)=><div key={item.key} className={`min-w-0 rounded-xl border px-2.5 py-2 ${item.state==='complete'?'border-emerald-500/25 bg-emerald-500/[.08]':item.state==='partial'?'border-amber-500/25 bg-amber-500/[.07]':'border-zinc-800 bg-zinc-900/55'}`}><div className="flex items-center gap-1.5"><span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.state==='complete'?'bg-emerald-400':item.state==='partial'?'bg-amber-400':'bg-zinc-700'}`}/><b className={`truncate text-[11px] ${item.state==='complete'?'text-emerald-300':item.state==='partial'?'text-amber-300':'text-zinc-500'}`}>{item.label}</b><span className="sr-only">{item.state==='complete'?'Identificado':item.state==='partial'?'Incompleto':'Não identificado'}</span></div><p title={item.value||item.hint} className="mt-1 truncate text-[11px] text-zinc-300">{item.value||item.hint}</p>{item.state==='partial'&&item.value&&<p className="mt-1 text-[10px] text-amber-200">{item.hint}</p>}</div>)}
               </div>
               {liveParsedOrders.length>1&&<p className="mt-2 text-[9px] font-bold text-violet-300">{liveParsedOrders.length} pedidos detectados · revisão individual antes de salvar</p>}
             </div>
@@ -604,6 +605,7 @@ const [routeId, setRouteId] = useState('');
           <div className="rounded-xl border border-zinc-800 bg-zinc-950/55 px-3 py-2 font-mono text-[9px] leading-relaxed text-zinc-600">Modelo: #1234 12345678 · Cliente · Rua, número, bairro · Pago/Pix/Dinheiro</div>
 
           <textarea
+            aria-label="Texto do pedido iFood"
             ref={parserInputRef}
             rows={3}
             placeholder="Cole aqui o texto do iFood..."

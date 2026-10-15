@@ -2,6 +2,7 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/verify-v79-operational-polish.cjs',
   'scripts/verify-v78-ifood-live-guide.cjs',
   'scripts/verify-v77-client-identity-parser-ux.cjs',
   'scripts/verify-delivery-inbox-money-v9.cjs',
@@ -76,7 +77,13 @@ const tests=[
   'scripts/verify-v66-route-cancellation.cjs',
   'scripts/verify-v66-customer-concurrency.cjs',
   'scripts/verify-v66-balcao-haptics.cjs',
-].filter(fs.existsSync);
+];
+
+const missing = tests.filter(file => !fs.existsSync(file));
+if (missing.length) {
+  console.error('PRE-APK BLOQUEADO: suítes obrigatórias ausentes:\n' + missing.join('\n'));
+  process.exit(1);
+}
 
 let failed=0;
 for(const file of tests){

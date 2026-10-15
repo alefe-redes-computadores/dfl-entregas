@@ -120,6 +120,24 @@ h1, h2, h3, h4, h5, h6 {
   min-height: 54px;
   align-items: flex-start !important;
   padding-block: 10px !important;
+  padding-right: 44px !important;
+}
+
+.dfl-toast-title, .dfl-toast-description { overflow-wrap: anywhere; }
+
+.dfl-parser-guide { max-height: 38dvh; overflow-y: auto; overscroll-behavior: contain; }
+
+@media (max-height: 520px) {
+  .dfl-parser-guide { position: relative; top: auto; max-height: 160px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .dfl-toast-title {

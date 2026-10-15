@@ -81,6 +81,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const swipeAxis = useRef<'pending' | 'horizontal' | 'vertical' | null>(null);
   const suppressCardClick = useRef(false);
   const completionBusyRef = useRef(false);
+  const copyBusyRef = useRef(false);
   const [completionBusy, setCompletionBusy] = useState(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
@@ -167,9 +168,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   ) => {
     if (!textToCopy) return;
 
-    if (Capacitor.isNativePlatform()) {
-      await Haptics.impact({ style: ImpactStyle.Heavy });
-    }
+    impact(ImpactStyle.Heavy);
 
     try {
       await navigator.clipboard.writeText(textToCopy);
@@ -221,6 +220,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     setIsIfoodModalOpen(false);
     setInputCode('');
     setGroupedCodeDrafts({});
+  };
+
+  const copyStop = async () => {
+    if (copyBusyRef.current) return;
+    copyBusyRef.current = true;
+    try {
+      const copied = await copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code, groupedDeliveries);
+      if (copied) toast.success('Entrega copiada!');
+      else toast.error('Não foi possível copiar a entrega.', { description: 'Tente novamente. Nenhum pedido foi alterado.' });
+    } finally {
+      copyBusyRef.current = false;
+    }
   };
 
   const executeCompletion = async (codeInput?: string | Record<string, string>) => {
@@ -434,7 +445,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
     try {
       await moveDeliveryToIndex(route.id, delivery.id, boundedTarget);
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+      impact(ImpactStyle.Light);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a nova posição.');
     }
@@ -732,9 +743,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
-                            if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                            copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code, groupedDeliveries);
-                            toast.success('Entrega copiada com sucesso!');
+                            await copyStop();
                           }}
                           className="flex min-w-0 items-center gap-1.5 h-8 px-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/40 active:scale-95 text-[11px] font-bold transition-all shadow-sm"
                         >
@@ -920,7 +929,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                   <Link
                     href={`/entregas/editar?id=${delivery.id}${operationalDateQuery}`}
-                    onClick={async () => { if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); }}
+                    onClick={() => impact(ImpactStyle.Light)}
+                    aria-label="Editar entrega"
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 active:scale-90 transition-all"
                   >
                     <Pencil size={16} />
@@ -928,17 +938,16 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                   <button
                     onClick={async () => {
-                      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-                      copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code, groupedDeliveries);
-                      toast.success('Entrega copiada!');
+                      await copyStop();
                     }}
+                    aria-label="Copiar mensagem da entrega"
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 active:scale-90 transition-all"
                   >
                     <Share2 size={16} strokeWidth={2.5} />
                   </button>
 
                   {!delivery.completed && !isRecoveryRoute && (
-                    <button type="button" data-no-card-swipe="true" onClick={async (event) => { event.stopPropagation(); if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light }); setDeleteOpen(true); }} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 active:scale-90 transition-all" aria-label="Excluir entrega" title="Excluir entrega">
+                    <button type="button" data-no-card-swipe="true" onClick={(event) => { event.stopPropagation(); impact(ImpactStyle.Light); setDeleteOpen(true); }} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 active:scale-90 transition-all" aria-label="Excluir entrega" title="Excluir entrega">
                       <Trash2 size={16} />
                     </button>
                   )}
@@ -1074,9 +1083,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
               type="button"
               disabled={completionBusy}
               onClick={async () => {
-                if (Capacitor.isNativePlatform()) {
-                  await Haptics.impact({ style: ImpactStyle.Light });
-                }
+                impact(ImpactStyle.Light);
                 await executeCompletion();
               }}
               className="mt-1 flex h-9 w-full items-center justify-center text-[10px] font-bold text-zinc-500 disabled:opacity-35"

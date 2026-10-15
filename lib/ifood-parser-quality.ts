@@ -19,10 +19,12 @@ const compact = (value: string) => value.replace(/\s+/g, ' ').trim();
 
 export function buildIfoodParseGuide(text: string, order?: ParsedIfoodOrder): IfoodGuideItem[] {
   const raw = text || '';
-  const explicitOrder = raw.match(/(?:pedido|n[º°o.]?\s*(?:do\s+)?pedido|#)\s*[:#-]?\s*(\d{1,6})/i)?.[1] || '';
-  const pair = raw.match(/(?:^|\n|\s)#?(\d{1,6})\s+(\d{1,8})(?=\s|$)/m);
-  const orderDigits = order?.orderId || explicitOrder || pair?.[1] || '';
-  const explicitId = raw.match(/(?:id\s*(?:ifood)?|ifood\s+id)\s*[:#-]?\s*(\d{1,8})/i)?.[1] || pair?.[2] || '';
+  const explicitOrder = raw.match(/(?:\bpedido|n[º°o.]?\s*(?:do\s+)?pedido|#)\s*[:#-]?\s*(\d+)(?!\d)/i)?.[1] || '';
+  // Header-only: amounts, phones and street numbers must not become IDs.
+  const pair = raw.match(/^\s*#?(\d{1,6})[ \t]+(\d+)[ \t]*$/m);
+  const standalone = raw.trim().match(/^#?(\d{1,6})$/)?.[1] || '';
+  const orderDigits = order?.orderId || explicitOrder || pair?.[1] || standalone;
+  const explicitId = raw.match(/\b(?:id\s*(?:ifood|do\s+ifood|do\s+pedido)?|ifood\s+id)\s*[:#-]?\s*(\d+)(?!\d)/i)?.[1] || pair?.[2] || '';
   const idDigits = order?.ifoodId || explicitId;
   const customerDraft = raw.match(/(?:cliente|nome)\s*:\s*([^\n]*)/i)?.[1]?.trim() || '';
   const hasAddressCue = /\b(?:rua|r\.|avenida|av\.|travessa|alameda)\b/i.test(raw);
@@ -31,15 +33,15 @@ export function buildIfoodParseGuide(text: string, order?: ParsedIfoodOrder): If
   return [
     {
       key: 'order', label: 'Pedido',
-      state: order?.orderId ? 'complete' : orderDigits ? 'partial' : 'missing',
+      state: /^\d{3,6}$/.test(orderDigits) ? 'complete' : orderDigits ? 'partial' : 'missing',
       value: order?.orderId ? `#${order.orderId}` : orderDigits ? `#${orderDigits}` : '',
       hint: orderDigits ? 'Continue até 3–6 dígitos' : 'Ex.: #1234',
     },
     {
       key: 'ifood', label: 'ID iFood',
-      state: order?.ifoodId ? 'complete' : idDigits ? 'partial' : 'missing',
+      state: /^\d{8}$/.test(idDigits) ? 'complete' : idDigits ? 'partial' : 'missing',
       value: order?.ifoodId || idDigits,
-      hint: idDigits ? `Faltam ${Math.max(0, 8-idDigits.length)} dígitos` : '8 dígitos',
+      hint: idDigits.length > 8 ? 'Confira: o ID deve ter 8 dígitos' : idDigits ? `Faltam ${Math.max(0, 8-idDigits.length)} dígitos` : '8 dígitos',
     },
     {
       key: 'customer', label: 'Cliente',
