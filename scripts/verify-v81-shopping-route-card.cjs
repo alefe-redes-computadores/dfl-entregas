@@ -1,0 +1,13 @@
+const fs=require('node:fs');const read=file=>fs.readFileSync(file,'utf8');const ok=(condition,label)=>{if(!condition)throw new Error(`V81: ${label}`);console.log('OK:',label)};
+const card=read('lib/route-share-card.ts'),route=read('components/home/RouteAccordion.tsx'),shopping=read('components/stock-supplies/ShoppingSession.tsx'),pre=read('scripts/pre-apk.cjs');
+ok(card.includes('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY')&&card.includes('maps.googleapis.com/maps/api/staticmap'),'imagem tenta mapa estático oficial');
+ok(card.includes('usedRealMap=false')&&card.includes('PRÉVIA OFFLINE'),'falha de mapa possui fallback visual');
+ok(card.includes('groupDeliveriesByStop'),'marcadores representam paradas físicas');
+ok(route.includes('buildRouteShareCard')&&route.includes('Share.share')&&route.includes('Filesystem.writeFile'),'APK compartilha imagem e mensagem');
+ok(route.includes('if (routeCardBusy) return')&&route.includes('disabled={routeCardBusy}'),'geração bloqueia toque duplo');
+ok(shopping.includes('Modo supermercado')&&shopping.includes('onlyPending')&&shopping.includes('Buscar item'),'compra presencial tem busca e filtro');
+ok(shopping.includes('localStorage.setItem(storageKey')&&shopping.includes('progresso salvo neste aparelho'),'checklist permanece offline');
+ok(shopping.includes('missingPrices')&&shopping.includes('count!==items.length'),'finalização exige todos os itens e preços');
+ok(!card.includes('firestore')&&!shopping.includes('onSnapshot'),'sem listener ou leitura remota nova');
+ok(pre.includes('scripts/verify-v81-shopping-route-card.cjs'),'suite registrada no PRE-APK');
+console.log('\nV81 COMPRAS + CARD VISUAL: CONTRATOS OK');

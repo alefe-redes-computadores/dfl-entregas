@@ -15,6 +15,7 @@ import {
   Copy,
   Crosshair,
   MapPinned,
+  Image as ImageIcon,
   MessageCircle,
   Navigation,
   RotateCcw,
@@ -38,6 +39,8 @@ import { RouteDepartureChecklist } from '@/components/routes/RouteDepartureCheck
 import { useOptimizedDeliveries } from '@/hooks/useOptimizedDeliveries';
 
 import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import {
   Haptics,
   ImpactStyle,
@@ -63,6 +66,7 @@ import { requestDeviceLocation } from '@/lib/device-location';
 import { geocodeAddress, geocodeStoreAddress } from '@/lib/store-geocoding';
 import { bestOperationalAddress } from '@/lib/operational-address';
 import { deliveryStopKey, groupDeliveriesByStop } from '@/lib/route-stops';
+import { buildRouteShareCard } from '@/lib/route-share-card';
 
 interface RouteAccordionProps {
   route: Route;
@@ -93,6 +97,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [optimizerApproximateIds, setOptimizerApproximateIds] = useState<string[]>([]);
   const [optimizerResolvedPoints, setOptimizerResolvedPoints] = useState<Record<string, LatLngPoint>>({});
   const [lastAppliedOrder, setLastAppliedOrder] = useState<string[] | null>(null);
+  const [routeCardBusy, setRouteCardBusy] = useState(false);
 
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   // Reage a mutações operacionais reais sem acordar a rota inteira
@@ -512,6 +517,28 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       toast.success('Dinheiro da rota copiado!', { description: 'Recebimentos, trocos e retorno físico por parada prontos.' });
     }
     setIsCopyMenuOpen(false);
+  };
+
+  const shareRouteCard = async () => {
+    if (routeCardBusy) return;
+    setRouteCardBusy(true);
+    try {
+      const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
+      const message = (await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute())).messages[0];
+      const card = await buildRouteShareCard(route, pendingDeliveries, storeAddr);
+      const filename = `rota-${route.id}-${Date.now()}.png`;
+      if (Capacitor.isNativePlatform()) {
+        const saved = await Filesystem.writeFile({ path:`dfl-rotas/${filename}`, data:card.dataUrl.split(',')[1], directory:Directory.Cache, recursive:true });
+        await Share.share({ title:`${route.name} · ${route.motoboy_name}`, text:message, files:[saved.uri], dialogTitle:'Compartilhar rota com imagem' });
+      } else {
+        const blob=await (await fetch(card.dataUrl)).blob(); const file=new File([blob],filename,{type:'image/png'});
+        if(navigator.share&&navigator.canShare?.({files:[file]})) await navigator.share({title:route.name,text:message,files:[file]});
+        else { const link=document.createElement('a');link.href=card.dataUrl;link.download=filename;link.click();await navigator.clipboard.writeText(message); }
+      }
+      toast.success('Card da rota pronto.',{description:card.usedRealMap?'Mapa real e paradas numeradas incluídos.':'Prévia offline criada; o link real segue na mensagem.'});
+      setIsCopyMenuOpen(false);
+    } catch(error) { console.error('[ROUTE CARD]',error); toast.error('Não foi possível gerar a imagem.',{description:'Você ainda pode copiar a rota em texto.'}); }
+    finally { setRouteCardBusy(false); }
   };
 
   const getCurrentOrigin = async (): Promise<{ point: LatLngPoint | null; label: string }> => {
@@ -1188,6 +1215,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
              </div>
 
              <div className="flex flex-col gap-2.5">
+                <button disabled={routeCardBusy} onClick={shareRouteCard} className="flex items-center gap-3 rounded-2xl border border-violet-500/20 bg-violet-500/[.055] p-4 text-left transition active:scale-[.985] disabled:opacity-50">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-violet-500/15 text-violet-300"><ImageIcon size={20}/></div>
+                  <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">{routeCardBusy?'Gerando mapa…':'Imagem da rota'}</span><span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Mapa com paradas numeradas + mensagem e link navegável.</span></div>
+                </button>
                 <button onClick={() => handleCopyMessage(1)} className="flex items-center gap-3 rounded-2xl border border-sky-500/20 bg-sky-500/[.055] p-4 text-left transition active:scale-[.985]">
                   <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-400"><MapPinned size={20}/></div>
                   <div className="flex flex-col">
