@@ -2229,6 +2229,7 @@ export const useAppStore = create<AppState>()(
               routeId,
               routeBeforeClose.name || 'a rota',
               routePendingCount,
+              get().storeSettings.notificationPreferences,
             );
           } else if (pendingAfter.length >= pendingBefore) {
             void notifyRouteFinished(

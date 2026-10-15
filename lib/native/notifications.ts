@@ -21,6 +21,7 @@ const SHIFT_NOTICE_MINUTES = 15;
 const SUPPLY_CHECK_DELAY_MINUTES = 10;
 const ANDROID_CHANNEL_ID = 'dfl-operational-v1';
 const lastSent = new Map<string, number>();
+const notificationsInFlight = new Set<string>();
 
 type NotificationOwner =
   | 'immediate'
@@ -35,6 +36,8 @@ export type NotificationPreferences = {
   shiftOpen: boolean;
   shiftPreClose: boolean;
   shiftClose: boolean;
+  ifoodAdsBeforeOpen: boolean;
+  ifoodAdsAfterClose: boolean;
   routeOpenReminder: boolean;
   routeStarted: boolean;
   routeFinished: boolean;
@@ -54,6 +57,8 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   shiftOpen: false,
   shiftPreClose: true,
   shiftClose: false,
+  ifoodAdsBeforeOpen: false,
+  ifoodAdsAfterClose: false,
   routeOpenReminder: true,
   routeStarted: true,
   routeFinished: true,
@@ -235,6 +240,8 @@ export async function notifyOperational(
   const now = Date.now();
   const cooldown = options?.cooldownMs ?? 60_000;
   if (now - persistentLastSent(key) < cooldown) return false;
+  if (notificationsInFlight.has(key)) return false;
+  notificationsInFlight.add(key);
 
   try {
     if (!(await hasPermission())) return false;
@@ -263,6 +270,8 @@ export async function notifyOperational(
   } catch (error) {
     console.error('[NOTIFICATIONS] Falha operacional:', error);
     return false;
+  } finally {
+    notificationsInFlight.delete(key);
   }
 }
 
@@ -395,6 +404,23 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
       const start = operationalDateTime(key, shift.start);
       const close = shiftCloseAt(key, shift.start, shift.end);
       if (!close) return;
+
+      push(
+        `shift:ifood-ads-open:${key}:${index}`,
+        'Confira o anúncio do iFood',
+        `O turno começa às ${shift.start}. Abra o iFood e confira se deseja ativar seu anúncio.`,
+        minusMinutes(start, 5),
+        'ifoodAdsBeforeOpen',
+        '/mais/notificacoes',
+      );
+      push(
+        `shift:ifood-ads-close:${key}:${index}`,
+        'Revise o anúncio após o expediente',
+        `Passaram 15 minutos do fechamento previsto às ${shift.end}. Confira no iFood se o anúncio deve ser pausado.`,
+        new Date(close.getTime() + 15 * 60_000),
+        'ifoodAdsAfterClose',
+        '/mais/notificacoes',
+      );
 
       push(
         `shift:prepare:${key}:${index}`,

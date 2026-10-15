@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Bell,
@@ -25,7 +25,6 @@ import { useAppStore } from '@/store/useAppStore';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   notificationPermissionStatus,
-  cancelAllOperationalNotifications,
   requestNotificationPermission,
   resolveNotificationPreferences,
   sendTestNotification,
@@ -54,6 +53,8 @@ function ToggleRow({
       type="button"
       onClick={onChange}
       disabled={disabled}
+      role="switch"
+      aria-checked={checked}
       className="flex w-full items-center gap-3 border-b border-zinc-800/70 px-4 py-3.5 text-left last:border-b-0 disabled:opacity-45"
     >
       <span className="min-w-0 flex-1">
@@ -142,6 +143,9 @@ export default function NotificationSettingsPage() {
     string | null
   >(null);
   const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
+  const testLock = useRef(false);
 
   const preferences = useMemo(
     () =>
@@ -164,8 +168,16 @@ export default function NotificationSettingsPage() {
   }, []);
 
   const save = async (next: NotificationPreferences) => {
+    if (saveLock.current) return false;
+    saveLock.current = true;
+    setSaving(true);
     const previous = preferences;
     try {
+      if (next.enabled && isNative && !(await requestNotificationPermission())) {
+        setPermissionState(await notificationPermissionStatus());
+        toast.error('Autorize as notificações no Android para ativá-las.');
+        return false;
+      }
       await updateStoreSettings({
         notificationPreferences: next,
         // Mantém compatibilidade com os controles antigos enquanto eles
@@ -174,9 +186,14 @@ export default function NotificationSettingsPage() {
         routeReminderEnabled: next.routeOpenReminder,
       });
       await reconcileNotificationPreferences(previous, next);
+      return true;
     } catch (error) {
       console.error(error);
       toast.error('Não foi possível salvar as notificações.');
+      return false;
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
     }
   };
 
@@ -192,47 +209,45 @@ export default function NotificationSettingsPage() {
     value: string,
   ) => {
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return;
+    if (saveLock.current) return;
+    saveLock.current = true;
+    setSaving(true);
     void updateStoreSettings({ [key]: value }).then(() => {
-      toast.success('Horário atualizado e avisos reagendados.');
+      toast.success('Horário salvo.', { description: 'O agendamento local será atualizado conforme a permissão do Android.' });
     }).catch(() => {
       toast.error('Não foi possível atualizar o horário.');
+    }).finally(() => {
+      saveLock.current = false;
+      setSaving(false);
     });
   };
 
   const toggleMaster = async () => {
     if (preferences.enabled) {
-      await save({ ...preferences, enabled: false });
-      await cancelAllOperationalNotifications();
-      toast.success('Notificações pausadas.');
+      if (await save({ ...preferences, enabled: false })) toast.success('Notificações pausadas.');
       return;
     }
 
-    if (isNative) {
-      const granted = await requestNotificationPermission();
+    if (await save({ ...preferences, enabled: true })) {
       setPermissionState(await notificationPermissionStatus());
-      if (!granted) {
-        toast.error('Autorize as notificações no Android para ativá-las.');
-        return;
-      }
+      toast.success('Notificações ativadas.');
     }
-
-    await save({ ...preferences, enabled: true });
-    toast.success('Notificações ativadas.');
   };
 
-  const enableAll = () => {
-    void save({
+  const enableAll = async () => {
+    const saved = await save({
       ...DEFAULT_NOTIFICATION_PREFERENCES,
       enabled: true,
       shiftOpen: true,
       shiftClose: true,
+      ifoodAdsBeforeOpen: true,
+      ifoodAdsAfterClose: true,
     });
-    toast.success('Todas as notificações foram ativadas.');
+    if (saved) toast.success('Todas as notificações foram ativadas.');
   };
 
-  const defaults = () => {
-    void save(DEFAULT_NOTIFICATION_PREFERENCES);
-    toast.success('Preferências recomendadas restauradas.');
+  const defaults = async () => {
+    if (await save(DEFAULT_NOTIFICATION_PREFERENCES)) toast.success('Preferências recomendadas restauradas.');
   };
 
   const requestPermission = async () => {
@@ -258,6 +273,8 @@ export default function NotificationSettingsPage() {
       return;
     }
 
+    if (testLock.current) return;
+    testLock.current = true;
     setTesting(true);
     try {
       const sent = await sendTestNotification();
@@ -267,12 +284,15 @@ export default function NotificationSettingsPage() {
       } else {
         toast.error('Não foi possível enviar a notificação de teste.');
       }
+    } catch {
+      toast.error('Não foi possível testar as notificações.');
     } finally {
+      testLock.current = false;
       setTesting(false);
     }
   };
 
-  const masterDisabled = !preferences.enabled;
+  const masterDisabled = !preferences.enabled || saving;
   const permissionLabel =
     permissionState === 'granted'
       ? 'Permitidas pelo Android'
@@ -308,6 +328,9 @@ export default function NotificationSettingsPage() {
         </div>
       </header>
 
+      {saving && <p role="status" className="mb-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">Salvando suas preferências…</p>}
+      <fieldset disabled={saving} className="min-w-0">
+
       <section className="mb-4 rounded-[26px] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[.10] to-zinc-900/40 p-4">
         <div className="flex items-center gap-3">
           <span className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/15 text-emerald-400">
@@ -329,6 +352,8 @@ export default function NotificationSettingsPage() {
               preferences.enabled ? 'bg-emerald-500' : 'bg-zinc-700'
             }`}
             aria-label="Ativar ou desativar notificações"
+            role="switch"
+            aria-checked={preferences.enabled}
           >
             <span
               className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition ${
@@ -395,12 +420,27 @@ export default function NotificationSettingsPage() {
             disabled={masterDisabled}
           />
           <ToggleRow
-            title="No fechamento"
-            description="Avisa quando o horário programado termina."
+            title="Ao terminar a última rota"
+            description="Avisa quando não há mais rotas abertas; não depende apenas do relógio."
             checked={preferences.shiftClose}
             onChange={() => toggle('shiftClose')}
             disabled={masterDisabled}
           />
+          <ToggleRow
+            title="Anúncio iFood: antes de abrir"
+            description="5 minutos antes de cada turno, lembra de conferir a ativação do anúncio no iFood."
+            checked={preferences.ifoodAdsBeforeOpen}
+            onChange={() => toggle('ifoodAdsBeforeOpen')}
+            disabled={masterDisabled}
+          />
+          <ToggleRow
+            title="Anúncio iFood: após fechar"
+            description="15 minutos após o fechamento previsto, lembra de conferir se o anúncio deve ser pausado."
+            checked={preferences.ifoodAdsAfterClose}
+            onChange={() => toggle('ifoodAdsAfterClose')}
+            disabled={masterDisabled}
+          />
+          <p className="px-4 py-3 text-xs leading-relaxed text-zinc-400">Os lembretes seguem dias, turnos, pausas e exceções da Loja. Eles não ativam nem pausam anúncios automaticamente.</p>
         </Section>
 
         <Section
@@ -438,7 +478,7 @@ export default function NotificationSettingsPage() {
           />
           <ToggleRow
             title="Confirmações iFood pendentes"
-            description="Leva direto para a Central filtrada pela rota."
+            description="Depois de finalizar a rota, avisa somente se restarem confirmações e abre a Central dessa rota."
             checked={preferences.ifoodPending}
             onChange={() => toggle('ifoodPending')}
             disabled={masterDisabled}
@@ -553,6 +593,7 @@ export default function NotificationSettingsPage() {
           rodando exigem Push Notification e ficam separados deste módulo.
         </p>
       </div>
+      </fieldset>
     </div>
   );
 }

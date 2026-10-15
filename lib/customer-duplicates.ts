@@ -48,13 +48,35 @@ export function customerDuplicateCandidates(
 
   const result: CustomerDuplicateCandidate[] = [];
 
+  // Indexar candidatos evita comparar clientes sem nome/telefone em comum.
+  // A régua de identidade abaixo e a ordem dos resultados continuam iguais.
+  const names = customers.map(customer => normalizeCustomerName(customer.name));
+  const phones = customers.map(customer => phoneDigits(customer.phone));
+  const byName = new Map<string, number[]>();
+  const byPhone = new Map<string, number[]>();
+  customers.forEach((_, index) => {
+    if (!names[index]) return;
+    const nameBucket = byName.get(names[index]) || [];
+    nameBucket.push(index);
+    byName.set(names[index], nameBucket);
+    if (phones[index].length >= 10) {
+      const phoneBucket = byPhone.get(phones[index]) || [];
+      phoneBucket.push(index);
+      byPhone.set(phones[index], phoneBucket);
+    }
+  });
+
   for (let i = 0; i < customers.length; i += 1) {
-    for (let j = i + 1; j < customers.length; j += 1) {
+    const candidates = new Set([
+      ...(byName.get(names[i]) || []),
+      ...(byPhone.get(phones[i]) || []),
+    ]);
+    for (const j of Array.from(candidates).filter(index => index > i).sort((a, b) => a - b)) {
       const left = customers[i];
       const right = customers[j];
 
-      const leftName = normalizeCustomerName(left.name);
-      const rightName = normalizeCustomerName(right.name);
+      const leftName = names[i];
+      const rightName = names[j];
 
       if (!leftName || !rightName) continue;
 
@@ -63,8 +85,8 @@ export function customerDuplicateCandidates(
        * Isso já trata "Maria" e "Maria (2)" como o mesmo nome-base.
        */
       const sameBaseName = leftName === rightName;
-      const leftPhone = phoneDigits(left.phone);
-      const rightPhone = phoneDigits(right.phone);
+      const leftPhone = phones[i];
+      const rightPhone = phones[j];
       const samePhone = leftPhone.length >= 10 && leftPhone === rightPhone;
 
       if (!sameBaseName && !samePhone) continue;
