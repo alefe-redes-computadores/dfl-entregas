@@ -528,9 +528,9 @@ export default function ShoppingList() {
                 {(product.presentations || []).filter((item) => item.active && item.conversion_quantity > 0).length > 1 && (
                   <div className="min-w-0">
                     <label className="mb-1 block text-[8px] font-black uppercase tracking-wider text-zinc-600">Forma de compra</label>
-                    <select value={presentationIds[product.id] || purchasePlan?.presentation?.id || ''} onChange={(event) => { const id=event.target.value; setPresentationIds((value)=>({...value,[product.id]:id})); const current=netRecommendationMap.get(product.id); const next=commercialPurchasePlan(product,current?.gross||0,current?.committed||0,id); setQuantities((value)=>({...value,[product.id]:String(Number(next.purchaseQuantity.toFixed(3)))})); }} className="h-11 w-full min-w-0 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-[10px] font-bold text-zinc-200 outline-none">
-                      {(product.presentations || []).filter((item)=>item.active&&item.conversion_quantity>0).map((item)=><option key={item.id} value={item.id}>{item.label} · {item.conversion_quantity.toLocaleString('pt-BR',{maximumFractionDigits:3})} {product.unit}</option>)}
-                    </select>
+                    <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-1" role="radiogroup" aria-label={`Forma de compra de ${product.name}`}>
+                      {(product.presentations || []).filter((item)=>item.active&&item.conversion_quantity>0).map((item)=>{const active=(presentationIds[product.id]||purchasePlan?.presentation?.id)===item.id;return <button type="button" role="radio" aria-checked={active} key={item.id} onClick={()=>{const id=item.id;setPresentationIds(value=>({...value,[product.id]:id}));const current=netRecommendationMap.get(product.id);const next=commercialPurchasePlan(product,current?.gross||0,current?.committed||0,id);setQuantities(value=>({...value,[product.id]:String(Number(next.purchaseQuantity.toFixed(3)))}))}} className={`min-h-11 shrink-0 rounded-xl border px-3 py-2 text-left text-[9px] font-bold ${active?'border-amber-500/40 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}><span className="block">{item.label}</span><span className="mt-0.5 block text-[8px] opacity-70">contém {item.conversion_quantity.toLocaleString('pt-BR',{maximumFractionDigits:3})} {product.unit}</span></button>})}
+                    </div>
                   </div>
                 )}
 

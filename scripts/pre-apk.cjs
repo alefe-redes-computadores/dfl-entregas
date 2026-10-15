@@ -2,6 +2,7 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/verify-v83-stock-route-experience.cjs',
   'scripts/verify-v82-ifood-recognition.cjs',
   'scripts/verify-v81-shopping-route-card.cjs',
   'scripts/verify-v80-notifications-customers.cjs',

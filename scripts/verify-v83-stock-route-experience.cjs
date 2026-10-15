@@ -1,0 +1,22 @@
+const fs=require('node:fs');
+const read=file=>fs.readFileSync(file,'utf8');
+const ok=(condition,label)=>{if(!condition)throw new Error(`V83: ${label}`);console.log('OK:',label)};
+const stock=read('app/estoque/page.tsx');
+const shopping=read('app/estoque/compras/page.tsx');
+const health=read('lib/stock-catalog-health.ts');
+const healthUi=read('components/stock/StockCatalogHealth.tsx');
+const route=read('components/home/RouteAccordion.tsx');
+
+ok(stock.includes('committed={committedMap.get(product.id)||0}')&&stock.includes('commercialPurchasePlan(product,guarded.quantity,committed)'), 'card desconta compra já aberta');
+ok(stock.includes('stockOperationPriority(product,recommendation)')&&stock.includes('stockOperationTiming(recommendation)'), 'card usa mesma autoridade operacional da compra');
+ok(stock.includes("`${p.name} ${p.category||''}`"), 'busca encontra nome e categoria');
+ok(health.includes("'Sem regra de reposição'")&&health.includes("'Meta sem margem'"), 'diagnóstico revisa mínimo e meta');
+ok(health.includes("'Custo médio ausente'")&&health.includes("'Prazo de reposição inválido'"), 'diagnóstico revisa custo e prazo');
+ok(health.includes("'Apresentações repetidas'")&&health.includes("commercialProductStatus"), 'diagnóstico revisa embalagem comercial');
+ok(healthUi.includes('Sugestão:')&&healthUi.includes('item.impact')&&healthUi.includes('nada é alterado sozinho'), 'revisão explica impacto sem autocorreção');
+ok(!shopping.includes('<select value={presentationIds[product.id]')&&shopping.includes('role="radiogroup"'), 'forma de compra não usa select nativo');
+ok(route.includes('routePreviewStops')&&route.includes('Sequência da rota'), 'rota possui prévia compacta da sequência');
+ok(route.includes("slice(0,isOpen?6:4)")&&route.includes("groupDeliveriesByStop(sortedDeliveries.filter"), 'prévia respeita paradas físicas e densidade do card');
+ok(!route.includes('staticMapUrl('), 'prévia não baixa mapa remoto por card');
+ok(!health.includes('firebase')&&!health.includes('firestore')&&!health.includes('onSnapshot'), 'diagnóstico permanece local');
+console.log('\nV83 ESTOQUE + COMPRAS + ROTAS: CONTRATOS OK');

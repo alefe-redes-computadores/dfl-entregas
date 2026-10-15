@@ -199,6 +199,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
   const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress, neighborMeta, stopMeta } = useOptimizedDeliveries(deliveries, getCustomerById);
+  const routePreviewStops = useMemo(() => groupDeliveriesByStop(sortedDeliveries.filter((item) => !item.completed)).map((group, index) => {
+    const delivery = group.representative;
+    const customer = getCustomerById(delivery.customer_id);
+    const address = bestOperationalAddress(delivery.address_string, customer?.address) || 'Endereço pendente';
+    const parts = address.split(',').map((part) => part.trim()).filter(Boolean);
+    return { number:index + 1, customer:customer?.name || delivery.customer_name || `Parada ${index + 1}`, place:parts.at(-1) || parts[0] || 'Endereço pendente', grouped:group.deliveries.length };
+  }), [getCustomerById, sortedDeliveries]);
 
   const optimizerRows = useMemo(() => {
     const representatives = groupDeliveriesByStop(
@@ -804,6 +811,16 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <ChevronDown size={18} className={clsx('text-zinc-500 transition-transform duration-200 ml-1', isOpen && 'rotate-180')} />
         </div>
       </button>
+
+      {!isVirtualRoute && routePreviewStops.length > 0 && (
+        <div className="px-3 pb-3" aria-label="Prévia da sequência da rota">
+          <div className={`rounded-2xl border px-3 py-2.5 ${isInProgress?'border-sky-500/20 bg-sky-500/[.045]':'border-zinc-800 bg-zinc-950/40'}`}>
+            <div className="mb-2 flex items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[.12em] text-sky-300"><MapPinned size={12}/> Sequência da rota</span><span className="text-[8px] font-bold text-zinc-600">{routePreviewStops.length} parada{routePreviewStops.length===1?'':'s'} pendente{routePreviewStops.length===1?'':'s'}</span></div>
+            <div className="flex min-w-0 items-start overflow-hidden">{routePreviewStops.slice(0,isOpen?6:4).map((stop,index)=><div key={`${stop.number}-${stop.customer}`} className="flex min-w-0 flex-1 items-start"><div className="min-w-0 flex-1 text-center"><span className={`mx-auto grid h-7 w-7 place-items-center rounded-full border text-[9px] font-black ${index===0&&isInProgress?'border-sky-400 bg-sky-500 text-zinc-950':'border-sky-500/30 bg-sky-500/10 text-sky-300'}`}>{stop.number}</span>{isOpen&&<><p className="mt-1 truncate text-[8px] font-bold text-zinc-300">{stop.customer}</p><p className="truncate text-[7px] text-zinc-600">{stop.place}{stop.grouped>1?` · ${stop.grouped} pedidos`:''}</p></>}</div>{index<Math.min(routePreviewStops.length,isOpen?6:4)-1&&<span className="mt-3 h-px w-3 shrink-0 bg-sky-500/25"/>}</div>)}</div>
+            {routePreviewStops.length>(isOpen?6:4)&&<p className="mt-2 text-center text-[8px] font-bold text-zinc-600">+ {routePreviewStops.length-(isOpen?6:4)} paradas na sequência completa</p>}
+          </div>
+        </div>
+      )}
 
       {isOpen && (
         <div className="px-4 pb-3">
