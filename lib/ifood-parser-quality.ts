@@ -15,6 +15,59 @@ export type IfoodGuideItem = {
   hint: string;
 };
 
+export type IfoodRecognitionTone = 'identity' | 'financial' | 'logistics' | 'attention';
+export type IfoodRecognitionItem = {
+  key: string;
+  label: string;
+  tone: IfoodRecognitionTone;
+};
+export type IfoodFinancialBreakdown = {
+  index: number;
+  title: string;
+  customerCharge: string;
+  subsidy: string;
+  total: string;
+};
+
+const money = (value: string) => value ? `R$ ${value}` : '';
+
+export function buildIfoodRecognitionSummary(orders: ParsedIfoodOrder[]) {
+  const items: IfoodRecognitionItem[] = [];
+  const financial: IfoodFinancialBreakdown[] = [];
+  const add = (key: string, label: string, tone: IfoodRecognitionTone) => {
+    if (label && !items.some((item) => item.key === key && item.label === label)) items.push({ key, label, tone });
+  };
+
+  orders.forEach((order, index) => {
+    const prefix = orders.length > 1 ? `${index + 1} · ` : '';
+    add(`order-${index}`, order.orderId ? `${prefix}Pedido #${order.orderId}` : '', 'identity');
+    add(`ifood-${index}`, order.ifoodId ? `${prefix}ID ${order.ifoodId}` : '', 'identity');
+    add(`code-${index}`, order.confirmationCode ? `${prefix}Código ${order.confirmationCode}` : '', 'attention');
+    add(`customer-${index}`, order.customerName ? `${prefix}${order.customerName}` : '', 'identity');
+    add(`phone-${index}`, order.phone ? `${prefix}Telefone identificado` : '', 'logistics');
+    add(`address-${index}`, order.address || order.mapsLink ? `${prefix}${order.mapsLink && !order.address ? 'Mapa identificado' : 'Endereço identificado'}` : '', 'logistics');
+    add(`payment-${index}`, order.paymentMethod ? `${prefix}${order.isPaid ? 'Pago no app' : `Pagamento: ${order.paymentMethod}`}` : '', 'financial');
+    add(`charge-${index}`, order.customerCharge ? `${prefix}Cliente paga ${money(order.customerCharge)}` : '', 'financial');
+    add(`subsidy-${index}`, order.subsidy ? `${prefix}Cupom iFood ${money(order.subsidy)}` : '', 'financial');
+    add(`change-${index}`, order.changeFor ? `${prefix}Troco para ${money(order.changeFor)}` : '', 'attention');
+    add(`drinks-${index}`, order.drinks.length ? `${prefix}${order.drinks.join(', ')}` : '', 'logistics');
+    add(`observations-${index}`, order.observations.length ? `${prefix}${order.observations.length} observação${order.observations.length > 1 ? 'ões' : ''}` : '', 'attention');
+    add(`route-${index}`, order.routeNumber ? `${prefix}Rota ${order.routeNumber}` : '', 'logistics');
+    add(`courier-${index}`, order.motoboyHint ? `${prefix}Motoboy: ${order.motoboyHint}` : '', 'logistics');
+    if (order.customerCharge || order.subsidy) {
+      financial.push({
+        index,
+        title: order.orderId ? `Pedido #${order.orderId}` : `Pedido ${index + 1}`,
+        customerCharge: order.customerCharge,
+        subsidy: order.subsidy,
+        total: order.value,
+      });
+    }
+  });
+
+  return { items, financial };
+}
+
 const compact = (value: string) => value.replace(/\s+/g, ' ').trim();
 
 export function buildIfoodParseGuide(text: string, order?: ParsedIfoodOrder): IfoodGuideItem[] {

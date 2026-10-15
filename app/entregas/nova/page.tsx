@@ -14,7 +14,7 @@ import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomple
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrdersText } from '@/lib/ifood-order-parser';
-import { assessIfoodParseQuality, buildIfoodParseGuide } from '@/lib/ifood-parser-quality';
+import { assessIfoodParseQuality, buildIfoodParseGuide, buildIfoodRecognitionSummary } from '@/lib/ifood-parser-quality';
 import { loadInboxDay, markInboxDraft } from '@/lib/delivery-inbox';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
@@ -96,20 +96,7 @@ export default function NovaEntregaPage() {
   const liveGuide = useMemo(() => buildIfoodParseGuide(deferredMagicText, liveParsedOrders[0]), [deferredMagicText, liveParsedOrders]);
   const parserGuideRef = useRef<HTMLDivElement | null>(null);
   const parserInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const liveRecognition = useMemo(() => {
-    const parsed = liveParsedOrders[0];
-    if (!parsed) return [];
-    return [
-      parsed.orderId && { label: `Pedido #${parsed.orderId}`, tone: 'ok' as const },
-      parsed.ifoodId && { label: `ID ${parsed.ifoodId}`, tone: 'ok' as const },
-      parsed.confirmationCode && { label: `Código ${parsed.confirmationCode}`, tone: 'ok' as const },
-      parsed.customerName && { label: parsed.customerName, tone: 'ok' as const },
-      (parsed.address || parsed.mapsLink) && { label: 'Endereço identificado', tone: 'ok' as const },
-      parsed.paymentMethod && { label: parsed.isPaid ? 'Pago no app' : 'Pagamento identificado', tone: 'ok' as const },
-      (parsed.customerCharge || parsed.value) && { label: `R$ ${parsed.customerCharge || parsed.value}`, tone: 'ok' as const },
-      parsed.drinks.length > 0 && { label: 'Bebidas identificadas', tone: 'ok' as const },
-    ].filter((item): item is { label: string; tone: 'ok' } => Boolean(item));
-  }, [liveParsedOrders]);
+  const liveRecognition = useMemo(() => buildIfoodRecognitionSummary(liveParsedOrders), [liveParsedOrders]);
 
 
   const [origin, setOrigin] = useState<OrderOrigin>('ifood');
@@ -578,18 +565,24 @@ const [routeId, setRouteId] = useState('');
               <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[.14em] text-zinc-400">Guia de preenchimento</p><span className="text-[9px] font-bold text-zinc-600">fica visível com o teclado</span></div>
               <div className="mt-2 flex items-center justify-between gap-2">
                 <span className="text-[10px] font-bold text-zinc-400">Reconhecimento ao vivo</span>
-                <span role="status" className="text-[10px] font-bold text-emerald-300">{parserUpdating ? 'Atualizando leitura…' : `${liveRecognition.length} dados identificados`}</span>
+                <span role="status" className="text-[10px] font-bold text-emerald-300">{parserUpdating ? 'Atualizando leitura…' : `${liveRecognition.items.length} dados identificados`}</span>
               </div>
-              {liveRecognition.length > 0 && (
+              {liveRecognition.items.length > 0 && (
                 <details className="mt-2 text-xs text-zinc-400"><summary className="cursor-pointer py-1">Ver dados reconhecidos</summary><div className="mt-2 flex flex-wrap gap-1.5">
-                  {liveRecognition.map((item) => (
-                    <span key={item.label} className="flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/[.08] px-2.5 py-1 text-[9px] font-bold text-emerald-300">
+                  {liveRecognition.items.map((item) => (
+                    <span key={`${item.key}-${item.label}`} className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[9px] font-bold ${item.tone==='financial'?'border-amber-500/25 bg-amber-500/[.08] text-amber-200':item.tone==='logistics'?'border-sky-500/25 bg-sky-500/[.08] text-sky-300':item.tone==='attention'?'border-violet-500/25 bg-violet-500/[.08] text-violet-300':'border-emerald-500/20 bg-emerald-500/[.08] text-emerald-300'}`}>
                       <CheckCircle2 size={11} /> {item.label}
                     </span>
                   ))}
                 </div></details>
               )}
-              {liveParseQuality.issues.length > 0 && liveRecognition.length > 0 && (
+              {liveRecognition.financial.some((item)=>item.subsidy) && (
+                <div className="mt-2 space-y-1.5 rounded-xl border border-amber-500/20 bg-amber-500/[.06] px-3 py-2.5">
+                  <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[.12em] text-amber-300"><TicketPercent size={12}/> Composição do pedido</p>
+                  {liveRecognition.financial.filter((item)=>item.subsidy).map((item)=><p key={`financial-${item.index}`} className="text-[10px] leading-relaxed text-zinc-300"><b className="text-zinc-100">{item.title}:</b> cliente paga {item.customerCharge?`R$ ${item.customerCharge}`:'valor não identificado'} + cupom iFood R$ {item.subsidy}{item.total?` = total R$ ${item.total}`:''}</p>)}
+                </div>
+              )}
+              {liveParseQuality.issues.length > 0 && liveRecognition.items.length > 0 && (
                 <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[.06] px-3 py-2 text-[10px] text-amber-200">
                   <AlertTriangle size={13} className="mt-0.5 shrink-0" />
                   <span>Falta conferir: {Array.from(new Set(liveParseQuality.issues.flatMap((item) => item.fields))).join(', ')}.</span>
@@ -621,7 +614,7 @@ const [routeId, setRouteId] = useState('');
             className="h-11 w-full rounded-xl bg-red-500 hover:bg-red-400 font-bold text-white text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-red-500/20"
           >
             <Sparkles size={15} />
-            {liveParseQuality.review > 0 && liveRecognition.length > 0
+            {liveParseQuality.review > 0 && liveRecognition.items.length > 0
               ? 'Preencher e revisar o que falta'
               : 'Revisar e preencher pedido'}
           </button>
