@@ -27,7 +27,9 @@ export function buildDailyStockSignal(product:StockProduct,movements:StockMoveme
  const guarded=guardedStockRecommendation(product,rec);
  const historyTarget=Math.max(Number(product.minimum_quantity)||0,weekdayAverage+Math.max(0,rec.averageDailyConsumption*rec.leadTimeDays));
  const rawHistorySuggested=Math.max(0,historyTarget-product.current_quantity);
- const rawSuggested=guarded.mode==='history'&&enough?rawHistorySuggested:guarded.quantity;
+ const configuredTarget=Math.max(0,Number(product.minimum_quantity)||0,Number(product.ideal_quantity)||0);
+ const boundedWeekdayNeed=configuredTarget>0?Math.min(rawHistorySuggested,Math.max(0,configuredTarget-product.current_quantity)):rawHistorySuggested;
+ const rawSuggested=guarded.mode==='history'&&enough?boundedWeekdayNeed:guarded.quantity;
  const dailyTarget=Math.max(0,product.current_quantity+rawSuggested);
  const commercialPlan=commercialPurchasePlan(product,rawSuggested,0);
  const suggested=commercialPlan.baseQuantity;

@@ -48,6 +48,7 @@ function Content() {
   const motoboy = useAppStore((state) =>
     state.motoboys.find((item) => item.id === id),
   );
+  const selectedDate = useAppStore((state) => state.selectedDate);
   const routes = useAppStore((state) => state.routes);
   const deliveries = useAppStore((state) => state.deliveries);
   const expenses = useAppStore((state) => state.operationalExpenses);
@@ -210,7 +211,7 @@ function Content() {
       )}
 
       <button
-        onClick={() => router.push(`/motoboys/acerto?id=${motoboy.id}`)}
+        onClick={() => router.push(`/motoboys/acerto?id=${motoboy.id}&date=${encodeURIComponent(operationalDateKey(selectedDate))}`)}
         className="flex h-13 min-h-[52px] items-center justify-center gap-2 rounded-[16px] bg-emerald-500 text-sm font-black text-zinc-950 shadow-lg shadow-emerald-500/10 active:scale-[.98]"
       >
         <Calculator size={18} />
@@ -377,7 +378,7 @@ function Content() {
                         <button
                           type="button"
                           onClick={() =>
-                            router.push(`/motoboys/acerto?id=${motoboy.id}`)
+                            router.push(`/motoboys/acerto?id=${motoboy.id}&date=${encodeURIComponent(operationalDateKey(selectedDate))}`)
                           }
                           className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.04] p-2.5 text-left"
                         >

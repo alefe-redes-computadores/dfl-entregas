@@ -9,7 +9,7 @@ export function guardedStockRecommendation(product:StockProduct,recommendation?:
  const days=n(recommendation?.distinctConsumptionDays);
  const events=n(recommendation?.consumptionEvents);
  const confidence=String(recommendation?.confidence||'baixa').toLowerCase();
- if(confidence==='alta'&&days>=6&&events>=8)return{quantity:intelligentQuantity,configuredTarget,configuredDeficit,mode:'history' as const,reason:'Histórico suficiente · consumo real + prazo de reposição'};
+ if(confidence==='alta'&&days>=6&&events>=8){const bounded=configuredTarget>0?Math.min(intelligentQuantity,Math.max(configuredDeficit,configuredTarget)):intelligentQuantity;return{quantity:bounded,configuredTarget,configuredDeficit,mode:'history' as const,reason:configuredTarget>0?'Histórico suficiente · limitado à meta de reposição configurada':'Histórico suficiente · sem meta configurada'};}
  if(configuredTarget>0){
   if(confidence==='media'&&days>=3&&events>=4){const ceiling=configuredDeficit>0?configuredDeficit*1.5:configuredTarget*0.5;return{quantity:Math.min(Math.max(configuredDeficit,intelligentQuantity),Math.max(configuredDeficit,ceiling)),configuredTarget,configuredDeficit,mode:'guarded' as const,reason:'Histórico parcial · sugestão limitada pela meta configurada'}}
   return{quantity:configuredDeficit,configuredTarget,configuredDeficit,mode:'configured' as const,reason:'Meta configurada · histórico insuficiente'};

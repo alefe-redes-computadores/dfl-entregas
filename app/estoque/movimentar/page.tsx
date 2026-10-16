@@ -570,7 +570,7 @@ function Content() {
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3">
           <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Como você vai informar?</p><p className="mt-1 text-[9px] text-zinc-600">Escolha a unidade usada na digitação.</p></div>{(()=>{try{const q=JSON.parse(sessionStorage.getItem('dfl-stock-review-queue')||'[]') as string[];const i=q.indexOf(product.id);return q.length&&i>=0?<span className="text-[10px] font-black text-sky-400">{i+1}/{q.length}</span>:null}catch{return null}})()}</div>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <button type="button" onClick={()=>{setPresentationId('base');setQuantity('');setAttempted(false)}} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId==='base'?'border-sky-500/40 bg-sky-500/10 text-sky-300':'border-zinc-800 text-zinc-500'}`}>Direto em {quantityLabel(product.unit)}<span className="mt-1 block text-[9px] font-medium">Unidade controlada no estoque</span></button>
+            <button type="button" onClick={()=>{setPresentationId('base');setQuantity('');setAttempted(false)}} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId==='base'?'border-sky-500/40 bg-sky-500/10 text-sky-300':'border-zinc-800 text-zinc-500'}`}>Direto em {quantityLabel(product.unit)}<span className="mt-1 block text-[9px] font-medium">Baixa direta na unidade-base, sem precisar fracionar pacote</span></button>
             {presentations.map((item)=><button type="button" key={item.id} onClick={()=>{setPresentationId(item.id);setQuantity('');setAttempted(false)}} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId===item.id?'border-amber-500/40 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-500'}`}>{humanPresentation(item,product.unit)}<span className="mt-1 block text-[9px] font-medium">{Math.abs(Number(item.conversion_quantity)-1)<1e-9?`Formato de compra · mesma quantidade`:commercialPresentationEquation(item,product.unit)}</span></button>)}
           </div>
         </section>
@@ -678,6 +678,19 @@ function Content() {
               {selectedPresentation && (
                 <p className="mt-2 text-[10px] font-bold text-sky-200">
                   {commercialMovementPreview(selectedPresentation,product.unit,typed)}
+                </p>
+              )}
+              {selectedPresentation && conversion > 0 && canUseRemaining && mode === 'moved' && (
+                <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
+                  Equivalência: {formatStockQuantity(typed, selectedPresentation.purchase_unit)}
+                  {' = '}{formatStockQuantity(baseTyped, product.unit)}.
+                  {' '}Pode informar frações da apresentação ou escolher a unidade interna acima para baixar unidades avulsas.
+                </p>
+              )}
+              {!selectedPresentation && canUseRemaining && mode === 'moved' && presentations.length > 0 && (
+                <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
+                  Baixa avulsa: você está retirando diretamente em {quantityLabel(product.unit)}.
+                  {' '}As apresentações comerciais não alteram a unidade controlada no estoque.
                 </p>
               )}
 

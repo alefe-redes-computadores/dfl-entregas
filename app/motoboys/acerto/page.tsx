@@ -36,8 +36,11 @@ function Content(){
   const storeSettings=useAppStore(state=>state.storeSettings);
   const updateStoreSettings=useAppStore(state=>state.updateStoreSettings);
 
+  const selectedDate=useAppStore(state=>state.selectedDate);
+  const deleteOperationalExpense=useAppStore(state=>state.deleteOperationalExpense);
+  const [deletingSettlement,setDeletingSettlement]=useState(false);
   const paramDate=params.get('date');
-  const [date,setDate]=useState(()=>paramDate&&/^\d{4}-\d{2}-\d{2}$/.test(paramDate)?paramDate:operationalDateKey(new Date()));
+  const [date,setDate]=useState(()=>paramDate&&/^\d{4}-\d{2}-\d{2}$/.test(paramDate)?paramDate:operationalDateKey(selectedDate));
   const [month,setMonth]=useState(()=>fromKey(date));
   const [calendar,setCalendar]=useState(false);
   const [adjustments,setAdjustments]=useState<MotoboySettlementAdjustment[]>([]);
@@ -311,6 +314,7 @@ function Content(){
     <PageHeader title="Acerto do motoboy" subtitle={motoboy.name} to={`/motoboys/details?id=${motoboy.id}`}/>
     <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2"><button onClick={()=>setDate(value=>shift(value,-1))} className="date-button"><ChevronLeft/></button><button onClick={()=>{setMonth(fromKey(date));setCalendar(true)}} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-800 text-sm font-black"><CalendarDays size={17} className="text-emerald-400"/>{fromKey(date).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).replaceAll('.','')}</button><button onClick={()=>setDate(value=>shift(value,1))} className="date-button"><ChevronRight/></button></div>
 
+    {existing&&<div className="flex justify-end"><button type="button" disabled={deletingSettlement} onClick={async()=>{if(!existing||!window.confirm(`Excluir o acerto registrado em ${fromKey(date).toLocaleDateString('pt-BR')}? Esta ação remove o lançamento financeiro e permite refazer o acerto na data correta.`))return;setDeletingSettlement(true);try{await deleteOperationalExpense(existing.id);toast.success('Acerto excluído. Você pode registrar novamente na data correta.');}catch(error){toast.error(error instanceof Error?error.message:'Falha ao excluir acerto.');}finally{setDeletingSettlement(false)}}} className="flex items-center gap-2 rounded-xl border border-red-500/30 px-3 py-2 text-[11px] font-bold text-red-300 disabled:opacity-50"><Trash2 size={14}/>{deletingSettlement?'Excluindo...':'Excluir acerto incorreto'}</button></div>}
     {existing&&<section className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.05] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-emerald-400">{typeof existing.settlement_gross_amount==='number'?'Acerto registrado':'Acerto registrado · legado'}</p><p className="mt-2 text-xl font-black text-emerald-300">R$ {money(existing.settlement_gross_amount ?? existing.amount)}</p><p className="mt-1 text-[10px] text-zinc-500">{typeof existing.settlement_gross_amount==='number'?'Custo operacional bruto do motoboy. O dinheiro recebido de clientes fica separado como liquidação de caixa.':'Valor originalmente registrado. Este acerto é anterior à separação entre custo bruto, abatimentos e caixa; o histórico não foi recalculado automaticamente.'}</p></section>}
 
     <div className="grid grid-cols-2 gap-3"><Card icon={Package} label={data.orderCount===data.physicalDeliveryCount?"Entregas concluídas":`${data.orderCount} pedidos`} value={String(data.physicalDeliveryCount)} tone="sky"/><Card icon={Banknote} label="Recebido · antes do troco" value={`R$ ${money(data.cashTendered)}`} tone="amber"/></div>

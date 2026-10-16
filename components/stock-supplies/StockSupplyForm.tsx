@@ -136,6 +136,33 @@ export function StockSupplyForm({
   const [supplierId, setSupplierId] = useState(initial?.supplier_id || '');
   const [supplierText, setSupplierText] = useState(initial?.supplier || '');
 
+  // V85.3: sugestão consultiva, somente da mesma apresentação e fornecedor.
+  const historicalPrice = (item: Draft) => {
+    if (!item.stock_product_id || (!supplierId && !supplierText.trim())) return null;
+    const normalizedSupplier = supplierText.trim().toLocaleLowerCase('pt-BR');
+    const candidates = historicalSupplies
+      .filter((supply) => !initial || supply.id !== initial.id)
+      .filter((supply) => supply.status === 'recebido' || supply.status === 'conferido')
+      .filter((supply) => supplierId
+        ? supply.supplier_id === supplierId
+        : (supply.supplier || '').trim().toLocaleLowerCase('pt-BR') === normalizedSupplier)
+      .sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at));
+    for (const supply of candidates) {
+      for (const previous of supply.items) {
+        if (previous.stock_product_id !== item.stock_product_id) continue;
+        if ((previous.presentation_id || '') !== (item.presentation_id || '')) continue;
+        if ((previous.purchase_unit || previous.unit) !== (item.purchase_unit || item.unit)) continue;
+        const factor = Number(item.conversion) || 1;
+        if (Math.abs((Number(previous.conversion_quantity) || 1) - factor) > 0.000001) continue;
+        const quantity = Number(previous.purchase_quantity) || (Number(previous.quantity) / factor);
+        const price = Number(previous.purchase_unit_price) ||
+          (quantity > 0 ? Number(previous.total_price) / quantity : 0);
+        if (Number.isFinite(price) && price > 0) return { price, date: supply.occurred_at };
+      }
+    }
+    return null;
+  };
+
   const preferredProductIds = useMemo(() => {
     const supplierName = supplierText
       .trim()
@@ -960,6 +987,15 @@ export function StockSupplyForm({
                   />
                 </label>
               </div>
+
+              {(() => {
+                const suggestion = historicalPrice(item);
+                if (!suggestion) return null;
+                return <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[.04] p-2.5">
+                  <p className="min-w-0 text-[10px] text-zinc-400">Último preço comparável deste fornecedor: <b className="text-emerald-300">{brl(suggestion.price)}</b><span className="block text-[9px] text-zinc-500">{new Date(suggestion.date).toLocaleDateString('pt-BR')} · confira antes de salvar</span></p>
+                  <button type="button" onClick={() => update(item.id, { purchasePrice: numberToBRLInput(suggestion.price) })} className="shrink-0 rounded-lg border border-emerald-500/30 px-3 py-2 text-[10px] font-black text-emerald-300">Usar preço</button>
+                </div>;
+              })()}
 
               {(!product || !product.presentations?.length) &&
                 item.purchase_unit !== 'un' && (
