@@ -1,5 +1,6 @@
 import type { Delivery, Route } from '@/types';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
+import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 
 export type RouteShareCard = { dataUrl: string; usedRealMap: boolean };
 
@@ -21,10 +22,10 @@ function coordinates(value: string): string | null {
   return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? `${lat},${lng}` : null;
 }
 
-function staticMapUrl(origin: string, stops: Delivery[]): string {
+function staticMapUrl(origin: string | null, stopCoordinates: Array<string | null>): string {
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
-  const points = [coordinates(origin), ...stops.map(stop => coordinates(stop.address_string || ''))];
-  if (!key || !stops.length || points.some(point => !point)) return '';
+  const points = [origin, ...stopCoordinates].map((point) => point ? coordinates(point) : null);
+  if (!key || !stopCoordinates.length || points.some(point => !point)) return '';
   const params = new URLSearchParams({ size: '640x640', scale: '2', maptype: 'roadmap', key });
   params.append('markers', `color:0x22c55e|label:L|${points[0]}`);
   points.slice(1, 21).forEach((point, index) => params.append('markers', `color:0x0ea5e9|label:${index < 9 ? index + 1 : String.fromCharCode(56 + index)}|${point}`));
@@ -46,7 +47,12 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
   return `${trimmed}…`;
 }
 
-export async function buildRouteShareCard(route: Route, deliveries: Delivery[], storeAddress: string): Promise<RouteShareCard> {
+export async function buildRouteShareCard(
+  route: Route,
+  deliveries: Delivery[],
+  storeAddress: string,
+  explicitCoordinates?: { origin?: string | null; stops?: Record<string, string | null> },
+): Promise<RouteShareCard> {
   const groups = groupDeliveriesByStop(deliveries);
   const stops = groups.map(group => group.representative);
   const canvas = document.createElement('canvas');
@@ -57,7 +63,9 @@ export async function buildRouteShareCard(route: Route, deliveries: Delivery[], 
   ctx.fillStyle = '#09090b';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   let usedRealMap = false;
-  const url = staticMapUrl(storeAddress, stops);
+  const origin = explicitCoordinates?.origin || coordinates(storeAddress);
+  const stopCoordinates = stops.map((stop) => explicitCoordinates?.stops?.[stop.id] || coordinates(stop.address_string || ''));
+  const url = staticMapUrl(origin, stopCoordinates);
   if (url) {
     try {
       const map = await loadImage(url);
@@ -101,7 +109,7 @@ export async function buildRouteShareCard(route: Route, deliveries: Delivery[], 
   ctx.fillStyle = '#a1a1aa';
   ctx.font = '700 27px Arial';
   ctx.fillText(fitText(ctx, `${route.motoboy_name}  ·  ${deliveries.length} pedidos  ·  ${stops.length} paradas`, 952), 64, 863);
-  const paid = deliveries.filter(item => item.is_paid).length;
+  const paid = deliveries.filter(item => deriveDeliveryPaymentState(item) === 'paid').length;
   const pendingCodes = deliveries.filter(item => item.origin === 'ifood' && !item.confirmation_code).length;
   roundBox(ctx, 48, 893, 984, 90, 20, '#17212b');
   ctx.font = '700 26px Arial';
@@ -121,7 +129,7 @@ export async function buildRouteShareCard(route: Route, deliveries: Delivery[], 
   if (stops.length > 5) {
     ctx.fillStyle = '#a1a1aa';
     ctx.font = '700 23px Arial';
-    ctx.fillText(`+ ${stops.length - 5} paradas na mensagem e no link`, 64, 1410);
+    ctx.fillText(`5 de ${stops.length} paradas · sequência completa na mensagem`, 64, 1410);
   }
   ctx.fillStyle = '#22c55e';
   ctx.font = '900 22px Arial';

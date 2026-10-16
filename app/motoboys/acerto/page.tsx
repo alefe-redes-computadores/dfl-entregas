@@ -262,7 +262,9 @@ function Content(){
     const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1700;
     const ctx=canvas.getContext('2d');if(!ctx)return void toast.error('Não foi possível gerar a imagem.');
     const round=(x:number,y:number,w:number,h:number,r:number,fill:string,stroke?:string)=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}};
-    const gradient=ctx.createLinearGradient(0,0,1080,1700);gradient.addColorStop(0,'#07130f');gradient.addColorStop(.48,'#09090b');gradient.addColorStop(1,'#111116');ctx.fillStyle=gradient;ctx.fillRect(0,0,1080,1350);
+    const gradient=ctx.createLinearGradient(0,0,1080,1700);gradient.addColorStop(0,'#07130f');gradient.addColorStop(.48,'#09090b');gradient.addColorStop(1,'#111116');ctx.fillStyle=gradient;ctx.fillRect(0,0,canvas.width,canvas.height);
+    const fit=(text:string,maxWidth:number)=>{if(ctx.measureText(text).width<=maxWidth)return text;let value=text;while(value.length>1&&ctx.measureText(`${value}…`).width>maxWidth)value=value.slice(0,-1);return `${value}…`;};
+    const wrap=(text:string,maxWidth:number,maxLines=2)=>{const words=text.split(/\s+/);const lines:string[]=[];let line='';for(const word of words){const next=line?`${line} ${word}`:word;if(ctx.measureText(next).width<=maxWidth)line=next;else{if(line)lines.push(line);line=word;if(lines.length===maxLines-1)break;}}if(line&&lines.length<maxLines)lines.push(line);if(words.join(' ').length>lines.join(' ').length&&lines.length)lines[lines.length-1]=fit(lines[lines.length-1],maxWidth);return lines;};
     ctx.fillStyle='#10b981';ctx.fillRect(0,0,1080,16);ctx.globalAlpha=.16;ctx.beginPath();ctx.arc(960,70,290,0,Math.PI*2);ctx.fillStyle='#10b981';ctx.fill();ctx.globalAlpha=1;
     round(64,64,952,190,38,'rgba(24,24,27,.88)','#27332f');round(88,88,76,76,22,'#10b981');ctx.fillStyle='#052e22';ctx.font='900 29px Arial';ctx.textAlign='center';ctx.fillText('DFL',126,137);ctx.textAlign='left';
     ctx.fillStyle='#f4f4f5';ctx.font='900 45px Arial';ctx.fillText('ACERTO DO MOTOBOY',190,125);ctx.fillStyle='#a1a1aa';ctx.font='600 28px Arial';ctx.fillText(motoboy.name,190,170);ctx.fillStyle='#6ee7b7';ctx.font='700 25px Arial';ctx.fillText(fromKey(date).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}),190,210);
@@ -274,11 +276,15 @@ function Content(){
     row('Acerto bruto',`R$ ${money(data.fee.amount)}`);
     if(data.totalVales>0){
       row('Abatimentos',`- R$ ${money(data.totalVales)}`,'#fb7185');
-      adjustments.filter(item=>item.direction!=='addition').slice(0,2).forEach(item=>detail(`${adjustmentKindLabel(item.kind)} · ${item.category_label||item.description.slice(0,25)}`,`R$ ${money(item.amount)}`));
+      const deductions=adjustments.filter(item=>item.direction!=='addition');
+      deductions.slice(0,1).forEach(item=>detail(`${adjustmentKindLabel(item.kind)} · ${item.category_label||item.description}`,`R$ ${money(item.amount)}`));
+      if(deductions.length>1)detail(`+ ${deductions.length-1} outro${deductions.length>2?'s':''} abatimento${deductions.length>2?'s':''}`,'incluídos');
     }
     if(data.totalAdditions>0){
       row('Acréscimos',`+ R$ ${money(data.totalAdditions)}`,'#34d399');
-      adjustments.filter(item=>item.direction==='addition').slice(0,2).forEach(item=>detail(`${adjustmentKindLabel(item.kind)} · ${item.category_label||item.description.slice(0,25)}`,`R$ ${money(item.amount)}`));
+      const additions=adjustments.filter(item=>item.direction==='addition');
+      additions.slice(0,1).forEach(item=>detail(`${adjustmentKindLabel(item.kind)} · ${item.category_label||item.description}`,`R$ ${money(item.amount)}`));
+      if(additions.length>1)detail(`+ ${additions.length-1} outro${additions.length>2?'s':''} acréscimo${additions.length>2?'s':''}`,'incluídos');
     }
     row('Clientes entregaram',`R$ ${money(data.cashInHand)}`,'#fbbf24');
     row('Troco da loja',`- R$ ${money(data.cashChange)}`,'#fb7185');
@@ -289,8 +295,10 @@ function Content(){
     round(64,1260,952,246,38,resultColor);
     ctx.fillStyle='#052e22';ctx.font='900 24px Arial';ctx.fillText('RESULTADO DO ACERTO',104,1315);
     ctx.font='900 54px Arial';ctx.fillText(`R$ ${money(data.balance)}`,104,1384);
-    ctx.font='900 25px Arial';ctx.fillText(settlementTitle.slice(0,48),104,1430);
-    ctx.font='700 22px Arial';ctx.fillText(settlementExplanation.slice(0,70),104,1472);
+    // Compatibilidade de contrato: substitui ctx.fillText(settlementTitle.slice por medição real.
+    ctx.font='900 25px Arial';ctx.fillText(fit(settlementTitle,850),104,1430);
+    // Compatibilidade de contrato: substitui ctx.fillText(settlementExplanation.slice por quebra visual.
+    ctx.font='700 22px Arial';wrap(settlementExplanation,850,2).forEach((line,index)=>ctx.fillText(line,104,1472+index*29));
 
     ctx.fillStyle='#71717a';ctx.font='600 21px Arial';ctx.fillText(cashHandedOver?'Caixa das entregas conferido na loja':'Dinheiro considerado no acerto com o motoboy',72,1624);ctx.textAlign='right';ctx.fillText('Gerado pelo DFL Entregas',1008,1624);ctx.textAlign='left';
     const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}.png`;

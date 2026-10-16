@@ -12,12 +12,12 @@ const stockWeekday = (date: Date) => new Intl.DateTimeFormat('en-US', {
 }).format(date);
 const normalizedStockReason = (reason?: string) => (reason || '')
  .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const validOperational = (m: StockMovement) =>
+const isOperationalStockConsumption = (m: StockMovement) =>
  m.type === 'saida' && !m.supply_id && Number.isFinite(m.quantity) && m.quantity > 0 &&
  !/estorno|revers|correc|ajuste|contagem|saldo inicial/.test(normalizedStockReason(m.reason));
 export function buildDailyStockSignal(product:StockProduct,movements:StockMovement[],now=new Date()){
  const weekday=stockWeekday(now);
- const rows=movements.filter(m=>m.product_id===product.id&&validOperational(m)).map(m=>({m,d:new Date(m.occurred_at)})).filter(x=>Number.isFinite(x.d.getTime())&&x.d<=now&&now.getTime()-x.d.getTime()<=120*DAY&&stockWeekday(x.d)===weekday);
+ const rows=movements.filter(m=>m.product_id===product.id&&isOperationalStockConsumption(m)).map(m=>({m,d:new Date(m.occurred_at)})).filter(x=>Number.isFinite(x.d.getTime())&&x.d<=now&&now.getTime()-x.d.getTime()<=120*DAY&&stockWeekday(x.d)===weekday);
  const byDay=new Map<string,number>();
  for(const {m,d} of rows){const k=stockDayKey(d);byDay.set(k,(byDay.get(k)||0)+m.quantity)}
  const samples=[...byDay.values()];

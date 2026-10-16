@@ -1,0 +1,40 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const ts = require('typescript');
+const Module = require('node:module');
+
+const read = (file) => fs.readFileSync(file, 'utf8');
+const ok = (value, label) => { if (!value) throw new Error(`V85.1: ${label}`); console.log('OK:', label); };
+
+const source = read('lib/stock-movement-authority.ts');
+const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+const mod = new Module('v85-1-stock-authority', module);
+mod.filename = `${process.cwd()}/lib/stock-movement-authority.ts`;
+mod.paths = module.paths;
+mod._compile(js, mod.filename);
+const { isOperationalStockConsumption, stockDayKey } = mod.exports;
+const movement = (overrides = {}) => ({ type: 'saida', quantity: 2, occurred_at: '2026-10-16T01:00:00Z', reason: 'Consumo', ...overrides });
+assert.equal(isOperationalStockConsumption(movement()), true);
+assert.equal(isOperationalStockConsumption(movement({ supply_id: 'compra-1' })), false);
+assert.equal(isOperationalStockConsumption(movement({ reason: 'Correção de contagem' })), false);
+assert.equal(isOperationalStockConsumption(movement({ type: 'entrada' })), false);
+assert.equal(stockDayKey(new Date('2026-10-16T01:00:00Z')), '2026-10-15');
+console.log('OK: consumo exclui compra revertida, correção e entrada');
+console.log('OK: dia operacional respeita São Paulo');
+
+const report = read('app/estoque/relatorios/page.tsx');
+const intelligence = read('lib/stock-intelligence.ts');
+const purchases = read('app/estoque/compras/page.tsx');
+const routeCard = read('lib/route-share-card.ts');
+const route = read('components/home/RouteAccordion.tsx');
+const settlement = read('app/motoboys/acerto/page.tsx');
+ok(report.includes('isOperationalStockConsumption(movement)'), 'relatório usa saída operacional canônica');
+ok(report.includes('new Map<string, number>()') && report.includes('useMemo'), 'relatório agrega em passagem única e memorizada');
+ok(intelligence.includes('stockObservedDays(firstDate, now, days)'), 'média usa dias realmente observados');
+ok(purchases.includes('const allProducts = useAppStore') && purchases.includes('const products = useMemo'), 'compras evita seletor instável');
+ok(routeCard.includes('deriveDeliveryPaymentState(item)') && routeCard.includes('explicitCoordinates'), 'imagem usa pagamento canônico e coordenadas explícitas');
+ok(route.includes('storeLatitude') && route.includes('storeMapsLink') && route.includes('stopPoints'), 'rota encaminha coordenadas já salvas sem geocodificação cega');
+ok(settlement.includes('ctx.fillRect(0,0,canvas.width,canvas.height)'), 'comprovante pinta toda a imagem');
+ok(settlement.includes('wrap(settlementExplanation,850,2)') && !settlement.includes('settlementExplanation.slice(0,70)'), 'resultado do acerto quebra texto sem corte cego');
+ok(!source.includes('firebase') && !source.includes('onSnapshot'), 'autoridade de estoque é local e sem listener');
+console.log('\nV85.1 FECHAMENTO VISUAL E ANALÍTICO: CONTRATOS OK');

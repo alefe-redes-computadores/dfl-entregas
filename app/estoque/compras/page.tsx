@@ -58,10 +58,10 @@ const prioritySort = (
 export default function ShoppingList() {
   const router = useRouter();
 
-  const products = useAppStore((state) =>
-    state.stockProducts.filter(
-      (product) => product.active,
-    ),
+  const allProducts = useAppStore((state) => state.stockProducts);
+  const products = useMemo(
+    () => allProducts.filter((product) => product.active),
+    [allProducts],
   );
 
   const movements = useAppStore(

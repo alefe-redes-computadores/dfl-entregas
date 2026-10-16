@@ -538,7 +538,23 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         setIsCopyMenuOpen(false);
         return;
       }
-      const card = await buildRouteShareCard(route, pendingDeliveries, storeAddr);
+      const storeLat = Number(storeSettings?.storeLatitude);
+      const storeLng = Number(storeSettings?.storeLongitude);
+      const storePoint = Number.isFinite(storeLat) && Number.isFinite(storeLng)
+        ? { lat: storeLat, lng: storeLng }
+        : extractLatLngFromMapsUrl(storeSettings?.storeMapsLink);
+      const stopPoints = Object.fromEntries(
+        groupDeliveriesByStop(pendingDeliveries).map((group) => {
+          const delivery = group.representative;
+          const customer = getCustomerById(delivery.customer_id);
+          const point = extractLatLngFromMapsUrl(delivery.maps_link) || extractLatLngFromMapsUrl(customer?.maps_link);
+          return [delivery.id, point ? `${point.lat},${point.lng}` : null];
+        }),
+      );
+      const card = await buildRouteShareCard(route, pendingDeliveries, storeAddr, {
+        origin: storePoint ? `${storePoint.lat},${storePoint.lng}` : null,
+        stops: stopPoints,
+      });
       const filename = `rota-${route.id}-${Date.now()}.png`;
       if (Capacitor.isNativePlatform()) {
         const saved = await Filesystem.writeFile({ path: `dfl-rotas/${filename}`, data: card.dataUrl.split(',')[1], directory: Directory.Cache, recursive: true });

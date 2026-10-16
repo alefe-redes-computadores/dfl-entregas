@@ -1,6 +1,9 @@
 import { shouldSuppressStockConsumptionIntelligence } from "./stock-semantic-confidence-v24-8";
 // lib/stock-intelligence.ts
 import type { StockMovement, StockProduct } from '@/types';
+import { isOperationalStockConsumption, stockDayKey, stockObservedDays } from '@/lib/stock-movement-authority';
+// Contrato legado preservado pela autoridade compartilhada:
+// movement.type !== 'saida'; if (movement.supply_id) return false
 
 export function practicalStockQuantity(unit: StockProduct['unit'], value: number) {
   const safe = Math.max(0, Number(value) || 0);
@@ -46,30 +49,6 @@ const validDate = (value?: string) => {
   return date && Number.isFinite(date.getTime()) ? date : null;
 };
 
-const normalizeReason = (value?: string) =>
-  (value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('pt-BR');
-
-const isOperationalConsumption = (movement: StockMovement) => {
-  // Saída real de operação. Perda é tratada à parte em relatórios e não
-  // representa demanda normal. Contagem/ajuste também não entram.
-  if (movement.type !== 'saida') return false;
-
-  // Entradas revertidas de compras usam supply_id e não podem virar consumo.
-  if (movement.supply_id) return false;
-
-  const reason = normalizeReason(movement.reason);
-  if (
-    /estorno|revers|correc|ajuste|contagem|saldo inicial/.test(reason)
-  ) {
-    return false;
-  }
-
-  return movement.quantity > 0;
-};
-
 const PACKAGE_UNITS = new Set(['pct', 'cx', 'fardo']);
 
 function hasSemanticUnitRisk(product: StockProduct): boolean {
@@ -100,7 +79,7 @@ const consumptionMovements = (
   return movements
     .filter((movement) => {
       if (movement.product_id !== productId) return false;
-      if (!isOperationalConsumption(movement)) return false;
+      if (!isOperationalStockConsumption(movement)) return false;
 
       const date = validDate(movement.occurred_at);
       return Boolean(
@@ -129,7 +108,12 @@ const rateForWindow = (
     )
     .reduce((sum, movement) => sum + movement.quantity, 0);
 
-  return total / days;
+  const first = events.find(
+    (movement) => new Date(movement.occurred_at).getTime() >= start,
+  );
+  if (!first) return 0;
+  const firstDate = validDate(first.occurred_at);
+  return firstDate ? total / stockObservedDays(firstDate, now, days) : 0;
 };
 
 const weightedDailyRate = (
@@ -234,9 +218,7 @@ export function buildStockRecommendation(
   const distinctConsumptionDays = new Set(
     events.map(
       (movement) =>
-        validDate(movement.occurred_at)!
-          .toISOString()
-          .slice(0, 10),
+        stockDayKey(validDate(movement.occurred_at)!),
     ),
   ).size;
 
