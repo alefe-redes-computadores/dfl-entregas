@@ -1,0 +1,11 @@
+const fs=require('node:fs'); const assert=require('node:assert/strict');
+const p=fs.readFileSync('lib/ifood-order-parser.ts','utf8');
+const q=fs.readFileSync('lib/ifood-parser-quality.ts','utf8');
+assert(p.includes('export function findDetachedIfoodIdentifiers'));
+assert(p.includes('orders.length !== 1 || ids.length !== 1'));
+assert(p.includes('result.orderId ||= detachedIds.orderId'));
+assert(p.includes('result.ifoodId ||= detachedIds.ifoodId'));
+assert(q.includes('findDetachedIfoodIdentifiers(raw)'));
+assert(p.includes('explicitIfoodHeader(line)'));
+assert(p.includes('explicitConfirmationCode(line)'));
+console.log('V85 FINAL: 7 contratos de reconhecimento preservados.');

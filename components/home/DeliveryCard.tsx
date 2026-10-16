@@ -496,9 +496,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           "relative overflow-hidden rounded-[18px] transition-all duration-200",
           delivery.completed ? "opacity-80" : "shadow-sm",
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
-          isNeighbor && !delivery.completed && "border-sky-500/30",
+          isNeighbor && !delivery.completed && "border-amber-500/30",
           isExpanded
-            ? "bg-zinc-900 border border-sky-500/30 shadow-[0_14px_34px_rgba(0,0,0,0.32)]"
+            ? "bg-zinc-900 border border-amber-500/35 shadow-[0_14px_34px_rgba(0,0,0,0.32)]"
             : delivery.completed
               ? "bg-zinc-900/24 border border-emerald-500/12"
               : "bg-zinc-900/35 border border-zinc-800/70"

@@ -12,6 +12,7 @@ export const INTEGRATION_EVENT_TYPES = [
   'delivery.out_for_delivery',
   'delivery.position_changed',
   'delivery.next_stop',
+  'delivery.pickup_ready',
   'delivery.completed',
   'delivery.failed',
 

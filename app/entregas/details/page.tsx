@@ -86,6 +86,7 @@ function DeliveryDetailsContent() {
     (state) => state.ifoodPendingConfirmations,
   );
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isMarkingReady, setIsMarkingReady] = useState(false);
   const [openingAdmin, setOpeningAdmin] = useState(false);
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -237,6 +238,17 @@ function DeliveryDetailsContent() {
         normalizedConfirmationCode,
       )}${pendingSuffix}&returnTo=${encodeURIComponent(confirmationReturn)}`,
     );
+  };
+
+  const markPickupReady = async () => {
+    if (mode !== 'pickup' || delivery.completed || cancelled || delivery.pickup_ready_at || isMarkingReady) return;
+    setIsMarkingReady(true);
+    try {
+      await updateDelivery(delivery.id, { pickup_ready_at: new Date().toISOString() });
+      toast.success('Prontidão registrada. O aviso ao cliente depende da sincronização com o Site.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Falha ao registrar prontidão.');
+    } finally { setIsMarkingReady(false); }
   };
 
   const executeCompletion = async (codeToSave?: string) => {
@@ -583,6 +595,14 @@ function DeliveryDetailsContent() {
           )}
         </div>
 
+        {mode === 'pickup' && !delivery.completed && !cancelled && (
+          <button type="button" onClick={markPickupReady}
+            disabled={isMarkingReady || Boolean(delivery.pickup_ready_at)}
+            className="mb-3 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/40 bg-amber-400/15 px-4 font-black text-amber-200 disabled:opacity-65">
+            <ShoppingBag size={19} />
+            {isMarkingReady ? 'Registrando prontidão...' : delivery.pickup_ready_at ? 'Prontidão registrada' : 'Pronto para retirada'}
+          </button>
+        )}
         <button
           onClick={handleCompletionAction}
           disabled={isCompleting || cancelled}

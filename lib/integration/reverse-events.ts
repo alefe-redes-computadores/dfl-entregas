@@ -7,6 +7,7 @@ export type DflSiteReverseEventType =
   | "delivery.out_for_delivery"
   | "delivery.position_changed"
   | "delivery.next_stop"
+  | "delivery.pickup_ready"
   | "delivery.completed"
   | "delivery.failed"
   | "route.started"

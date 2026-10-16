@@ -37,6 +37,9 @@ import {
   extractCustomerNeighborhood,
   findExistingCustomer,
   nextCustomerName,
+  normalizeCustomerAddress,
+  normalizeCustomerName,
+  normalizeCustomerPhone,
 } from '@/lib/customer-identity';
 import { stockProductCategory, suggestStockCategory } from '@/lib/stock-categories';
 import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop, moveStopToIndex, stopDeliveryIds } from '@/lib/route-stops';
@@ -2879,13 +2882,15 @@ export const useAppStore = create<AppState>()(
       findOrCreateCustomer: (name, details) => {
         const rawName = name.trim();
         if (!rawName) return Promise.resolve('');
-        // Mesmo nome pode representar pessoas diferentes: a fila apenas serializa.
-        // A decisão de reutilização permanece em customerIdentityEvidence.
-        const flightKey = rawName.normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .toLocaleLowerCase('pt-BR')
-          .replace(/\s*\(\d+\)\s*$/, '')
-          .replace(/\s+/g, ' ').trim();
+        // Serializa pela evidência mais estável disponível. Assim duas telas
+        // não criam cadastros paralelos para o mesmo telefone com grafias
+        // ligeiramente diferentes, sem unir homônimos de endereços distintos.
+        const normalizedPhone = normalizeCustomerPhone(details?.phone);
+        const normalizedAddress = normalizeCustomerAddress(details?.address);
+        const normalizedName = normalizeCustomerName(rawName);
+        const flightKey = normalizedPhone.length >= 10
+          ? `phone:${normalizedPhone}`
+          : `identity:${normalizedName}|${normalizedAddress}`;
         const pending = customerCreationFlights.get(flightKey);
         if (pending) {
           return pending.catch(() => '').then(() =>

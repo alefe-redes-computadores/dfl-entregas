@@ -1,4 +1,4 @@
-import type { ParsedIfoodOrder } from '@/lib/ifood-order-parser';
+import { findDetachedIfoodIdentifiers, type ParsedIfoodOrder } from '@/lib/ifood-order-parser';
 
 export type IfoodParseQuality = {
   complete: number;
@@ -75,10 +75,18 @@ export function buildIfoodParseGuide(text: string, order?: ParsedIfoodOrder): If
   const explicitOrder = raw.match(/(?:\bpedido|n[º°o.]?\s*(?:do\s+)?pedido|#)\s*[:#-]?\s*(\d+)(?!\d)/i)?.[1] || '';
   // Header-only: amounts, phones and street numbers must not become IDs.
   const pair = raw.match(/^\s*#?(\d{1,6})[ \t]+(\d+)[ \t]*$/m);
+  // V85: reconhecimento progressivo de pares em linhas separadas.
+  // Apenas linhas numéricas consecutivas são elegíveis sem rótulo.
+  const separated = raw.match(/(?:^|\n)\s*#?(\d{4}|\d{8})\s*\n\s*#?(\d{4}|\d{8})\s*(?=\n|$)/);
+  const separateOrder = separated && separated[1].length !== separated[2].length
+    ? (separated[1].length === 4 ? separated[1] : separated[2]) : '';
+  const separateId = separated && separated[1].length !== separated[2].length
+    ? (separated[1].length === 8 ? separated[1] : separated[2]) : '';
   const standalone = raw.trim().match(/^#?(\d{1,6})$/)?.[1] || '';
-  const orderDigits = order?.orderId || explicitOrder || pair?.[1] || standalone;
+  const detached = findDetachedIfoodIdentifiers(raw);
+  const orderDigits = order?.orderId || explicitOrder || pair?.[1] || separateOrder || detached?.orderId || standalone;
   const explicitId = raw.match(/\b(?:id\s*(?:ifood|do\s+ifood|do\s+pedido)?|ifood\s+id)\s*[:#-]?\s*(\d+)(?!\d)/i)?.[1] || pair?.[2] || '';
-  const idDigits = order?.ifoodId || explicitId;
+  const idDigits = order?.ifoodId || explicitId || separateId || detached?.ifoodId || '';
   const customerDraft = raw.match(/(?:cliente|nome)\s*:\s*([^\n]*)/i)?.[1]?.trim() || '';
   const hasAddressCue = /\b(?:rua|r\.|avenida|av\.|travessa|alameda)\b/i.test(raw);
   const hasPaymentCue = /\b(?:pago|pix|dinheiro|cart[aã]o|troco|maquininha)\b/i.test(raw);

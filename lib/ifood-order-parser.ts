@@ -67,6 +67,23 @@ function explicitIfoodHeader(line: string) {
   return null;
 }
 
+// V85: candidatos numéricos isolados e independentes, sem confundir dados de entrega.
+// Conservador: só aceita um par inequívoco por bloco e jamais força uma associação.
+export function findDetachedIfoodIdentifiers(raw: string) {
+  const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const blocked = /\b(?:cep|telefone|celular|whats?app|zap|troco|confirma[cç][aã]o|c[oó]digo|pix|total|rua|avenida|travessa|alameda|bairro|valor|r\$)\b/i;
+  const candidates = lines.flatMap((line, index) => {
+    if (blocked.test(line) || /https?:\/\//i.test(line)) return [];
+    const digits = line.match(/^#?(\d{4}|\d{8})$/)?.[1];
+    return digits ? [{ digits, index }] : [];
+  });
+  const orders = candidates.filter(item => item.digits.length === 4);
+  const ids = candidates.filter(item => item.digits.length === 8);
+  if (orders.length !== 1 || ids.length !== 1) return null;
+  if (Math.abs(orders[0].index - ids[0].index) > 8) return null;
+  return { orderId: orders[0].digits, ifoodId: ids[0].digits };
+}
+
 const MAP_HOST =
   /(?:google\.[^/]+\/(?:maps|url)|maps\.google\.[^/]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i;
 
@@ -667,6 +684,7 @@ export function parseIfoodOrderText(
   // depois do cabeçalho do pedido.
 
   // Primeira passada: IDs reservados e link do Maps.
+  const detachedIds = findDetachedIfoodIdentifiers(text);
   lines.forEach((line, index) => {
     const url = mapUrl(line);
 
@@ -678,6 +696,19 @@ export function parseIfoodOrderText(
       result.ifoodId ||= header.ifoodId;
       if (idLine < 0) idLine = index;
       return;
+    }
+
+    // V85: dois identificadores em linhas distintas, sem depender da ordem.
+    // Só aceitamos linhas inteiramente numéricas e adjacentes para não
+    // capturar telefone, CEP, valores ou número do endereço.
+    if (!result.orderId || !result.ifoodId) {
+      const current = line.trim().match(/^#?(\d{4}|\d{8})$/)?.[1];
+      const adjacent = lines[index + 1]?.trim().match(/^#?(\d{4}|\d{8})$/)?.[1];
+      if (current && adjacent && current.length !== adjacent.length) {
+        result.orderId ||= current.length === 4 ? current : adjacent;
+        result.ifoodId ||= current.length === 8 ? current : adjacent;
+        if (idLine < 0) idLine = index;
+      }
     }
 
     const explicitId = explicitIfoodId(line);
@@ -738,6 +769,11 @@ export function parseIfoodOrderText(
       }
     }
   });
+
+  if (detachedIds) {
+    result.orderId ||= detachedIds.orderId;
+    result.ifoodId ||= detachedIds.ifoodId;
+  }
 
   lines.forEach((original, index) => {
     const line = spaces(

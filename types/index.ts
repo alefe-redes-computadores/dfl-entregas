@@ -301,6 +301,8 @@ export interface Delivery {
   id: string;
   route_id: string;
   fulfillment_mode?: FulfillmentMode; // legado sem campo = delivery
+  /** Prontidão real da retirada; não equivale à conclusão. */
+  pickup_ready_at?: string | null;
   stop_group_id?: string;
   customer_charge?: number;
   ifood_subsidy?: number;

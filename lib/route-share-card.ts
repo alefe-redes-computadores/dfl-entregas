@@ -1,30 +1,130 @@
 import type { Delivery, Route } from '@/types';
-import { cleanAddressForMaps } from '@/lib/maps';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
 
 export type RouteShareCard = { dataUrl: string; usedRealMap: boolean };
 
 const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
-  const image = new Image(); image.crossOrigin = 'anonymous'; image.onload = () => resolve(image); image.onerror = reject; image.src = src;
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.onload = () => resolve(image);
+  image.onerror = () => reject(new Error('Mapa estático indisponível'));
+  image.src = src;
 });
 
-function staticMapUrl(origin: string, stops: Delivery[]) {
+// Nunca geocodificar endereços incompletos para produzir uma imagem que parece precisa.
+// Só utilizamos o mapa quando TODAS as paradas e a loja têm coordenadas explícitas.
+function coordinates(value: string): string | null {
+  const match = value.trim().match(/^(-?\d{1,2}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})$/);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? `${lat},${lng}` : null;
+}
+
+function staticMapUrl(origin: string, stops: Delivery[]): string {
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
-  if (!key || !stops.length) return '';
-  const locations = [origin, ...stops.map(item => cleanAddressForMaps(item.address_string))];
+  const points = [coordinates(origin), ...stops.map(stop => coordinates(stop.address_string || ''))];
+  if (!key || !stops.length || points.some(point => !point)) return '';
   const params = new URLSearchParams({ size: '640x640', scale: '2', maptype: 'roadmap', key });
-  params.append('markers', `color:0x22c55e|label:L|${locations[0]}`);
-  stops.slice(0, 20).forEach((item, index) => params.append('markers', `color:0x0ea5e9|label:${index < 9 ? index + 1 : String.fromCharCode(56 + index)}|${cleanAddressForMaps(item.address_string)}`));
-  params.append('path', `color:0x0ea5e9ff|weight:5|${locations.slice(0, 21).join('|')}`);
+  params.append('markers', `color:0x22c55e|label:L|${points[0]}`);
+  points.slice(1, 21).forEach((point, index) => params.append('markers', `color:0x0ea5e9|label:${index < 9 ? index + 1 : String.fromCharCode(56 + index)}|${point}`));
+  // Não desenhar linhas retas fingindo que representam ruas ou a rota percorrida.
   return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
 }
 
-function box(ctx: CanvasRenderingContext2D, x:number,y:number,w:number,h:number,r:number){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}
+function roundBox(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, color: string) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.fill();
+}
+
+function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let trimmed = text;
+  while (trimmed.length > 1 && ctx.measureText(`${trimmed}…`).width > maxWidth) trimmed = trimmed.slice(0, -1);
+  return `${trimmed}…`;
+}
 
 export async function buildRouteShareCard(route: Route, deliveries: Delivery[], storeAddress: string): Promise<RouteShareCard> {
-  const stops=groupDeliveriesByStop(deliveries).map(group=>group.representative);const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1350;const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas indisponível.');ctx.fillStyle='#09090b';ctx.fillRect(0,0,1080,1350);let usedRealMap=false;const url=staticMapUrl(storeAddress,stops);
-  if(url)try{const map=await loadImage(url);ctx.drawImage(map,0,0,1080,760);usedRealMap=true}catch{/* fallback sem rede/chave */}
-  if(!usedRealMap){ctx.fillStyle='#0c1820';ctx.fillRect(0,0,1080,760);ctx.strokeStyle='#183342';ctx.lineWidth=18;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(80,640);ctx.bezierCurveTo(280,510,250,170,500,260);ctx.bezierCurveTo(720,340,710,600,1000,130);ctx.stroke();stops.slice(0,12).forEach((_,index)=>{const x=145+(index%4)*250,y=590-Math.floor(index/4)*190;ctx.fillStyle='#38bdf8';ctx.beginPath();ctx.arc(x,y,32,0,Math.PI*2);ctx.fill();ctx.fillStyle='#082f49';ctx.font='900 28px Arial';ctx.textAlign='center';ctx.fillText(String(index+1),x,y+10);});}
-  const gradient=ctx.createLinearGradient(0,520,0,850);gradient.addColorStop(0,'rgba(9,9,11,0)');gradient.addColorStop(1,'#09090b');ctx.fillStyle=gradient;ctx.fillRect(0,520,1080,340);ctx.textAlign='left';ctx.fillStyle='#38bdf8';ctx.font='900 25px Arial';ctx.fillText('DFL ENTREGAS · ROTA COMPARTILHADA',64,720);ctx.fillStyle='#fafafa';ctx.font='900 58px Arial';ctx.fillText(route.name,64,792);ctx.fillStyle='#a1a1aa';ctx.font='700 28px Arial';ctx.fillText(`${route.motoboy_name} · ${deliveries.length} pedidos · ${stops.length} paradas`,64,838);
-  let y=900;stops.slice(0,6).forEach((item,index)=>{ctx.fillStyle='#18181b';box(ctx,48,y,984,58,18);ctx.fillStyle='#38bdf8';ctx.font='900 24px Arial';ctx.fillText(String(index+1).padStart(2,'0'),72,y+38);ctx.fillStyle='#e4e4e7';ctx.font='700 23px Arial';ctx.fillText((item.customer_name||item.address_string||'Parada').slice(0,58),128,y+38);y+=70;});if(stops.length>6){ctx.fillStyle='#71717a';ctx.font='700 22px Arial';ctx.fillText(`+ ${stops.length-6} paradas no link completo`,64,y+12);}ctx.fillStyle='#22c55e';ctx.font='900 24px Arial';ctx.fillText(usedRealMap?'MAPA REAL · SEQUÊNCIA NUMERADA':'PRÉVIA OFFLINE · LINK REAL NA MENSAGEM',64,1300);return{dataUrl:canvas.toDataURL('image/png',.92),usedRealMap};
+  const groups = groupDeliveriesByStop(deliveries);
+  const stops = groups.map(group => group.representative);
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1450;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas indisponível.');
+  ctx.fillStyle = '#09090b';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  let usedRealMap = false;
+  const url = staticMapUrl(storeAddress, stops);
+  if (url) {
+    try {
+      const map = await loadImage(url);
+      ctx.drawImage(map, 0, 0, 1080, 690);
+      usedRealMap = true;
+    } catch { /* Fallback operacional, nunca mapa fictício. */ }
+  }
+  if (!usedRealMap) {
+    roundBox(ctx, 48, 48, 984, 600, 36, '#111c24');
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = '900 27px Arial';
+    ctx.fillText('SEQUÊNCIA OPERACIONAL', 90, 120);
+    ctx.fillStyle = '#f4f4f5';
+    ctx.font = '900 56px Arial';
+    ctx.fillText(`${stops.length} paradas`, 90, 205);
+    ctx.fillStyle = '#a1a1aa';
+    ctx.font = '600 28px Arial';
+    ctx.fillText('Não é um mapa geográfico.', 90, 265);
+    ctx.fillText('Abra o link enviado para navegar nas ruas.', 90, 312);
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(105, 352); ctx.lineTo(975, 352); ctx.stroke();
+    ctx.fillStyle = '#e4e4e7';
+    ctx.font = '700 29px Arial';
+    ctx.fillText('Loja  →  Paradas na ordem cadastrada', 90, 415);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '600 26px Arial';
+    ctx.fillText('Posições ilustrativas não são utilizadas.', 90, 485);
+  }
+  const overlay = ctx.createLinearGradient(0, 575, 0, 800);
+  overlay.addColorStop(0, 'rgba(9,9,11,0)');
+  overlay.addColorStop(1, '#09090b');
+  ctx.fillStyle = overlay;
+  ctx.fillRect(0, 575, 1080, 225);
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = '900 25px Arial';
+  ctx.fillText('DFL ENTREGAS  ·  ROTA COMPLETA', 64, 750);
+  ctx.fillStyle = '#fafafa';
+  ctx.font = '900 52px Arial';
+  ctx.fillText(fitText(ctx, route.name, 952), 64, 817);
+  ctx.fillStyle = '#a1a1aa';
+  ctx.font = '700 27px Arial';
+  ctx.fillText(fitText(ctx, `${route.motoboy_name}  ·  ${deliveries.length} pedidos  ·  ${stops.length} paradas`, 952), 64, 863);
+  const paid = deliveries.filter(item => item.is_paid).length;
+  const pendingCodes = deliveries.filter(item => item.origin === 'ifood' && !item.confirmation_code).length;
+  roundBox(ctx, 48, 893, 984, 90, 20, '#17212b');
+  ctx.font = '700 26px Arial';
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillText(`${paid} pagos  ·  ${deliveries.length - paid} a conferir  ·  ${pendingCodes} códigos pendentes`, 78, 949);
+  let y = 1015;
+  stops.slice(0, 5).forEach((item, index) => {
+    roundBox(ctx, 48, y, 984, 61, 15, '#18181b');
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = '900 24px Arial';
+    ctx.fillText(String(index + 1).padStart(2, '0'), 72, y + 40);
+    ctx.fillStyle = '#e4e4e7';
+    ctx.font = '700 23px Arial';
+    ctx.fillText(fitText(ctx, item.customer_name || item.address_string || 'Parada', 850), 135, y + 40);
+    y += 75;
+  });
+  if (stops.length > 5) {
+    ctx.fillStyle = '#a1a1aa';
+    ctx.font = '700 23px Arial';
+    ctx.fillText(`+ ${stops.length - 5} paradas na mensagem e no link`, 64, 1410);
+  }
+  ctx.fillStyle = '#22c55e';
+  ctx.font = '900 22px Arial';
+  ctx.fillText(usedRealMap ? 'MAPA COM COORDENADAS EXPLÍCITAS' : 'SEM MAPA VALIDADO · LINK DE NAVEGAÇÃO NA MENSAGEM', 64, 1437);
+  return { dataUrl: canvas.toDataURL('image/png', 0.9), usedRealMap };
 }

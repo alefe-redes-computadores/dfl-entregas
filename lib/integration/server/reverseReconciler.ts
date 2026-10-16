@@ -105,6 +105,8 @@ function eventOccurredAt(
     );
   }
 
+  if (type === 'delivery.pickup_ready') return str(delivery.pickup_ready_at) || occurredAt(delivery, route);
+
   if (type === 'delivery.completed') {
     return str(delivery.completed_at) || occurredAt(delivery, route);
   }
@@ -132,7 +134,12 @@ function eventOccurredAt(
 
 function eventTypes(delivery: Raw, route: Raw | undefined, pendingIndex: number, pendingStops: number, totalStops: number) {
   if (str(delivery.source_system) === 'dfl_site' && /cancel/i.test(str(delivery.site_order_status))) return [] as const;
-  if (bool(delivery.completed)) return ['delivery.completed'] as const;
+  if (bool(delivery.completed)) {
+    return routeClosed(route)
+      ? ['delivery.completed', 'route.completed'] as const
+      : ['delivery.completed'] as const;
+  }
+  if (str(delivery.fulfillment_mode) === 'pickup') return str(delivery.pickup_ready_at) ? ['delivery.pickup_ready'] as const : [] as const;
   if (routeClosed(route)) return ['route.completed'] as const;
 
   // Estar apenas alocado em uma rota NÃO significa estar na rua.
@@ -352,7 +359,9 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
       // delivery.out_for_delivery representa a SAÍDA da rota, não cada
       // alteração posterior de posição. Sua identidade precisa permanecer
       // estável enquanto a rota estiver na rua para não gerar WhatsApp repetido.
-      const identity = type === 'delivery.out_for_delivery'
+      const identity = type === 'delivery.pickup_ready'
+        ? { type, deliveryId: item.id, readyAt: str(item.data.pickup_ready_at) }
+        : type === 'delivery.out_for_delivery'
         ? {
             type,
             deliveryId: item.id,
@@ -419,7 +428,7 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
     await batch.commit();
   }
 
-  if (maintenanceDue || analyticsEnabled) {
+  if (maintenanceDue || analyticsItems.length > 0) {
     const newestCompletedCursor = recentCompletedDocs.reduce((latest, doc) => {
       const value = str((doc.data() as Raw).updated_at).trim();
       return value > latest ? value : latest;

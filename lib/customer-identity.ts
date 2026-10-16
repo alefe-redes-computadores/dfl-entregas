@@ -316,12 +316,26 @@ export function customerIdentityEvidence(
    * - nome igual permite enriquecer um cadastro realmente
    *   incompleto, desde que não exista identidade contraditória.
    */
-  // V61: nunca reutilizar apenas por nome semelhante ou telefone.
+  const compatibleName =
+    exactName || similarity >= 0.72;
+
+  /*
+   * O telefone confirmado pode unir uma variação pequena de nome, mas
+   * nunca vence um endereço conhecido diferente. Já o nome exato pode
+   * enriquecer um cadastro antigo incompleto sem criar um "Nome (2)".
+   */
   const reusable =
     !addressConflict &&
-    exactName &&
-    sameAddress &&
-    !phoneConflict;
+    !phoneConflict &&
+    (
+      (sameAddress && compatibleName) ||
+      (samePhone && compatibleName) ||
+      (
+        exactName &&
+        incomingHasIdentity &&
+        storedMissingIncomingIdentity
+      )
+    );
 
   return {
     score: Math.max(0, Math.min(100, score)),

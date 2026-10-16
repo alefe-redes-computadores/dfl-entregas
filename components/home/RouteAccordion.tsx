@@ -15,7 +15,6 @@ import {
   Copy,
   Crosshair,
   MapPinned,
-  Image as ImageIcon,
   MessageCircle,
   Navigation,
   RotateCcw,
@@ -526,26 +525,45 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     setIsCopyMenuOpen(false);
   };
 
-  const shareRouteCard = async () => {
+  const shareRouteCard = async (mode: 'full' | 'checklist' = 'full') => {
     if (routeCardBusy) return;
     setRouteCardBusy(true);
     try {
       const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-      const message = (await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute())).messages[0];
+      const generated = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute());
+      const message = mode === 'checklist' ? (generated.messages[1] || '') : [generated.messages[0], generated.messages[1]].filter(Boolean).join('\n\n');
+      if (mode === 'full' && generated.hasFuzzyAddresses) {
+        toast.error('Confira os endereços incompletos antes de compartilhar.', { description: 'Use o texto da rota para revisar os endereços e o link de navegação.' });
+        await navigator.clipboard.writeText(message);
+        setIsCopyMenuOpen(false);
+        return;
+      }
       const card = await buildRouteShareCard(route, pendingDeliveries, storeAddr);
       const filename = `rota-${route.id}-${Date.now()}.png`;
       if (Capacitor.isNativePlatform()) {
-        const saved = await Filesystem.writeFile({ path:`dfl-rotas/${filename}`, data:card.dataUrl.split(',')[1], directory:Directory.Cache, recursive:true });
-        await Share.share({ title:`${route.name} · ${route.motoboy_name}`, text:message, files:[saved.uri], dialogTitle:'Compartilhar rota com imagem' });
+        const saved = await Filesystem.writeFile({ path: `dfl-rotas/${filename}`, data: card.dataUrl.split(',')[1], directory: Directory.Cache, recursive: true });
+        await Share.share({ title: `${route.name} · ${route.motoboy_name}`, text: message, files: [saved.uri], dialogTitle: mode === 'checklist' ? 'Compartilhar checklist com imagem' : 'Compartilhar rota completa' });
       } else {
-        const blob=await (await fetch(card.dataUrl)).blob(); const file=new File([blob],filename,{type:'image/png'});
-        if(navigator.share&&navigator.canShare?.({files:[file]})) await navigator.share({title:route.name,text:message,files:[file]});
-        else { const link=document.createElement('a');link.href=card.dataUrl;link.download=filename;link.click();await navigator.clipboard.writeText(message); }
+        const blob = await (await fetch(card.dataUrl)).blob();
+        const file = new File([blob], filename, { type: 'image/png' });
+        if (navigator.share && navigator.canShare?.({ files: [file] })) await navigator.share({ title: route.name, text: message, files: [file] });
+        else {
+          const link = document.createElement('a');
+          link.href = card.dataUrl;
+          link.download = filename;
+          link.click();
+          await navigator.clipboard.writeText(message);
+          toast.success('Imagem salva e mensagem copiada.');
+        }
       }
-      toast.success('Card da rota pronto.',{description:card.usedRealMap?'Mapa real e paradas numeradas incluídos.':'Prévia offline criada; o link real segue na mensagem.'});
+      toast.success(mode === 'checklist' ? 'Checklist e imagem preparados.' : 'Rota completa preparada.', { description: card.usedRealMap ? 'Mapa real e sequência operacional.' : 'Sequência operacional, sem mapa fictício.' });
       setIsCopyMenuOpen(false);
-    } catch(error) { console.error('[ROUTE CARD]',error); toast.error('Não foi possível gerar a imagem.',{description:'Você ainda pode copiar a rota em texto.'}); }
-    finally { setRouteCardBusy(false); }
+    } catch (error) {
+      console.error('[ROUTE CARD]', error);
+      toast.error('Imagem indisponível. Copie a rota em texto.');
+    } finally {
+      setRouteCardBusy(false);
+    }
   };
 
   const getCurrentOrigin = async (): Promise<{ point: LatLngPoint | null; label: string }> => {
@@ -760,7 +778,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   return (
-    <div className={clsx("overflow-hidden rounded-[20px] border transition-all duration-200 relative", isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : isInProgress ? "bg-sky-900/10 border-sky-500/30" : "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]")}>
+    <div className={clsx("overflow-hidden rounded-[20px] border transition-all duration-200 relative", isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : isInProgress ? "bg-zinc-900/70 border-zinc-600/70" : "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]")}>
       {totalDeliveries > 0 && !isCompleted && (
         <div className="absolute top-0 left-0 h-1 bg-zinc-800 w-full">
           <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
@@ -814,10 +832,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
       {!isVirtualRoute && routePreviewStops.length > 0 && (
         <div className="px-3 pb-3" aria-label="Prévia da sequência da rota">
-          <div className={`rounded-2xl border px-3 py-2.5 ${isInProgress?'border-sky-500/20 bg-sky-500/[.045]':'border-zinc-800 bg-zinc-950/40'}`}>
-            <div className="mb-2 flex items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[.12em] text-sky-300"><MapPinned size={12}/> Sequência da rota</span><span className="text-[8px] font-bold text-zinc-600">{routePreviewStops.length} parada{routePreviewStops.length===1?'':'s'} pendente{routePreviewStops.length===1?'':'s'}</span></div>
-            <div className="flex min-w-0 items-start overflow-hidden">{routePreviewStops.slice(0,isOpen?6:4).map((stop,index)=><div key={`${stop.number}-${stop.customer}`} className="flex min-w-0 flex-1 items-start"><div className="min-w-0 flex-1 text-center"><span className={`mx-auto grid h-7 w-7 place-items-center rounded-full border text-[9px] font-black ${index===0&&isInProgress?'border-sky-400 bg-sky-500 text-zinc-950':'border-sky-500/30 bg-sky-500/10 text-sky-300'}`}>{stop.number}</span>{isOpen&&<><p className="mt-1 truncate text-[8px] font-bold text-zinc-300">{stop.customer}</p><p className="truncate text-[7px] text-zinc-600">{stop.place}{stop.grouped>1?` · ${stop.grouped} pedidos`:''}</p></>}</div>{index<Math.min(routePreviewStops.length,isOpen?6:4)-1&&<span className="mt-3 h-px w-3 shrink-0 bg-sky-500/25"/>}</div>)}</div>
-            {routePreviewStops.length>(isOpen?6:4)&&<p className="mt-2 text-center text-[8px] font-bold text-zinc-600">+ {routePreviewStops.length-(isOpen?6:4)} paradas na sequência completa</p>}
+          <div className={`rounded-2xl border px-3 py-2.5 ${isInProgress?'border-amber-500/25 bg-amber-500/[.04]':'border-zinc-800 bg-zinc-950/40'}`}>
+            <div className="mb-2 flex items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[.12em] text-sky-300"><MapPinned size={12}/> Sequência da rota</span><span className="text-[10px] font-bold text-zinc-400">{routePreviewStops.length} parada{routePreviewStops.length===1?'':'s'} pendente{routePreviewStops.length===1?'':'s'}</span></div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{routePreviewStops.slice(0,isOpen?6:4).map((stop,index)=><div key={`${stop.number}-${stop.customer}`} className={`flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 ${index===0&&isInProgress?'border-amber-500/40 bg-amber-500/10':'border-zinc-700/70 bg-zinc-950/60'}`}><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-black ${index===0&&isInProgress?'bg-amber-400 text-zinc-950':'bg-zinc-800 text-zinc-100'}`}>{stop.number}</span><div className="min-w-0 flex-1"><p className="truncate text-[12px] font-bold text-zinc-100">{stop.customer}</p><p className="truncate text-[11px] font-medium text-zinc-300">{stop.place}{stop.grouped>1?` · ${stop.grouped} pedidos`:''}</p></div>{index===0&&isInProgress&&<span className="shrink-0 text-[9px] font-black uppercase text-amber-300">Próxima</span>}</div>)}</div>
+            {routePreviewStops.length>(isOpen?6:3)&&<p className="mt-2 text-center text-[10px] font-bold text-zinc-400">+ {routePreviewStops.length-(isOpen?6:3)} paradas na sequência completa</p>}
           </div>
         </div>
       )}
@@ -1183,7 +1201,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                           ) : (
                             <>
                               <span className="block text-[9px] font-black text-emerald-400">{legDistance ? `~${legDistance} do ponto anterior` : 'Ponto localizado'}</span>
-                              {storeDistance && <span className="mt-0.5 block text-[8px] font-bold text-zinc-600">~{storeDistance} em linha reta da loja</span>}
+                              {storeDistance && <span className="mt-0.5 block text-[10px] font-bold text-zinc-400">~{storeDistance} em linha reta da loja</span>}
                             </>
                           )}
                           {changed && (
@@ -1232,18 +1250,19 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
              </div>
 
              <div className="flex flex-col gap-2.5">
-                <button disabled={routeCardBusy} onClick={shareRouteCard} className="flex items-center gap-3 rounded-2xl border border-violet-500/20 bg-violet-500/[.055] p-4 text-left transition active:scale-[.985] disabled:opacity-50">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-violet-500/15 text-violet-300"><ImageIcon size={20}/></div>
-                  <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">{routeCardBusy?'Gerando mapa…':'Imagem da rota'}</span><span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Mapa com paradas numeradas + mensagem e link navegável.</span></div>
+                <button disabled={routeCardBusy} onClick={() => void shareRouteCard('full')} className="flex items-center gap-3 rounded-2xl border border-violet-500/20 bg-violet-500/[.055] p-4 text-left transition active:scale-[.985] disabled:opacity-50">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-violet-500/15 text-violet-300"><MapPinned size={20}/></div>
+                  <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">{routeCardBusy ? 'Preparando rota…' : 'Rota completa'}</span><span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Imagem confiável + rota, contatos e checklist. Sem mapa fictício.</span></div>
                 </button>
                 <button onClick={() => handleCopyMessage(1)} className="flex items-center gap-3 rounded-2xl border border-sky-500/20 bg-sky-500/[.055] p-4 text-left transition active:scale-[.985]">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-400"><MapPinned size={20}/></div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-black text-zinc-100">Rota e contatos</span>
-                    <span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Paradas, endereços, pedidos, contatos e link do mapa.</span>
-                  </div>
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-400"><Copy size={20}/></div>
+                  <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">Copiar texto da rota</span><span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Alternativa para pesquisar e encaminhar sem imagem.</span></div>
                 </button>
 
+                <button disabled={routeCardBusy} onClick={() => void shareRouteCard('checklist')} className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[.085] p-4 text-left transition active:scale-[.985] disabled:opacity-50">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-300"><ClipboardCheck size={20}/></div>
+                  <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">Compartilhar conferência + imagem</span><span className="mt-1 text-[11px] font-medium leading-relaxed text-zinc-300">Segunda mensagem: bebidas, códigos e checklist com imagem operacional.</span></div>
+                </button>
                 <button onClick={() => handleCopyMessage(2)} className="flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[.055] p-4 text-left transition active:scale-[.985]">
                   <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-400"><ClipboardCheck size={20}/></div>
                   <div className="flex flex-col">
