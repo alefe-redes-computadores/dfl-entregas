@@ -50,7 +50,7 @@ import {
   siteStatusLabel,
 } from '@/lib/delivery-presentation';
 import { siteIntegrationStages } from '@/lib/site-integration-health';
-import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { canMarkSitePickupReady, isCancelledSiteDelivery } from '@/lib/integration/site-order';
 
 const money = (value = 0) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -241,7 +241,7 @@ function DeliveryDetailsContent() {
   };
 
   const markPickupReady = async () => {
-    if (mode !== 'pickup' || delivery.completed || cancelled || delivery.pickup_ready_at || isMarkingReady) return;
+    if (!canMarkSitePickupReady(delivery) || isMarkingReady) return;
     setIsMarkingReady(true);
     try {
       await updateDelivery(delivery.id, { pickup_ready_at: new Date().toISOString() });
@@ -595,7 +595,7 @@ function DeliveryDetailsContent() {
           )}
         </div>
 
-        {mode === 'pickup' && !delivery.completed && !cancelled && (
+        {delivery.source_system === 'dfl_site' && mode === 'pickup' && !delivery.completed && !cancelled && (
           <button type="button" onClick={markPickupReady}
             disabled={isMarkingReady || Boolean(delivery.pickup_ready_at)}
             className="mb-3 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/40 bg-amber-400/15 px-4 font-black text-amber-200 disabled:opacity-65">

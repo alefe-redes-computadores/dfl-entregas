@@ -1,0 +1,13 @@
+const fs=require('fs'); const assert=require('assert');
+const stock=fs.readFileSync('app/estoque/page.tsx','utf8');
+const shop=fs.readFileSync('app/estoque/compras/page.tsx','utf8');
+const picker=fs.readFileSync('components/stock-supplies/StockProductPicker.tsx','utf8');
+const search=fs.readFileSync('lib/stock-search.ts','utf8');
+for(const key of ['rankStockProducts','setShowOnlySelected','hiddenSelectedCount','aria-label="Buscar produto para comprar"','if (busy || !chosen.length) return']) assert(shop.includes(key),`Compras: ${key}`);
+assert(shop.includes('committedStockQuantityMap'), 'Compras abertas abatidas do cálculo');
+assert(shop.includes('normalizeTypedPurchaseQuantity'), 'Unidade comercial normalizada');
+assert(picker.includes('rankStockProducts(products, query)'), 'Busca unificada com estoque');
+assert(picker.includes('preferredRank'), 'Histórico por fornecedor preservado');
+assert(search.includes('normalizeStockSearch'), 'Busca sem acentos preservada');
+for(const key of ['Zerados','Reposições sugeridas','Compras abertas']) assert(stock.includes(key),`Painel: ${key}`);
+console.log('V89.3: 12 contratos de UX/compra/integração aprovados');

@@ -300,6 +300,8 @@ function Content() {
 
         product_id: product.id,
 
+        expected_balance: product.current_quantity,
+
         product_name:
           product.name,
 

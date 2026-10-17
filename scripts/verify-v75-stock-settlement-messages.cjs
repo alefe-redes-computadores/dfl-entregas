@@ -28,5 +28,5 @@ ok(page.includes('Quanto voltou fisicamente para a loja?')&&page.includes('settl
 ok(page.includes('Pix enviado ao motoboy deve ser lançado como Adiantamento'),'Pix separado do retorno físico');
 ok(whatsapp.includes("item.origin === 'ifood' && item.ifood_id")&&whatsapp.includes('PEDIR O CÓDIGO DE 4 DÍGITOS'),'mensagem agrupada prioriza ID e código');
 ok(!whatsapp.includes("const equation = groupedOrders.map")&&!whatsapp.includes("const equation=groupedDeliveries.map"),'equações repetitivas removidas');
-ok(whatsapp.includes('Total da parada a cobrar')&&whatsapp.includes("filter(item => !item.is_paid)"),'valor só aparece quando existe cobrança');
+ok(whatsapp.includes('Total da parada a cobrar')&&whatsapp.includes("filter(item=>!deliveryPaid(item))")||whatsapp.includes("filter(item => !deliveryPaid(item))"),'valor só aparece quando existe cobrança');
 console.log('\nV75 ESTOQUE + ACERTO + MENSAGENS: CONTRATOS OK');

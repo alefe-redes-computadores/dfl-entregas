@@ -1,0 +1,13 @@
+const fs = require('fs');
+const assert = require('assert');
+const page = fs.readFileSync('app/loja/page.tsx', 'utf8');
+assert(page.includes('const touchFeedback = (style: ImpactStyle): void =>'), 'feedback nao bloqueante ausente');
+assert(page.includes('void Haptics.impact({ style }).catch(() => undefined)'), 'falha tatil deve ser absorvida');
+assert(page.includes('if (toggleInFlight.current || settingsInFlight.current) return;'), 'toggle precisa evitar concorrencia');
+assert(page.includes('if (settingsInFlight.current || toggleInFlight.current) return;'), 'save precisa evitar concorrencia');
+assert(page.includes('toggleInFlight.current = false;') && page.includes('settingsInFlight.current = false;'), 'travas precisam liberar em finally');
+assert(page.includes('disabled={storeToggleBusy || storeSettingsBusy}'), 'botao loja precisa bloquear durante persistencia');
+assert(page.includes('disabled={storeSettingsBusy || storeToggleBusy}'), 'botao salvar precisa bloquear durante persistencia');
+assert(!/void touchFeedback\([^)]*\)\.catch/.test(page), 'feedback void nao retorna promise');
+assert.strictEqual((page.match(/Haptics\.impact\(/g)||[]).length,1,'chamadas tateis devem passar pelo adaptador');
+console.log('V100: feedback tatil, concorrencia e configuracoes — 9 contratos OK');

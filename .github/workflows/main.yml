@@ -5,9 +5,17 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: dfl-entregas-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Clonar Repositório
         uses: actions/checkout@v4
@@ -93,6 +101,16 @@ jobs:
           npx cap add android
           npx cap sync android
           npx cap doctor android || true
+
+      # Garantir permissão de GPS no Manifest do APK recriado a cada build.
+      # No Android 12+, COARSE e FINE precisam constar para localização precisa.
+      - name: Corrigir permissões nativas de localização
+        shell: bash
+        run: |
+          node scripts/patch-android-location-permissions.mjs
+          grep -F 'android.permission.ACCESS_FINE_LOCATION' android/app/src/main/AndroidManifest.xml
+          grep -F 'android.permission.ACCESS_COARSE_LOCATION' android/app/src/main/AndroidManifest.xml
+          grep -F 'android.hardware.location.gps' android/app/src/main/AndroidManifest.xml
 
       # O Android é recriado acima em todo build.
       # Portanto este patch PRECISA acontecer depois do último cap sync
@@ -286,4 +304,4 @@ jobs:
           name: DFL-Entregas-${{ github.run_number }}-${{ github.sha }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14

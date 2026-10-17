@@ -6,6 +6,10 @@ import {
   Bike,
   Home,
   PackagePlus,
+  Boxes,
+  ShoppingCart,
+  ReceiptText,
+  ClipboardList,
   Plus,
   Store,
   UserPlus,
@@ -26,7 +30,7 @@ const NAV_ITEMS = [
 
 type AddMode =
   | { kind: 'direct'; href: string; label: string }
-  | { kind: 'sheet'; label: string; options: Array<{ href: string; label: string; description: string; icon: typeof Plus; tone: 'sky' | 'emerald' | 'violet' }> }
+  | { kind: 'sheet'; label: string; options: Array<{ href: string; label: string; description: string; icon: typeof Plus; tone: 'sky' | 'emerald' | 'violet' | 'amber' }> }
   | null;
 
 export function BottomNav() {
@@ -43,8 +47,12 @@ export function BottomNav() {
   }, []);
 
   const addMode: AddMode =
-    pathname === '/estoque'
-      ? { kind: 'direct', href: '/estoque/novo', label: 'Novo produto' }
+    (pathname === '/estoque' || pathname.startsWith('/estoque/compras') || pathname.startsWith('/estoque/catalogo'))
+      ? { kind: 'sheet', label: 'Estoque e compras', options: [
+          { href: '/estoque/novo', label: 'Novo produto', description: 'Cadastrar produto e apresentações', icon: Boxes, tone: 'emerald' },
+          { href: '/estoque/compras', label: 'Montar compra', description: 'Planejar e registrar compras', icon: ShoppingCart, tone: 'amber' },
+          { href: '/estoque/contagem', label: 'Contagem física', description: 'Conferir o saldo do estoque', icon: ClipboardList, tone: 'sky' },
+        ] }
       : pathname === '/abastecimentos'
         ? { kind: 'direct', href: '/abastecimentos/novo', label: 'Nova compra' }
         : pathname === '/entregas'
@@ -105,6 +113,8 @@ export function BottomNav() {
                                 icon: PackagePlus,
                                 tone: 'emerald',
                               },
+                              { href: '/estoque/compras', label: 'Montar compra', description: 'Comprar e conferir produtos', icon: ShoppingCart, tone: 'amber' },
+                              { href: '/despesas/novo', label: 'Nova despesa', description: 'Registrar gasto da operação', icon: ReceiptText, tone: 'violet' },
                             ],
                           }
                         : null;
@@ -196,7 +206,9 @@ export function BottomNav() {
                   ? 'border-sky-500/20 bg-sky-500/[.055] text-sky-400'
                   : option.tone === 'emerald'
                     ? 'border-emerald-500/20 bg-emerald-500/[.055] text-emerald-400'
-                    : 'border-violet-500/20 bg-violet-500/[.055] text-violet-400';
+                    : option.tone === 'amber'
+                      ? 'border-amber-500/20 bg-amber-500/[.055] text-amber-400'
+                      : 'border-violet-500/20 bg-violet-500/[.055] text-violet-400';
                 return (
                   <button
                     key={option.href}

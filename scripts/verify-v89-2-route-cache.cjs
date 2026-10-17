@@ -1,0 +1,13 @@
+const fs=require('fs');
+const source=fs.readFileSync('components/home/RouteAccordion.tsx','utf8');
+const cache=fs.readFileSync('lib/route-card-revision.ts','utf8');
+const check=(ok,msg)=>{if(!ok)throw new Error(msg);console.log('OK:',msg)};
+check(cache.includes('WeakMap<Delivery[], Map<string, string>>'),'index cache uses weak snapshot keys');
+check(cache.includes('for (const item of deliveries)'),'single pass creates the per-route revision index');
+check(source.includes('indexedRouteDeliveryRevision(state.deliveries, route.id)'),'route reads one indexed revision');
+check(!source.includes('state.deliveries\n      .filter'),'old per-card full-list selector removed');
+check(source.includes('const { totalDeliveries, pendingDeliveriesCount')&&source.includes('}, [deliveries]);'),'route summary memoized');
+check(source.includes('const departureChecklist = useMemo('),'checklist memoized');
+check(source.includes('const clientsWithPhone = useMemo('),'phone list memoized');
+check(!cache.includes('firebase')&&!cache.includes('firestore'),'no additional Firebase reads');
+console.log('V89.2 ROUTE CACHE: CONTRACTS OK');

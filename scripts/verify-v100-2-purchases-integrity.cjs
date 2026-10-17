@@ -1,0 +1,32 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const read = file => fs.readFileSync(file, 'utf8');
+const form = read('components/stock-supplies/StockSupplyForm.tsx');
+const create = read('app/abastecimentos/novo/page.tsx');
+const edit = read('app/abastecimentos/editar/page.tsx');
+const shop = read('components/stock-supplies/ShoppingSession.tsx');
+assert.match(form,/submitInFlight\.current\) return;/,'compra trava duplo envio');
+assert.match(form,/submitInFlight\.current = true;/);
+assert.match(form,/finally\s*\{\s*submitInFlight\.current = false;/);
+assert.match(form,/await onSubmit\(\{/);
+assert(form.indexOf('await onSubmit({') < form.indexOf('removeStockSupplyDraft(draftKey);',form.indexOf('await onSubmit({')), 'rascunho só removido após sucesso');
+assert.match(form,/writeStockSupplyDraft\(draftKey, formDraft\)/);
+assert.match(form,/disabled=\{busy \|\| submitting\}/);
+for(const [name,page] of [['nova',create],['editar',edit]]) {
+  assert(page.indexOf('await operation;') < page.indexOf('router.replace(',page.indexOf('await operation;')), `${name}: navegação só após servidor confirmar`);
+  assert.match(page,/throw error;/, `${name}: falha deve ser propagada ao formulário`);
+}
+assert.match(shop,/function defaultUnitPrice\(item: StockSupplyItem\)/);
+assert.match(shop,/total \/ quantity/,'preço total nunca usado como unitário');
+assert.match(shop,/useState<Draft>\(\(\) => emptyDraft\(supply.items\)\)/,'hidratação SSR segura');
+assert.match(shop,/setDraft\(readDraft\(supply.id, supply.items\)\)/,'leitura local pós-hidratação');
+assert.match(shop,/const safePrices: Record<string, string> = \{ \.\.\.base\.prices \};/,'preços do rascunho mantêm tipo string');
+assert.match(shop,/const candidate = prices\[item\.id\]/,'valor externo restrito a leitura local');
+assert.match(shop,/typeof candidate === 'string' && candidate\.length <= 64/,'validação ocorre após restringir unknown');
+assert.match(shop,/prices: safePrices/,'retorno tipado sem unknown');
+assert.match(shop,/hydratedId !== supply.id \|\| finishing/,'não sobrescrever outro rascunho');
+assert.match(shop,/finishInFlight.current = true/,'não duplicar recebimento');
+assert.match(shop,/completedSessionRef\.current === supply\.id/,'não restaurar rascunho após recebimento confirmado');
+assert.match(shop,/completedSessionRef\.current = supply\.id/);
+assert(shop.indexOf('await onFinish(items);') < shop.indexOf('window.localStorage.removeItem(storageKey(supply.id))'), 'rascunho local só excluído após compra confirmada');
+console.log('V100.2: compra, rascunho, preço unitário e hidratação — 20 contratos OK');

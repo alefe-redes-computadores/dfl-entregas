@@ -82,10 +82,9 @@ function Content() {
   }
 
   const save = async (value: StockSupplyFormValue) => {
-    if (busy) return;
+    if (busy) throw new Error('Compra já está sendo salva.');
 
     setBusy(true);
-    void feedbackSuccess();
 
     try {
       const operation = updateStockSupply(
@@ -98,11 +97,12 @@ function Content() {
         { id: 'purchase-save' },
       );
 
+      await operation;
+      void feedbackSuccess();
+
       router.replace(
         `/abastecimentos/detalhes?id=${supply.id}`,
       );
-
-      await operation;
 
       toast.success('Compra sincronizada.', {
         id: 'purchase-save',
@@ -121,6 +121,7 @@ function Content() {
           : 'Não foi possível salvar a compra.',
         { id: 'purchase-save' },
       );
+      throw error;
     } finally {
       setBusy(false);
     }

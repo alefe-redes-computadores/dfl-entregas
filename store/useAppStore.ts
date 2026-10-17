@@ -21,15 +21,18 @@ import {
   scheduleStockSupplyCheckReminder,
   type NotificationPreferences,
 } from '@/lib/native/notifications';
-import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, StockSupplier, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation, OperationalExpense, MotoboySettlementCategory } from '@/types';
+import type { Route, Delivery, Customer, OrderOrigin, Motoboy, Fueling, StockSupply, StockSupplier, TeamMember, StockProduct, StockMovement, DaySchedule, StorePause, HolidayOverride, IfoodPendingConfirmation, OperationalExpense, MotoboySettlementCategory, MotoboyAdjustment } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
   dateKey,
   deliveryDate,
   isSyntheticOperationalRoute,
   routeDate,
+  routeOperationalDateKey,
   routeStartedAt,
 } from '@/lib/operational-time';
+import { isClosedSettlement, settlementDocumentId } from '@/lib/motoboy-settlement-authority';
+import { reconcileIfoodConfirmation } from '@/lib/ifood-confirmation-authority';
 import { fuelingDate } from '@/lib/fueling-analytics';
 import { INITIAL_STOCK_PRODUCTS, INITIAL_STOCK_SUPPLIERS, STOCK_CATALOG_VERSION } from '@/lib/stock-catalog';
 import {
@@ -43,6 +46,7 @@ import {
 } from '@/lib/customer-identity';
 import { stockProductCategory, suggestStockCategory } from '@/lib/stock-categories';
 import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop, moveStopToIndex, stopDeliveryIds } from '@/lib/route-stops';
+import { validOriginPoint } from '@/lib/store-origin';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingConfirmation, isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
@@ -55,6 +59,13 @@ import {
   stockExitExceeds,
 } from '@/lib/stock-precision';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { groupStockSupplyItems, planStockSupplyLedger } from '@/lib/stock-supply-ledger';
+import { planStockMovement, planStockCount, type StockCountInput } from '@/lib/stock-mutation-plan';
+
+const stockWriteConnectionError = (error: unknown) => {
+  const code = String((error as { code?: unknown } | null)?.code || '');
+  return /unavailable|deadline-exceeded|failed-precondition/.test(code);
+};
 
 const routeCreateLocks = new Set<string>();
 const deliveryMutationLocks = new Set<string>();
@@ -88,9 +99,8 @@ async function autoOrganizeLoadedRouteAfterInsert(
   const groups = groupDeliveriesByStop(items);
   if (groups.length < 2) return;
 
-  const lat = Number(settings.storeLatitude);
-  const lng = Number(settings.storeLongitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  const origin = validOriginPoint(settings.storeLatitude, settings.storeLongitude);
+  if (!origin) return;
 
   const lockedAt = new Map<number, (typeof groups)[number]>();
   const freeGroups: typeof groups = [];
@@ -111,7 +121,7 @@ async function autoOrganizeLoadedRouteAfterInsert(
   });
   if (freeStops.filter((stop) => Boolean(stop.point)).length < 2) return;
 
-  const smartFree = buildSmartRouteOrder({ lat, lng }, freeStops);
+  const smartFree = buildSmartRouteOrder(origin, freeStops);
   const smartByKey = new Map(
     smartFree.map((stop) => [deliveryStopKey(stop.delivery), freeGroups.find((group) => group.key === deliveryStopKey(stop.delivery))!]),
   );
@@ -155,6 +165,7 @@ interface AppState {
   stockMovements: StockMovement[];
   ifoodPendingConfirmations: IfoodPendingConfirmation[];
   operationalExpenses: OperationalExpense[];
+  motoboyAdjustments: MotoboyAdjustment[];
   selectedDate: Date;
   isSyncing: boolean;
   syncError: boolean;
@@ -240,11 +251,14 @@ interface AppState {
   addStockProduct: (product: StockProduct) => Promise<void>;
   updateStockProduct: (id: string, data: Partial<StockProduct>) => Promise<void>;
   cleanupDuplicateStockProducts: () => Promise<{ deleted: number; archived: number; groups: number }>;
-  addStockMovement: (movement: Omit<StockMovement, 'balance_before' | 'balance_after' | 'created_at'>) => Promise<void>;
+  addStockMovement: (movement: Omit<StockMovement, 'balance_before' | 'balance_after' | 'created_at'> & { expected_balance?: number }) => Promise<void>;
   integrateStockSupply: (id: string) => Promise<void>;
   reverseStockSupply: (id: string) => Promise<void>;
-  countStockProducts: (counts: Array<{ product_id: string; quantity: number }>, responsible?: { id?: string; name?: string }) => Promise<void>;
+  countStockProducts: (counts: StockCountInput[], responsible?: { id?: string; name?: string }) => Promise<void>;
   addOperationalExpense: (expense: OperationalExpense) => Promise<void>;
+  addMotoboyAdjustment: (adjustment: MotoboyAdjustment) => Promise<void>;
+  cancelMotoboyAdjustment: (id: string) => Promise<void>;
+  closeMotoboySettlement: (expense: OperationalExpense, adjustmentIds: string[]) => Promise<void>;
   updateOperationalExpense: (id: string, data: Partial<OperationalExpense>) => Promise<void>;
   deleteOperationalExpense: (id: string) => Promise<void>;
   addIfoodPendingConfirmations: (items: IfoodPendingConfirmation[]) => Promise<void>;
@@ -399,6 +413,7 @@ export const useAppStore = create<AppState>()(
       stockMovements: [],
       ifoodPendingConfirmations: [],
       operationalExpenses: [],
+      motoboyAdjustments: [],
       selectedDate: new Date(),
       isSyncing: false,
       syncError: false,
@@ -527,7 +542,7 @@ export const useAppStore = create<AppState>()(
         const syncStartedMs = Date.now();
         set({ isSyncing: true, syncError: false });
         try {
-          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, stockSuppliersSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, operationalExpensesSnap, storeSnap] = await Promise.all([
+          const [routesSnap, deliveriesSnap, customersSnap, motoboysSnap, fuelingsSnap, stockSuppliesSnap, stockSuppliersSnap, teamMembersSnap, stockProductsSnap, stockMovementsSnap, pendingConfirmationsSnap, operationalExpensesSnap, motoboyAdjustmentsSnap, storeSnap] = await Promise.all([
             getDocs(incrementalCollection('routes', get().routes, 'updated_at', (item) => item.updated_at || item.created_at)),
             getDocs(incrementalCollection(
               'deliveries',
@@ -570,6 +585,12 @@ export const useAppStore = create<AppState>()(
               'updated_at',
               (item) => item.updated_at || item.created_at || item.occurred_at,
             )),
+            getDocs(incrementalCollection(
+              'motoboy_adjustments',
+              get().motoboyAdjustments,
+              'updated_at',
+              (item) => item.updated_at || item.created_at,
+            )),
             getDoc(doc(db, 'store', 'store_settings'))
           ]);
 
@@ -586,6 +607,7 @@ export const useAppStore = create<AppState>()(
             stock_movements: stockMovementsSnap.size,
             ifood_pending_confirmations: pendingConfirmationsSnap.size,
             operational_expenses: operationalExpensesSnap.size,
+            motoboy_adjustments: motoboyAdjustmentsSnap.size,
             store_settings: storeSnap.exists() ? 1 : 0,
           };
 
@@ -600,6 +622,7 @@ export const useAppStore = create<AppState>()(
           const fbStockProducts = stockProductsSnap.docs.map(d => d.data() as StockProduct);
           const fbStockMovements = stockMovementsSnap.docs.map(d => d.data() as StockMovement);
           const fbOperationalExpenses = operationalExpensesSnap.docs.map(d => d.data() as OperationalExpense);
+          const fbMotoboyAdjustments = motoboyAdjustmentsSnap.docs.map(d => d.data() as MotoboyAdjustment);
           const fbPendingConfirmations = pendingConfirmationsSnap.docs.map(
             d => d.data() as IfoodPendingConfirmation,
           );
@@ -876,6 +899,8 @@ export const useAppStore = create<AppState>()(
             ifoodPendingConfirmations: mergedPendingConfirmations,
             operationalExpenses: mergeById(fbOperationalExpenses, get().operationalExpenses)
               .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime()),
+            motoboyAdjustments: mergeById(fbMotoboyAdjustments, get().motoboyAdjustments)
+              .sort((a, b) => b.created_at.localeCompare(a.created_at)),
             storeSettings: finalStoreSettings as any,
             isSyncing: false,
             syncError: false
@@ -948,7 +973,12 @@ export const useAppStore = create<AppState>()(
 
       addRoute: async (route) => {
         const now = new Date().toISOString();
-        const routeWithTimestamp: Route = { ...route, created_at: route.created_at || now, updated_at: now };
+        const routeWithTimestamp: Route = {
+          ...route,
+          created_at: route.created_at || now,
+          operational_date: route.operational_date || dateKey(route.created_at || now),
+          updated_at: now,
+        };
         const operationKey = routeOperationKey(routeWithTimestamp);
         if (routeCreateLocks.has(operationKey)) {
           throw new Error('Esta rota já está sendo criada. Aguarde um instante.');
@@ -1442,191 +1472,229 @@ export const useAppStore = create<AppState>()(
       },
 
       addStockMovement: async (movement) => {
-        // IDs operacionais determinísticos tornam a baixa repetível com segurança.
-        // Reabrir a revisão ou tocar duas vezes nunca altera o saldo novamente.
+        // A origem de verdade é o saldo confirmado pelo servidor. Uma cópia local
+        // antiga NUNCA deve escrever um novo saldo baseado nela.
         if (get().stockMovements.some((item) => item.id === movement.id)) return;
-        const product = get().stockProducts.find((item) => item.id === movement.product_id);
-        if (!product) throw new Error('Produto de estoque não encontrado.');
-        const before = roundStockQuantity(product.current_quantity);
-        const isExit = movement.type === 'saida' || movement.type === 'perda';
-        if (isExit && stockExitExceeds(movement.quantity, before, product.unit)) {
-          throw new Error(`Saldo insuficiente. Disponível: ${before.toLocaleString('pt-BR')} ${product.unit}.`);
-        }
-        const effectiveQuantity = isExit
-          ? clampStockExit(movement.quantity, before, product.unit)
-          : roundStockQuantity(movement.quantity);
-        const after = roundStockQuantity(
-          movement.type === 'contagem' || movement.type === 'ajuste'
-            ? effectiveQuantity
-            : movement.type === 'entrada'
-              ? before + effectiveQuantity
-              : before - effectiveQuantity,
-        );
-        const createdAt = new Date().toISOString();
-        const record: StockMovement = { ...movement, quantity: effectiveQuantity, balance_before: before, balance_after: after, created_at: createdAt };
-        const previousProducts = get().stockProducts;
-        const previousMovements = get().stockMovements;
-        const productPatch: Partial<StockProduct> = {
-          current_quantity: after,
-          average_cost: movement.type === 'entrada' && movement.unit_cost
-            ? Number((((before * (product.average_cost || 0)) + (effectiveQuantity * movement.unit_cost)) / Math.max(after, effectiveQuantity)).toFixed(4))
-            : product.average_cost,
-          last_counted_at: movement.type === 'contagem' ? movement.occurred_at : product.last_counted_at,
-          updated_at: createdAt,
-        };
-        set({
-          stockProducts: previousProducts.map((item) => item.id === product.id ? { ...item, ...productPatch } : item),
-          stockMovements: [record, ...previousMovements],
-        });
+        let result: ReturnType<typeof planStockMovement> & { alreadyExisted: boolean };
+        const lastServerRead: { current: StockProduct | null } = { current: null };
         try {
-          const batch = writeBatch(db);
-          batch.update(doc(db, 'stock_products', product.id), sanitizeForFirebase(productPatch));
-          batch.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record));
-          await batch.commit();
-          const thresholdChange = { before: product, after: { ...product, ...productPatch } };
-          const reviewActive = typeof window !== 'undefined' && Boolean(sessionStorage.getItem('dfl-stock-review-queue'));
-          if (reviewActive) {
-            try {
-              const current = JSON.parse(sessionStorage.getItem('dfl-stock-review-changes') || '[]');
-              sessionStorage.setItem('dfl-stock-review-changes', JSON.stringify([...current, thresholdChange]));
-            } catch { sessionStorage.setItem('dfl-stock-review-changes', JSON.stringify([thresholdChange])); }
-          } else {
-            void notifyStockThresholdChanges([thresholdChange], get().storeSettings.notificationPreferences);
-          }
+          result = await runTransaction(db, async (transaction) => {
+            const productRef = doc(db, 'stock_products', movement.product_id);
+            const movementRef = doc(db, 'stock_movements', movement.id);
+            // Todas as leituras ocorrem antes das escritas, como exige Firestore.
+            const [productSnap, priorMovement] = await Promise.all([
+              transaction.get(productRef), transaction.get(movementRef),
+            ]);
+            if (!productSnap.exists()) throw new Error('Produto de estoque não encontrado no servidor.');
+            const currentProduct = productSnap.data() as StockProduct;
+            lastServerRead.current = currentProduct;
+            if (priorMovement.exists()) {
+              // O ID já foi gravado em outro aparelho. Hidratar a store local
+              // para não continuar sugerindo a mesma baixa; nunca duplicar o lançamento.
+              const recorded = priorMovement.data() as StockMovement;
+              if (recorded.product_id !== movement.product_id) throw new Error('Identificador de movimentação já utilizado por outro produto.');
+              return { before: currentProduct, changed: currentProduct, record: recorded, alreadyExisted: true };
+            }
+            const now = new Date().toISOString();
+            const plan = planStockMovement(currentProduct, movement, now);
+            transaction.update(productRef, sanitizeForFirebase(plan.changed));
+            transaction.set(movementRef, sanitizeForFirebase(plan.record));
+            return { ...plan, alreadyExisted: false };
+          });
         } catch (error) {
-          set({ stockProducts: previousProducts, stockMovements: previousMovements });
+          const fresh = lastServerRead.current;
+          if (fresh && error instanceof Error && /mudou em outro aparelho|Saldo insuficiente/.test(error.message)) {
+            set((state) => ({
+              stockProducts: state.stockProducts.map((item) => item.id === fresh.id ? fresh : item),
+            }));
+          }
+          if (stockWriteConnectionError(error)) {
+            throw new Error('Não foi possível confirmar o saldo no servidor. Confira a conexão e tente novamente; a movimentação não foi confirmada.');
+          }
           throw error;
+        }
+        // Só refletir na interface depois da confirmação transacional.
+        set((state) => ({
+          stockProducts: state.stockProducts.map((item) => item.id === result.changed.id ? result.changed : item),
+          stockMovements: [result.record, ...state.stockMovements.filter((item) => item.id !== result.record.id)],
+        }));
+        if (result.alreadyExisted) return; // não disparar notificações novamente
+        const reviewActive = typeof window !== 'undefined' && Boolean(sessionStorage.getItem('dfl-stock-review-queue'));
+        const thresholdChange = { before: result.before, after: result.changed };
+        if (reviewActive) {
+          try {
+            const current = JSON.parse(sessionStorage.getItem('dfl-stock-review-changes') || '[]');
+            sessionStorage.setItem('dfl-stock-review-changes', JSON.stringify([...current, thresholdChange]));
+          } catch { sessionStorage.setItem('dfl-stock-review-changes', JSON.stringify([thresholdChange])); }
+        } else {
+          void notifyStockThresholdChanges([thresholdChange], get().storeSettings.notificationPreferences);
         }
       },
 
       integrateStockSupply: async (id) => {
-        // Se o usuário acabou de editar/criar a compra e já tocou em
-        // "Conferir", a transação deve enxergar a versão mais recente.
         await waitForStockSupplyWrite(id);
-
-        const previousProducts = get().stockProducts;
-        const previousMovements = get().stockMovements;
-        const previousSupplies = get().stockSupplies;
-        try {
-          const result = await runTransaction(db, async (transaction) => {
-            const supplyRef = doc(db, 'stock_supplies', id);
-            const supplySnap = await transaction.get(supplyRef);
-            if (!supplySnap.exists()) throw new Error('Compra não encontrada.');
-            const supply = supplySnap.data() as StockSupply;
-            if (supply.stock_integrated_at) return null;
-            if (supply.status !== 'recebido') {
-              if (supply.status === 'conferido' && !supply.stock_integrated_at) {
-                throw new Error('Compra legada marcada como conferida sem integração. Volte para Recebido antes de lançar no estoque.');
-              }
-              throw new Error('Marque a compra como recebida antes de conferir.');
-            }
-            const missing = supply.items.find((item) => !item.stock_product_id);
-            if (missing) throw new Error(`Vincule todos os itens ao estoque. Pendente: ${missing.name}.`);
-            const refs = supply.items.map((item) => doc(db, 'stock_products', item.stock_product_id!));
-            const snaps = await Promise.all(refs.map((ref) => transaction.get(ref)));
-            const now = new Date().toISOString();
-            const changed: StockProduct[] = [];
-            const records: StockMovement[] = [];
-            supply.items.forEach((item, index) => {
-              const snap = snaps[index];
-              if (!snap.exists()) throw new Error(`Produto vinculado não encontrado: ${item.name}.`);
-              const product = snap.data() as StockProduct;
-              if (product.unit !== item.unit) throw new Error(`Unidade incompatível em ${item.name}.`);
-              const before = product.current_quantity; const after = before + item.quantity;
-              const averageCost = item.unit_price ? Number((((before * (product.average_cost || 0)) + item.quantity * item.unit_price) / Math.max(after, item.quantity)).toFixed(4)) : product.average_cost;
-              const next = { ...product, current_quantity: after, average_cost: averageCost, updated_at: now };
-              changed.push(next); transaction.update(refs[index], sanitizeForFirebase(next));
-              const record: StockMovement = { id: `supply-${supply.id}-${item.id}`, product_id: product.id, product_name: product.name, type: 'entrada', quantity: item.quantity, balance_before: before, balance_after: after, unit_cost: item.unit_price, reason: `Compra${supply.supplier ? ` em ${supply.supplier}` : ''}`, supply_id: supply.id, team_member_id: supply.purchaser_id, team_member_name: supply.purchaser_name, occurred_at: supply.occurred_at, created_at: now };
-              records.push(record); transaction.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record));
-            });
-            const supplyPatch: Partial<StockSupply> = { status: 'conferido', checked_at: supply.checked_at || now, stock_integrated_at: now, updated_at: now };
-            transaction.update(supplyRef, sanitizeForFirebase(supplyPatch));
-            return { changed, records, supplyPatch };
+        const result = await runTransaction(db, async (transaction) => {
+          const supplyRef = doc(db, 'stock_supplies', id);
+          const supplySnap = await transaction.get(supplyRef);
+          if (!supplySnap.exists()) throw new Error('Compra não encontrada.');
+          const supply = supplySnap.data() as StockSupply;
+          if (supply.stock_integrated_at) return null;
+          if (supply.status !== 'recebido') {
+            throw new Error(supply.status === 'conferido'
+              ? 'Compra legada conferida sem integração. Volte para Recebido antes de lançar no estoque.'
+              : 'Marque a compra como recebida antes de conferir.');
+          }
+          // Uma leitura por produto distinto; evita snapshot desatualizado quando
+          // a mesma compra inclui múltiplas linhas do mesmo insumo.
+          const groups = groupStockSupplyItems(supply);
+          const keys = [...groups.keys()];
+          const refs = keys.map((productId) => doc(db, 'stock_products', productId));
+          const snaps = await Promise.all(refs.map((ref) => transaction.get(ref)));
+          const products = new Map<string, StockProduct>();
+          snaps.forEach((snap, index) => {
+            if (snap.exists()) products.set(keys[index], snap.data() as StockProduct);
           });
-          if (!result) return;
-          const changedMap = new Map(result.changed.map((item) => [item.id, item]));
-          set({ stockProducts: previousProducts.map((item) => changedMap.get(item.id) || item), stockMovements: [...result.records, ...previousMovements.filter((item) => !result.records.some((record) => record.id === item.id))], stockSupplies: previousSupplies.map((item) => item.id === id ? { ...item, ...result.supplyPatch } : item) });
-          void cancelStockSupplyCheckReminder(id);
-        } catch (error) {
-          set({ stockProducts: previousProducts, stockMovements: previousMovements, stockSupplies: previousSupplies });
-          throw error;
-        }
+          const now = new Date().toISOString();
+          const plan = planStockSupplyLedger(supply, products, 'integrate', now);
+          plan.changed.forEach((product) => {
+            transaction.update(doc(db, 'stock_products', product.id), sanitizeForFirebase(product));
+          });
+          plan.records.forEach((record) => {
+            transaction.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record));
+          });
+          const supplyPatch: Partial<StockSupply> = {
+            status: 'conferido', checked_at: supply.checked_at || now,
+            stock_integrated_at: now, updated_at: now,
+          };
+          transaction.update(supplyRef, sanitizeForFirebase(supplyPatch));
+          return { ...plan, supplyPatch };
+        });
+        if (!result) return;
+        const changedMap = new Map(result.changed.map((item) => [item.id, item]));
+        const recordIds = new Set(result.records.map((item) => item.id));
+        // A transação já confirmou no servidor: não substituir outras mudanças
+        // recebidas na store durante a espera.
+        set((state) => ({
+          stockProducts: state.stockProducts.map((item) => changedMap.get(item.id) || item),
+          stockMovements: [...result.records, ...state.stockMovements.filter((item) => !recordIds.has(item.id))],
+          stockSupplies: state.stockSupplies.map((item) => item.id === id ? { ...item, ...result.supplyPatch } : item),
+        }));
+        void cancelStockSupplyCheckReminder(id);
       },
 
       reverseStockSupply: async (id) => {
         await waitForStockSupplyWrite(id);
-
-        const previousProducts = get().stockProducts; const previousMovements = get().stockMovements; const previousSupplies = get().stockSupplies;
-        try {
-          const result = await runTransaction(db, async (transaction) => {
-            const supplyRef=doc(db,'stock_supplies',id);const supplySnap=await transaction.get(supplyRef);if(!supplySnap.exists())throw new Error('Compra não encontrada.');const supply=supplySnap.data() as StockSupply;
-            if(!supply.stock_integrated_at)throw new Error('Esta compra ainda não foi integrada.');if(supply.stock_reversed_at)return null;
-            const refs=supply.items.map(item=>doc(db,'stock_products',item.stock_product_id!));const snaps=await Promise.all(refs.map(ref=>transaction.get(ref)));const now=new Date().toISOString();const changed:StockProduct[]=[];const records:StockMovement[]=[];
-            supply.items.forEach((item,index)=>{const snap=snaps[index];if(!snap.exists())throw new Error(`Produto não encontrado: ${item.name}.`);const product=snap.data() as StockProduct;if(product.current_quantity<item.quantity)throw new Error(`Não é possível estornar ${item.name}: saldo atual menor que a entrada original.`);const after=product.current_quantity-item.quantity;const previousValue=product.current_quantity*(product.average_cost||0)-item.quantity*(item.unit_price||product.average_cost||0);const averageCost=after>0?Number(Math.max(0,previousValue/after).toFixed(4)):undefined;const next={...product,current_quantity:after,average_cost:averageCost,updated_at:now};changed.push(next);transaction.update(refs[index],sanitizeForFirebase({...next,average_cost:averageCost??deleteField()}));const record:StockMovement={id:`reversal-${supply.id}-${item.id}`,product_id:product.id,product_name:product.name,type:'saida',quantity:item.quantity,balance_before:product.current_quantity,balance_after:after,unit_cost:item.unit_price,reason:'Estorno auditável de compra integrada',supply_id:supply.id,team_member_id:supply.purchaser_id,team_member_name:supply.purchaser_name,occurred_at:now,created_at:now};records.push(record);transaction.set(doc(db,'stock_movements',record.id),sanitizeForFirebase(record));});
-            const supplyPatch:Partial<StockSupply>={stock_reversed_at:now,updated_at:now};transaction.update(supplyRef,sanitizeForFirebase(supplyPatch));return{changed,records,supplyPatch};
+        const beforeLocal = get().stockProducts;
+        const result = await runTransaction(db, async (transaction) => {
+          const supplyRef = doc(db, 'stock_supplies', id);
+          const supplySnap = await transaction.get(supplyRef);
+          if (!supplySnap.exists()) throw new Error('Compra não encontrada.');
+          const supply = supplySnap.data() as StockSupply;
+          if (!supply.stock_integrated_at) throw new Error('Esta compra ainda não foi integrada.');
+          if (supply.stock_reversed_at) return null;
+          const groups = groupStockSupplyItems(supply);
+          const keys = [...groups.keys()];
+          const refs = keys.map((productId) => doc(db, 'stock_products', productId));
+          const snaps = await Promise.all(refs.map((ref) => transaction.get(ref)));
+          const products = new Map<string, StockProduct>();
+          snaps.forEach((snap, index) => {
+            if (snap.exists()) products.set(keys[index], snap.data() as StockProduct);
           });
-          if(!result)return;const changedMap=new Map(result.changed.map(item=>[item.id,item]));set({stockProducts:previousProducts.map(item=>changedMap.get(item.id)||item),stockMovements:[...result.records,...previousMovements.filter(item=>!result.records.some(record=>record.id===item.id))],stockSupplies:previousSupplies.map(item=>item.id===id?{...item,...result.supplyPatch}:item)});
-          void notifyStockThresholdChanges(
-            result.changed.map((after) => ({
-              before:
-                previousProducts.find((item) => item.id === after.id) ||
-                after,
-              after,
-            })),
-            get().storeSettings.notificationPreferences,
-          );
-        } catch(error){set({stockProducts:previousProducts,stockMovements:previousMovements,stockSupplies:previousSupplies});throw error;}
+          const now = new Date().toISOString();
+          const plan = planStockSupplyLedger(supply, products, 'reverse', now);
+          plan.changed.forEach((product) => {
+            transaction.update(doc(db, 'stock_products', product.id), sanitizeForFirebase({
+              ...product, average_cost: product.average_cost ?? deleteField(),
+            }));
+          });
+          plan.records.forEach((record) => {
+            transaction.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record));
+          });
+          const supplyPatch: Partial<StockSupply> = { stock_reversed_at: now, updated_at: now };
+          transaction.update(supplyRef, sanitizeForFirebase(supplyPatch));
+          return { ...plan, supplyPatch };
+        });
+        if (!result) return;
+        const changedMap = new Map(result.changed.map((item) => [item.id, item]));
+        const recordIds = new Set(result.records.map((item) => item.id));
+        set((state) => ({
+          stockProducts: state.stockProducts.map((item) => changedMap.get(item.id) || item),
+          stockMovements: [...result.records, ...state.stockMovements.filter((item) => !recordIds.has(item.id))],
+          stockSupplies: state.stockSupplies.map((item) => item.id === id ? { ...item, ...result.supplyPatch } : item),
+        }));
+        void notifyStockThresholdChanges(
+          result.changed.map((after) => ({
+            before: beforeLocal.find((item) => item.id === after.id) || after,
+            after,
+          })),
+          get().storeSettings.notificationPreferences,
+        );
       },
 
       countStockProducts: async (counts, responsible) => {
         if (!counts.length) return;
-        const previousProducts = get().stockProducts;
-        const previousMovements = get().stockMovements;
-        const now = new Date().toISOString();
-        const stamp = Date.now();
-        const nextProducts = [...previousProducts];
-        const records: StockMovement[] = [];
-        counts.forEach((count, position) => {
-          const index = nextProducts.findIndex((item) => item.id === count.product_id);
-          if (index < 0 || !Number.isFinite(count.quantity) || count.quantity < 0) throw new Error('Contagem inválida.');
-          const product = nextProducts[index];
-          nextProducts[index] = { ...product, current_quantity: count.quantity, last_counted_at: now, updated_at: now };
-          records.push({ id: `count-${stamp}-${position}-${product.id}`, product_id: product.id, product_name: product.name, type: 'contagem', quantity: count.quantity, balance_before: product.current_quantity, balance_after: count.quantity, reason: 'Contagem física em lote', team_member_id: responsible?.id, team_member_name: responsible?.name, occurred_at: now, created_at: now });
-        });
-        set({ stockProducts: nextProducts, stockMovements: [...records, ...previousMovements] });
-        try {
-          const batch = writeBatch(db);
-          nextProducts.forEach((product) => {
-            const before = previousProducts.find((item) => item.id === product.id);
-            if (before !== product) {
-              batch.update(
-                doc(db, 'stock_products', product.id),
-                sanitizeForFirebase(product),
-              );
-            }
-          });
-          records.forEach((record) =>
-            batch.set(
-              doc(db, 'stock_movements', record.id),
-              sanitizeForFirebase(record),
-            ),
-          );
-          await batch.commit();
-          void notifyStockThresholdChanges(
-            nextProducts
-              .filter((after) =>
-                records.some((record) => record.product_id === after.id),
-              )
-              .map((after) => ({
-                before:
-                  previousProducts.find((item) => item.id === after.id) ||
-                  after,
-                after,
-              })),
-            get().storeSettings.notificationPreferences,
-          );
+        // 2 escritas por item (produto + movimento); limite conservador
+        // para preservar atomicidade e evitar lotes acima do limite Firestore.
+        if (counts.length > 200) throw new Error('Confira até 200 produtos por vez. Divida a contagem para manter cada lote atômico.');
+        // Validar antes de abrir a transação, incluindo referências duplicadas.
+        const ids = new Set<string>();
+        for (const row of counts) {
+          if (!row.product_id || ids.has(row.product_id)) throw new Error('Produto duplicado na contagem física. Revise os itens antes de salvar.');
+          if (!Number.isFinite(row.quantity) || row.quantity < 0) throw new Error('Quantidade de contagem inválida.');
+          if (!Number.isFinite(row.expected_quantity) || row.expected_quantity < 0) {
+            throw new Error('Saldo original da contagem ausente. Reabra a conferência para evitar sobrescrever outra movimentação.');
+          }
+          ids.add(row.product_id);
         }
-        catch (error) { set({ stockProducts: previousProducts, stockMovements: previousMovements }); throw error; }
+        // Identificador único por tentativa, criado FORA do callback que o SDK pode repetir.
+        const operationId = `count-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+        let result: ReturnType<typeof planStockCount>;
+        const latestProducts = new Map<string, StockProduct>();
+        try {
+          result = await runTransaction(db, async (transaction) => {
+            const refs = counts.map((row) => doc(db, 'stock_products', row.product_id));
+            const snaps = await Promise.all(refs.map((ref) => transaction.get(ref)));
+            const products = new Map<string, StockProduct>();
+            snaps.forEach((snap, index) => {
+              if (snap.exists()) {
+                const remoteProduct = snap.data() as StockProduct;
+                products.set(counts[index].product_id, remoteProduct);
+                latestProducts.set(remoteProduct.id, remoteProduct);
+              }
+            });
+            const now = new Date().toISOString();
+            const plan = planStockCount(counts, products, operationId, now, responsible);
+            // Se algum produto mudou desde que a contagem foi iniciada,
+            // o planejador lança erro e NENHUMA escrita é feita.
+            plan.changed.forEach((product) => {
+              transaction.update(doc(db, 'stock_products', product.id), sanitizeForFirebase(product));
+            });
+            plan.records.forEach((record) => {
+              transaction.set(doc(db, 'stock_movements', record.id), sanitizeForFirebase(record));
+            });
+            return plan;
+          });
+        } catch (error) {
+          if (latestProducts.size && error instanceof Error && /mudou em outro aparelho/.test(error.message)) {
+            set((state) => ({
+              stockProducts: state.stockProducts.map((item) => latestProducts.get(item.id) || item),
+            }));
+          }
+          if (stockWriteConnectionError(error)) {
+            throw new Error('Sem confirmação do servidor para a contagem. Mantenha o rascunho e tente novamente com internet.');
+          }
+          throw error;
+        }
+        const changed = new Map(result.changed.map((item) => [item.id, item]));
+        const records = new Set(result.records.map((item) => item.id));
+        set((state) => ({
+          stockProducts: state.stockProducts.map((item) => changed.get(item.id) || item),
+          stockMovements: [...result.records, ...state.stockMovements.filter((item) => !records.has(item.id))],
+        }));
+        void notifyStockThresholdChanges(
+          result.changed.map((after) => ({ before: result.before.get(after.id) || after, after })),
+          get().storeSettings.notificationPreferences,
+        );
       },
 
       addDelivery: async (delivery) => {
@@ -2139,45 +2207,66 @@ export const useAppStore = create<AppState>()(
           throw new Error('Conclua todas as entregas antes de finalizar a rota.');
         }
 
+        // Autoridade remota: não fechar uma rota com lista de entregas desatualizada.
+        // Esta consulta acontece SOMENTE na ação explícita de fechamento.
+        const remoteRouteDeliveries = await getDocs(query(
+          collection(db, 'deliveries'),
+          where('route_id', '==', routeId),
+        ));
+        const localIds = new Set(routeDeliveries.map((delivery) => delivery.id));
+        const remoteIds = new Set(remoteRouteDeliveries.docs.map((snapshot) => snapshot.id));
+        if (localIds.size !== remoteIds.size || [...remoteIds].some((id) => !localIds.has(id))) {
+          throw new Error('As entregas desta rota mudaram em outro aparelho. Atualize antes de fechar.');
+        }
+
+        if (routeDeliveries.length > 400) {
+          throw new Error('Rota grande demais para finalizar com segurança de uma vez. Solicite conferência.');
+        }
+
         const endTime = new Date().toISOString();
-
-        set((state) => ({
-          routes: state.routes.map((route) =>
-            route.id === routeId
-              ? {
-                  ...route,
-                  status: 'fechada',
-                  end_time: route.end_time || endTime,
-                  updated_at: endTime,
-                }
-              : route,
-          ),
-        }));
-
-        try {
-          const route = get().routes.find((item) => item.id === routeId);
-          const finalEndTime = route?.end_time || endTime;
-
-          const closeBatch = writeBatch(db);
-          closeBatch.update(doc(db, 'routes', routeId), {
+        const routeRef = doc(db, 'routes', routeId);
+        const deliveryRefs = routeDeliveries.map((delivery) => doc(db, 'deliveries', delivery.id));
+        const finalEndTime = await runTransaction(db, async (transaction) => {
+          // Todas as leituras vêm ANTES das atualizações, conforme contrato do Firestore.
+          const persistedRoute = await transaction.get(routeRef);
+          if (!persistedRoute.exists()) throw new Error('Rota não encontrada no servidor. Atualize a tela.');
+          const remoteRoute = persistedRoute.data() as Route;
+          if (remoteRoute.status === 'fechada') return remoteRoute.end_time || endTime;
+          if (!routeStartedAt({ ...remoteRoute, id: routeId })) {
+            throw new Error('Esta rota ainda não foi iniciada no servidor. Atualize antes de fechar.');
+          }
+          const remoteDeliveries = await Promise.all(deliveryRefs.map((ref) => transaction.get(ref)));
+          for (const snapshot of remoteDeliveries) {
+            if (!snapshot.exists()) throw new Error('Uma entrega foi excluída em outro aparelho. Atualize a rota.');
+            const remote = snapshot.data() as Delivery;
+            if (remote.route_id !== routeId || remote.completed !== true) {
+              throw new Error('Uma entrega ainda não foi concluída ou mudou de rota em outro aparelho. Atualize a tela.');
+            }
+          }
+          const closedAt = remoteRoute.end_time || endTime;
+          transaction.update(routeRef, {
             status: 'fechada',
-            end_time: finalEndTime,
+            end_time: closedAt,
             updated_at: endTime,
           });
-          routeDeliveries
-            .filter((delivery) => delivery.source_system !== 'dfl_site')
-            .forEach((delivery) => closeBatch.update(doc(db, 'deliveries', delivery.id), {
-              analytics_sync_pending: true,
-              analytics_sync_requested_at: endTime,
-              updated_at: delivery.updated_at || endTime,
-            }));
-          await closeBatch.commit();
-          void cancelRouteDurationReminder(routeId);
-        } catch (error) {
-          set({ routes: previousRoutes });
-          console.error(error);
-          throw error;
-        }
+          routeDeliveries.forEach((delivery, index) => {
+            if (delivery.source_system !== 'dfl_site') {
+              transaction.update(deliveryRefs[index], {
+                analytics_sync_pending: true,
+                analytics_sync_requested_at: endTime,
+              });
+            }
+          });
+          return closedAt;
+        });
+
+        // UI só anuncia conclusão depois da transação confirmada.
+        set((state) => ({
+          routes: state.routes.map((route) => route.id === routeId
+            ? { ...route, status: 'fechada', end_time: finalEndTime, updated_at: endTime }
+            : route),
+        }));
+        void cancelRouteDurationReminder(routeId);
 
         // Encerrar a rota não significa que os pedidos já foram confirmados
         // no portal do iFood. Criamos uma fila externa, idempotente.
@@ -2260,34 +2349,35 @@ export const useAppStore = create<AppState>()(
       },
 
       reopenRoute: async (routeId) => {
-        const previousRoutes = get().routes;
-        const current = previousRoutes.find((route) => route.id === routeId);
+        if (isSyntheticOperationalRoute(routeId)) {
+          throw new Error('Agrupador operacional não é rota real.');
+        }
+        const current = get().routes.find((route) => route.id === routeId);
         if (!current) throw new Error('Rota não encontrada.');
         if (current.status !== 'fechada') return;
 
         const now = new Date().toISOString();
-
-        // end_time é o primeiro encerramento operacional real da rota.
-        // Reabrir serve para correções posteriores e não pode distorcer a duração histórica.
-        set((state) => ({
-          routes: state.routes.map((r) =>
-            r.id === routeId
-              ? { ...r, status: 'aberta', reopened_at: now, updated_at: now }
-              : r
-          ),
-        }));
-
-        try {
-          await updateDoc(doc(db, 'routes', routeId), {
+        const ref = doc(db, 'routes', routeId);
+        const remote = await runTransaction(db, async (transaction) => {
+          const snapshot = await transaction.get(ref);
+          if (!snapshot.exists()) throw new Error('Rota excluída no servidor. Atualize a tela.');
+          const saved = snapshot.data() as Route;
+          if (saved.status !== 'fechada') {
+            throw new Error('Esta rota foi alterada em outro aparelho. Atualize a tela.');
+          }
+          transaction.update(ref, {
             status: 'aberta',
             reopened_at: now,
             updated_at: now,
           });
-        } catch (error) {
-          set({ routes: previousRoutes });
-          console.error(error);
-          throw error;
-        }
+          return saved;
+        });
+        // Não apagar o encerramento histórico nem afirmar sucesso antes do servidor.
+        set((state) => ({
+          routes: state.routes.map((route) => route.id === routeId
+            ? { ...route, status: 'aberta', end_time: remote.end_time, reopened_at: now, updated_at: now }
+            : route),
+        }));
       },
 
       reorderDelivery: async (routeId, deliveryId, direction) => {
@@ -2443,10 +2533,138 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
+      addMotoboyAdjustment: async (adjustment) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(adjustment.operational_date)) {
+          throw new Error('Data operacional do ajuste inválida.');
+        }
+        if (!Number.isFinite(adjustment.amount) || adjustment.amount <= 0) {
+          throw new Error('Informe um valor válido para o ajuste.');
+        }
+        const adjustmentRef = doc(db, 'motoboy_adjustments', adjustment.id);
+        const dailySettlementRef = doc(db, 'operational_expenses', settlementDocumentId(
+          `motoboy:${adjustment.motoboy_id}:${adjustment.operational_date}`,
+        ));
+        await runTransaction(db, async (transaction) => {
+          const closed = await transaction.get(dailySettlementRef);
+          const existing = await transaction.get(adjustmentRef);
+          if (closed.exists()) throw new Error('O acerto deste dia já foi fechado. Não é possível lançar ajustes.');
+          if (existing.exists()) throw new Error('Este ajuste já foi registrado.');
+          transaction.set(adjustmentRef, sanitizeForFirebase(adjustment));
+        });
+        set((state) => ({
+          motoboyAdjustments: [
+            adjustment,
+            ...state.motoboyAdjustments.filter((item) => item.id !== adjustment.id),
+          ],
+        }));
+      },
+
+      cancelMotoboyAdjustment: async (id) => {
+        const current = get().motoboyAdjustments.find((item) => item.id === id);
+        if (!current) throw new Error('Ajuste não encontrado.');
+        const now = new Date().toISOString();
+        const actor = get().user;
+        const adjustmentRef = doc(db, 'motoboy_adjustments', id);
+        await runTransaction(db, async (transaction) => {
+          const snapshot = await transaction.get(adjustmentRef);
+          if (!snapshot.exists()) throw new Error('Ajuste não encontrado no servidor.');
+          const remote = snapshot.data() as MotoboyAdjustment;
+          if (remote.status !== 'pending') {
+            throw new Error(remote.status === 'incorporated' ? 'Ajuste já incorporado a um acerto.' : 'Ajuste já cancelado.');
+          }
+          transaction.update(adjustmentRef, sanitizeForFirebase({
+            status: 'cancelled',
+            cancelled_at: now,
+            cancelled_by_uid: actor?.uid || undefined,
+            updated_at: now,
+          }));
+        });
+        set((state) => ({
+          motoboyAdjustments: state.motoboyAdjustments.map((item) => item.id === id ? {
+            ...item,
+            status: 'cancelled',
+            cancelled_at: now,
+            cancelled_by_uid: actor?.uid,
+            updated_at: now,
+          } : item),
+        }));
+      },
+
+      closeMotoboySettlement: async (expense, adjustmentIds) => {
+        if (expense.source_kind !== 'motoboy_settlement' || !expense.source_id) {
+          throw new Error('Contrato de fechamento inválido.');
+        }
+        if (!/^motoboy:[^:]+:\d{4}-\d{2}-\d{2}$/.test(expense.source_id)) {
+          throw new Error('Identidade do acerto inválida.');
+        }
+        const historical = await getDocs(query(
+          collection(db, 'operational_expenses'),
+          where('source_id', '==', expense.source_id),
+        ));
+        if (!historical.empty) throw new Error('Já existe um acerto para este motoboy e dia.');
+        const settlementRef = doc(db, 'operational_expenses', settlementDocumentId(expense.source_id));
+        const adjustmentRefs = [...new Set(adjustmentIds)].map((id) => doc(db, 'motoboy_adjustments', id));
+        const now = new Date().toISOString();
+        await runTransaction(db, async (transaction) => {
+          const settlementSnapshot = await transaction.get(settlementRef);
+          if (settlementSnapshot.exists()) throw new Error('Acerto já confirmado em outro aparelho. Atualize a tela.');
+          const adjustmentSnapshots = [];
+          for (const adjustmentRef of adjustmentRefs) adjustmentSnapshots.push(await transaction.get(adjustmentRef));
+          for (const snapshot of adjustmentSnapshots) {
+            if (!snapshot.exists()) throw new Error('Um ajuste pendente não existe mais. Atualize a tela.');
+            const adjustment = snapshot.data() as MotoboyAdjustment;
+            if (adjustment.status !== 'pending' || adjustment.motoboy_id !== expense.motoboy_id || adjustment.operational_date !== expense.operational_date) {
+              throw new Error('Um ajuste foi alterado em outro aparelho. Atualize antes de fechar.');
+            }
+          }
+          transaction.set(settlementRef, sanitizeForFirebase({ ...expense, id: settlementRef.id }));
+          adjustmentRefs.forEach((adjustmentRef) => transaction.update(adjustmentRef, sanitizeForFirebase({
+            status: 'incorporated',
+            settlement_source_id: expense.source_id,
+            incorporated_at: now,
+            updated_at: now,
+          })));
+        });
+        const saved = { ...expense, id: settlementRef.id };
+        set((state) => ({
+          operationalExpenses: [saved, ...state.operationalExpenses.filter((item) => item.source_id !== expense.source_id)],
+          motoboyAdjustments: state.motoboyAdjustments.map((item) => adjustmentIds.includes(item.id) ? {
+            ...item,
+            status: 'incorporated',
+            settlement_source_id: expense.source_id,
+            incorporated_at: now,
+            updated_at: now,
+          } : item),
+        }));
+      },
+
       addOperationalExpense: async (expense) => {
         const previous = get().operationalExpenses;
         if (expense.source_id && previous.some((item) => item.source_id === expense.source_id)) {
           throw new Error('Esta despesa já foi lançada.');
+        }
+        // Acertos usam o mesmo documento por motoboy/competência em todos os aparelhos.
+        // Nenhuma coleção nova e nenhum efeito financeiro antes da confirmação remota.
+        if (expense.source_kind === 'motoboy_settlement') {
+          if (!expense.source_id || !/^motoboy:[^:]+:\d{4}-\d{2}-\d{2}$/.test(expense.source_id)) {
+            throw new Error('Identidade do acerto inválida.');
+          }
+          const historical = await getDocs(query(
+            collection(db, 'operational_expenses'),
+            where('source_id', '==', expense.source_id),
+          ));
+          if (!historical.empty) throw new Error('Já existe um acerto para este motoboy e dia.');
+          const settlementRef = doc(db, 'operational_expenses', `settlement-${expense.source_id}`);
+          await runTransaction(db, async (transaction) => {
+            const existing = await transaction.get(settlementRef);
+            if (existing.exists()) throw new Error('Acerto já confirmado em outro aparelho. Atualize a tela.');
+            transaction.set(settlementRef, sanitizeForFirebase({ ...expense, id: settlementRef.id }));
+          });
+          set((state) => ({ operationalExpenses: [
+            { ...expense, id: settlementRef.id },
+            ...state.operationalExpenses.filter((item) => item.source_id !== expense.source_id),
+          ] }));
+          return;
         }
         set((state) => ({ operationalExpenses: [expense, ...state.operationalExpenses] }));
         try {
@@ -2459,44 +2677,37 @@ export const useAppStore = create<AppState>()(
       },
 
       updateOperationalExpense: async (id, data) => {
-        const previous = get().operationalExpenses;
-        const current = previous.find((item) => item.id === id);
-
-        if (!current) {
-          throw new Error('Despesa não encontrada.');
+        const current = get().operationalExpenses.find((item) => item.id === id);
+        if (!current) throw new Error('Despesa não encontrada.');
+        if (isClosedSettlement(current) || data.source_kind === 'motoboy_settlement') {
+          throw new Error('Acerto fechado é imutável. Use uma correção auditável.');
         }
-
-        const next: Partial<OperationalExpense> = {
-          ...data,
-          updated_at: new Date().toISOString(),
-        };
-
-        set((state) => ({
-          operationalExpenses: state.operationalExpenses.map((item) =>
-            item.id === id ? { ...item, ...next } : item,
-          ),
+        const ref = doc(db, 'operational_expenses', id);
+        const next = { ...data, updated_at: new Date().toISOString() };
+        await runTransaction(db, async (transaction) => {
+          const snapshot = await transaction.get(ref);
+          if (!snapshot.exists()) throw new Error('Despesa excluída em outro aparelho. Atualize a tela.');
+          const remote = snapshot.data() as OperationalExpense;
+          if (isClosedSettlement(remote)) throw new Error('Acerto fechado em outro aparelho não pode ser editado.');
+          transaction.update(ref, sanitizeForFirebase(next));
+        });
+        set((state) => ({ operationalExpenses: state.operationalExpenses.map((item) =>
+          item.id === id ? { ...item, ...next } : item),
         }));
-
-        try {
-          await updateDoc(
-            doc(db, 'operational_expenses', id),
-            sanitizeForFirebase(next),
-          );
-        } catch (error) {
-          set({ operationalExpenses: previous });
-          throw error;
-        }
       },
 
       deleteOperationalExpense: async (id) => {
-        const previous = get().operationalExpenses;
+        const current = get().operationalExpenses.find((item) => item.id === id);
+        if (isClosedSettlement(current)) throw new Error('Acerto fechado não pode ser excluído.');
+        const ref = doc(db, 'operational_expenses', id);
+        await runTransaction(db, async (transaction) => {
+          const snapshot = await transaction.get(ref);
+          if (!snapshot.exists()) throw new Error('Despesa já excluída em outro aparelho. Atualize a tela.');
+          const remote = snapshot.data() as OperationalExpense;
+          if (isClosedSettlement(remote)) throw new Error('Acerto fechado em outro aparelho não pode ser excluído.');
+          transaction.delete(ref);
+        });
         set((state) => ({ operationalExpenses: state.operationalExpenses.filter((item) => item.id !== id) }));
-        try {
-          await deleteDoc(doc(db, 'operational_expenses', id));
-        } catch (error) {
-          set({ operationalExpenses: previous });
-          throw error;
-        }
       },
 
       addIfoodPendingConfirmations: async (items) => {
@@ -2663,64 +2874,65 @@ export const useAppStore = create<AppState>()(
         }
 
         if (!changed.size) return;
+        if (changed.size > 150) {
+          throw new Error('Muitas confirmações em um único lote. Divida em grupos menores.');
+        }
 
-        set({
-          ifoodPendingConfirmations: working,
+        const candidates = [...changed.values()];
+        const saved = await runTransaction(db, async (transaction) => {
+          // Verificar o status no SERVIDOR impede ressuscitar uma confirmação
+          // resolvida em outro aparelho por causa de uma store desatualizada.
+          const refs = candidates.map((item) => doc(db, 'ifood_pending_confirmations', item.id));
+          const snapshots = await Promise.all(refs.map((ref) => transaction.get(ref)));
+          const reconciled = candidates.map((item, index) => reconcileIfoodConfirmation(
+            snapshots[index].exists() ? snapshots[index].data() as IfoodPendingConfirmation : undefined,
+            item,
+          ));
+          reconciled.forEach((item, index) => {
+            const current = snapshots[index];
+            if (current.exists() && current.data().status === 'resolved') {
+              // Não tocar em confirmação já resolvida evita até atualizar seu timestamp.
+              return;
+            }
+            transaction.set(refs[index], sanitizeForFirebase(item), { merge: true });
+          });
+          return reconciled;
+        });
+        // Atualizar apenas os itens persistidos, sem restaurar um snapshot antigo
+        // da store que possa apagar alterações concorrentes da sessão.
+        set((state) => {
+          const authoritative = new Map(saved.map((item) => [item.id, item]));
+          const retained = state.ifoodPendingConfirmations.filter((item) => !authoritative.has(item.id));
+          return { ifoodPendingConfirmations: [...saved, ...retained] };
         });
 
-        try {
-          const batch = writeBatch(db);
-
-          changed.forEach((item) => {
-            batch.set(
-              doc(
-                db,
-                'ifood_pending_confirmations',
-                item.id,
-              ),
-              sanitizeForFirebase(item),
-              { merge: true },
-            );
-          });
-
-          await batch.commit();
-        } catch (error) {
-          set({
-            ifoodPendingConfirmations: previous,
-          });
-
-          console.error(
-            'Erro ao consolidar fila de confirmações iFood:',
-            error,
-          );
-
-          throw error;
-        }
       },
 
       updateIfoodPendingConfirmation: async (id, data) => {
-        const previous = get().ifoodPendingConfirmations;
-        const updated = {
-          ...data,
-          updated_at: new Date().toISOString(),
-        };
-
+        const now = new Date().toISOString();
+        const ref = doc(db, 'ifood_pending_confirmations', id);
+        const saved = await runTransaction(db, async (transaction) => {
+          const snapshot = await transaction.get(ref);
+          if (!snapshot.exists()) throw new Error('Confirmação excluída em outro aparelho. Atualize a lista.');
+          const remote = snapshot.data() as IfoodPendingConfirmation;
+          const next: IfoodPendingConfirmation = {
+            ...remote,
+            ...data,
+            id,
+            updated_at: now,
+          };
+          // Restauração é uma ação manual explícita da Central, nunca da geração da rota.
+          const patch = sanitizeForFirebase({ ...data, updated_at: now });
+          if (data.status === 'pending' && Object.prototype.hasOwnProperty.call(data, 'resolved_at') && data.resolved_at === undefined) {
+            patch.resolved_at = deleteField();
+          }
+          transaction.update(ref, patch);
+          return next;
+        });
         set((state) => ({
-          ifoodPendingConfirmations: state.ifoodPendingConfirmations.map((item) =>
-            item.id === id ? { ...item, ...updated } : item,
-          ),
+          ifoodPendingConfirmations: state.ifoodPendingConfirmations.map((item) => item.id === id ? saved : item),
         }));
 
-        try {
-          await updateDoc(
-            doc(db, 'ifood_pending_confirmations', id),
-            sanitizeForFirebase(updated),
-          );
-        } catch (error) {
-          set({ ifoodPendingConfirmations: previous });
-          console.error(error);
-          throw error;
-        }
       },
 
       deleteIfoodPendingConfirmation: async (id) => {
@@ -3150,6 +3362,7 @@ export const useAppStore = create<AppState>()(
         stockMovements: state.stockMovements.slice(0, 500),
         ifoodPendingConfirmations: state.ifoodPendingConfirmations,
         operationalExpenses: state.operationalExpenses,
+        motoboyAdjustments: state.motoboyAdjustments,
         isPrivacyMode: state.isPrivacyMode,
         routeAlertsEnabled: state.routeAlertsEnabled,
         theme: state.theme,

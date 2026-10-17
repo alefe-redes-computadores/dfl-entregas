@@ -19,6 +19,26 @@ export const dateKey = (value: Date | string) =>
 export const dateFromKey = (key: string) =>
   new Date(`${key}T12:00:00-03:00`);
 
+export const validOperationalDateKey = (value?: string | null) =>
+  Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+
+export const routeOperationalDateKey = (route: {
+  operational_date?: string;
+  created_at?: string;
+  started_at?: string;
+  departure_time?: string;
+  updated_at?: string;
+}) => {
+  if (validOperationalDateKey(route.operational_date)) return route.operational_date!;
+  const legacy = firstValidTimestamp(
+    route.created_at,
+    route.started_at,
+    route.departure_time,
+    route.updated_at,
+  );
+  return legacy ? dateKey(legacy) : '';
+};
+
 export const shiftDateKey = (key: string, amount: number) => {
   const [year, month, day] = key.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day + amount, 12, 0, 0));

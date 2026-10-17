@@ -583,8 +583,11 @@ export default function ConfirmacoesPage() {
   };
 
   const vibrate = async (style: ImpactStyle) => {
-    if (Capacitor.isNativePlatform()) {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
       await Haptics.impact({ style });
+    } catch {
+      // Feedback tátil não pode impedir a confirmação ou abertura do portal.
     }
   };
 

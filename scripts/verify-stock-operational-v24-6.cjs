@@ -11,7 +11,7 @@ ok(precision.includes('stockQuantityTolerance')&&precision.includes('clampStockE
 ok(move.includes("mode === 'remaining'")&&!move.includes("mode === 'remaining' &&\n      amount <= 0"),'quanto sobrou aceita saldo zero');
 ok(move.includes("'__input-g'")&&move.includes("'__input-ml'"),'kg aceita gramas e L aceita ml');
 ok(move.includes('stockExitExceeds(rawAmount, product.current_quantity, product.unit)'),'falso saldo insuficiente usa tolerância');
-ok(store.includes('effectiveQuantity = isExit')&&store.includes('clampStockExit(movement.quantity, before, product.unit)'),'store usa mesma tolerância');
+ok(store.includes('planStockMovement(currentProduct, movement, now)')&&r('lib/stock-mutation-plan.ts').includes('clampStockExit(quantity, before, original.unit)'),'movimentação transacional usa mesma tolerância');
 ok(stock.includes('const reviewOrder=useMemo(()=>groups.flatMap')&&stock.includes('JSON.stringify(reviewOrder.map(item=>item.id))'),'Salvar e próximo segue ordem visual');
 ok(catalog.includes("'pct-400g','Pacote 400 g',0.4,'pct'"),'Batata palha possui pacote 400 g');
 ok(store.includes('presentationMigrations')&&store.includes('canonicalByName'),'apresentações canônicas são completadas no Firebase');

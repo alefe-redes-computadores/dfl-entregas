@@ -64,6 +64,8 @@ export function SiteAdminHub({
     const awaitingRoute = site.filter(
       (delivery) =>
         !delivery.completed &&
+        !delivery.operational_dismissed_at &&
+        !isCancelledSiteDelivery(delivery) &&
         isDeliveryFulfillment(delivery) &&
         !delivery.route_id &&
         isSiteOrderReleasedToLogistics(delivery),
@@ -110,6 +112,7 @@ export function SiteAdminHub({
   }, [deliveries, routes, selectedDateOrders]);
 
   const hasAttention = stats.awaitingConfirmation > 0 || stats.awaitingRoute > 0;
+  const pendingTasks = stats.awaitingConfirmation + stats.awaitingRoute;
 
   useEffect(() => {
     if (!expanded) return;
@@ -156,7 +159,7 @@ export function SiteAdminHub({
 
           {hasAttention && (
             <span className="mt-1 block text-[10px] font-bold text-amber-300">
-              {[
+              {pendingTasks} {pendingTasks === 1 ? 'ação' : 'ações'} · {[
                 stats.awaitingConfirmation
                   ? `${stats.awaitingConfirmation} para confirmar`
                   : '',

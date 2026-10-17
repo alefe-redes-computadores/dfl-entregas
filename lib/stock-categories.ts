@@ -120,14 +120,14 @@ export function stockCategoryOrder(category?:string){
 
 export type StockCategoryVisualTone =
   | 'rose' | 'sky' | 'cyan' | 'amber' | 'lime' | 'emerald'
-  | 'orange' | 'violet' | 'fuchsia' | 'teal' | 'yellow' | 'slate';
+  | 'orange' | 'violet' | 'indigo' | 'fuchsia' | 'teal' | 'yellow' | 'slate';
 
 /** Identidade visual canônica. Não altera o valor persistido da categoria. */
 export function stockCategoryVisualTone(category?: string): StockCategoryVisualTone {
   const value = canonicalStockCategory(category);
 
   if (value === 'Açougue') return 'rose';
-  if (value === 'Frios') return 'sky';
+  if (value === 'Frios') return 'indigo';
   if (value === 'Congelados') return 'cyan';
   if (value === 'Mercearia') return 'amber';
   if (value === 'Padaria / Panificação') return 'orange';
@@ -153,6 +153,7 @@ export function stockCategoryVisualClasses(category?: string): string {
     emerald: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
     orange: 'border-orange-500/20 bg-orange-500/10 text-orange-400',
     violet: 'border-violet-500/20 bg-violet-500/10 text-violet-400',
+    indigo: 'border-indigo-500/20 bg-indigo-500/10 text-indigo-400',
     fuchsia: 'border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-400',
     teal: 'border-teal-500/20 bg-teal-500/10 text-teal-400',
     yellow: 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400',

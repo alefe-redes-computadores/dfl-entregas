@@ -1,0 +1,17 @@
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const read=p=>fs.readFileSync(p,'utf8');
+const wa=read('lib/whatsapp.ts');
+const card=read('lib/route-share-card.ts');
+const delivery=read('components/home/DeliveryCard.tsx');
+for (const token of ['formatOperationalPhone','deriveDeliveryPaymentState','Bebidas desta rota','COBRANÇAS NO CARTÃO','Confirmações necessárias','s.phone','deliveryPaid(item)']) assert.ok(wa.includes(token),`mensagem não usa ${token}`);
+assert.ok(!wa.includes('link direto na Mensagem 1'));
+assert.ok(!wa.includes('Bebidas da bag'));
+assert.ok(!wa.includes('PIX QR`; stopsNeedingPosMachine'));
+assert.ok(delivery.includes('delivery.order_index + 1'));
+for(const token of ['ANTES DE SAIR','CHECKLIST OPERACIONAL','routeStartedAt(route)','cardOrders','pendingCodes','groupDeliveriesByStop','deriveDeliveryPaymentState']) assert.ok(card.includes(token),`imagem não usa ${token}`);
+assert.ok(!card.includes('Mapa indisponível para esta rota.'));
+assert.ok(!card.includes('Posições ilustrativas'));
+assert.ok(!card.includes('Não é um mapa geográfico.'));
+assert.ok(!card.includes("params.append('path'"));
+console.log('V89 MENSAGERIA E IMAGEM OPERACIONAL: CONTRATOS OK');

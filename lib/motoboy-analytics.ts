@@ -5,7 +5,11 @@ import { groupDeliveriesByStop } from '@/lib/route-stops';
 export type ValeInput = MotoboySettlementAdjustment;
 export const normalizeName=(value?:string)=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLocaleLowerCase('pt-BR');
 export const operationalDateKey=(value:Date|string)=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
-export const routeOperationalDate=(route:Route)=>route.started_at||route.departure_time||route.created_at||route.updated_at;
+// A competência é fixada na criação da rota, nunca no horário de saída/conclusão.
+// Os eventos preservam seus timestamps próprios para auditoria.
+export const routeOperationalDate=(route:Route)=>route.operational_date
+  ? `${route.operational_date}T12:00:00-03:00`
+  : route.created_at||route.started_at||route.departure_time||route.updated_at;
 
 export function routeBelongsToMotoboy(route:Route,motoboy:Motoboy):boolean {
   if(route.motoboy_id)return route.motoboy_id===motoboy.id;
@@ -38,7 +42,7 @@ export function getMotoboyDayData(
   cashHandedOver:boolean|number=true,
   carry:{storeCredit?:number;motoboyCredit?:number}={},
 ){
-  const dayRoutes=getMotoboyRoutes(motoboy,routes).filter(route=>{const value=routeOperationalDate(route);return value?operationalDateKey(value)===date:false;});
+  const dayRoutes=getMotoboyRoutes(motoboy,routes).filter(route=>route.operational_date?route.operational_date===date:(routeOperationalDate(route)?operationalDateKey(routeOperationalDate(route)! as string)===date:false));
   const routeIds=new Set(dayRoutes.map(route=>route.id));
   const completedDeliveries=deliveries.filter(delivery=>routeIds.has(delivery.route_id)&&delivery.completed===true);
   // Agrupamento é por rota: visitar o mesmo endereço novamente em outra rota

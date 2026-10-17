@@ -429,6 +429,18 @@ export function normalizeSiteOrderStatus(value?: string | null): string {
  * textual ainda permanece `pendente`. Esse resíduo não pode gerar alerta,
  * rota sintética ou contador fantasma.
  */
+/** Apenas pedidos de retirada identificados como provenientes do DFL Site
+ * podem publicar a ação de prontidão para o cliente. A origem do pedido é
+ * autoridade; modalidade pickup isolada NÃO torna um pedido um pedido do site.
+ */
+export function canMarkSitePickupReady(delivery: Pick<Delivery, 'source_system' | 'fulfillment_mode' | 'completed' | 'site_order_status' | 'pickup_ready_at'>): boolean {
+  return delivery.source_system === 'dfl_site' &&
+    delivery.fulfillment_mode === 'pickup' &&
+    delivery.completed !== true &&
+    !isCancelledSiteDelivery(delivery) &&
+    !Boolean(delivery.pickup_ready_at);
+}
+
 /** Cancelamento comercial nao equivale a entrega concluida. */
 export function isCancelledSiteDelivery(delivery: Pick<Delivery, 'source_system' | 'site_order_status'>): boolean {
   return delivery.source_system === 'dfl_site' &&

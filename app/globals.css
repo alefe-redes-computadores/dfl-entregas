@@ -339,3 +339,8 @@ html[data-dfl-platform="android"] [data-sonner-toaster].dfl-toaster[data-y-posit
 html[data-dfl-platform="android"] [data-sonner-toaster].dfl-toaster[data-y-position="top"] [data-sonner-toast] {
   margin-top: 0 !important;
 }
+
+/* V100.5 — status bar transparente: impedir conteúdo sob o relógio no APK. */
+html[data-dfl-platform="android"] header.safe-top {
+  padding-top: calc(max(env(safe-area-inset-top, 0px), var(--dfl-native-statusbar-fallback, 0px)) + 1rem) !important;
+}

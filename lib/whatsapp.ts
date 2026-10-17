@@ -7,6 +7,7 @@ import { canonicalizeOperationalAddress, bestOperationalAddress, hasHouseNumber 
 import { deliveryStopKey, stopNumberMap, groupDeliveriesByStop } from '@/lib/route-stops';
 import { routeCashFlow } from '@/lib/route-cash-flow';
 import { buildRouteChangePlan } from '@/lib/route-change-plan';
+import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -45,11 +46,24 @@ const getOriginLabel = (delivery: Delivery): string => {
   return 'Origem não registrada';
 };
 
+// Telefone de contato para exibição. Nunca inventar DDD ou alterar números fixos.
+export const formatOperationalPhone = (raw?: string | null): string => {
+  let digits = (raw || '').replace(/\D/g, '');
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) digits = digits.slice(2);
+  if (digits.length === 10 && /^[1-9]\d[6-9]/.test(digits)) digits = `${digits.slice(0,2)}9${digits.slice(2)}`;
+  return digits.length === 11 || digits.length === 10 ? digits : '';
+};
+
+const deliveryPaid = (item: Delivery) => deriveDeliveryPaymentState(item) === 'paid';
+const firstName = (value: string) => value.trim().split(/\s+/)[0] || 'Cliente';
+const deliveryOrigin = (item: Delivery) => item.source_system === 'dfl_site' ? 'SITE' : item.origin === 'ifood' ? 'IFOOD' : 'LOJA';
+
 export async function copyDeliveryToClipboard(
   delivery: Delivery,
   customerName?: string,
   savedCustomerCode?: string,
   relatedDeliveries: Delivery[] = [delivery],
+  stopPosition?: number,
 ): Promise<boolean> {
   try {
     const parts: string[] = [];
@@ -57,9 +71,9 @@ export async function copyDeliveryToClipboard(
     const valueStr = formatMoney(deliveryCharge(delivery));
     const isUrgent = delivery.is_urgent;
     const currentCode = delivery.confirmation_code || savedCustomerCode;
-    const clientPhone = delivery.phone?.replace(/\D/g, '');
+    const clientPhone = formatOperationalPhone(delivery.phone);
 
-    parts.push(`📦 *ENTREGA*`);
+    parts.push(`📦 *ENTREGA${stopPosition && stopPosition > 0 ? ` ${getNumberEmoji(stopPosition)}` : ''} · ${deliveryOrigin(delivery)}*`);
     if (isUrgent) parts.push(`🚨 *ATENÇÃO: ENTREGA URGENTE* 🚨`);
     parts.push('');
 
@@ -67,7 +81,7 @@ export async function copyDeliveryToClipboard(
       new Map(relatedDeliveries.map((item) => [item.id, item])).values(),
     );
     if (groupedOrders.length > 1) {
-      const groupedPending = groupedOrders.filter(item => !item.is_paid);
+      const groupedPending = groupedOrders.filter(item => !deliveryPaid(item));
       const groupedTotal = groupedPending.reduce((sum, item) => sum + deliveryCharge(item), 0);
       parts.push(`📦 *${groupedOrders.length} PEDIDOS · 1 PARADA*`);
       parts.push(groupedPending.length===0?'✅ *Todos os pedidos estão pagos*':groupedPending.length===groupedOrders.length?`💵 *Cobrar na parada: R$ ${formatMoney(groupedTotal)}*`:`⚠️ *Pagamento misto · cobrar R$ ${formatMoney(groupedTotal)}*`);
@@ -78,12 +92,12 @@ export async function copyDeliveryToClipboard(
           ? `ID *${item.ifood_id}*`
           : item.order_id ? `pedido *#${item.order_id}*` : 'sem identificador';
         const itemCode = item.confirmation_code?.replace(/\D/g, '').slice(0, 4);
-        const payment = item.is_paid
-          ? (item.payment_method==='pix'?'PIX confirmado ✅':'Pago no app ✅')
+        const payment = deliveryPaid(item)
+          ? 'Pago ✅'
           : `Cobrar R$ ${formatMoney(deliveryCharge(item))} · ${(item.payment_method||'dinheiro').replace(/_/g,' ')}`;
         parts.push(`${index + 1}. *${itemName}* · ${itemOrigin} · ${itemReference}`);
         if(item.origin==='ifood')parts.push(itemCode?`   🔑 Código: *${itemCode}*`:'   🚨 *PEDIR O CÓDIGO DE 4 DÍGITOS*');
-        parts.push(`   ${item.is_paid?'✅':'💵'} ${payment}`);
+        parts.push(`   ${deliveryPaid(item)?'✅':'💵'} ${payment}`);
       });
       parts.push('📍 *Uma parada física · entregar cada pedido separadamente*');
       const address = routeAddressParts(delivery.address_string);
@@ -94,13 +108,10 @@ export async function copyDeliveryToClipboard(
       return true;
     }
 
-    if (customerName) parts.push(`👤 *Cliente:* ${customerName}`);
+    parts.push(`👤 *${customerName || delivery.customer_name || 'Cliente'}*${isIfood && delivery.ifood_id ? ` · ID *${delivery.ifood_id}*` : ''}`);
 
     if (isIfood) {
-      let ifoodInfo = `🛒 *Origem:* iFood`;
-      if (delivery.ifood_id) ifoodInfo += ` · ID *${delivery.ifood_id}*`;
-      else if (delivery.order_id) ifoodInfo += ` · pedido #${delivery.order_id}`;
-      parts.push(ifoodInfo);
+      if (!delivery.ifood_id && delivery.order_id) parts.push(`🧾 *Pedido #${delivery.order_id}*`);
 
       if (currentCode) {
         parts.push(`🔑 *Código iFood:* \`${currentCode}\` ✅`);
@@ -108,20 +119,21 @@ export async function copyDeliveryToClipboard(
         parts.push(`🚨 *PEGAR O CÓDIGO DE 4 DÍGITOS COM O CLIENTE!*`);
       }
     } else {
-      parts.push(`🛒 *Origem:* ${getOriginLabel(delivery)}`);
+      if (delivery.order_id) parts.push(`🧾 *Pedido #${delivery.order_id}*`);
     }
 
     const individualAddress = routeAddressParts(delivery.address_string);
-    parts.push(`📍 *Destino:* ${individualAddress.neighborhood} · ${individualAddress.streetWithNumber}`);
+    parts.push(`📍 *Destino:* ${individualAddress.streetWithNumber} · *${individualAddress.neighborhood}*`);
     if (delivery.observation) parts.push(`⚠️ *ATENÇÃO:* ${delivery.observation}`);
 
-    if (clientPhone && delivery.notify_whatsapp) {
+    if (clientPhone) {
       const gateMsg = encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.');
-      parts.push(`📲 *Contato rápido:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
+      parts.push(`📲 *Contato:* *${clientPhone}*`);
+      if (delivery.notify_whatsapp) parts.push(`↳ https://wa.me/55${clientPhone}?text=${gateMsg}`);
     }
 
-    if (delivery.is_paid) {
-      parts.push(isIfood ? `📱 *Pagamento:* Pago no app ✅` : `📱 *Pagamento:* PIX confirmado ✅`);
+    if (deliveryPaid(delivery)) {
+      parts.push(`✅ *Pagamento:* Pago`);
     } else {
       const pMethod = delivery.payment_method?.toUpperCase().replace('_', ' ') || 'PAGAMENTO';
       if (delivery.payment_method === 'dinheiro') {
@@ -138,7 +150,7 @@ export async function copyDeliveryToClipboard(
         parts.push(`⚠️ *Levar maquininha*`);
       } else if (delivery.payment_method === 'pix') {
         parts.push(`📱 *Pagamento:* PIX · *R$ ${valueStr}*`);
-        parts.push(`⚠️ *Cobrar na maquininha*`);
+        parts.push(`⚠️ *PIX pendente: confirmar recebimento*`);
       } else {
         parts.push(`💵 *Pagamento:* ${pMethod} - R$ ${valueStr}`);
       }
@@ -278,9 +290,9 @@ export async function generateRouteMessages(
     const totalStops = new Set(deliveries.map((delivery) => deliveryGroupKey(delivery))).size;
     const physicalStopNumbers = stopNumberMap(deliveries);
     const drinksSummary: Record<string, { qty: number; name: string }> = {};
-    const stopsNeedingCode: { num: number; neighborhood: string; street: string }[] = [];
-    const stopsNeedingCall: { num: number; name: string }[] = [];
-    const stopsNeedingPosMachine: number[] = [];
+    const stopsNeedingCode: { num: number; neighborhood: string; street: string; client: string }[] = [];
+    const stopsNeedingCall: { num: number; name: string; phone: string }[] = [];
+    const stopsNeedingPosMachine: { num: number; name: string; neighborhood: string; amount: number }[] = [];
 
     msg1.push(`──────────────`);
     const matchRouteNumber = route.name.match(/\d+/);
@@ -367,7 +379,7 @@ export async function generateRouteMessages(
       const clientName = stopClientNames.length > 1
         ? stopClientNames.join(' + ')
         : stopClientNames[0] || customer?.name || representative.customer_name || 'Cliente';
-      const clientPhone = (representative.phone || customer?.phone || '').replace(/\D/g, '');
+      const clientPhone = formatOperationalPhone(representative.phone || customer?.phone);
 
       if (!hasHouseNumber(street) && !customer?.maps_link) {
         hasFuzzyAddresses = true;
@@ -379,9 +391,9 @@ export async function generateRouteMessages(
       const stopTotal = stopGroup.deliveries.reduce((sum, item) => sum + deliveryCharge(item), 0);
       msg1.push(`*${emojiNum} ${clientName}*`);
       msg1.push(`📍 *${neighborhood}* · ${addressParts.streetWithNumber}`);
-      const stopToCollect = stopGroup.deliveries.filter((item) => !item.is_paid).reduce((sum, item) => sum + deliveryCharge(item), 0);
+      const stopToCollect = stopGroup.deliveries.filter((item) => !deliveryPaid(item)).reduce((sum, item) => sum + deliveryCharge(item), 0);
       if (stopGroup.deliveries.length > 1) {
-        const paidCount=stopGroup.deliveries.filter(item=>item.is_paid).length;
+        const paidCount=stopGroup.deliveries.filter(deliveryPaid).length;
         const paymentSummary=stopToCollect>0
           ? paidCount>0?`⚠️ pagamento misto · cobrar R$ ${formatMoney(stopToCollect)}`: `💵 cobrar R$ ${formatMoney(stopToCollect)}`
           : '✅ tudo pago';
@@ -391,9 +403,9 @@ export async function generateRouteMessages(
       const codes = Array.from(new Set(ifoodOrders.map((item) => item.confirmation_code || customer?.last_confirmation_code || '').map((value) => value.replace(/\D/g, '').slice(0, 4)).filter(Boolean)));
       if (ifoodOrders.length > 0 && stopGroup.deliveries.length === 1) {
         if (codes.length === 1) msg1.push(`🔑 *Código iFood:* *${codes[0]}* ✅`);
-        else { stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly }); msg1.push(`🚨 *PEGAR CÓDIGO COM O CLIENTE!*`); }
+        else { stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly, client: firstName(clientName) }); msg1.push(`🚨 *PEGAR CÓDIGO COM O CLIENTE!*`); }
       } else if (ifoodOrders.length > 1 && codes.length === 0) {
-        stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly });
+        stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly, client: firstName(clientName) });
       }
 
       stopGroup.deliveries.forEach((item) => {
@@ -405,10 +417,9 @@ export async function generateRouteMessages(
           : item.order_id ? `pedido *#${item.order_id}*` : 'sem identificador';
         const specificCode = (item.confirmation_code || '').replace(/\D/g, '').slice(0, 4);
         let paymentText = '';
-        if (item.value === 1) { paymentText='R$ 1,00 · cartão'; stopsNeedingPosMachine.push(stopNumber); }
-        else if (item.is_paid) paymentText = item.payment_method === 'pix' ? 'PIX confirmado ✅' : 'Pago no app ✅';
-        else if (item.payment_method === 'pix') { paymentText=`R$ ${valueStr} · PIX QR`; stopsNeedingPosMachine.push(stopNumber); }
-        else if (item.payment_method?.includes('cartao')) { paymentText=`R$ ${valueStr} · cartão`; stopsNeedingPosMachine.push(stopNumber); }
+        if (deliveryPaid(item)) paymentText = 'Pago ✅';
+        else if (item.payment_method === 'pix') paymentText=`PIX pendente · R$ ${valueStr}`;
+        else if (item.payment_method?.includes('cartao')) { paymentText=`R$ ${valueStr} · cartão`; stopsNeedingPosMachine.push({ num: stopNumber, name: firstName(itemCustomerName || clientName), neighborhood, amount: deliveryCharge(item) }); }
         else if (item.payment_method === 'dinheiro' && item.change_for) { const troco=Math.max(0,item.change_for-deliveryCharge(item)); paymentText=`R$ ${valueStr} · paga c/ R$ ${formatMoney(item.change_for)} · troco R$ ${formatMoney(troco)}`; }
         else paymentText=`R$ ${valueStr} · ${(item.payment_method || 'dinheiro').toUpperCase()}`;
         const customerText = stopGroup.deliveries.length > 1 && itemCustomerName ? `*${itemCustomerName}* · ` : '';
@@ -423,10 +434,11 @@ export async function generateRouteMessages(
 
       Array.from(new Set(stopGroup.deliveries.map((item) => item.observation?.trim()).filter(Boolean))).forEach((observation) => msg1.push(`⚠️ *ATENÇÃO:* ${observation}`));
 
-      if (clientPhone && stopGroup.deliveries.some((item) => item.notify_whatsapp)) {
-        stopsNeedingCall.push({ num: stopNumber, name: clientName });
+      if (clientPhone) {
+        stopsNeedingCall.push({ num: stopNumber, name: firstName(clientName), phone: formatOperationalPhone(clientPhone) });
         const gateMsg=encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.');
-        msg1.push(`📲 *Contato rápido:* https://wa.me/55${clientPhone}?text=${gateMsg}`);
+        msg1.push(`📲 *Contato:* *${formatOperationalPhone(clientPhone)}*`);
+        if (stopGroup.deliveries.some((item) => item.notify_whatsapp)) msg1.push(`↳ https://wa.me/55${clientPhone}?text=${gateMsg}`);
       }
       msg1.push(`──────────────`);
     });
@@ -449,7 +461,9 @@ export async function generateRouteMessages(
 
     // MENSAGEM 2: CONFERÊNCIA DA ROTA — BAG, CÓDIGOS, TROCO E CAIXA
     const now = new Date();
-    const timeString = `${String(now.getHours()).padStart(2, '0')}h${String(now.getMinutes()).padStart(2, '0')}m`;
+    const departure = firstValidTimestamp(routeStartedAt(route));
+    const shownTime = departure || now;
+    const timeString = `${String(shownTime.getHours()).padStart(2, '0')}h${String(shownTime.getMinutes()).padStart(2, '0')}m`;
 
     msg2.push(`──────────────`);
     msg2.push(`🏍️ *Rota ${routeNumber} · ${route.motoboy_name}*`);
@@ -490,7 +504,7 @@ export async function generateRouteMessages(
       );
       const neighborhood = addressParts.neighborhood;
       const isDuplicate = neighborhoodCounts[neighborhood] > 1;
-      const clientPhone = delivery.phone || customer?.phone;
+      const clientPhone = formatOperationalPhone(delivery.phone || customer?.phone);
 
       const streetLabel = isDuplicate ? ` (${addressParts.street})` : '';
       const groupDrinks = groupedDeliveries
@@ -498,14 +512,14 @@ export async function generateRouteMessages(
         .filter(Boolean)
         .join(' + ');
       const drinkInfo = groupDrinks ? ` · 🥤 *${groupDrinks}*` : '';
-      const zapWarning = (clientPhone && delivery.notify_whatsapp) ? ` · 📲 contato` : '';
+      const zapWarning = clientPhone ? ` · 📲 contato` : '';
       const needsCode = groupedDeliveries.some((candidate) => {
         if (candidate.origin !== 'ifood') return false;
         const candidateCustomer = getCustomerById(candidate.customer_id);
         return !(candidate.confirmation_code || candidateCustomer?.last_confirmation_code);
       });
       const needsCashChange = groupedDeliveries.some((candidate) =>
-        !candidate.is_paid &&
+        !deliveryPaid(candidate) &&
         candidate.payment_method === 'dinheiro' &&
         Boolean(candidate.change_for && candidate.change_for > deliveryCharge(candidate))
       );
@@ -521,10 +535,10 @@ export async function generateRouteMessages(
           const codeInfo=candidate.origin==='ifood'?(code?` · 🔑 *${code}*`:' · 🔑 *pedir código*'):'';
           const candidateDrinks=candidate.drinks?.trim()?` · 🥤 *${candidate.drinks.trim()}*`:'';
           const amount=deliveryCharge(candidate);
-          const paymentAction=candidate.is_paid?'':` · cobrar *R$ ${formatMoney(amount)}* · ${(candidate.payment_method||'dinheiro').replace(/_/g,' ')}`;
+          const paymentAction=deliveryPaid(candidate)?'':` · cobrar *R$ ${formatMoney(amount)}* · ${(candidate.payment_method||'dinheiro').replace(/_/g,' ')}`;
           msg2.push(`   ↳ *${candidateName}* · ${reference}${codeInfo}${candidateDrinks}${paymentAction}`);
         });
-        const groupedTotal=groupedDeliveries.filter(item=>!item.is_paid).reduce((sum,item)=>sum+deliveryCharge(item),0);
+        const groupedTotal=groupedDeliveries.filter(item=>!deliveryPaid(item)).reduce((sum,item)=>sum+deliveryCharge(item),0);
         if(groupedTotal>0)msg2.push(`   💰 Total da parada a cobrar: *R$ ${formatMoney(groupedTotal)}*`);
         msg2.push('   📍 *1 parada física · pedidos e códigos separados*');
       }else{
@@ -536,31 +550,35 @@ export async function generateRouteMessages(
 
     const drinkKeys = Object.keys(drinksSummary);
     if (drinkKeys.length > 0) {
-      msg2.push(`🥤 *Bebidas da bag*`);
-      msg2.push(`Conferir antes de sair:`);
+      msg2.push(`🥤 *Bebidas desta rota*`);
+      msg2.push(`⚠️ *Conferir antes de sair:*`);
       msg2.push('');
       drinkKeys.forEach(key => {
-        msg2.push(`• *${drinksSummary[key].qty}x ${drinksSummary[key].name}*`);
+        msg2.push(`  • *${drinksSummary[key].qty}x ${drinksSummary[key].name}*`);
       });
       msg2.push(`──────────────`);
     }
 
-    msg2.push(`💳 *MAQUININHA*`);
     if (stopsNeedingPosMachine.length > 0) {
-      msg2.push(`⚠️ *LEVAR MAQUININHA*`);
-      msg2.push(`Cobrança nas paradas: ${stopsNeedingPosMachine.map(getNumberEmoji).join(', ')}`);
-    } else {
-      msg2.push(`Não precisa levar nesta rota.`);
+      msg2.push(`💳 *COBRANÇAS NO CARTÃO · LEVAR MAQUININHA*`);
+      const byStop = new Map<number, { names: string[]; neighborhood: string; amount: number }>();
+      stopsNeedingPosMachine.forEach((item) => {
+        const entry = byStop.get(item.num) || { names: [], neighborhood: item.neighborhood, amount: 0 };
+        if (!entry.names.includes(item.name)) entry.names.push(item.name);
+        entry.amount += item.amount;
+        byStop.set(item.num, entry);
+      });
+      byStop.forEach((entry, num) => msg2.push(`  • ${getNumberEmoji(num)} *${entry.names.join(' + ')}* (${entry.neighborhood}) · *R$ ${formatMoney(entry.amount)}*`));
     }
     msg2.push(`──────────────`);
 
     // LISTA ORGANIZADA DE CÓDIGOS NO FINAL
     if (stopsNeedingCode.length > 0) {
-      msg2.push(`🔐 *Códigos iFood*`);
+      msg2.push(`🔐 *Confirmações necessárias*`);
       msg2.push(`*Pegar com o cliente:*`);
       stopsNeedingCode.forEach((stop) => {
         const duplicateNeighborhood = neighborhoodCounts[stop.neighborhood] > 1;
-        msg2.push(`• ${stop.num}. *${stop.neighborhood}*${duplicateNeighborhood ? ` (${stop.street})` : ''}`);
+        msg2.push(`  • ${getNumberEmoji(stop.num)} *${stop.neighborhood}*${duplicateNeighborhood ? ` · ${stop.street}` : ''} (${stop.client})`);
       });
       msg2.push(`──────────────`);
     }
@@ -569,7 +587,7 @@ export async function generateRouteMessages(
       msg2.push(`📲 *Contato rápido*`);
       msg2.push(`Se precisar falar com o cliente:`);
       stopsNeedingCall.forEach(s => {
-        msg2.push(`• ${getNumberEmoji(s.num)} *${s.name}* · link direto na Mensagem 1`);
+        msg2.push(`  • ${getNumberEmoji(s.num)} *${s.name}* · 📲 *${s.phone}*`);
       });
       msg2.push(`──────────────`);
     }

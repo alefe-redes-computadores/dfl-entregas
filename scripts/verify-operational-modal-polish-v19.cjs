@@ -15,7 +15,7 @@ ok(checklist.includes('aria-busy={busy}'), 'estado ocupado acessível');
 ok(checklist.includes('LoaderCircle') && checklist.includes('animate-spin'), 'feedback visual imediato');
 ok(checklist.includes('busySeconds >= 4'), 'espera longa recebe explicação');
 ok(checklist.includes("document.body.style.overflow = 'hidden'"), 'fundo protegido durante o modal');
-ok(route.includes('await Haptics.impact({ style: ImpactStyle.Medium });\n      }\n      await startRoute(route.id);'), 'confirmação da saída tem feedback tátil imediato');
+ok(route.includes('await safeRouteHaptic();\n      await startRoute(route.id);') && route.includes('catch { /* feedback tátil é opcional */ }'), 'confirmação da saída tem feedback tátil imediato');
 if (errors) {
   console.error(`\nV19: ${errors} contrato(s) falharam.`);
   process.exit(1);

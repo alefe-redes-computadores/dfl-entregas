@@ -8,7 +8,7 @@ ok(!c.includes('GripVertical'),'arrasto redundante removido do card');
 ok(!c.includes('pendingCount > 1 &&\n    !manualLocked'),'controle não desaparece quando travado');
 ok(!c.includes('disabled={manualLocked}'),'setas continuam disponíveis para decisão manual explícita');
 ok(!s.includes("{ metadata: { order_locked: false, order_source: 'manual'"),'movimento manual preserva trava do otimizador');
-ok(c.includes('groupedDeliveries);'),'cópia individual receb todos os pedidos da parada');
+ok(c.includes('groupedDeliveries, typeof delivery.order_index'),'cópia individual receb todos os pedidos da parada');
 ok(w.includes('PEDIDOS · 1 PARADA'),'mensagem individual enumera grupo');
 ok(w.includes('groupedPending')&&w.includes('Cobrar na parada'),'mensagem individual resume pago e cobrança');
 ok(w.includes("parts.push('', '🗺️ *Abrir no mapa:*', mapLink)"),'mensagem individual agrupada preserva mapa');

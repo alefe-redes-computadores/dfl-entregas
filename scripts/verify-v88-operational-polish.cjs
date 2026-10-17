@@ -1,0 +1,16 @@
+const fs=require('node:fs');
+const read=file=>fs.readFileSync(file,'utf8');
+const ok=(value,label)=>{if(!value)throw new Error(`V88: ${label}`);console.log('OK:',label)};
+const route=read('components/home/RouteAccordion.tsx');
+const card=read('lib/route-share-card.ts');
+const stock=read('app/estoque/page.tsx');
+const categories=read('lib/stock-categories.ts');
+const settlement=read('app/motoboys/acerto/page.tsx');
+ok(route.includes("!optimizerApproximateIds.includes(delivery.id) ? optimizerResolvedPoints[delivery.id]") ,'mapa reutiliza somente coordenadas resolvidas confiáveis');
+ok(card.includes('customer_charge ?? item.value')&&card.includes('RECEBER')&&card.includes("item.drinks?.trim()"),'imagem resume cobrança e bebida por parada');
+ok(!card.includes('Não é um mapa geográfico.')&&!card.includes('Posições ilustrativas'),'fallback verboso removido');
+ok(stock.includes('Revisões do estoque')&&stock.includes('reviewOpen')&&stock.includes('<StockCriticalBanner products={active} />'),'conferências ficam em central compacta');
+ok(categories.includes("if (value === 'Frios') return 'indigo'")&&categories.includes("if (value === 'Limpeza e higiene') return 'sky'"),'categorias próximas recebem cores distintas');
+ok(settlement.includes('Motivo: lanche, combustível...')&&!settlement.includes('DEFAULT_CATEGORIES'),'acerto usa motivo livre sem categorias rígidas');
+ok(settlement.includes("description.length<2")&&settlement.includes("kind:adjustmentDirection==='addition'?'addition':'custom'"),'ajuste livre permanece validado e tipado');
+console.log('\nV88 POLIMENTO OPERACIONAL: CONTRATOS OK');

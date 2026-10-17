@@ -22,7 +22,7 @@ export default function NewStockSupplyPage() {
   const [busy, setBusy] = useState(false);
 
   const save = async (value: StockSupplyFormValue) => {
-    if (busy) return;
+    if (busy) throw new Error('Compra já está sendo salva.');
 
     setBusy(true);
 
@@ -37,24 +37,20 @@ export default function NewStockSupplyPage() {
     };
 
     try {
-      /*
-       * addStockSupply altera o Zustand antes do Firestore.
-       * Podemos abrir os detalhes imediatamente sem fingir
-       * que a persistência já terminou.
-       */
+      // Zustand atualiza de forma otimista, mas só navegamos após a gravação remota.
+      // Caso falhe, a store reverte e o formulário preserva o rascunho.
       const operation = addStockSupply(supply);
-
-      void feedbackSuccess();
 
       toast.loading('Compra registrada. Sincronizando...', {
         id: 'purchase-save',
       });
 
+      await operation;
+      void feedbackSuccess();
+
       router.replace(
         `/abastecimentos/detalhes?id=${supply.id}`,
       );
-
-      await operation;
 
       toast.success('Compra sincronizada.', {
         id: 'purchase-save',
@@ -68,9 +64,10 @@ export default function NewStockSupplyPage() {
       void feedbackError();
 
       toast.error(
-        'A compra não pôde ser sincronizada e foi desfeita.',
+        'Compra não salva. Os dados do formulário foram mantidos.',
         { id: 'purchase-save' },
       );
+      throw error;
     } finally {
       setBusy(false);
     }

@@ -2,9 +2,9 @@ import type { Delivery, Motoboy, OperationalExpense, Route } from '@/types';
 import {
   operationalDateKey,
   routeBelongsToMotoboy,
-  routeOperationalDate,
 } from '@/lib/motoboy-analytics';
 import { isInternalOperationalMotoboy } from '@/lib/operational-exclusions';
+import { routeOperationalDateKey } from '@/lib/operational-time';
 
 export function buildPendingMotoboySettlements(input:{
   motoboys:Motoboy[];
@@ -20,8 +20,7 @@ export function buildPendingMotoboySettlements(input:{
     .flatMap((motoboy)=>{
       const dayRoutes=input.routes.filter((route)=>{
         if(!routeBelongsToMotoboy(route,motoboy))return false;
-        const value=routeOperationalDate(route);
-        return value?operationalDateKey(value)===date:false;
+        return routeOperationalDateKey(route)===date;
       });
 
       if(!dayRoutes.length)return [];

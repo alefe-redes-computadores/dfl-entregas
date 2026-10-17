@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
@@ -20,11 +20,20 @@ import { StoreTimePicker } from '@/components/store/StoreTimePicker';
 import { useDeliveryIntelligence } from '@/hooks/useDeliveryIntelligence';
 import { isWithinSchedule, validateSchedule } from '@/lib/operational-time';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
-import { requestDeviceLocation } from '@/lib/device-location';
+import { requestDeviceLocation, LocationFailure, type LocationFailureCode } from '@/lib/device-location';
+import { LocationPermissionGuide } from '@/components/location/LocationPermissionGuide';
+import { storedOriginPoint, hasSpecificStoreAddress } from '@/lib/store-origin';
 import { extractLatLngFromMapsUrl, parseCoordinateString } from '@/lib/maps';
 import { SiteAdminHub } from '@/components/store/SiteAdminHub';
+import { OperationalAttentionQueue } from '@/components/store/OperationalAttentionQueue';
 
 const DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+// Feedback tatil e estritamente nao bloqueante: falha do Android nunca impede persistencia.
+const touchFeedback = (style: ImpactStyle): void => {
+  if (!Capacitor.isNativePlatform()) return;
+  try { void Haptics.impact({ style }).catch(() => undefined); } catch { /* plugin indisponivel */ }
+};
 
 const formatMoney = (val: number) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -44,6 +53,10 @@ export default function LojaPage() {
   const settingsProtectionOff = storeSettings.routeReminderEnabled === false && storeSettings.autoCloseCompletedRoutes === false;
 
   const [isStoreOpen, setIsStoreOpen] = useState(false);
+  const toggleInFlight = useRef(false);
+  const settingsInFlight = useRef(false);
+  const [storeToggleBusy, setStoreToggleBusy] = useState(false);
+  const [storeSettingsBusy, setStoreSettingsBusy] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [storeAddress, setStoreAddress] = useState('Patos de Minas, MG');
   const [storePoint, setStorePoint] = useState<{lat:number;lng:number}|null>(null);
@@ -51,6 +64,7 @@ export default function LojaPage() {
 
   // Dashboard Hook
   const dashboardData = useStoreDashboard();
+
   const intelligence = useDeliveryIntelligence({
     lookbackDays: 30,
     minimumSample: 5,
@@ -165,11 +179,10 @@ export default function LojaPage() {
   }, [hasHydrated]);
 
   const toggleStore = async () => {
-    if (Capacitor.isNativePlatform()) {
-      await Haptics.impact({
-        style: ImpactStyle.Heavy,
-      });
-    }
+    if (toggleInFlight.current || settingsInFlight.current) return;
+    toggleInFlight.current = true;
+    setStoreToggleBusy(true);
+    touchFeedback(ImpactStyle.Heavy);
 
     const previousState = isStoreOpen;
     const newState = !previousState;
@@ -196,6 +209,9 @@ export default function LojaPage() {
             'A alteração local foi desfeita.',
         },
       );
+    } finally {
+      toggleInFlight.current = false;
+      setStoreToggleBusy(false);
     }
   };
 
@@ -203,12 +219,10 @@ export default function LojaPage() {
     e?: React.FormEvent,
   ) => {
     if (e) e.preventDefault();
-
-    if (Capacitor.isNativePlatform()) {
-      await Haptics.impact({
-        style: ImpactStyle.Medium,
-      });
-    }
+    if (settingsInFlight.current || toggleInFlight.current) return;
+    settingsInFlight.current = true;
+    setStoreSettingsBusy(true);
+    touchFeedback(ImpactStyle.Medium);
 
     try {
       await updateStoreSettings({
@@ -236,27 +250,64 @@ export default function LojaPage() {
             'Confira sua conexão e tente novamente.',
         },
       );
+    } finally {
+      settingsInFlight.current = false;
+      setStoreSettingsBusy(false);
     }
   };
 
-  const captureStoreLocation=async()=>{try{setStorePoint(await requestDeviceLocation());toast.success('Localização da loja capturada. Salve as configurações.')}catch(error){toast.error('Não foi possível capturar a localização.',{description:error instanceof Error?error.message:'Confira a permissão do navegador.'})}};
+  const [capturingStoreLocation, setCapturingStoreLocation] = useState(false);
+  const [locationFailure, setLocationFailure] = useState<LocationFailureCode | null>(null);
+  const captureStoreLocation = async () => {
+    if (capturingStoreLocation) return;
+    setCapturingStoreLocation(true);
+    setLocationFailure(null);
+    try {
+      const point = await requestDeviceLocation();
+      await updateStoreSettings({ storeLatitude: point.lat, storeLongitude: point.lng });
+      setStorePoint(point);
+      toast.success('Origem das rotas salva com a localização atual.');
+      if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light);
+    } catch (error) {
+      setLocationFailure(error instanceof LocationFailure ? error.code : 'unknown');
+      toast.error('Não foi possível salvar a localização.', { description: error instanceof Error ? error.message : 'Confira as permissões do dispositivo.' });
+    } finally {
+      setCapturingStoreLocation(false);
+    }
+  };
   const applyStoreReference=()=>{const point=parseCoordinateString(storeLocationReference)||extractLatLngFromMapsUrl(storeLocationReference);if(!point)return toast.error('Cole coordenadas ou um link completo do Maps com latitude e longitude.');setStorePoint(point);toast.success('Origem da loja reconhecida. Salve as configurações.')};
 
   const openDayEditor = (dayIndex: number) => {
-    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light });
+    if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light);
     setEditingDay(dayIndex);
     setTempDaySchedule(schedule[dayIndex] || { active: true, shifts: [{ start: '18:00', end: '23:00' }] });
   };
 
-  const saveDayEditor = () => {
-    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium });
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const saveDayEditor = async () => {
+    if (savingSchedule || editingDay === null) return;
     const error = validateSchedule(tempDaySchedule);
     if (error) { toast.error('Confira os horários', { description: error }); return; }
-    if (editingDay !== null) { setSchedule(prev => ({ ...prev, [editingDay]: { ...tempDaySchedule, shifts: tempDaySchedule.shifts.map(shift => ({...shift})) } })); setEditingDay(null); }
+    const nextSchedule = {
+      ...schedule,
+      [editingDay]: { ...tempDaySchedule, shifts: tempDaySchedule.shifts.map(shift => ({ ...shift })) },
+    };
+    setSavingSchedule(true);
+    try {
+      await updateStoreSettings({ schedule: nextSchedule });
+      setSchedule(nextSchedule);
+      setEditingDay(null);
+      toast.success('Horário salvo na operação.');
+      if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Medium);
+    } catch {
+      toast.error('Não foi possível salvar o horário.', { description: 'O editor foi mantido aberto para tentar novamente.' });
+    } finally {
+      setSavingSchedule(false);
+    }
   };
 
   const applyQuickAdjustment = (type: '24h' | 'almoco' | 'janta' | 'ambos') => {
-    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light });
+    if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light);
     let s: Shift[] = [];
     if (type === '24h') s = [{ start: '00:00', end: '23:59' }];
     if (type === 'almoco') s = [{ start: '11:00', end: '15:00' }];
@@ -267,7 +318,7 @@ export default function LojaPage() {
 
   const confirmTimePicker = () => {
     if (!timePicker) return;
-    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium });
+    if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Medium);
     if (editingDay !== null) {
       setTempDaySchedule(prev => {
         const ns = prev.shifts.map(shift => ({ ...shift }));
@@ -299,7 +350,7 @@ export default function LojaPage() {
 
       <section className={`overflow-hidden rounded-[24px] border shadow-[0_18px_45px_rgba(0,0,0,.14)] ${isStoreOpen ? 'border-emerald-500/25 bg-gradient-to-br from-emerald-500/[.09] via-zinc-900/55 to-zinc-950/60' : 'border-zinc-800 bg-gradient-to-br from-zinc-900/80 to-zinc-950/60'}`}>
         <button
-          onClick={toggleStore}
+          onClick={toggleStore} disabled={storeToggleBusy || storeSettingsBusy} aria-busy={storeToggleBusy}
           className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left active:scale-[0.99]"
         >
           <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isStoreOpen ? 'bg-emerald-400 text-zinc-950 shadow-[0_0_24px_rgba(52,211,153,.16)]' : 'bg-zinc-800/90 text-zinc-500'}`}>
@@ -339,10 +390,12 @@ export default function LojaPage() {
           </span>
         </div>
 
+        <OperationalAttentionQueue orders={dashboardData.selectedDateOrders} selectedDateKey={dashboardData.selectedDateKey} onFinance={()=>setIsRevenueModalOpen(true)}/>
+
         <button
           onClick={() => {
             if (Capacitor.isNativePlatform()) {
-              Haptics.impact({ style: ImpactStyle.Light });
+              touchFeedback(ImpactStyle.Light);
             }
             router.push('/loja/caixa-de-entrada');
           }}
@@ -368,22 +421,22 @@ export default function LojaPage() {
         </button>
 
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative min-h-[118px] overflow-hidden rounded-[22px] border border-amber-500/20 bg-gradient-to-br from-amber-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
+          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir entregas: ${dashboardData.totalEntregas} no período`} className="group relative min-h-[104px] overflow-hidden rounded-[20px] border border-amber-500/20 bg-gradient-to-br from-amber-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
             </div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Entregas</p>
-            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.totalEntregas} registradas no período</p>
+            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Entregas <span className="ml-1 text-lg text-amber-300">{dashboardData.totalEntregas}</span></p>
+            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Consultar pedidos e pendências</p>
           </button>
 
-          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} className="group relative min-h-[118px] overflow-hidden rounded-[22px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
+          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir rotas: ${dashboardData.selectedDateRoutes.length} no período`} className="group relative min-h-[104px] overflow-hidden rounded-[20px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
             </div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Rotas</p>
-            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.selectedDateRoutes.length} rota{dashboardData.selectedDateRoutes.length === 1 ? '' : 's'} no período</p>
+            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Rotas <span className="ml-1 text-lg text-sky-300">{dashboardData.selectedDateRoutes.length}</span></p>
+            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Acompanhar sequência e motoboys</p>
           </button>
 
           <div className="col-span-2 mt-1 flex items-center gap-2 px-1 pt-1">
@@ -442,7 +495,7 @@ export default function LojaPage() {
 
           <div className="flex items-center gap-1">
             <button
-              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToPreviousDay(); }}
+              onClick={() => { if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light); dashboardData.goToPreviousDay(); }}
               className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-500 active:scale-95"
               aria-label="Dia anterior"
             >
@@ -455,7 +508,7 @@ export default function LojaPage() {
               {dashboardData.formattedDateLabel}
             </button>
             <button
-              onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); dashboardData.goToNextDay(); }}
+              onClick={() => { if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light); dashboardData.goToNextDay(); }}
               className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-500 active:scale-95"
               aria-label="Próximo dia"
             >
@@ -566,6 +619,11 @@ export default function LojaPage() {
           </button>
         </div>
 
+        {isScheduleEditorOpen && (
+          <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/[.06] px-3 py-2 text-[11px] font-medium text-emerald-300">
+            Toque no dia, ajuste os horários e use “Salvar horário deste dia”. A alteração será gravada sem precisar abrir Configurações.
+          </p>
+        )}
         {!isScheduleEditorOpen && (
           <div className="rounded-[20px] border border-zinc-800/80 bg-zinc-900/35 p-3.5">
             <div className="flex items-start justify-between gap-4">
@@ -698,8 +756,14 @@ export default function LojaPage() {
           <div className="flex flex-col gap-4 rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-4">
             <div className="flex flex-col gap-2">
               <AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" />
-              <p className="px-1 text-[10px] font-medium text-zinc-600">Usado como ponto de partida das rotas.</p>
-              <button type="button" onClick={captureStoreLocation} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-sky-500/25 bg-sky-500/[.07] text-xs font-black text-sky-400"><Crosshair size={15}/>{storePoint?'Localização precisa salva':'Usar localização atual da loja'}</button>
+              <p className="px-1 text-[11px] font-medium text-zinc-400">Origem das rotas. Informe rua e número ou salve um ponto exato no mapa.</p>
+              {!(storePoint || storedOriginPoint(storeSettings)) && !hasSpecificStoreAddress(storeAddress) && (
+                <p role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/[.05] p-3 text-[11px] leading-relaxed text-amber-200">
+                  Cidade ou bairro isolado não define a origem da loja. Para organizar as rotas corretamente, salve a localização precisa ou informe o endereço completo.
+                </p>
+              )}
+              <button type="button" onClick={captureStoreLocation} disabled={capturingStoreLocation} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-sky-500/25 bg-sky-500/[.07] px-3 text-xs font-black text-sky-400 disabled:opacity-50"><Crosshair size={15}/>{capturingStoreLocation ? 'Obtendo e salvando localização…' : 'Usar GPS e salvar origem da loja'}</button>
+              <LocationPermissionGuide code={locationFailure} />
               <div className="grid grid-cols-[1fr_auto] gap-2"><input value={storeLocationReference} onChange={e=>setStoreLocationReference(e.target.value)} placeholder="Coordenadas ou link completo do Maps" className="h-11 min-w-0 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-xs text-zinc-200 outline-none focus:border-sky-500"/><button type="button" onClick={applyStoreReference} className="rounded-xl border border-zinc-700 px-3 text-[10px] font-black text-zinc-300">Usar</button></div>
             </div>
 
@@ -711,7 +775,7 @@ export default function LojaPage() {
                   <p className="text-[10px] text-zinc-600">Avisa quando o motoboy volta</p>
                 </div>
               </div>
-              <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setRouteAlertsEnabled(!routeAlertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full ${routeAlertsEnabled ? 'bg-amber-500' : 'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${routeAlertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
+              <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light); setRouteAlertsEnabled(!routeAlertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full ${routeAlertsEnabled ? 'bg-amber-500' : 'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${routeAlertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
             </div>
 
             <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
@@ -722,7 +786,7 @@ export default function LojaPage() {
                   <p className="text-[10px] text-zinc-600">Abre e fecha pelos horários</p>
                 </div>
               </div>
-              <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setAlertsEnabled(!alertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full ${alertsEnabled ? 'bg-sky-500' : 'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${alertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
+              <button type="button" onClick={() => { if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light); setAlertsEnabled(!alertsEnabled); }} className={`relative inline-flex h-8 w-14 items-center rounded-full ${alertsEnabled ? 'bg-sky-500' : 'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${alertsEnabled ? 'translate-x-7' : 'translate-x-1'}`} /></button>
             </div>
 
             <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
@@ -730,7 +794,7 @@ export default function LojaPage() {
               <button type="button" onClick={()=>updateStoreSettings({routeReminderEnabled:settingsProtectionOff,autoCloseCompletedRoutes:settingsProtectionOff})} className={`relative inline-flex h-8 w-14 items-center rounded-full ${!settingsProtectionOff?'bg-violet-500':'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${!settingsProtectionOff?'translate-x-7':'translate-x-1'}`}/></button>
             </div>
 
-            <button onClick={handleSaveAllSettings} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white active:scale-95"><Check size={16} /> Salvar configurações</button>
+            <button onClick={handleSaveAllSettings} disabled={storeSettingsBusy || storeToggleBusy} aria-busy={storeSettingsBusy} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white active:scale-95"><Check size={16} /> Salvar configurações</button>
           </div>
         )}
       </section>
@@ -739,18 +803,18 @@ export default function LojaPage() {
         <div className="fixed inset-0 z-[80] flex flex-col bg-zinc-950 animate-in slide-in-from-bottom duration-300">
            <div className="flex items-center justify-between p-4 border-b border-zinc-800/80 bg-zinc-950 shrink-0"><button onClick={() => setEditingDay(null)} className="p-2 text-zinc-400 active:scale-90 bg-zinc-900 rounded-full"><ChevronLeft size={24}/></button><span className="font-bold text-zinc-50">Editar horários</span><div className="w-10"></div></div>
            <div className="flex-1 overflow-y-auto pb-32">
-             <div className="p-6 flex items-center justify-between"><span className="text-2xl font-bold text-zinc-100">{DAYS_OF_WEEK[editingDay]}</span><button type="button" onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTempDaySchedule(prev => ({ ...prev, active: !prev.active })); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 ${tempDaySchedule.active ? 'bg-indigo-500' : 'bg-zinc-800 border border-zinc-700'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${tempDaySchedule.active ? 'translate-x-7' : 'translate-x-1'}`} /></button></div>
+             <div className="p-6 flex items-center justify-between"><span className="text-2xl font-bold text-zinc-100">{DAYS_OF_WEEK[editingDay]}</span><button type="button" onClick={() => { if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light); setTempDaySchedule(prev => ({ ...prev, active: !prev.active })); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 ${tempDaySchedule.active ? 'bg-indigo-500' : 'bg-zinc-800 border border-zinc-700'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${tempDaySchedule.active ? 'translate-x-7' : 'translate-x-1'}`} /></button></div>
              {tempDaySchedule.active && (
                <div className="px-6 flex flex-col gap-4">
                  {tempDaySchedule.shifts.map((shift, sIdx) => (
                    <div key={sIdx} className="flex items-center gap-3">
-                     <button onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker({ isOpen: true, shiftIndex: sIdx, field: 'start', hour: shift.start.split(':')[0], minute: shift.start.split(':')[1] }); }} className="flex-1 h-14 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 flex items-center justify-between text-zinc-200 font-bold active:bg-zinc-800 transition-colors shadow-sm">{shift.start}<ChevronDown size={18} className="text-zinc-500" /></button>
+                     <button onClick={() => { if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light); setTimePicker({ isOpen: true, shiftIndex: sIdx, field: 'start', hour: shift.start.split(':')[0], minute: shift.start.split(':')[1] }); }} className="flex-1 h-14 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 flex items-center justify-between text-zinc-200 font-bold active:bg-zinc-800 transition-colors shadow-sm">{shift.start}<ChevronDown size={18} className="text-zinc-500" /></button>
                      <span className="text-zinc-600 font-black">-</span>
-                     <button onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTimePicker({ isOpen: true, shiftIndex: sIdx, field: 'end', hour: shift.end.split(':')[0], minute: shift.end.split(':')[1] }); }} className="flex-1 h-14 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 flex items-center justify-between text-zinc-200 font-bold active:bg-zinc-800 transition-colors shadow-sm">{shift.end}<ChevronDown size={18} className="text-zinc-500" /></button>
-                     {tempDaySchedule.shifts.length > 1 && <button onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium }); setTempDaySchedule(p => ({...p, shifts: p.shifts.filter((_, idx) => idx !== sIdx)})); }} className="p-4 text-zinc-500 hover:text-red-500 bg-zinc-900 border border-zinc-800 rounded-2xl transition-colors"><Trash2 size={20}/></button>}
+                     <button onClick={() => { if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light); setTimePicker({ isOpen: true, shiftIndex: sIdx, field: 'end', hour: shift.end.split(':')[0], minute: shift.end.split(':')[1] }); }} className="flex-1 h-14 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 flex items-center justify-between text-zinc-200 font-bold active:bg-zinc-800 transition-colors shadow-sm">{shift.end}<ChevronDown size={18} className="text-zinc-500" /></button>
+                     {tempDaySchedule.shifts.length > 1 && <button onClick={() => { if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Medium); setTempDaySchedule(p => ({...p, shifts: p.shifts.filter((_, idx) => idx !== sIdx)})); }} className="p-4 text-zinc-500 hover:text-red-500 bg-zinc-900 border border-zinc-800 rounded-2xl transition-colors"><Trash2 size={20}/></button>}
                    </div>
                  ))}
-                 <button onClick={() => { if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light }); setTempDaySchedule(p => ({...p, shifts: [...p.shifts, { start: '00:00', end: '00:00' }]})); }} className="self-end p-3 bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 active:scale-90 transition-all mt-2 shadow-sm"><Plus size={20}/></button>
+                 <button onClick={() => { if (Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Light); setTempDaySchedule(p => ({...p, shifts: [...p.shifts, { start: '00:00', end: '00:00' }]})); }} className="self-end p-3 bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 active:scale-90 transition-all mt-2 shadow-sm"><Plus size={20}/></button>
                </div>
              )}
              <div className="flex flex-col px-6 mt-10">
@@ -760,7 +824,7 @@ export default function LojaPage() {
                 <button onClick={() => applyQuickAdjustment('janta')} className="text-left py-5 border-b border-zinc-800/80 text-zinc-300 text-sm font-semibold active:bg-zinc-900/50 transition-colors">Janta | 18:00 às 23:00h</button>
              </div>
            </div>
-           <div className="dfl-fixed-footer fixed bottom-0 left-1/2 w-full max-w-md -translate-x-1/2 border-t border-zinc-800 bg-zinc-950 p-4 shrink-0"><button onClick={saveDayEditor} className="w-full h-14 bg-zinc-100 hover:bg-white text-zinc-950 font-black rounded-xl text-lg active:scale-95 transition-all shadow-xl">Confirmar</button></div>
+           <div className="dfl-fixed-footer fixed bottom-0 left-1/2 w-full max-w-md -translate-x-1/2 border-t border-zinc-800 bg-zinc-950 p-4 shrink-0"><button onClick={saveDayEditor} disabled={savingSchedule} className="w-full h-14 bg-emerald-500 disabled:opacity-60 text-zinc-950 font-black rounded-xl text-base active:scale-95 transition-all shadow-xl">{savingSchedule ? "Salvando horário…" : "Salvar horário deste dia"}</button></div>
         </div>
       )}
 
@@ -776,7 +840,7 @@ export default function LojaPage() {
                   <div className="flex flex-col gap-1.5 flex-1"><span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider px-1">Fim</span><input type="date" onChange={e => setTempPause({...tempPause, end_date: e.target.value})} className="h-14 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-sm text-zinc-200 focus:border-amber-500 outline-none transition-colors" /></div>
                 </div>
              </div>
-             <button onClick={() => { if(Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium }); setPauses(prev => [...prev, { ...tempPause, id: Date.now().toString() }]); setIsPauseModalOpen(false); }} className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black rounded-xl mt-2 active:scale-95 transition-all text-lg shadow-lg shadow-amber-500/20">Salvar Pausa</button>
+             <button onClick={() => { if(Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Medium); setPauses(prev => [...prev, { ...tempPause, id: Date.now().toString() }]); setIsPauseModalOpen(false); }} className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black rounded-xl mt-2 active:scale-95 transition-all text-lg shadow-lg shadow-amber-500/20">Salvar Pausa</button>
            </div>
         </div>
       )}

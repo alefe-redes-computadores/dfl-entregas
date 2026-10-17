@@ -1,0 +1,11 @@
+const fs=require('fs'),assert=require('assert');const read=p=>fs.readFileSync(p,'utf8');
+const route=read('components/home/RouteAccordion.tsx');const queue=read('components/store/OperationalAttentionQueue.tsx');
+assert(route.includes('stopMeta.get(delivery.id)?.stopNumber ?? index + 1'),'Physical stop positions must survive completed stops');
+assert(route.includes('[getCustomerById, sortedDeliveries, stopMeta]'),'Stop metadata must be memo dependency');
+assert(route.includes('aria-expanded={isOpen}'),'Route collapse must be accessible');
+assert(route.includes('aria-expanded={sequenceExpanded}'),'Sequence collapse must be accessible');
+assert(route.includes('!isCompleted && !isVirtualRoute && routePreviewStops.length > 0'),'Finished routes must not show operational sequence');
+assert(queue.includes('const effectiveFilter = filter'),'Missing filter fallback');
+assert(queue.includes('aria-controls="dfl-operational-attention-details"'),'Queue disclosure must name its panel');
+assert(queue.includes('aria-label={`${labels[task.kind]}'),'Action must identify task');
+console.log('V89.8: rota compacta, ordem física, fila e acessibilidade OK');

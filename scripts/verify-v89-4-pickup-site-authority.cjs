@@ -1,0 +1,14 @@
+const fs = require('fs');
+const assert = require('assert');
+const details=fs.readFileSync('app/entregas/details/page.tsx','utf8');
+const site=fs.readFileSync('lib/integration/site-order.ts','utf8');
+const reverse=fs.readFileSync('lib/integration/server/reverseReconciler.ts','utf8');
+assert(details.includes("import { canMarkSitePickupReady, isCancelledSiteDelivery }"));
+assert(details.includes("if (!canMarkSitePickupReady(delivery) || isMarkingReady) return;"));
+assert(details.includes("delivery.source_system === 'dfl_site' && mode === 'pickup'"));
+assert(site.includes("export function canMarkSitePickupReady"));
+assert(site.includes("delivery.source_system === 'dfl_site'"));
+assert(site.includes("delivery.fulfillment_mode === 'pickup'"));
+assert(site.includes("!isCancelledSiteDelivery(delivery)"));
+assert(reverse.includes("str(delivery.source_system) === 'dfl_site' && str(delivery.external_order_id) && str(delivery.pickup_ready_at)"));
+console.log('V89.4: prontidão exclusiva de retirada do site, protegida no UI e no emissor de eventos');

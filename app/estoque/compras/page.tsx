@@ -13,12 +13,16 @@ import {
   PackagePlus,
   Plus,
   Save,
+  Search,
+  X,
+  ShoppingBasket,
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { stockLevel } from '@/lib/stock';
+import { rankStockProducts } from '@/lib/stock-search';
 import { stockOperationLabel, stockOperationPriority, stockOperationRank, stockOperationTiming } from '@/lib/stock-operation';
 import {
   buildStockRecommendations,
@@ -159,6 +163,8 @@ export default function ShoppingList() {
   );
 
   const [showAll, setShowAll] = useState(false);
+  const [query, setQuery] = useState('');
+  const [showOnlySelected, setShowOnlySelected] = useState(false);
 
   const [selected, setSelected] = useState<
     Record<string, boolean>
@@ -232,9 +238,10 @@ export default function ShoppingList() {
     );
   }, [netRecommendationMap, suggested]);
 
-  const displayed = showAll
-    ? products
-    : suggested;
+  const displayed = useMemo(() => rankStockProducts(
+    showAll ? products : suggested, query,
+  ).filter((product) => !showOnlySelected || selected[product.id]),
+  [showAll, products, suggested, query, showOnlySelected, selected]);
 
   const chosen = products.filter(
     (product) =>
@@ -245,6 +252,7 @@ export default function ShoppingList() {
   );
 
   const create = async () => {
+    if (busy || !chosen.length) return;
     setBusy(true);
 
     try {
@@ -307,6 +315,19 @@ export default function ShoppingList() {
     }
   };
 
+  const selectedCount = chosen.length;
+  const hiddenSelectedCount = chosen.filter((item) => !displayed.some((shown) => shown.id === item.id)).length;
+  const selectableDisplayed = displayed.filter(product => !selected[product.id]);
+  const selectedDisplayedCount = displayed.length - selectableDisplayed.length;
+  const toggleVisibleSelection = () => {
+    if(busy||!displayed.length)return;
+    const shouldSelect = selectableDisplayed.length > 0;
+    setSelected(current => ({...current,...Object.fromEntries(displayed.map(product => [product.id,shouldSelect]))}));
+    if(shouldSelect){
+      setQuantities(current => ({...current,...Object.fromEntries(displayed.filter(product=>current[product.id]===undefined).map(product=>[product.id,String(Number((netRecommendationMap.get(product.id)?.purchaseQuantity||1).toFixed(3)))]))}));
+    }
+  };
+
   return (
     <div className="pb-10">
       <PageHeader
@@ -340,6 +361,7 @@ export default function ShoppingList() {
 
       <div className="mb-4 grid grid-cols-2 gap-2">
         <button
+          type="button" aria-pressed={!showAll}
           onClick={() => setShowAll(false)}
           className={`h-11 rounded-xl border text-xs font-black ${
             !showAll
@@ -351,6 +373,7 @@ export default function ShoppingList() {
         </button>
 
         <button
+          type="button" aria-pressed={showAll}
           onClick={() => setShowAll(true)}
           className={`h-11 rounded-xl border text-xs font-black ${
             showAll
@@ -361,6 +384,23 @@ export default function ShoppingList() {
           Todos ativos
         </button>
       </div>
+
+      <section className="mb-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3" aria-label="Busca e revisão da compra" id="dfl-purchase-review">
+        <div className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950 px-3">
+          <Search size={17} className="shrink-0 text-amber-400" />
+          <input aria-label="Buscar produto para comprar" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome ou categoria" className="h-12 min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600" />
+          {query && <button type="button" onClick={() => setQuery('')} aria-label="Limpar busca"><X size={16} className="text-zinc-400" /></button>}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div aria-live="polite" className="flex items-center gap-2 text-xs font-bold text-zinc-300"><ShoppingBasket size={16} className="text-amber-400" />{selectedCount} {selectedCount === 1 ? 'item escolhido' : 'itens escolhidos'}</div>
+          <button type="button" aria-pressed={showOnlySelected} onClick={() => {setShowOnlySelected((current) => !current); if(!showOnlySelected) { setShowAll(true); setQuery(''); }}} className={`min-h-10 rounded-xl border px-3 text-[11px] font-bold ${showOnlySelected ? 'border-amber-500/50 bg-amber-500/10 text-amber-300' : 'border-zinc-700 text-zinc-400'}`}>{showOnlySelected ? 'Exibindo escolhidos' : 'Revisar escolhidos'}</button>
+        </div>
+        {!!displayed.length && <div role="group" aria-label="Seleção em lote de produtos" className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800 pt-2">
+          <span role="status" aria-live="polite" className="text-[11px] text-zinc-400">{displayed.length} visíveis · {selectedDisplayedCount} selecionados nesta lista</span>
+          <button type="button" onClick={toggleVisibleSelection} disabled={busy} className="min-h-11 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-[11px] font-bold text-amber-300 disabled:opacity-50">{selectableDisplayed.length ? 'Selecionar visíveis' : 'Desmarcar visíveis'}</button>
+        </div>}
+        {hiddenSelectedCount > 0 && !showOnlySelected && <button type="button" onClick={()=>{setShowOnlySelected(true);setShowAll(true);setQuery('')}} className="mt-2 flex min-h-11 w-full items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 text-left text-[11px] font-semibold text-amber-200"><span>{hiddenSelectedCount} item(ns) escolhidos fora do filtro</span><span className="font-black">Revisar agora →</span></button>}
+      </section>
 
       <div className="space-y-2">
         {displayed.map((product) => {
@@ -392,6 +432,10 @@ export default function ShoppingList() {
             >
               <div className="flex items-center gap-3">
                 <button
+                  type="button"
+                  aria-pressed={!!selected[product.id]}
+                  aria-label={`${selected[product.id] ? 'Remover' : 'Selecionar'} ${product.name} da compra`}
+                  disabled={busy}
                   onClick={() => {
                     setSelected((value) => ({
                       ...value,
@@ -602,19 +646,23 @@ export default function ShoppingList() {
         })}
 
         {!displayed.length && (
-          <div className="py-16 text-center">
+          <div className="rounded-2xl border border-dashed border-zinc-700/70 bg-zinc-900/30 px-4 py-12 text-center" role="status">
             <PackagePlus className="mx-auto text-emerald-500" />
             <p className="mt-3 text-sm font-bold text-zinc-300">
-              Estoque em dia
+              {query ? 'Nenhum produto corresponde à busca' : showOnlySelected ? 'Nenhum item escolhido' : 'Nenhuma reposição sugerida agora'}
             </p>
+            {query&&<button type="button" onClick={()=>setQuery('')} className="mt-3 min-h-11 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 text-xs font-black text-amber-300">Limpar busca</button>}
+            {!query&&showOnlySelected&&<button type="button" onClick={()=>setShowOnlySelected(false)} className="mt-3 min-h-11 rounded-xl border border-zinc-700 px-4 text-xs font-black text-zinc-300">Ver produtos</button>}
+            {!query&&!showOnlySelected&&!showAll&&<button type="button" onClick={()=>setShowAll(true)} className="mt-3 min-h-11 rounded-xl border border-zinc-700 px-4 text-xs font-black text-zinc-300">Ver todos os produtos</button>}
           </div>
         )}
       </div>
 
+      <a href="#dfl-purchase-review" className="mb-2 mt-5 flex min-h-10 items-center justify-center rounded-xl border border-zinc-800 text-[11px] font-bold text-zinc-400">Voltar à busca e revisão</a>
       <button
         onClick={create}
         disabled={busy || !chosen.length}
-        className="mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 font-black text-zinc-950 disabled:opacity-40"
+        className="sticky bottom-[calc(var(--dfl-safe-bottom)+12px)] z-20 mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-amber-300/40 bg-amber-500 font-black text-zinc-950 shadow-[0_8px_35px_rgba(0,0,0,.45)] disabled:opacity-40"
       >
         <Save size={18} />
         {busy

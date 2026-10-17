@@ -1,0 +1,11 @@
+const fs=require('fs');const assert=require('assert');
+const s=fs.readFileSync('components/home/DeliveryCard.tsx','utf8');
+assert(s.includes('const recurrence = useMemo('),'recorrência deve ser memoizada');
+assert(s.includes('const recurrenceDeliveries = useAppStore((state) => state.deliveries)'),'histórico deve ser selecionado uma única vez');
+assert.equal((s.match(/customerRecurrence\(/g)||[]).length,1,'uma varredura de recorrência por card');
+assert(s.includes("whatsappDigits.startsWith('55')"),'não duplicar DDI de telefone');
+assert(s.includes('https://wa.me/${normalizedWhatsappPhone}'),'WhatsApp deve usar telefone normalizado');
+assert(s.includes('disabled={copyBusy}')&&s.includes('setCopyBusy(false)'),'bloquear cópia repetida e liberar');
+assert(s.includes('deriveDeliveryPaymentState(delivery)'),'estado financeiro canônico preservado');
+assert(s.includes('const groupedDeliveries = stopDeliveries?.length'),'agrupamento preservado');
+console.log('V97 ENTREGA MOBILE: 8 contratos aprovados');

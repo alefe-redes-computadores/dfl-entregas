@@ -811,6 +811,11 @@ export async function notifyStockThresholdChanges(
   preferences?: Partial<NotificationPreferences>,
 ) {
   if (!resolveNotificationPreferences(preferences).enabled) return false;
+  // Movimentações feitas com o app aberto já recebem toast e feedback tátil.
+  // Evita empilhar uma notificação Android para cada toque da conferência.
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    return false;
+  }
 
   const relevant = changes
     .filter(({ after }) => after.active !== false && after.minimum_quantity > 0)
@@ -881,7 +886,7 @@ export async function notifyStockThresholdChanges(
     .join('|')}`;
 
   return notifyOperational(key, title, body, {
-    cooldownMs: 5 * 60_000,
-    extra: { href: '/estoque/compras' },
+    cooldownMs: 30 * 60_000,
+    extra: { href: '/estoque/compras', dflGroupedStockAlert: true },
   });
 }

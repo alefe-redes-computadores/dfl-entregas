@@ -3,7 +3,7 @@
 import { PreRouteIntelligence } from '@/components/home/PreRouteIntelligence';
 import { RouteSequenceAdvisor } from '@/components/home/RouteSequenceAdvisor';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -61,10 +61,13 @@ import {
 import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
-import { requestDeviceLocation } from '@/lib/device-location';
+import { requestDeviceLocation, LocationFailure, type LocationFailureCode } from '@/lib/device-location';
+import { LocationPermissionGuide } from '@/components/location/LocationPermissionGuide';
+import { storedOriginPoint, hasSpecificStoreAddress } from '@/lib/store-origin';
 import { geocodeAddress, geocodeStoreAddress } from '@/lib/store-geocoding';
 import { bestOperationalAddress } from '@/lib/operational-address';
 import { deliveryStopKey, groupDeliveriesByStop } from '@/lib/route-stops';
+import { routeDeliveryRevision as indexedRouteDeliveryRevision } from '@/lib/route-card-revision';
 import { buildRouteShareCard } from '@/lib/route-share-card';
 
 interface RouteAccordionProps {
@@ -75,6 +78,7 @@ interface RouteAccordionProps {
 export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [sequenceExpanded, setSequenceExpanded] = useState(false);
   const [showRouteTools, setShowRouteTools] = useState(false);
   const routeUiKey = 'dfl-route-last-open-v2';
   const [fuzzyModalOpen, setFuzzyModalOpen] = useState(false);
@@ -90,6 +94,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [optimizerOrigin, setOptimizerOrigin] = useState<LatLngPoint | null>(null);
   const [optimizerOriginLabel, setOptimizerOriginLabel] = useState('Localização atual');
   const [optimizerLocationError, setOptimizerLocationError] = useState('');
+  const [optimizerLocationFailure, setOptimizerLocationFailure] = useState<LocationFailureCode | null>(null);
   const [optimizerOrder, setOptimizerOrder] = useState<string[]>([]);
   const [optimizerEdited, setOptimizerEdited] = useState(false);
   const [optimizerPreviousOrder, setOptimizerPreviousOrder] = useState<string[]>([]);
@@ -97,23 +102,24 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [optimizerResolvedPoints, setOptimizerResolvedPoints] = useState<Record<string, LatLngPoint>>({});
   const [lastAppliedOrder, setLastAppliedOrder] = useState<string[] | null>(null);
   const [routeCardBusy, setRouteCardBusy] = useState(false);
+  const [routeCopyBusy, setRouteCopyBusy] = useState(false);
+  const routeCopyLock = useRef(false);
+  const routeActionLock = useRef(false);
+  const routeCardLock = useRef(false);
+  // Falha de vibração nunca pode impedir persistência ou ocultar o resultado real.
+  const safeRouteHaptic = async (success = false) => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      if (success) await Haptics.notification({ type: NotificationType.Success });
+      else await Haptics.impact({ style: ImpactStyle.Light });
+    } catch { /* feedback tátil é opcional */ }
+  };
 
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   // Reage a mutações operacionais reais sem acordar a rota inteira
   // quando apenas o estado transitório is_expanded muda.
   const routeDeliveryRevision = useAppStore((state) =>
-    state.deliveries
-      .filter((item) => item.route_id === route.id)
-      .map((item) =>
-        [
-          item.id,
-          item.updated_at || item.created_at || item.createdAt || '',
-          item.order_index ?? '',
-          item.completed ? 1 : 0,
-          item.route_id,
-        ].join(':'),
-      )
-      .join('|'),
+    indexedRouteDeliveryRevision(state.deliveries, route.id),
   );
   const selectedDate = useAppStore((state) => state.selectedDate);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
@@ -146,16 +152,17 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       allRoutes,
     ],
   );
-  const totalDeliveries = deliveries.length;
-  const pendingDeliveriesCount = deliveries.filter((d) => !d.completed).length;
-  const totalStops = groupDeliveriesByStop(deliveries).length;
-  const pendingStopGroups = groupDeliveriesByStop(
-    deliveries.filter((delivery) => !delivery.completed),
-  );
-  const pendingStopsCount = pendingStopGroups.length;
-  const progressPercent = totalDeliveries > 0 ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
-
-  const routeTotalValue = deliveries.reduce((acc, curr) => acc + (curr.value || 0), 0);
+  // Derived operational figures share one snapshot instead of regrouping per JSX render.
+  const { totalDeliveries, pendingDeliveriesCount, totalStops, pendingStopsCount, progressPercent, routeTotalValue } = useMemo(() => {
+    const totalDeliveries = deliveries.length;
+    const pending = deliveries.filter((delivery) => !delivery.completed);
+    const pendingDeliveriesCount = pending.length;
+    const totalStops = groupDeliveriesByStop(deliveries).length;
+    const pendingStopsCount = groupDeliveriesByStop(pending).length;
+    const routeTotalValue = deliveries.reduce((sum, delivery) => sum + (delivery.value || 0), 0);
+    const progressPercent = totalDeliveries ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
+    return { totalDeliveries, pendingDeliveriesCount, totalStops, pendingStopsCount, progressPercent, routeTotalValue };
+  }, [deliveries]);
   const operationalRouteDate = routeDate(route);
   const operationalRouteDateKey = operationalRouteDate ? dateKey(operationalRouteDate) : '';
   const routeDetailsHref = operationalRouteDateKey
@@ -185,7 +192,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const toggleRouteOpen = () => {
     setIsOpen((previous) => {
       const next = !previous;
-      if (!next) setShowRouteTools(false);
+      if (!next) {
+        setShowRouteTools(false);
+        setSequenceExpanded(false);
+      }
       if (typeof window !== 'undefined' && next && !isVirtualRoute) {
         localStorage.setItem(routeUiKey, route.id);
         localStorage.setItem('dfl-active-operational-route-v1', route.id);
@@ -198,18 +208,18 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
   const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress, neighborMeta, stopMeta } = useOptimizedDeliveries(deliveries, getCustomerById);
+  const pendingStopGroups = useMemo(() => groupDeliveriesByStop(pendingDeliveries), [pendingDeliveries]);
+  const allStopGroups = useMemo(() => groupDeliveriesByStop(sortedDeliveries), [sortedDeliveries]);
   const routePreviewStops = useMemo(() => groupDeliveriesByStop(sortedDeliveries.filter((item) => !item.completed)).map((group, index) => {
     const delivery = group.representative;
     const customer = getCustomerById(delivery.customer_id);
     const address = bestOperationalAddress(delivery.address_string, customer?.address) || 'Endereço pendente';
     const parts = address.split(',').map((part) => part.trim()).filter(Boolean);
-    return { number:index + 1, customer:customer?.name || delivery.customer_name || `Parada ${index + 1}`, place:parts.at(-1) || parts[0] || 'Endereço pendente', grouped:group.deliveries.length };
-  }), [getCustomerById, sortedDeliveries]);
+    return { number:stopMeta.get(delivery.id)?.stopNumber ?? index + 1, customer:customer?.name || delivery.customer_name || `Parada ${index + 1}`, place:parts.at(-1) || parts[0] || 'Endereço pendente', grouped:group.deliveries.length };
+  }), [getCustomerById, sortedDeliveries, stopMeta]);
 
   const optimizerRows = useMemo(() => {
-    const representatives = groupDeliveriesByStop(
-      pendingDeliveries,
-    ).map((group) => group.representative);
+    const representatives = pendingStopGroups.map((group) => group.representative);
 
     const orderIds = optimizerOrder.length > 0
       ? optimizerOrder
@@ -240,7 +250,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   ]);
 
   // Clientes com telefone para disparo de aviso de saída
-  const departureChecklist = deliveries.map((delivery) => {
+  const departureChecklist = useMemo(() => deliveries.map((delivery) => {
     const customer = getCustomerById(delivery.customer_id);
     return {
       id: delivery.id,
@@ -253,7 +263,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         !delivery.confirmation_code &&
         !customer?.last_confirmation_code,
     };
-  });
+  }), [deliveries, getCustomerById]);
 
   const departureDrinks = departureChecklist.filter((item) => item.drinks);
   const departureChange = departureChecklist.filter((item) => item.change > 0);
@@ -261,7 +271,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     (item) => item.missingAddress || item.missingConfirmation,
   );
 
-  const clientsWithPhone = deliveries
+  const clientsWithPhone = useMemo(() => deliveries
     .map((d) => {
       const cust = getCustomerById(d.customer_id);
       const phone = d.phone || cust?.phone;
@@ -272,7 +282,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         orderId: d.order_id
       };
     })
-    .filter((c) => !!c.phone);
+    .filter((c) => !!c.phone), [deliveries, getCustomerById]);
 
   let routeDuration = '';
   if (isCompleted && startedAt && route.end_time) {
@@ -336,12 +346,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (actionBusy) return;
     setActionBusy(true);
     try {
-      if (Capacitor.isNativePlatform()) {
-        await Haptics.impact({ style: ImpactStyle.Medium });
-      }
+      await safeRouteHaptic();
       await startRoute(route.id);
       setDepartureChecklistOpen(false);
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+      await safeRouteHaptic(true);
       toast.success('Rota iniciada.', { description: 'Checklist conferido e horário real de saída registrado.' });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar a rota.');
@@ -379,23 +387,19 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   const handleStartRoute = async () => {
     if (actionBusy) return;
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+    await safeRouteHaptic();
     setDepartureChecklistOpen(true);
   };
 
   const handleCloseRoute = async () => {
-    if (actionBusy) return;
-
+    if (actionBusy || routeActionLock.current) return;
+    routeActionLock.current = true;
     setActionBusy(true);
 
     try {
       await closeRoute(route.id);
 
-      if (Capacitor.isNativePlatform()) {
-        await Haptics.notification({
-          type: NotificationType.Success,
-        });
-      }
+      await safeRouteHaptic(true);
 
       const pendingIfood =
         useAppStore
@@ -447,17 +451,17 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           : 'Não foi possível finalizar a rota.',
       );
     } finally {
+      routeActionLock.current = false;
       setActionBusy(false);
     }
   };
 
   const handleDeleteEmptyRoute = async () => {
-    if (actionBusy) return;
+    if (actionBusy || routeActionLock.current) return;
+    routeActionLock.current = true;
     setActionBusy(true);
     try {
-      if (Capacitor.isNativePlatform()) {
-        await Haptics.impact({ style: ImpactStyle.Heavy });
-      }
+      await safeRouteHaptic();
       await deleteRoute(route.id);
       toast.success('Rota excluída.');
     } catch (error) {
@@ -465,17 +469,17 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         error instanceof Error ? error.message : 'Não foi possível excluir a rota.',
       );
     } finally {
+      routeActionLock.current = false;
       setActionBusy(false);
     }
   };
 
   const confirmReopenRoute = async () => {
-    if (actionBusy) return;
+    if (actionBusy || routeActionLock.current) return;
+    routeActionLock.current = true;
     setActionBusy(true);
     try {
-      if (Capacitor.isNativePlatform()) {
-        await Haptics.impact({ style: ImpactStyle.Medium });
-      }
+      await safeRouteHaptic();
       await reopenRoute(route.id);
       setIsReopenModalOpen(false);
       toast.success('Rota reaberta para correções.');
@@ -484,49 +488,71 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         error instanceof Error ? error.message : 'Não foi possível reabrir a rota.',
       );
     } finally {
+      routeActionLock.current = false;
       setActionBusy(false);
     }
   };
 
   const handleCopyMessage = async (msgType: 1 | 2 | 3) => {
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
-    const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-    const previousRoute = getPreviousRoute();
-
-    const result = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, previousRoute);
-
-    if (result.hasFuzzyAddresses && result.fuzzyList.length > 0 && msgType === 1) {
-      setCurrentFuzzyList(result.fuzzyList);
-      setPendingActionType(msgType === 1 ? 'copy1' : msgType === 2 ? 'copy2' : 'copy3');
-      setFuzzyModalOpen(true);
-      return;
+    if (routeCopyLock.current || routeCardBusy) return;
+    routeCopyLock.current = true;
+    setRouteCopyBusy(true);
+    try {
+      await safeRouteHaptic();
+      const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
+      const result = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute());
+      if (result.hasFuzzyAddresses && result.fuzzyList.length > 0 && msgType === 1) {
+        setCurrentFuzzyList(result.fuzzyList);
+        setPendingActionType('copy1');
+        setFuzzyModalOpen(true);
+        return;
+      }
+      await copyGeneratedRouteMessage(msgType, result.messages);
+    } catch (error) {
+      console.error('[ROUTE COPY]', error);
+      toast.error('Não foi possível preparar a mensagem. Tente novamente.');
+    } finally {
+      routeCopyLock.current = false;
+      setRouteCopyBusy(false);
     }
-
-    executeCopyAction(msgType, result.messages);
   };
 
-  const executeCopyAction = async (msgType: 1 | 2 | 3, messages?: string[]) => {
+  const copyGeneratedRouteMessage = async (msgType: 1 | 2 | 3, messages: string[]) => {
+    const message = messages[msgType - 1];
+    if (!message?.trim()) throw new Error('Mensagem sem conteúdo');
+    if (!navigator.clipboard?.writeText) throw new Error('Área de transferência indisponível');
+    await navigator.clipboard.writeText(message);
+    const feedback = {
+      1: ['Rota e contatos copiados!', 'Paradas, endereços, contatos e mapa prontos para o WhatsApp.'],
+      2: ['Checklist de saída copiado!', 'Bebidas, maquininha e códigos prontos para conferência.'],
+      3: ['Dinheiro da rota copiado!', 'Recebimentos, trocos e retorno físico por parada prontos.'],
+    }[msgType];
+    toast.success(feedback[0], { description: feedback[1] });
     setFuzzyModalOpen(false);
-    const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-    const previousRoute = getPreviousRoute();
-
-    const msgsToCopy = messages || (await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, previousRoute)).messages;
-
-    if (msgType === 1) {
-      await navigator.clipboard.writeText(msgsToCopy[0]);
-      toast.success('Rota e contatos copiados!', { description: 'Paradas, endereços, contatos e mapa prontos para o WhatsApp.' });
-    } else if (msgType === 2) {
-      await navigator.clipboard.writeText(msgsToCopy[1]);
-      toast.success('Checklist de saída copiado!', { description: 'Bebidas, maquininha e códigos prontos para conferência.' });
-    } else {
-      await navigator.clipboard.writeText(msgsToCopy[2] || '');
-      toast.success('Dinheiro da rota copiado!', { description: 'Recebimentos, trocos e retorno físico por parada prontos.' });
-    }
+    setPendingActionType(null);
     setIsCopyMenuOpen(false);
   };
 
+  const executeCopyAction = async (msgType: 1 | 2 | 3, messages?: string[]) => {
+    if (routeCopyLock.current || routeCardBusy) return;
+    routeCopyLock.current = true;
+    setRouteCopyBusy(true);
+    try {
+      const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
+      const prepared = messages || (await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute())).messages;
+      await copyGeneratedRouteMessage(msgType, prepared);
+    } catch (error) {
+      console.error('[ROUTE COPY]', error);
+      toast.error('Não foi possível copiar. Verifique a permissão da área de transferência.');
+    } finally {
+      routeCopyLock.current = false;
+      setRouteCopyBusy(false);
+    }
+  };
+
   const shareRouteCard = async (mode: 'full' | 'checklist' = 'full') => {
-    if (routeCardBusy) return;
+    if (routeCardBusy || routeCardLock.current) return;
+    routeCardLock.current = true;
     setRouteCardBusy(true);
     try {
       const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
@@ -544,10 +570,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         ? { lat: storeLat, lng: storeLng }
         : extractLatLngFromMapsUrl(storeSettings?.storeMapsLink);
       const stopPoints = Object.fromEntries(
-        groupDeliveriesByStop(pendingDeliveries).map((group) => {
+        pendingStopGroups.map((group) => {
           const delivery = group.representative;
           const customer = getCustomerById(delivery.customer_id);
-          const point = extractLatLngFromMapsUrl(delivery.maps_link) || extractLatLngFromMapsUrl(customer?.maps_link);
+          const point = (!optimizerApproximateIds.includes(delivery.id) ? optimizerResolvedPoints[delivery.id] : undefined) || extractLatLngFromMapsUrl(delivery.maps_link) || extractLatLngFromMapsUrl(customer?.maps_link);
           return [delivery.id, point ? `${point.lat},${point.lng}` : null];
         }),
       );
@@ -572,42 +598,47 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           toast.success('Imagem salva e mensagem copiada.');
         }
       }
-      toast.success(mode === 'checklist' ? 'Checklist e imagem preparados.' : 'Rota completa preparada.', { description: card.usedRealMap ? 'Mapa real e sequência operacional.' : 'Sequência operacional, sem mapa fictício.' });
+      // No Android e no Web Share, concluir o diálogo não prova o envio ao destinatário.
+      toast.success('Compartilhamento preparado.', { description: card.usedRealMap ? 'Confira o destinatário e envie no aplicativo escolhido.' : 'Confira o destinatário; imagem operacional sem mapa fictício.' });
       setIsCopyMenuOpen(false);
     } catch (error) {
-      console.error('[ROUTE CARD]', error);
-      toast.error('Imagem indisponível. Copie a rota em texto.');
+      if (error instanceof Error && /abort|cancel/i.test(error.name + ' ' + error.message)) {
+        toast.info('Compartilhamento cancelado. O DFL não enviou nenhuma mensagem.');
+      } else {
+        console.error('[ROUTE CARD]', error);
+        toast.error('Imagem indisponível. Copie a rota em texto.');
+      }
     } finally {
+      routeCardLock.current = false;
       setRouteCardBusy(false);
     }
   };
 
   const getCurrentOrigin = async (): Promise<{ point: LatLngPoint | null; label: string }> => {
-    const lat = Number(storeSettings?.storeLatitude);
-    const lng = Number(storeSettings?.storeLongitude);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    const storedPoint = storedOriginPoint(storeSettings);
+    if (storedPoint) {
       setOptimizerLocationError('');
-      return { point: { lat, lng }, label: 'Loja · localização salva' };
-    }
-    const linkedStorePoint = extractLatLngFromMapsUrl(storeSettings?.storeMapsLink);
-    if (linkedStorePoint) {
-      setOptimizerLocationError('');
-      return { point: linkedStorePoint, label: 'Loja · ponto salvo no mapa' };
+      setOptimizerLocationFailure(null);
+      return { point: storedPoint, label: 'Loja · origem precisa salva' };
     }
     const storeAddress = storeSettings?.storeAddress?.trim();
-    if (storeAddress) {
+    // Geocodificar apenas "Patos de Minas, MG" falseia a origem no centro.
+    if (storeAddress && hasSpecificStoreAddress(storeAddress)) {
       try {
         const point = await geocodeStoreAddress(storeAddress);
         await updateStoreSettings({ storeLatitude: point.lat, storeLongitude: point.lng });
         setOptimizerLocationError('');
-        return { point, label: 'Loja · endereço cadastrado' };
+        setOptimizerLocationFailure(null);
+        return { point, label: 'Loja · endereço completo cadastrado' };
       } catch (error) { console.warn('Endereço da loja não localizado:', error); }
     }
     try {
       const point = await requestDeviceLocation();
-      setOptimizerLocationError('Posição da loja ausente; usando localização atual como fallback.');
-      return { point, label: 'Localização atual · fallback' };
+      setOptimizerLocationFailure(null);
+      setOptimizerLocationError('Origem da loja não cadastrada: esta prévia usa sua posição atual, que pode ser diferente da loja. Salve a origem correta em Loja → Configurações.');
+      return { point, label: 'GPS atual · origem provisória' };
     } catch (error) {
+      setOptimizerLocationFailure(error instanceof LocationFailure ? error.code : 'unknown');
       setOptimizerLocationError(error instanceof Error ? error.message : 'Não foi possível determinar a origem.');
       return { point: null, label: 'Origem indisponível' };
     }
@@ -618,9 +649,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     setOptimizerBusy(true);
 
     try {
-      const representatives = groupDeliveriesByStop(
-        pendingDeliveries,
-      ).map((group) => group.representative);
+      const representatives = pendingStopGroups.map((group) => group.representative);
       const previousIds = representatives.map((delivery) => delivery.id);
 
       const resolvedStops = await Promise.all(
@@ -685,7 +714,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       setOptimizerOpen(true);
 
       if (Capacitor.isNativePlatform()) {
-        await Haptics.impact({ style: ImpactStyle.Medium });
+        void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
       }
     } finally {
       setOptimizerBusy(false);
@@ -777,9 +806,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   const handleOpenMaps = async () => {
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Light });
+    await safeRouteHaptic();
 
-    const stops = groupDeliveriesByStop(pendingDeliveries).map((group) => {
+    const stops = pendingStopGroups.map((group) => {
       const d = group.representative;
       const cust = getCustomerById(d.customer_id);
       return resolveStopLocation(d, cust?.maps_link);
@@ -800,7 +829,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
         </div>
       )}
-      <button onClick={toggleRouteOpen} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-3 pt-3.5 text-left active:scale-[0.99] transition-transform">
+      <button type="button" onClick={toggleRouteOpen} aria-expanded={isOpen} aria-label={`${route.name} · ${route.motoboy_name} · ${isOpen ? 'Recolher' : 'Expandir'} detalhes da rota`} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-3 pt-3.5 text-left active:scale-[0.99] transition-transform">
         <div className="flex min-w-0 items-center gap-3">
           <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl transition-colors shrink-0', isNotStarted ? 'bg-zinc-800 text-zinc-400' : isInProgress ? 'bg-sky-500/20 text-sky-400' : 'bg-emerald-500/20 text-emerald-500')}>
             <Bike size={22} />
@@ -821,7 +850,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           {!isCompleted ? (
             <span className={clsx("max-w-[104px] whitespace-normal rounded-xl px-2 py-1 text-center text-[10px] font-black leading-tight min-[390px]:max-w-none min-[390px]:whitespace-nowrap min-[390px]:rounded-full min-[390px]:px-2.5 min-[390px]:text-xs", pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white" : isInProgress ? "bg-sky-500/20 text-sky-400" : "bg-zinc-800 text-zinc-400")}>
               {pendingDeliveriesCount === 0 && totalDeliveries > 0
-                ? 'Pronta para finalizar'
+                ? 'Finalizar rota'
                 : pendingStopsCount === pendingDeliveriesCount
                   ? `${pendingDeliveriesCount} pendente${pendingDeliveriesCount !== 1 ? 's' : ''}`
                   : `${pendingDeliveriesCount} pedidos · ${pendingStopsCount} parada${pendingStopsCount !== 1 ? 's' : ''}`}
@@ -846,12 +875,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         </div>
       </button>
 
-      {!isVirtualRoute && routePreviewStops.length > 0 && (
+      {isOpen && !isCompleted && !isVirtualRoute && routePreviewStops.length > 0 && (
         <div className="px-3 pb-3" aria-label="Prévia da sequência da rota">
           <div className={`rounded-2xl border px-3 py-2.5 ${isInProgress?'border-amber-500/25 bg-amber-500/[.04]':'border-zinc-800 bg-zinc-950/40'}`}>
-            <div className="mb-2 flex items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[.12em] text-sky-300"><MapPinned size={12}/> Sequência da rota</span><span className="text-[10px] font-bold text-zinc-400">{routePreviewStops.length} parada{routePreviewStops.length===1?'':'s'} pendente{routePreviewStops.length===1?'':'s'}</span></div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{routePreviewStops.slice(0,isOpen?6:4).map((stop,index)=><div key={`${stop.number}-${stop.customer}`} className={`flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 ${index===0&&isInProgress?'border-amber-500/40 bg-amber-500/10':'border-zinc-700/70 bg-zinc-950/60'}`}><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-black ${index===0&&isInProgress?'bg-amber-400 text-zinc-950':'bg-zinc-800 text-zinc-100'}`}>{stop.number}</span><div className="min-w-0 flex-1"><p className="truncate text-[12px] font-bold text-zinc-100">{stop.customer}</p><p className="truncate text-[11px] font-medium text-zinc-300">{stop.place}{stop.grouped>1?` · ${stop.grouped} pedidos`:''}</p></div>{index===0&&isInProgress&&<span className="shrink-0 text-[9px] font-black uppercase text-amber-300">Próxima</span>}</div>)}</div>
-            {routePreviewStops.length>(isOpen?6:3)&&<p className="mt-2 text-center text-[10px] font-bold text-zinc-400">+ {routePreviewStops.length-(isOpen?6:3)} paradas na sequência completa</p>}
+            <button type="button" onClick={()=>setSequenceExpanded(value=>!value)} aria-expanded={sequenceExpanded} aria-label={`${sequenceExpanded ? 'Recolher' : 'Expandir'} sequência da ${route.name}`} className="flex w-full items-center justify-between gap-2 text-left"><span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[.12em] text-sky-300"><MapPinned size={12}/> Sequência da rota</span><span className="flex items-center gap-1 text-[10px] font-bold text-zinc-400">{routePreviewStops.length} parada{routePreviewStops.length===1?'':'s'}<ChevronDown size={13} className={`transition ${sequenceExpanded?'rotate-180':''}`}/></span></button>
+            <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">{routePreviewStops.slice(0,sequenceExpanded?routePreviewStops.length:3).map((stop,index)=><div key={`${stop.number}-${stop.customer}`} className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2 ${index===0&&isInProgress?'border-amber-500/35 bg-amber-500/[.08]':'border-zinc-800 bg-zinc-950/45'}`}><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-black ${index===0&&isInProgress?'bg-amber-400 text-zinc-950':'bg-zinc-800 text-zinc-200'}`}>{stop.number}</span><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-bold text-zinc-200">{stop.customer}</p><p className="truncate text-[9px] text-zinc-500">{stop.place}{stop.grouped>1?` · ${stop.grouped} pedidos`:''}</p></div>{index===0&&isInProgress&&<span className="shrink-0 text-[8px] font-black uppercase text-amber-300">Próxima</span>}</div>)}</div>
+            {routePreviewStops.length>3&&<button type="button" onClick={()=>setSequenceExpanded(value=>!value)} aria-expanded={sequenceExpanded} className="mt-2 min-h-10 w-full rounded-lg text-[9px] font-black text-sky-300 active:bg-sky-500/5">{sequenceExpanded?'Mostrar só as próximas':`Ver todas · mais ${routePreviewStops.length-3}`}</button>}
           </div>
         </div>
       )}
@@ -924,7 +953,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           {sortedDeliveries.length === 0 ? (
             <p className="py-4 text-center text-sm text-zinc-600">Nenhuma entrega nesta rota ainda.</p>
           ) : (
-            groupDeliveriesByStop(sortedDeliveries).map((stopGroup) => {
+            allStopGroups.map((stopGroup) => {
               const first = stopGroup.representative;
               const physicalStop = stopMeta.get(first.id);
               const cust = getCustomerById(first.customer_id);
@@ -1156,6 +1185,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   <p className="mt-1 text-[10px] text-zinc-500">
                     {optimizerLocationError || 'Não foi possível determinar a origem.'}
                   </p>
+                  <div className="mt-3"><LocationPermissionGuide code={optimizerLocationFailure} compact /></div>
                   <button onClick={buildOptimizerPreview} disabled={optimizerBusy} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-red-500/10 text-[10px] font-black text-red-300 disabled:opacity-40"><Crosshair size={13}/>{optimizerBusy?'Consultando GPS...':'Tentar GPS novamente'}</button>
                 </div>
               )}
@@ -1261,7 +1291,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <div className="dfl-bottom-sheet safe-bottom relative flex max-h-[88dvh] flex-col overflow-y-auto rounded-t-[30px] p-5 pb-6 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-200" onClick={(event) => event.stopPropagation()}>
              <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-zinc-700" />
              <div className="mb-4 flex items-center justify-between gap-3">
-               <div><h3 className="flex items-center gap-2 font-heading text-lg font-black text-zinc-50"><Copy size={18} className="text-emerald-400"/> Copiar para o motoboy</h3><p className="mt-1 text-[10px] text-zinc-500">Escolha a informação que deseja enviar no WhatsApp.</p></div>
+               <div><h3 className="flex items-center gap-2 font-heading text-lg font-black text-zinc-50"><Copy size={18} className="text-emerald-400"/> {routeCopyBusy ? 'Copiando mensagem…' : 'Copiar para o motoboy'}</h3><p className="mt-1 text-[10px] text-zinc-500">Escolha a informação que deseja enviar no WhatsApp.</p></div>
                <button aria-label="Fechar" onClick={() => setIsCopyMenuOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-800 text-zinc-400 active:scale-90"><X size={18}/></button>
              </div>
 
@@ -1270,7 +1300,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-violet-500/15 text-violet-300"><MapPinned size={20}/></div>
                   <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">{routeCardBusy ? 'Preparando rota…' : 'Rota completa'}</span><span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Imagem confiável + rota, contatos e checklist. Sem mapa fictício.</span></div>
                 </button>
-                <button onClick={() => handleCopyMessage(1)} className="flex items-center gap-3 rounded-2xl border border-sky-500/20 bg-sky-500/[.055] p-4 text-left transition active:scale-[.985]">
+                <button disabled={routeCopyBusy || routeCardBusy} onClick={() => handleCopyMessage(1)} className="flex items-center gap-3 rounded-2xl border border-sky-500/20 bg-sky-500/[.055] p-4 text-left transition active:scale-[.985]">
                   <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-400"><Copy size={20}/></div>
                   <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">Copiar texto da rota</span><span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Alternativa para pesquisar e encaminhar sem imagem.</span></div>
                 </button>
@@ -1279,7 +1309,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-300"><ClipboardCheck size={20}/></div>
                   <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">Compartilhar conferência + imagem</span><span className="mt-1 text-[11px] font-medium leading-relaxed text-zinc-300">Segunda mensagem: bebidas, códigos e checklist com imagem operacional.</span></div>
                 </button>
-                <button onClick={() => handleCopyMessage(2)} className="flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[.055] p-4 text-left transition active:scale-[.985]">
+                <button disabled={routeCopyBusy || routeCardBusy} onClick={() => handleCopyMessage(2)} className="flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[.055] p-4 text-left transition active:scale-[.985]">
                   <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-400"><ClipboardCheck size={20}/></div>
                   <div className="flex flex-col">
                     <span className="text-sm font-black text-zinc-100">Checklist de saída</span>
@@ -1287,7 +1317,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   </div>
                 </button>
 
-                <button onClick={() => handleCopyMessage(3)} className="flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[.055] p-4 text-left transition active:scale-[.985]">
+                <button disabled={routeCopyBusy || routeCardBusy} onClick={() => handleCopyMessage(3)} className="flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[.055] p-4 text-left transition active:scale-[.985]">
                   <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-300"><Wallet size={20}/></div>
                   <div className="flex flex-col">
                     <span className="text-sm font-black text-zinc-100">Dinheiro da rota</span>
@@ -1373,7 +1403,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               ))}
             </div>
             <div className="flex flex-col gap-2.5 pt-2">
-              <button onClick={() => { if (pendingActionType) executeCopyAction(pendingActionType === 'copy1' ? 1 : pendingActionType === 'copy3' ? 3 : 2); }} className="w-full h-12 bg-sky-500 hover:bg-sky-400 rounded-xl font-bold text-zinc-950 text-sm active:scale-95 transition-all shadow-lg shadow-sky-500/20">Prosseguir Mesmo Assim</button>
+              <button disabled={routeCopyBusy || routeCardBusy} onClick={() => { if (pendingActionType) void executeCopyAction(pendingActionType === 'copy1' ? 1 : pendingActionType === 'copy3' ? 3 : 2); }} className="w-full h-12 bg-sky-500 hover:bg-sky-400 rounded-xl font-bold text-zinc-950 text-sm active:scale-95 transition-all shadow-lg shadow-sky-500/20">Prosseguir Mesmo Assim</button>
               <button onClick={() => setFuzzyModalOpen(false)} className="w-full h-11 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-semibold text-zinc-300 text-xs active:scale-95 transition-all">Cancelar e Inserir Links Manuais</button>
             </div>
           </div>

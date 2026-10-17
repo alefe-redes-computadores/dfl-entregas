@@ -139,7 +139,7 @@ function eventTypes(delivery: Raw, route: Raw | undefined, pendingIndex: number,
       ? ['delivery.completed', 'route.completed'] as const
       : ['delivery.completed'] as const;
   }
-  if (str(delivery.fulfillment_mode) === 'pickup') return str(delivery.pickup_ready_at) ? ['delivery.pickup_ready'] as const : [] as const;
+  if (str(delivery.fulfillment_mode) === 'pickup') return str(delivery.source_system) === 'dfl_site' && str(delivery.external_order_id) && str(delivery.pickup_ready_at) ? ['delivery.pickup_ready'] as const : [] as const;
   if (routeClosed(route)) return ['route.completed'] as const;
 
   // Estar apenas alocado em uma rota NÃO significa estar na rua.

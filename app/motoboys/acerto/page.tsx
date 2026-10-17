@@ -1,13 +1,14 @@
 'use client';
-import { Suspense,useMemo,useState } from 'react';
+import { Suspense,useEffect,useMemo,useRef,useState } from 'react';
 import { useRouter,useSearchParams } from 'next/navigation';
-import { ArrowDown,ArrowDownLeft,ArrowUp,ArrowUpRight,Banknote,CalendarDays,ChevronLeft,ChevronRight,Copy,Image as ImageIcon,Package,Plus,ReceiptText,Send,Trash2,X } from 'lucide-react';
+import { ArrowDownLeft,ArrowUpRight,Banknote,CalendarDays,ChevronLeft,ChevronRight,Copy,Image as ImageIcon,Package,Plus,ReceiptText,Send,Trash2,X,ShieldCheck } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { getMotoboyDayData,operationalDateKey } from '@/lib/motoboy-analytics';
 import { moneyValueToDraft,normalizeMoneyDraft,parseMoneyDraft } from '@/lib/route-cash-flow';
-import type { MotoboySettlementAdjustment,MotoboySettlementCategory } from '@/types';
+import type { MotoboySettlementAdjustment } from '@/types';
+import { pendingAdjustmentsForSettlement, settlementAdjustmentSnapshot, settlementSourceId } from '@/lib/motoboy-settlement-authority';
 import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
@@ -15,14 +16,6 @@ import { Share } from '@capacitor/share';
 const fromKey=(key:string)=>new Date(`${key}T12:00:00-03:00`);
 const shift=(key:string,days:number)=>{const date=fromKey(key);date.setDate(date.getDate()+days);return operationalDateKey(date);};
 const money=(value:number)=>value.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const DEFAULT_CATEGORIES:MotoboySettlementCategory[]=[
-  {id:'advance',label:'Adiantamento',direction:'deduction',position:0},
-  {id:'fuel',label:'Combustível',direction:'deduction',position:1},
-  {id:'consumption',label:'Consumo / lanche',direction:'deduction',position:2},
-  {id:'tip',label:'Gorjeta',direction:'addition',position:0},
-  {id:'extra_fee',label:'Taxa extra',direction:'addition',position:1},
-  {id:'gratification',label:'Gratificação',direction:'addition',position:2},
-];
 
 function Content(){
   const router=useRouter();
@@ -31,39 +24,57 @@ function Content(){
   const motoboy=useAppStore(state=>state.motoboys.find(item=>item.id===id));
   const routes=useAppStore(state=>state.routes);
   const deliveries=useAppStore(state=>state.deliveries);
-  const addOperationalExpense=useAppStore(state=>state.addOperationalExpense);
+  const closeMotoboySettlement=useAppStore(state=>state.closeMotoboySettlement);
+  const addMotoboyAdjustment=useAppStore(state=>state.addMotoboyAdjustment);
+  const cancelMotoboyAdjustment=useAppStore(state=>state.cancelMotoboyAdjustment);
+  const motoboyAdjustments=useAppStore(state=>state.motoboyAdjustments);
+  const user=useAppStore(state=>state.user);
   const operationalExpenses=useAppStore(state=>state.operationalExpenses);
-  const storeSettings=useAppStore(state=>state.storeSettings);
-  const updateStoreSettings=useAppStore(state=>state.updateStoreSettings);
 
   const selectedDate=useAppStore(state=>state.selectedDate);
-  const deleteOperationalExpense=useAppStore(state=>state.deleteOperationalExpense);
-  const [deletingSettlement,setDeletingSettlement]=useState(false);
   const paramDate=params.get('date');
   const [date,setDate]=useState(()=>paramDate&&/^\d{4}-\d{2}-\d{2}$/.test(paramDate)?paramDate:operationalDateKey(selectedDate));
   const [month,setMonth]=useState(()=>fromKey(date));
   const [calendar,setCalendar]=useState(false);
-  const [adjustments,setAdjustments]=useState<MotoboySettlementAdjustment[]>([]);
-  const [adjustmentKind,setAdjustmentKind]=useState<MotoboySettlementAdjustment['kind']>('advance');
-  const [adjustmentCategoryId,setAdjustmentCategoryId]=useState('advance');
+  const migratedDrafts=useRef(new Set<string>());
+  const draftKey=id?`dfl:settlement-draft:v86:${id}:${date}`:'';
+  const sharedAdjustments=useMemo(()=>motoboy?pendingAdjustmentsForSettlement(motoboyAdjustments,motoboy.id,date):[],[date,motoboy,motoboyAdjustments]);
+  const adjustments=useMemo(()=>settlementAdjustmentSnapshot(sharedAdjustments),[sharedAdjustments]);
+  useEffect(()=>{
+    if(!draftKey||!motoboy||migratedDrafts.current.has(draftKey))return;
+    migratedDrafts.current.add(draftKey);
+    const migrate=async()=>{
+      const raw=window.localStorage.getItem(draftKey);if(!raw)return;
+      const parsed:unknown=JSON.parse(raw);if(!Array.isArray(parsed))return;
+      const valid=parsed.filter((item):item is MotoboySettlementAdjustment=>Boolean(item&&typeof item==='object'&&typeof item.id==='string'&&typeof item.description==='string'&&typeof item.amount==='number'&&Number.isFinite(item.amount)&&item.amount>0));
+      for(const item of valid){
+        if(motoboyAdjustments.some(current=>current.id===item.id))continue;
+        const now=new Date().toISOString();
+        await addMotoboyAdjustment({...item,motoboy_id:motoboy.id,motoboy_name:motoboy.name,operational_date:date,status:'pending',author_uid:user?.uid,author_name:user?.displayName||user?.email||undefined,created_at:now,updated_at:now});
+      }
+      window.localStorage.removeItem(draftKey);
+      if(valid.length)toast.success('Rascunho antigo sincronizado.',{description:`${valid.length} ajuste(s) agora estão disponíveis em todos os aparelhos.`});
+    };
+    void migrate().catch(()=>{migratedDrafts.current.delete(draftKey);toast.error('Rascunho local preservado.',{description:'A sincronização será tentada novamente depois.'});});
+  },[addMotoboyAdjustment,date,draftKey,motoboy,motoboyAdjustments,user]);
+
   const [adjustmentDirection,setAdjustmentDirection]=useState<'deduction'|'addition'>('deduction');
   const [adjustmentDescription,setAdjustmentDescription]=useState('');
   const [adjustmentValue,setAdjustmentValue]=useState('');
-  const [categoryManager,setCategoryManager]=useState(false);
-  const [newCategoryName,setNewCategoryName]=useState('');
-  const [savingCategory,setSavingCategory]=useState(false);
   const [settlementStrategy,setSettlementStrategy]=useState<'separate'|'offset'|'manual'>('separate');
   const [cashMode,setCashMode]=useState<'all'|'none'|'partial'>('all');
   const [cashHandedDraft,setCashHandedDraft]=useState('');
   const [saving,setSaving]=useState(false);
+  const settlementInFlight=useRef(false);
+  const copyInFlight=useRef(false);
+  const [copyBusy,setCopyBusy]=useState(false);
   const [imageBusy,setImageBusy]=useState(false);
+  const adjustmentSubmitting=useRef(false);
+  const [adjustmentBusy,setAdjustmentBusy]=useState(false);
 
-  const customCategories=(storeSettings.settlementAdjustmentCategories||[]).filter(item=>item.custom!==false).sort((a,b)=>a.position-b.position);
-  const directionCategories=[...DEFAULT_CATEGORIES.filter(item=>item.direction===adjustmentDirection),...customCategories.filter(item=>item.direction===adjustmentDirection)];
-  const selectedCategory=directionCategories.find(item=>item.id===adjustmentCategoryId)||directionCategories[0];
   const manualCashInput=cashMode==='all'?true:cashMode==='none'?false:parseMoneyDraft(cashHandedDraft);
 
-  const sourceId=motoboy?`motoboy:${motoboy.id}:${date}`:'';
+  const sourceId=motoboy?settlementSourceId(motoboy.id,date):'';
   const existing=operationalExpenses.find(item=>item.source_id===sourceId);
   const priorSettlement=useMemo(()=>motoboy?operationalExpenses
     .filter(item=>item.motoboy_id===motoboy.id&&item.source_kind==='motoboy_settlement'&&operationalDateKey(item.occurred_at)<date)
@@ -74,10 +85,10 @@ function Content(){
     storeCredit:Math.max(0,Number(priorSettlement.settlement_store_credit)||0),
     motoboyCredit:Math.max(0,Number(priorSettlement.settlement_motoboy_credit)||0),
   }):({storeCredit:0,motoboyCredit:0}),[priorSettlement]);
-  const baseData=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,adjustments,true,priorCarry):null,[adjustments,date,deliveries,motoboy,priorCarry,routes]);
+  const baseData=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,existing?.settlement_adjustments||adjustments,true,priorCarry):null,[adjustments,date,deliveries,existing,motoboy,priorCarry,routes]);
   const offsetReturn=baseData?Math.max(0,baseData.cashInHand-Math.min(baseData.cashCollected,Math.max(0,baseData.liquidFee+baseData.priorMotoboyCredit-baseData.priorStoreCredit))):0;
   const cashSettlementInput=settlementStrategy==='separate'?true:settlementStrategy==='offset'?offsetReturn:manualCashInput;
-  const data=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,adjustments,cashSettlementInput,priorCarry):null,[adjustments,cashSettlementInput,date,deliveries,motoboy,priorCarry,routes]);
+  const data=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,existing?.settlement_adjustments||adjustments,cashSettlementInput,priorCarry):null,[adjustments,cashSettlementInput,date,deliveries,existing,motoboy,priorCarry,routes]);
   const days=useMemo(()=>{const first=new Date(month.getFullYear(),month.getMonth(),1);const start=new Date(first.getFullYear(),first.getMonth(),1-first.getDay());return Array.from({length:42},(_,index)=>{const day=new Date(start);day.setDate(start.getDate()+index);return day;});},[month]);
 
   if(!motoboy||!data)return <div><PageHeader title="Acerto indisponível" to="/motoboys"/></div>;
@@ -118,33 +129,20 @@ function Content(){
         : `A loja permanece devendo R$ ${money(data.balance)} a ${motoboy.name}. O saldo irá para o próximo acerto.`
       : `R$ ${money(data.balance)} serão quitados neste acerto. Nenhum saldo seguirá para o próximo.`;
 
-  const saveCustomCategory=async()=>{
-    const label=newCategoryName.trim();
-    if(label.length<2)return void toast.error('Digite um nome para a categoria.');
-    if([...DEFAULT_CATEGORIES,...customCategories].some(item=>item.direction===adjustmentDirection&&item.label.toLocaleLowerCase('pt-BR')===label.toLocaleLowerCase('pt-BR')))return void toast.error('Essa categoria já existe.');
-    const category:MotoboySettlementCategory={id:`custom-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,label,direction:adjustmentDirection,position:customCategories.filter(item=>item.direction===adjustmentDirection).length,custom:true};
-    setSavingCategory(true);
-    try{await updateStoreSettings({settlementAdjustmentCategories:[...customCategories,category]});setAdjustmentCategoryId(category.id);setAdjustmentKind('custom');setNewCategoryName('');setCategoryManager(false);toast.success('Categoria salva no banco de dados.');}
-    catch{toast.error('Não foi possível salvar a categoria.');}
-    finally{setSavingCategory(false);}
-  };
-
-  const moveCustomCategory=async(id:string,direction:-1|1)=>{
-    const same=customCategories.filter(item=>item.direction===adjustmentDirection);
-    const index=same.findIndex(item=>item.id===id);const target=index+direction;
-    if(index<0||target<0||target>=same.length)return;
-    [same[index],same[target]]=[same[target],same[index]];
-    const reordered=customCategories.map(item=>item.direction===adjustmentDirection?{...item,position:same.findIndex(value=>value.id===item.id)}:item);
-    try{await updateStoreSettings({settlementAdjustmentCategories:reordered});}catch{toast.error('Não foi possível reordenar.');}
-  };
-
-  const addAdjustment=()=>{
+  const addAdjustment=async()=>{
+    if(adjustmentSubmitting.current||existing)return;
     const amount=parseMoneyDraft(adjustmentValue);
-    if(!selectedCategory||!Number.isFinite(amount)||amount<=0)return void toast.error('Escolha a categoria e informe o valor.');
-    const description=adjustmentDescription.trim()||selectedCategory.label;
-    setAdjustments(current=>[...current,{id:`adj-${Date.now()}`,kind:selectedCategory.custom?'custom':selectedCategory.id as MotoboySettlementAdjustment['kind'],direction:adjustmentDirection,category_id:selectedCategory.id,category_label:selectedCategory.label,description,amount}]);
-    setAdjustmentDescription('');
-    setAdjustmentValue('');
+    if(existing)return void toast.error('Acerto já fechado. Não é possível alterar os ajustes.');
+    const description=adjustmentDescription.trim();
+    if(description.length<2)return void toast.error('Informe o motivo do ajuste.');
+    if(!Number.isFinite(amount)||amount<=0)return void toast.error('Informe um valor válido.');
+    const now=new Date().toISOString();
+    adjustmentSubmitting.current=true;setAdjustmentBusy(true);
+    try{
+      await addMotoboyAdjustment({id:`adj-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,kind:adjustmentDirection==='addition'?'addition':'custom',direction:adjustmentDirection,category_label:description,description,amount,motoboy_id:motoboy.id,motoboy_name:motoboy.name,operational_date:date,status:'pending',author_uid:user?.uid,author_name:user?.displayName||user?.email||undefined,created_at:now,updated_at:now});
+      setAdjustmentDescription('');setAdjustmentValue('');toast.success('Ajuste sincronizado.',{description:'Ele entrará automaticamente neste acerto.'});
+    }catch(error){toast.error(error instanceof Error?error.message:'Não foi possível salvar o ajuste.');}
+    finally{adjustmentSubmitting.current=false;setAdjustmentBusy(false);}
   };
 
   const summary=()=>{
@@ -152,6 +150,8 @@ function Content(){
     const lines=[
       `🧾 *ACERTO · DFL ENTREGAS*`,
       `🏍️ *Entregador:* ${motoboy.name}`,
+      `📌 *Situação:* ${existing?'ACERTO REGISTRADO':'AGUARDANDO CONFERÊNCIA'}`,
+      '──────────────────',
       `📅 *Data:* ${day}/${monthValue}/${year}`,
       '',
       `📦 *${data.orderCount} pedidos · ${data.physicalDeliveryCount} paradas físicas* · 🔁 *${data.completedRoutes} rotas*`,
@@ -160,6 +160,7 @@ function Content(){
       `🛣️ *CONTAGEM POR ROTA*`,
       ...data.routeBreakdown.map(item=>`↳ *${item.label}:* ${item.orderCount} pedido${item.orderCount===1?'':'s'} → ${item.physicalDeliveryCount} parada${item.physicalDeliveryCount===1?'':'s'}${item.groupedOrderCount>0?` · ${item.groupedOrderCount} agrupado${item.groupedOrderCount===1?'':'s'}`:''}`),
       '',
+      '──────────────────',
       `💰 *DIÁRIA*`,
       data.fee.description,
       `*Acerto bruto: R$ ${money(data.fee.amount)}*`,
@@ -196,6 +197,7 @@ function Content(){
       `Modo: *${settlementStrategy==='separate'?'caixa separado':settlementStrategy==='offset'?'compensar diária':'ajuste manual'}*`,
       data.retainedCash>0 ? `↳ Com o motoboy: *R$ ${money(data.retainedCash)}*` : `↳ Caixa conferido integralmente na loja`,
       '',
+      '──────────────────',
       `🏪 *RESULTADO DO ACERTO*`,
       `*R$ ${money(data.balance)} · ${settlementTitle}*`,
       settlementEquation,
@@ -205,6 +207,7 @@ function Content(){
   };
 
   const confirm=async()=>{
+    if(settlementInFlight.current)return;
     if(existing)return void toast.info('Este dia já possui acerto registrado.');
     if(data.fee.amount<=0)return void toast.error('Não há valor de acerto para registrar.');
     if(!data.routes.length)return void toast.error('Não existem rotas deste motoboy nesta data.');
@@ -215,9 +218,10 @@ function Content(){
     if(openRoutes.length||pending.length)return void toast.error('Finalize a operação antes de confirmar o acerto.',{description:`${openRoutes.length} rota(s) aberta(s) · ${pending.length} entrega(s) pendente(s).`});
 
     const now=new Date().toISOString();
+    settlementInFlight.current=true;
     setSaving(true);
     try{
-      await addOperationalExpense({
+      await closeMotoboySettlement({
         id:`expense-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
         occurred_at:`${date}T12:00:00-03:00`,
         type:'motoboy',
@@ -229,6 +233,10 @@ function Content(){
         motoboy_name:motoboy.name,
         source_kind:'motoboy_settlement',
         source_id:sourceId,
+        operational_date:date,
+        schema_version:2,
+        closed_by_uid:user?.uid,
+        closed_by_name:user?.displayName||user?.email||undefined,
         settlement_gross_amount:data.fee.amount,
         settlement_net_payable:data.liquidFee,
         settlement_cash_balance:data.balance,
@@ -250,13 +258,23 @@ function Content(){
         observation:`${data.physicalDeliveryCount} entregas físicas · ${data.orderCount} pedidos · ${data.completedRoutes} rotas · custo bruto R$ ${money(data.fee.amount)} · abatimentos R$ ${money(data.totalVales)} · líquido do motoboy R$ ${money(data.liquidFee)} · caixa R$ ${money(data.balance)} · saldo futuro ${carryForward?'sim':'não'}`,
         created_at:now,
         updated_at:now,
-      });
+      },sharedAdjustments.map(item=>item.id));
+      try{window.localStorage.removeItem(draftKey);}catch{}
       toast.success('Acerto confirmado e lançado em despesas.');
     }catch(error){toast.error(error instanceof Error?error.message:'Não foi possível confirmar o acerto.');}
-    finally{setSaving(false);}
+    finally{settlementInFlight.current=false;setSaving(false);}
   };
 
-  const copy=async()=>{await navigator.clipboard.writeText(summary());toast.success('Resumo copiado.');};
+  const copy=async()=>{
+    if(copyInFlight.current)return;
+    copyInFlight.current=true;setCopyBusy(true);
+    try{
+      if(!navigator.clipboard?.writeText)throw new Error('Clipboard indisponível');
+      await navigator.clipboard.writeText(summary());
+      toast.success('Resumo copiado.');
+    }catch{toast.error('Não foi possível copiar o resumo.',{description:'Confira a permissão da área de transferência e tente novamente.'});}
+    finally{copyInFlight.current=false;setCopyBusy(false);}
+  };
   // Compartilhamento unificado: texto e imagem quando suportado; cópia independente como alternativa.
   const image=async()=>{
     if(imageBusy)return;
@@ -314,27 +332,26 @@ function Content(){
     <PageHeader title="Acerto do motoboy" subtitle={motoboy.name} to={`/motoboys/details?id=${motoboy.id}`}/>
     <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2"><button onClick={()=>setDate(value=>shift(value,-1))} className="date-button"><ChevronLeft/></button><button onClick={()=>{setMonth(fromKey(date));setCalendar(true)}} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-800 text-sm font-black"><CalendarDays size={17} className="text-emerald-400"/>{fromKey(date).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).replaceAll('.','')}</button><button onClick={()=>setDate(value=>shift(value,1))} className="date-button"><ChevronRight/></button></div>
 
-    {existing&&<div className="flex justify-end"><button type="button" disabled={deletingSettlement} onClick={async()=>{if(!existing||!window.confirm(`Excluir o acerto registrado em ${fromKey(date).toLocaleDateString('pt-BR')}? Esta ação remove o lançamento financeiro e permite refazer o acerto na data correta.`))return;setDeletingSettlement(true);try{await deleteOperationalExpense(existing.id);toast.success('Acerto excluído. Você pode registrar novamente na data correta.');}catch(error){toast.error(error instanceof Error?error.message:'Falha ao excluir acerto.');}finally{setDeletingSettlement(false)}}} className="flex items-center gap-2 rounded-xl border border-red-500/30 px-3 py-2 text-[11px] font-bold text-red-300 disabled:opacity-50"><Trash2 size={14}/>{deletingSettlement?'Excluindo...':'Excluir acerto incorreto'}</button></div>}
+    {existing&&<div className="flex justify-end"><span className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-300"><ShieldCheck size={14}/>Fechado e protegido</span></div>}
     {existing&&<section className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.05] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-emerald-400">{typeof existing.settlement_gross_amount==='number'?'Acerto registrado':'Acerto registrado · legado'}</p><p className="mt-2 text-xl font-black text-emerald-300">R$ {money(existing.settlement_gross_amount ?? existing.amount)}</p><p className="mt-1 text-[10px] text-zinc-500">{typeof existing.settlement_gross_amount==='number'?'Custo operacional bruto do motoboy. O dinheiro recebido de clientes fica separado como liquidação de caixa.':'Valor originalmente registrado. Este acerto é anterior à separação entre custo bruto, abatimentos e caixa; o histórico não foi recalculado automaticamente.'}</p></section>}
 
     <div className="grid grid-cols-2 gap-3"><Card icon={Package} label={data.orderCount===data.physicalDeliveryCount?"Entregas concluídas":`${data.orderCount} pedidos`} value={String(data.physicalDeliveryCount)} tone="sky"/><Card icon={Banknote} label="Recebido · antes do troco" value={`R$ ${money(data.cashTendered)}`} tone="amber"/></div>
 
     {(data.priorStoreCredit>0||data.priorMotoboyCredit>0)&&<section className="rounded-[22px] border border-amber-500/20 bg-amber-500/[.055] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-amber-400">Saldo trazido do acerto anterior</p><p className="mt-2 text-lg font-black text-amber-200">R$ {money(data.priorStoreCredit||data.priorMotoboyCredit)}</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{data.priorStoreCredit>0?`${motoboy.name} estava com este valor da loja. Ele será compensado automaticamente hoje.`:`A loja devia este valor a ${motoboy.name}. Ele será somado automaticamente ao acerto de hoje.`}</p></section>}
 
-    <section className="rounded-[24px] border border-sky-500/20 bg-sky-500/5 p-5"><p className="text-[10px] font-black uppercase tracking-wider text-sky-400">Prévia do acerto</p><div className="mt-4 space-y-3"><Line label="Acerto bruto" value={`R$ ${money(data.fee.amount)}`}/><p className="text-[10px] text-zinc-500">{data.fee.description}</p>{adjustments.map(item=><div key={item.id} className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-zinc-300">{item.description}</p><p className="text-[9px] text-zinc-600">{adjustmentKindLabel(item.kind)} · {item.direction==='addition'?'acréscimo':'abatimento'}</p></div><span className={`text-xs font-black ${item.direction==='addition'?'text-emerald-400':'text-red-400'}`}>{item.direction==='addition'?'+':'-'} R$ {money(item.amount)}</span><button onClick={()=>setAdjustments(current=>current.filter(value=>value.id!==item.id))} className="grid h-8 w-8 place-items-center rounded-xl text-red-500"><Trash2 size={13}/></button></div>)}<div className="border-t border-sky-500/10 pt-3"><Line label="Total dos abatimentos" value={`- R$ ${money(data.totalVales)}`}/><Line label="Total dos acréscimos" value={`+ R$ ${money(data.totalAdditions)}`}/><Line label="Líquido do motoboy" value={`R$ ${money(data.liquidFee)}`} strong/></div></div></section>
+    <section className="rounded-[24px] border border-sky-500/20 bg-sky-500/5 p-5"><p className="text-[10px] font-black uppercase tracking-wider text-sky-400">Prévia do acerto</p><div className="mt-4 space-y-3"><Line label="Acerto bruto" value={`R$ ${money(data.fee.amount)}`}/><p className="text-[10px] text-zinc-500">{data.fee.description}</p>{adjustments.map(item=><div key={item.id} className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-zinc-300">{item.description}</p><p className="text-[9px] text-zinc-600">{adjustmentKindLabel(item.kind)} · {item.direction==='addition'?'acréscimo':'abatimento'}</p></div><span className={`text-xs font-black ${item.direction==='addition'?'text-emerald-400':'text-red-400'}`}>{item.direction==='addition'?'+':'-'} R$ {money(item.amount)}</span><button disabled={Boolean(existing)} onClick={()=>{if(window.confirm(`Cancelar o ajuste de R$ ${money(item.amount)}? O histórico será preservado.`))void cancelMotoboyAdjustment(item.id).catch(error=>toast.error(error instanceof Error?error.message:'Falha ao cancelar ajuste.'));}} className="grid h-8 w-8 place-items-center rounded-xl text-red-500"><Trash2 size={13}/></button></div>)}<div className="border-t border-sky-500/10 pt-3"><Line label="Total dos abatimentos" value={`- R$ ${money(data.totalVales)}`}/><Line label="Total dos acréscimos" value={`+ R$ ${money(data.totalAdditions)}`}/><Line label="Líquido do motoboy" value={`R$ ${money(data.liquidFee)}`} strong/></div></div></section>
 
-    <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4"><p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Ajuste do acerto</p><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={()=>{setAdjustmentDirection('deduction');setAdjustmentCategoryId('advance');setAdjustmentKind('advance')}} className={`h-11 rounded-xl border text-xs font-black ${adjustmentDirection==='deduction'?'border-red-500/35 bg-red-500/10 text-red-300':'border-zinc-800 text-zinc-500'}`}>− Abatimento</button><button onClick={()=>{setAdjustmentDirection('addition');setAdjustmentCategoryId('tip');setAdjustmentKind('tip')}} className={`h-11 rounded-xl border text-xs font-black ${adjustmentDirection==='addition'?'border-emerald-500/35 bg-emerald-500/10 text-emerald-300':'border-zinc-800 text-zinc-500'}`}>+ Acréscimo</button></div><div className="mt-3 grid grid-cols-2 gap-2">{directionCategories.map(category=><button key={category.id} onClick={()=>{setAdjustmentCategoryId(category.id);setAdjustmentKind(category.custom?'custom':category.id as MotoboySettlementAdjustment['kind'])}} className={`min-h-12 rounded-xl border px-3 text-[11px] font-black ${selectedCategory?.id===category.id?'border-amber-500/40 bg-amber-500/10 text-amber-200':'border-zinc-800 text-zinc-500'}`}>{category.label}</button>)}<button onClick={()=>setCategoryManager(true)} className="min-h-12 rounded-xl border border-dashed border-sky-500/35 bg-sky-500/5 px-3 text-[11px] font-black text-sky-300"><Plus size={14} className="mx-auto mb-1"/>Nova categoria</button></div><div className="mt-3 grid grid-cols-[1fr_112px_48px] gap-2"><input value={adjustmentDescription} onChange={e=>setAdjustmentDescription(e.target.value)} placeholder="Observação opcional" className="input"/><input value={adjustmentValue} onChange={e=>setAdjustmentValue(normalizeMoneyDraft(e.target.value))} inputMode="numeric" placeholder="0,00" className="input text-right font-black"/><button onClick={addAdjustment} aria-label="Adicionar ajuste" className="flex h-12 items-center justify-center rounded-xl bg-amber-400 text-zinc-950"><Plus size={18}/></button></div></section>
+    <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4"><p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Novo ajuste</p><p className="mt-1 text-[10px] text-zinc-600">Digite o motivo; ele fica sincronizado e entra uma única vez no fechamento.</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" aria-pressed={adjustmentDirection==='deduction'} disabled={adjustmentBusy||Boolean(existing)} onClick={()=>setAdjustmentDirection('deduction')} className={`h-11 rounded-xl border text-xs font-black ${adjustmentDirection==='deduction'?'border-red-500/35 bg-red-500/10 text-red-300':'border-zinc-800 text-zinc-500'}`}>− Abatimento</button><button type="button" aria-pressed={adjustmentDirection==='addition'} disabled={adjustmentBusy||Boolean(existing)} onClick={()=>setAdjustmentDirection('addition')} className={`h-11 rounded-xl border text-xs font-black ${adjustmentDirection==='addition'?'border-emerald-500/35 bg-emerald-500/10 text-emerald-300':'border-zinc-800 text-zinc-500'}`}>+ Acréscimo</button></div><div className="mt-3 grid grid-cols-[minmax(0,1fr)_92px_48px] gap-2"><input aria-label="Motivo do ajuste" disabled={adjustmentBusy||Boolean(existing)} value={adjustmentDescription} onChange={e=>setAdjustmentDescription(e.target.value)} maxLength={60} placeholder="Motivo: lanche, combustível..." className="input"/><input aria-label="Valor do ajuste" disabled={adjustmentBusy||Boolean(existing)} value={adjustmentValue} onChange={e=>setAdjustmentValue(normalizeMoneyDraft(e.target.value))} inputMode="numeric" placeholder="0,00" className="input text-right font-black"/><button disabled={Boolean(existing)||adjustmentBusy} onClick={addAdjustment} aria-label={adjustmentBusy?"Salvando ajuste":"Adicionar ajuste"} aria-busy={adjustmentBusy} className="flex h-12 items-center justify-center rounded-xl bg-amber-400 text-zinc-950 disabled:opacity-40">{adjustmentBusy?<span className="text-[10px] font-black">...</span>:<Plus size={18}/>}</button></div><p role="status" className="mt-2 text-[10px] text-zinc-500">{adjustmentBusy?"Salvando ajuste no sistema…":"Informe o motivo e o valor antes de adicionar."}</p></section>
 
-    <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4"><p className="text-sm font-black">Como fechar o caixa?</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Clientes entregaram R$ {money(data.cashInHand)}. Tirando R$ {money(data.cashChange)} de troco bancado pela loja, as vendas líquidas são R$ {money(data.cashCollected)}.</p><div className="mt-3 grid gap-2"><button onClick={()=>setSettlementStrategy('separate')} className={`rounded-2xl border p-3 text-left ${settlementStrategy==='separate'?'border-emerald-500/40 bg-emerald-500/10':'border-zinc-800'}`}><span className="block text-xs font-black">Caixa separado</span><span className="mt-1 block text-[9px] text-zinc-500">Devolve R$ {money(data.cashInHand)} e a diária é paga à parte.</span></button><button onClick={()=>setSettlementStrategy('offset')} className={`rounded-2xl border p-3 text-left ${settlementStrategy==='offset'?'border-sky-500/40 bg-sky-500/10':'border-zinc-800'}`}><span className="block text-xs font-black">Compensar diária nas vendas</span><span className="mt-1 block text-[9px] text-zinc-500">Retém no máximo R$ {money(data.cashCollected)} das vendas; dinheiro do troco nunca entra na diária.</span></button><button onClick={()=>setSettlementStrategy('manual')} className={`rounded-2xl border p-3 text-left ${settlementStrategy==='manual'?'border-amber-500/40 bg-amber-500/10':'border-zinc-800'}`}><span className="block text-xs font-black">Conferência manual</span><span className="mt-1 block text-[9px] text-zinc-500">Use somente quando o valor físico devolvido for diferente.</span></button></div>{settlementStrategy==='manual'&&<><div className="mt-3 grid grid-cols-3 gap-2">{([['all','Tudo'],['partial','Informar'],['none','Nada']] as const).map(([value,label])=><button key={value} onClick={()=>{setCashMode(value);if(value==='partial'&&!cashHandedDraft)setCashHandedDraft(moneyValueToDraft(data.cashInHand))}} className={`min-h-11 rounded-xl border px-2 text-[10px] font-black ${cashMode===value?'border-amber-500/35 bg-amber-500/10 text-amber-200':'border-zinc-800 text-zinc-600'}`}>{label}</button>)}</div>{cashMode==='partial'&&<label className="mt-3 block text-[10px] font-bold text-zinc-500">Quanto voltou fisicamente para a loja?<input value={cashHandedDraft} onChange={e=>setCashHandedDraft(normalizeMoneyDraft(e.target.value))} inputMode="numeric" className="input mt-2 w-full text-right text-sm font-black text-zinc-100" placeholder="0,00"/></label>}</>}<div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-zinc-950/60 p-3"><Line label="Voltou para a loja" value={`R$ ${money(data.cashHandedOverAmount)}`}/><Line label="Retido pelo motoboy" value={`R$ ${money(data.retainedCash)}`}/></div><p className="mt-2 text-[10px] font-bold leading-relaxed text-sky-300">{settlementEquation}</p><p className="mt-2 text-[9px] leading-relaxed text-zinc-600">Pix enviado ao motoboy deve ser lançado como Adiantamento.</p></section>
+    <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4"><p className="text-sm font-black">Como fechar o caixa?</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Clientes entregaram R$ {money(data.cashInHand)}. Tirando R$ {money(data.cashChange)} de troco bancado pela loja, as vendas líquidas são R$ {money(data.cashCollected)}.</p><div className="mt-3 grid gap-2"><button type="button" aria-pressed={settlementStrategy==='separate'} disabled={saving||Boolean(existing)} onClick={()=>setSettlementStrategy('separate')} className={`rounded-2xl border p-3 text-left ${settlementStrategy==='separate'?'border-emerald-500/40 bg-emerald-500/10':'border-zinc-800'}`}><span className="block text-xs font-black">Caixa separado</span><span className="mt-1 block text-[9px] text-zinc-500">Devolve R$ {money(data.cashInHand)} e a diária é paga à parte.</span></button><button type="button" aria-pressed={settlementStrategy==='offset'} disabled={saving||Boolean(existing)} onClick={()=>setSettlementStrategy('offset')} className={`rounded-2xl border p-3 text-left ${settlementStrategy==='offset'?'border-sky-500/40 bg-sky-500/10':'border-zinc-800'}`}><span className="block text-xs font-black">Compensar diária nas vendas</span><span className="mt-1 block text-[9px] text-zinc-500">Retém no máximo R$ {money(data.cashCollected)} das vendas; dinheiro do troco nunca entra na diária.</span></button><button type="button" aria-pressed={settlementStrategy==='manual'} disabled={saving||Boolean(existing)} onClick={()=>setSettlementStrategy('manual')} className={`rounded-2xl border p-3 text-left ${settlementStrategy==='manual'?'border-amber-500/40 bg-amber-500/10':'border-zinc-800'}`}><span className="block text-xs font-black">Conferência manual</span><span className="mt-1 block text-[9px] text-zinc-500">Use somente quando o valor físico devolvido for diferente.</span></button></div>{settlementStrategy==='manual'&&<><div className="mt-3 grid grid-cols-3 gap-2">{([['all','Tudo'],['partial','Informar'],['none','Nada']] as const).map(([value,label])=><button key={value} type="button" aria-pressed={cashMode===value} disabled={saving||Boolean(existing)} onClick={()=>{setCashMode(value);if(value==='partial'&&!cashHandedDraft)setCashHandedDraft(moneyValueToDraft(data.cashInHand))}} className={`min-h-11 rounded-xl border px-2 text-[10px] font-black ${cashMode===value?'border-amber-500/35 bg-amber-500/10 text-amber-200':'border-zinc-800 text-zinc-600'}`}>{label}</button>)}</div>{cashMode==='partial'&&<label className="mt-3 block text-[10px] font-bold text-zinc-500">Quanto voltou fisicamente para a loja?<input value={cashHandedDraft} disabled={saving||Boolean(existing)} onChange={e=>setCashHandedDraft(normalizeMoneyDraft(e.target.value))} inputMode="numeric" className="input mt-2 w-full text-right text-sm font-black text-zinc-100" placeholder="0,00"/></label>}</>}<div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-zinc-950/60 p-3"><Line label="Voltou para a loja" value={`R$ ${money(data.cashHandedOverAmount)}`}/><Line label="Retido pelo motoboy" value={`R$ ${money(data.retainedCash)}`}/></div><p className="mt-2 text-[10px] font-bold leading-relaxed text-sky-300">{settlementEquation}</p><p className="mt-2 text-[9px] leading-relaxed text-zinc-600">Pix enviado ao motoboy deve ser lançado como Adiantamento.</p></section>
 
     <section className={`rounded-[26px] p-5 ${data.settlementDirection==='store_credit'?'bg-amber-500':'bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.settlementDirection==='store_credit'?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 break-words text-[clamp(1.65rem,8vw,2.25rem)] font-black tabular-nums text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black uppercase text-zinc-900">{settlementTitle}</p><p className="mt-2 max-w-[32rem] text-[11px] font-bold leading-relaxed text-zinc-900/80">{settlementExplanation}</p></section>
 
     <button disabled={saving||Boolean(existing)} onClick={confirm} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-40"><ReceiptText size={17}/>{existing?'Acerto já registrado':saving?'Confirmando...':'Confirmar acerto'}</button>
-    <div className="grid grid-cols-2 gap-2"><button onClick={copy} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[11px] font-black text-zinc-300"><Copy size={14}/>Copiar resumo</button><button disabled={imageBusy} onClick={()=>void image()} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-emerald-500/35 bg-emerald-500/10 text-[11px] font-black text-emerald-200 disabled:opacity-40"><ImageIcon size={14}/>{imageBusy?'Gerando...':'Compartilhar acerto'}</button></div>
+    <div className="grid grid-cols-2 gap-2"><button disabled={copyBusy} aria-busy={copyBusy} onClick={copy} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[11px] font-black text-zinc-300"><Copy size={14}/>{copyBusy?'Copiando...':'Copiar resumo'}</button><button disabled={imageBusy} onClick={()=>void image()} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-emerald-500/35 bg-emerald-500/10 text-[11px] font-black text-emerald-200 disabled:opacity-40"><ImageIcon size={14}/>{imageBusy?'Gerando...':'Compartilhar acerto'}</button></div>
 
-    {categoryManager&&<div className="fixed inset-0 z-[60] flex items-end bg-black/80 p-3 backdrop-blur-sm" onClick={()=>setCategoryManager(false)}><div className="w-full rounded-[28px] border border-zinc-800 bg-zinc-950 p-5" onClick={event=>event.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-lg font-black">Nova categoria</p><p className="mt-1 text-[10px] text-zinc-500">Será salva no Firebase e aparecerá em todos os aparelhos.</p></div><button onClick={()=>setCategoryManager(false)} className="date-button"><X size={17}/></button></div><div className="mt-4 flex gap-2"><input autoFocus value={newCategoryName} onChange={e=>setNewCategoryName(e.target.value)} maxLength={32} placeholder={adjustmentDirection==='deduction'?'Ex.: Uniforme':'Ex.: Prêmio'} className="input flex-1"/><button disabled={savingCategory} onClick={()=>void saveCustomCategory()} className="rounded-xl bg-emerald-500 px-4 text-xs font-black text-zinc-950 disabled:opacity-50">{savingCategory?'Salvando...':'Salvar'}</button></div>{customCategories.filter(item=>item.direction===adjustmentDirection).length>0&&<div className="mt-5 border-t border-zinc-800 pt-4"><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-zinc-600">Ordem das categorias personalizadas</p>{customCategories.filter(item=>item.direction===adjustmentDirection).map((item,index,array)=><div key={item.id} className="mb-2 flex items-center gap-2 rounded-xl bg-zinc-900 p-2 pl-3"><span className="min-w-0 flex-1 truncate text-xs font-bold">{item.label}</span><button disabled={index===0} onClick={()=>void moveCustomCategory(item.id,-1)} className="date-button disabled:opacity-20"><ArrowUp size={14}/></button><button disabled={index===array.length-1} onClick={()=>void moveCustomCategory(item.id,1)} className="date-button disabled:opacity-20"><ArrowDown size={14}/></button></div>)}</div>}</div></div>}
 
-    {calendar&&<div className="fixed inset-0 z-50 flex items-end bg-black/75 p-3 backdrop-blur-sm" onClick={()=>setCalendar(false)}><div className="w-full rounded-[30px] border border-zinc-800 bg-zinc-950 p-5" onClick={e=>e.stopPropagation()}><div className="mb-4 flex items-center justify-between"><button onClick={()=>setMonth(value=>new Date(value.getFullYear(),value.getMonth()-1,1))} className="date-button"><ChevronLeft/></button><p className="font-black capitalize">{month.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</p><button onClick={()=>setMonth(value=>new Date(value.getFullYear(),value.getMonth()+1,1))} className="date-button"><ChevronRight/></button></div><div className="grid grid-cols-7 text-center text-[10px] text-zinc-600">{['D','S','T','Q','Q','S','S'].map((label,index)=><span key={`${label}-${index}`}>{label}</span>)}</div><div className="mt-2 grid grid-cols-7 gap-1">{days.map(day=>{const key=operationalDateKey(day);return <button key={key} onClick={()=>{setDate(key);setCalendar(false)}} className={`aspect-square rounded-xl text-xs font-bold ${key===date?'bg-emerald-500 text-zinc-950':day.getMonth()===month.getMonth()?'text-zinc-300':'text-zinc-700'}`}>{day.getDate()}</button>})}</div><button onClick={()=>setCalendar(false)} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 text-xs font-bold text-zinc-400"><X size={15}/>Fechar</button></div></div>}
+    {calendar&&<div className="fixed inset-0 z-50 flex items-end bg-black/75 p-3 backdrop-blur-sm" onClick={()=>setCalendar(false)}><div role="dialog" aria-modal="true" aria-label="Selecionar dia do acerto" className="max-h-[85dvh] w-full overflow-y-auto rounded-[30px] border border-zinc-800 bg-zinc-950 p-5 pb-[calc(var(--dfl-safe-bottom)+20px)]" onClick={e=>e.stopPropagation()}><div className="mb-4 flex items-center justify-between"><button onClick={()=>setMonth(value=>new Date(value.getFullYear(),value.getMonth()-1,1))} className="date-button"><ChevronLeft/></button><p className="font-black capitalize">{month.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</p><button onClick={()=>setMonth(value=>new Date(value.getFullYear(),value.getMonth()+1,1))} className="date-button"><ChevronRight/></button></div><div className="grid grid-cols-7 text-center text-[10px] text-zinc-600">{['D','S','T','Q','Q','S','S'].map((label,index)=><span key={`${label}-${index}`}>{label}</span>)}</div><div className="mt-2 grid grid-cols-7 gap-1">{days.map(day=>{const key=operationalDateKey(day);return <button key={key} onClick={()=>{setDate(key);setCalendar(false)}} className={`aspect-square rounded-xl text-xs font-bold ${key===date?'bg-emerald-500 text-zinc-950':day.getMonth()===month.getMonth()?'text-zinc-300':'text-zinc-700'}`}>{day.getDate()}</button>})}</div><button onClick={()=>setCalendar(false)} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 text-xs font-bold text-zinc-400"><X size={15}/>Fechar</button></div></div>}
 
     <style jsx>{`.date-button{display:flex;height:2.75rem;width:2.75rem;align-items:center;justify-content:center;border-radius:1rem;color:rgb(113 113 122)}.input{height:3rem;min-width:0;border-radius:.75rem;border:1px solid rgb(39 39 42);background:rgb(24 24 27/.6);padding:0 .75rem;font-size:.75rem;outline:none}`}</style>
   </div>

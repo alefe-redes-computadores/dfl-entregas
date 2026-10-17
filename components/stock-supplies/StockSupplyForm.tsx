@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Calculator, PackagePlus, Plus, Save, Trash2 } from 'lucide-react';
+import { AlertCircle, Calculator, Clock3, PackagePlus, Plus, Save, Trash2 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import type {
   PaymentMethod,
@@ -36,6 +36,12 @@ import {
   commercialPurchasePlan,
   netStockPurchaseQuantity,
 } from '@/lib/stock-shopping';
+import {
+  readStockSupplyDraft,
+  removeStockSupplyDraft,
+  stockSupplyDraftKey,
+  writeStockSupplyDraft,
+} from '@/lib/stock-supply-draft';
 
 export type StockSupplyFormValue = Omit<
   StockSupply,
@@ -53,6 +59,20 @@ type ItemErrors = {
   product?: string;
   quantity?: string;
   conversion?: string;
+};
+
+type PersistedFormDraft = {
+  occurredAt: string;
+  status: StockSupplyStatus;
+  supplierId: string;
+  supplierText: string;
+  purchaserName: string;
+  purchaserId: string;
+  transport: string;
+  otherCosts: string;
+  payment: PaymentMethod | '';
+  observation: string;
+  items: Draft[];
 };
 
 const number = parseStockQuantityInput;
@@ -225,7 +245,11 @@ export function StockSupplyForm({
   const [attempted, setAttempted] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [draftRestoredAt, setDraftRestoredAt] = useState('');
   const allowLeaveRef = useRef(false);
+  const submitInFlight = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  const draftKey = stockSupplyDraftKey(initial?.id);
 
   const [items, setItems] = useState<Draft[]>(
     initial?.items?.length
@@ -247,6 +271,56 @@ export function StockSupplyForm({
         })
       : [fresh()],
   );
+
+  const formDraft = useMemo<PersistedFormDraft>(() => ({
+    occurredAt,
+    status,
+    supplierId,
+    supplierText,
+    purchaserName,
+    purchaserId,
+    transport,
+    otherCosts,
+    payment,
+    observation,
+    items,
+  }), [occurredAt, status, supplierId, supplierText, purchaserName, purchaserId, transport, otherCosts, payment, observation, items]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = readStockSupplyDraft<PersistedFormDraft>(draftKey);
+    if (!saved) return;
+    if (initial?.updated_at && Date.parse(saved.savedAt) <= Date.parse(initial.updated_at)) {
+      removeStockSupplyDraft(draftKey);
+      return;
+    }
+    const value = saved.value;
+    if (!value?.items?.length) return;
+    setOccurredAt(value.occurredAt);
+    setStatus(value.status);
+    setSupplierId(value.supplierId);
+    setSupplierText(value.supplierText);
+    setPurchaserName(value.purchaserName);
+    setPurchaserId(value.purchaserId);
+    setTransport(value.transport);
+    setOtherCosts(value.otherCosts);
+    setPayment(value.payment);
+    setObservation(value.observation);
+    setItems(value.items);
+    setDraftRestoredAt(saved.savedAt);
+    setDirty(true);
+    toast.info('Rascunho da compra recuperado.', { id: 'stock-supply-draft' });
+    // A chave muda somente entre criar e editar; não reexecutar a restauração ao digitar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!dirty || typeof window === 'undefined') return;
+    const timer = window.setTimeout(() => {
+      writeStockSupplyDraft(draftKey, formDraft);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [dirty, draftKey, formDraft]);
 
   const draftIncoming = useMemo(
     () =>
@@ -286,7 +360,9 @@ export function StockSupplyForm({
     };
   }, [dirty]);
 
-  const confirmLeave = () => {
+  const leaveForm = (discard: boolean) => {
+    if (discard) removeStockSupplyDraft(draftKey);
+    else writeStockSupplyDraft(draftKey, formDraft);
     allowLeaveRef.current = true;
     setDirty(false);
     setLeaveOpen(false);
@@ -529,6 +605,7 @@ export function StockSupplyForm({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (busy || submitInFlight.current) return;
     setAttempted(true);
 
     if (!occurredAt) {
@@ -549,9 +626,10 @@ export function StockSupplyForm({
 
     const now = new Date().toISOString();
 
-    allowLeaveRef.current = true;
-    setDirty(false);
-    await onSubmit({
+    submitInFlight.current = true;
+    setSubmitting(true);
+    try {
+      await onSubmit({
       occurred_at: new Date(occurredAt).toISOString(),
       status,
       items: normalized,
@@ -574,6 +652,16 @@ export function StockSupplyForm({
           ? initial?.checked_at || now
           : undefined,
     });
+      try { removeStockSupplyDraft(draftKey); } catch { /* gravação remota já foi confirmada */ }
+      allowLeaveRef.current = true;
+      setDirty(false);
+    } catch {
+      // O chamador exibe o erro. Preservar rascunho e campos para nova tentativa.
+      try { writeStockSupplyDraft(draftKey, formDraft); } catch { /* armazenamento local indisponível */ }
+    } finally {
+      submitInFlight.current = false;
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -593,6 +681,8 @@ export function StockSupplyForm({
           </div>
         </div>
       </section>
+
+      {draftRestoredAt && <div className="flex items-center gap-2 rounded-2xl border border-sky-500/20 bg-sky-500/[.05] px-3.5 py-3 text-[10px] font-bold text-sky-300"><Clock3 size={15}/><span>Rascunho recuperado · salvo automaticamente {new Date(draftRestoredAt).toLocaleString('pt-BR')}</span></div>}
 
       <div id="purchase-date">
         <label className="text-xs font-bold text-zinc-400">
@@ -1127,11 +1217,13 @@ export function StockSupplyForm({
       )}
 
       <button
-        disabled={busy}
+        type="submit"
+        disabled={busy || submitting}
+        aria-busy={busy || submitting}
         className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-amber-500 font-black text-zinc-950 disabled:opacity-40"
       >
         <Save size={18} />
-        {busy ? 'Registrando...' : submitLabel}
+        {busy || submitting ? 'Registrando...' : submitLabel}
       </button>
 
       {leaveOpen && (
@@ -1151,20 +1243,27 @@ export function StockSupplyForm({
             <p className="mt-2 text-xs leading-relaxed text-zinc-500">
               Há alterações nesta compra que ainda não foram salvas.
             </p>
-            <div className="mt-5 grid grid-cols-2 gap-2">
+            <div className="mt-5 grid gap-2">
               <button
                 type="button"
                 onClick={() => setLeaveOpen(false)}
                 className="h-12 rounded-xl bg-zinc-900 text-sm font-bold text-zinc-300"
               >
-                Não, continuar
+                Continuar editando
               </button>
               <button
                 type="button"
-                onClick={confirmLeave}
+                onClick={() => leaveForm(false)}
                 className="h-12 rounded-xl bg-amber-500 text-sm font-black text-zinc-950"
               >
-                Sim, sair
+                Salvar rascunho e sair
+              </button>
+              <button
+                type="button"
+                onClick={() => leaveForm(true)}
+                className="h-11 rounded-xl text-xs font-bold text-red-400"
+              >
+                Descartar alterações
               </button>
             </div>
           </div>

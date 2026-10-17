@@ -118,6 +118,23 @@ export interface MotoboySettlementAdjustment {
   amount: number;
 }
 
+export type MotoboyAdjustmentStatus = 'pending' | 'cancelled' | 'incorporated';
+
+export interface MotoboyAdjustment extends MotoboySettlementAdjustment {
+  motoboy_id: string;
+  motoboy_name: string;
+  operational_date: string;
+  status: MotoboyAdjustmentStatus;
+  author_uid?: string;
+  author_name?: string;
+  settlement_source_id?: string;
+  incorporated_at?: string;
+  cancelled_at?: string;
+  cancelled_by_uid?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface OperationalExpense {
   id: string;
   occurred_at: string;
@@ -128,6 +145,10 @@ export interface OperationalExpense {
   motoboy_name?: string;
   source_kind?: 'motoboy_settlement' | 'manual';
   source_id?: string;
+  operational_date?: string;
+  schema_version?: number;
+  closed_by_uid?: string;
+  closed_by_name?: string;
   settlement_gross_amount?: number;
   /** Valor financeiro do acerto depois de ajustes reais, sem compensar dinheiro das entregas. */
   settlement_net_payable?: number;
@@ -250,6 +271,8 @@ export interface Route {
   change_money: number;
   drinks_summary?: string;
   created_at?: string;
+  /** Competência imutável da operação; eventos após meia-noite continuam neste dia. */
+  operational_date?: string;
   updated_at?: string;
 }
 

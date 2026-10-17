@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -20,7 +20,7 @@ import { compactAddressForCard, hasHouseNumber } from "@/lib/operational-address
 import { auditOperationalAddress } from '@/lib/address-quality';
 import { SiteOrderSnapshot } from '@/components/home/SiteOrderSnapshot';
 import { customerRecurrence } from '@/lib/customer-recurrence';
-import { deliveryPaymentStateLabel } from '@/lib/delivery-finance';
+import { deliveryPaymentStateLabel, deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 import { ownerContextLabel } from '@/lib/owner-order-context';
 
 interface DeliveryCardProps {
@@ -82,6 +82,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const suppressCardClick = useRef(false);
   const completionBusyRef = useRef(false);
   const copyBusyRef = useRef(false);
+  const [copyBusy, setCopyBusy] = useState(false);
   const [completionBusy, setCompletionBusy] = useState(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
@@ -100,6 +101,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   const payment = PAYMENT_CONFIG[delivery.payment_method as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.dinheiro;
   const PaymentIcon = payment.icon;
+  const paymentState = deriveDeliveryPaymentState(delivery);
   const paymentStateLabel = deliveryPaymentStateLabel(delivery);
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const isSiteOrder = delivery.source_system === 'dfl_site';
@@ -107,35 +109,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isDeveloperTest = delivery.developer_test === true || delivery.owner_order_context === 'owner_provisional';
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
   const isUrgent = groupedDeliveries.some((item) => item.is_urgent);
-  const customerTier = useAppStore(
-    (state) =>
-      customerRecurrence(
-        state.deliveries,
-        delivery.customer_id,
-        delivery,
-      ).tier,
+  // Uma única leitura da lista e um único cálculo por card/versão, evitando
+  // três varreduras completas do histórico em cada renderização.
+  const recurrenceDeliveries = useAppStore((state) => state.deliveries);
+  const recurrence = useMemo(
+    () => customerRecurrence(recurrenceDeliveries, delivery.customer_id, delivery),
+    [recurrenceDeliveries, delivery.customer_id, delivery.id, delivery.completed],
   );
-  const recurrenceCompletedOrders = useAppStore(
-    (state) =>
-      customerRecurrence(
-        state.deliveries,
-        delivery.customer_id,
-        delivery,
-      ).completedOrders,
-  );
-  const recurrenceMilestoneLabel = useAppStore(
-    (state) =>
-      customerRecurrence(
-        state.deliveries,
-        delivery.customer_id,
-        delivery,
-      ).milestoneLabel,
-  );
-  const recurrence = {
-    tier: customerTier,
-    completedOrders: recurrenceCompletedOrders,
-    milestoneLabel: recurrenceMilestoneLabel,
-  };
+  const customerTier = recurrence.tier;
   const isVIP = Boolean(customerTier);
 
   const shortAddress = compactAddressForCard(delivery.address_string, customer?.address, customer?.neighborhood);
@@ -146,6 +127,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     { fallbackNeighborhood: customer?.neighborhood },
   );
   const activePhone = delivery.phone || customer?.phone;
+  // Links wa.me aceitam DDI, mas não devem duplicar o 55 já cadastrado.
+  const whatsappDigits = (activePhone || '').replace(/\D/g, '');
+  const normalizedWhatsappPhone = whatsappDigits.startsWith('55') && whatsappDigits.length >= 12
+    ? whatsappDigits
+    : whatsappDigits.length >= 10 && whatsappDigits.length <= 11
+      ? `55${whatsappDigits}`
+      : '';
+
   const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
   const isAwaitingRoute = route.id === 'rota-aguardando-vinculo';
   const canDismissFromOperation =
@@ -225,12 +214,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const copyStop = async () => {
     if (copyBusyRef.current) return;
     copyBusyRef.current = true;
+    setCopyBusy(true);
     try {
-      const copied = await copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code, groupedDeliveries);
+      const copied = await copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code, groupedDeliveries, typeof delivery.order_index === 'number' ? delivery.order_index + 1 : undefined);
       if (copied) toast.success('Entrega copiada!');
       else toast.error('Não foi possível copiar a entrega.', { description: 'Tente novamente. Nenhum pedido foi alterado.' });
     } finally {
       copyBusyRef.current = false;
+      setCopyBusy(false);
     }
   };
 
@@ -614,7 +605,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         const itemCustomer = getCustomerById(item.customer_id);
                         const charge = item.customer_charge ?? item.value ?? 0;
                         const itemCode = item.confirmation_code?.replace(/\D/g, '').slice(0, 4);
-                        const paymentLabel = item.is_paid ? 'Pago app' : item.payment_method === 'dinheiro' ? (item.change_for ? `Dinheiro · p/ R$ ${item.change_for.toFixed(2).replace('.', ',')}` : 'Dinheiro') : item.payment_method?.includes('cartao') ? 'Cartão' : item.payment_method === 'pix' ? 'Pix' : 'Pagamento';
+                        const itemPayment = deriveDeliveryPaymentState(item);
+                        const paymentLabel = itemPayment === 'paid' ? 'Pago' : itemPayment === 'pending' ? 'Pix pendente' : item.payment_method === 'dinheiro' ? (item.change_for ? `Cobrar dinheiro · troco p/ R$ ${item.change_for.toFixed(2).replace('.', ',')}` : 'Cobrar dinheiro') : 'Cobrar cartão';
                         return (
                           <div key={item.id} className="flex items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/55 px-2.5 py-2">
                             <span className={clsx("flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[9px] font-black", item.completed ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-300")}>{item.completed ? '✓' : index + 1}</span>
@@ -695,16 +687,16 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                               <CheckSquare size={10} />
                               Pagamentos por pedido
                             </span>
-                          ) : delivery.is_paid ? (
+                          ) : paymentState === 'paid' ? (
                             <span className="flex items-center gap-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1.5 py-0.5 text-[10px] font-black shrink-0">
-                              <CheckCircle2 size={10} /> Pago App
+                              <CheckCircle2 size={10} /> Pago
                             </span>
                           ) : (
                             <span className={clsx("flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-black shrink-0", payment.className)}>
                               <PaymentIcon size={10} />
-                              {payment.label === 'Dinheiro'
-                                ? `Dinheiro ${delivery.change_for ? `(Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})` : ''}`
-                                : payment.label === 'Pix' ? 'QR Code Maquininha' : 'Cartão Maquininha'}
+                              {paymentState === 'pending' ? 'Pix pendente' : payment.label === 'Dinheiro'
+                                ? `Cobrar dinheiro ${delivery.change_for ? `(Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})` : ''}`
+                                : 'Cobrar cartão'}
                             </span>
                           )}
 
@@ -752,11 +744,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                         {!isGroupedStop && activePhone && (
                           <a
-                            href={`https://wa.me/55${activePhone.replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`}
+                            href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`}
                             target="_blank"
                             rel="noreferrer"
                             className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 active:scale-90 transition-transform"
                             title="Chamar cliente no WhatsApp"
+                      aria-label="Chamar cliente no WhatsApp"
                           >
                             <MessageCircle size={14} />
                           </a>
@@ -873,9 +866,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 delivery.completed && !isExpanded && "bg-emerald-500/[.025] border-emerald-500/10"
               )}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {delivery.is_paid ? (
+                  {paymentState === 'paid' ? (
                     <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-500">
-                      <CheckCircle2 size={14} /> Pago no App
+                      <CheckCircle2 size={14} /> Pago
                     </span>
                   ) : (
                     <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}>
@@ -915,13 +908,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           : 'Dar Baixa'}
                   </button>
 
-                  {activePhone && (
+                  {normalizedWhatsappPhone && (
                     <a
-                      href={`https://wa.me/55${activePhone.replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`}
+                      href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`}
                       target="_blank"
                       rel="noreferrer"
                       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 active:scale-90 transition-all"
                       title="Chamar cliente no WhatsApp"
+                      aria-label="Chamar cliente no WhatsApp"
                     >
                       <MessageCircle size={18} />
                     </a>
@@ -937,13 +931,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   </Link>
 
                   <button
-                    onClick={async () => {
-                      await copyStop();
-                    }}
-                    aria-label="Copiar mensagem da entrega"
+                    onClick={() => { void copyStop(); }}
+                    disabled={copyBusy}
+                    aria-busy={copyBusy}
+                    aria-label={copyBusy ? "Copiando mensagem da entrega" : "Copiar mensagem da entrega"}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 active:scale-90 transition-all"
                   >
-                    <Share2 size={16} strokeWidth={2.5} />
+                    {copyBusy ? <LoaderCircle size={16} className="animate-spin" /> : <Share2 size={16} strokeWidth={2.5} />}
                   </button>
 
                   {!delivery.completed && !isRecoveryRoute && (

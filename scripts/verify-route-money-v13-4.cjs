@@ -16,7 +16,7 @@ const checks = [
  ['mensagem distingue valor exato',whatsapp.includes('Valor exato · sem troco')],
  ['mensagem detalha volta física por entrega',whatsapp.includes('formatMoney(line.tendered)')&&whatsapp.indexOf('line.tendered - line.cashChange')<0],
  ['mensagem explica total físico',whatsapp.includes('Deve voltar fisicamente na bag')],
- ['contato substitui chamar no portão',whatsapp.includes('*Contato rápido*')&&!whatsapp.includes('*Chamar no portão*')],
+ ['contato substitui chamar no portão',whatsapp.includes('*Contato:*')&&!whatsapp.includes('*Chamar no portão*')],
 ];
 let failed=0;for(const [label,pass] of checks){console.log(`${pass?'OK':'ERRO'}: ${label}`);if(!pass)failed++;}
 if(failed)process.exit(1);console.log('\nV13.4 CAIXA DA ROTA + DINHEIRO: CONTRATOS OK');

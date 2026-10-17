@@ -1,5 +1,79 @@
-import type { StockProduct,StockSupplier,StockSupply } from '@/types';
+import type { StockProduct, StockSupplier, StockSupply } from '@/types';
 import { comparableBaseUnitCost } from '@/lib/stock-commercial-health';
-export type StockPriceInsight={product:StockProduct;samples:number;median:number;lowest:number;latest:number;bestSupplier?:string;savingPercent?:number;confidence:'baixa'|'média'|'alta'};
-const median=(v:number[])=>{const s=[...v].sort((a,b)=>a-b),m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2};
-export function buildStockPriceInsights(products:StockProduct[],supplies:StockSupply[],suppliers:StockSupplier[]):StockPriceInsight[]{const names=new Map(suppliers.map(s=>[s.id,s.name]));return products.map(product=>{const rows=supplies.filter(s=>s.status==='recebido'||s.status==='conferido').flatMap(s=>s.items.filter(i=>i.stock_product_id===product.id).map(i=>({price:comparableBaseUnitCost(i),supplier:names.get(s.supplier_id||'')||s.supplier||'Fornecedor não informado',date:new Date(s.occurred_at||s.created_at).getTime()}))).filter((r):r is typeof r&{price:number}=>r.price!==null&&r.price>0).sort((a,b)=>b.date-a.date);if(!rows.length)return null;const values=rows.map(r=>r.price),by=new Map<string,number[]>();rows.forEach(r=>by.set(r.supplier,[...(by.get(r.supplier)||[]),r.price]));const best=Array.from(by).map(([name,prices])=>({name,value:median(prices)})).sort((a,b)=>a.value-b.value)[0],med=median(values);return{product,samples:rows.length,median:med,lowest:Math.min(...values),latest:rows[0].price,bestSupplier:best?.name,savingPercent:med>0&&best?Math.max(0,(med-best.value)/med*100):0,confidence:rows.length>=8?'alta':rows.length>=3?'média':'baixa'} as StockPriceInsight}).filter((x):x is StockPriceInsight=>Boolean(x)).sort((a,b)=>(b.savingPercent||0)-(a.savingPercent||0))}
+
+export type StockPriceInsight = {
+  product: StockProduct;
+  samples: number;
+  median: number;
+  lowest: number;
+  latest: number;
+  bestSupplier?: string;
+  savingPercent?: number;
+  confidence: 'baixa' | 'média' | 'alta';
+};
+
+type PriceObservation = { price: number; supplier: string; date: number };
+const median = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const half = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2;
+};
+
+/** O histórico é indexado em uma passagem, sem filtrar todas as compras para cada produto. */
+export function buildStockPriceInsights(
+  products: StockProduct[],
+  supplies: StockSupply[],
+  suppliers: StockSupplier[],
+): StockPriceInsight[] {
+  const supplierNames = new Map(suppliers.map((supplier) => [supplier.id, supplier.name]));
+  const history = new Map<string, PriceObservation[]>();
+  for (const supply of supplies) {
+    if (supply.status !== 'recebido' && supply.status !== 'conferido') continue;
+    const supplier = supplierNames.get(supply.supplier_id || '') || supply.supplier || 'Fornecedor não informado';
+    const timestamp = new Date(supply.occurred_at || supply.created_at).getTime();
+    for (const item of supply.items) {
+      if (!item.stock_product_id) continue;
+      const price = comparableBaseUnitCost(item);
+      if (price === null || !Number.isFinite(price) || price <= 0) continue;
+      const observations = history.get(item.stock_product_id) || [];
+      observations.push({ price, supplier, date: timestamp });
+      history.set(item.stock_product_id, observations);
+    }
+  }
+  const insights: StockPriceInsight[] = [];
+  for (const product of products) {
+    const observations = history.get(product.id);
+    if (!observations?.length) continue;
+    observations.sort((a, b) => b.date - a.date);
+    const prices = observations.map((item) => item.price);
+    const bySupplier = new Map<string, number[]>();
+    for (const row of observations) {
+      const values = bySupplier.get(row.supplier) || [];
+      values.push(row.price);
+      bySupplier.set(row.supplier, values);
+    }
+    let bestSupplier: string | undefined;
+    let bestPrice = Infinity;
+    for (const [name, values] of bySupplier) {
+      const candidate = median(values);
+      if (candidate < bestPrice) {
+        bestPrice = candidate;
+        bestSupplier = name;
+      }
+    }
+    const typicalPrice = median(prices);
+    insights.push({
+      product,
+      samples: observations.length,
+      median: typicalPrice,
+      lowest: Math.min(...prices),
+      latest: observations[0].price,
+      bestSupplier,
+      savingPercent: typicalPrice > 0 && bestSupplier
+        ? Math.max(0, (typicalPrice - bestPrice) / typicalPrice * 100)
+        : 0,
+      confidence: observations.length >= 8 ? 'alta' : observations.length >= 3 ? 'média' : 'baixa',
+    });
+  }
+  return insights.sort((a, b) => (b.savingPercent || 0) - (a.savingPercent || 0));
+}

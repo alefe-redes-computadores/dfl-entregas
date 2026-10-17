@@ -1,0 +1,10 @@
+const fs=require('fs'),assert=require('assert');const read=p=>fs.readFileSync(p,'utf8');
+const stock=read('app/estoque/page.tsx'),shopping=read('app/estoque/compras/page.tsx'),supplier=read('components/stock-supplies/StockSupplierPicker.tsx'),queue=read('components/store/OperationalAttentionQueue.tsx'),store=read('app/loja/page.tsx');
+assert(stock.includes('Limpar busca e filtros')&&stock.includes('aria-pressed={filter===key}'));
+assert(stock.includes('Abrir detalhes de ${product.name}')&&!stock.includes('data-stock-product={product.id} onClick={open}'));
+assert(shopping.includes('aria-live="polite"')&&shopping.includes('Ver todos os produtos'));
+assert(shopping.includes('sticky bottom-[calc(var(--dfl-safe-bottom)+12px)]'));
+assert(supplier.includes("normalize('NFD')")&&supplier.includes('Nenhum fornecedor encontrado'));
+assert(queue.includes('actionLabels[task.kind]')&&queue.includes('Abrir caixa de entrada'));
+assert(store.includes('Abrir entregas: ${dashboardData.totalEntregas}')&&store.includes('Acompanhar sequência e motoboys'));
+console.log('V90: UX mobile, estoque, compras, fornecedor, loja e pendências OK');

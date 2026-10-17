@@ -1,0 +1,16 @@
+const fs = require('node:fs');
+const route = fs.readFileSync('components/home/RouteAccordion.tsx', 'utf8');
+const pre = fs.readFileSync('scripts/pre-apk.cjs', 'utf8');
+const assert = (condition, name) => { if (!condition) throw Error(`V99: ${name}`); console.log(`OK: ${name}`); };
+assert(route.includes('routeActionLock = useRef(false)'), 'bloqueio síncrono de ações da rota');
+assert(route.includes('if (actionBusy || routeActionLock.current) return'), 'reabertura/fechamento/exclusão protegidos contra toque duplo');
+assert(route.includes('routeActionLock.current = false'), 'bloqueio liberado após operação');
+assert(route.includes('const pendingStopGroups = useMemo('), 'hotfix de paradas pendentes preservado');
+assert(route.includes('const allStopGroups = useMemo(') && route.includes('allStopGroups.map((stopGroup)'), 'grupos reutilizados nos cards');
+assert(route.includes('pendingStopGroups.map((group)'), 'grupos pendentes reutilizados em roteamento');
+assert(route.includes('if (routeCardBusy || routeCardLock.current) return'), 'compartilhamento protegido contra toques concorrentes');
+assert(route.includes('abort|cancel') && route.includes('Compartilhamento cancelado'), 'cancelamento não reporta envio concluído');
+assert(route.includes('await safeRouteHaptic();') && !route.includes('await Haptics.impact({ style: ImpactStyle.Heavy });'), 'feedback tátil não impede excluir rota');
+assert(route.includes('ifoodPendingConfirmations') && route.includes("label: 'Confirmar iFood'"), 'fila iFood pós-rota preservada');
+assert(pre.includes('scripts/verify-v99-route-lifecycle.cjs'), 'verificador registrado no PRE-APK');
+console.log('V99 CICLO DE ROTAS: CONTRATOS OK');

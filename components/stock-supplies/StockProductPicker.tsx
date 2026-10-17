@@ -13,6 +13,7 @@ import { toast } from '@/lib/operational-toast';
 
 import { useAppStore } from '@/store/useAppStore';
 import { stockLevel } from '@/lib/stock';
+import { rankStockProducts } from '@/lib/stock-search';
 import { formatStockQuantity } from '@/lib/stock-quantity';
 import { SUPPLY_UNIT_LABELS } from '@/lib/stock-supply';
 import { StockCategoryPicker } from '@/components/stock/StockCategoryPicker';
@@ -86,10 +87,7 @@ export function StockProductPicker({
 
   const filtered = useMemo(
     () =>
-      products
-        .filter((product) =>
-          normalize(product.name).includes(normalize(query)),
-        )
+      [...rankStockProducts(products, query)]
         .sort((a, b) => {
           const aRank = preferredRank.get(a.id);
           const bRank = preferredRank.get(b.id);
@@ -100,7 +98,7 @@ export function StockProductPicker({
             return aRank - bRank;
           }
 
-          return a.name.localeCompare(b.name, 'pt-BR');
+          return query.trim() ? 0 : a.name.localeCompare(b.name, 'pt-BR');
         }),
     [preferredRank, products, query],
   );
@@ -287,13 +285,15 @@ export function StockProductPicker({
       {open && (
         <div
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (event.target === event.currentTarget && !busy) {
               setOpen(false);
             }
           }}
-          className="fixed inset-0 z-[120] flex items-end bg-black/85 px-3 pt-3 backdrop-blur-md"
+          onKeyDown={(event) => { if (event.key === 'Escape' && !busy) { setOpen(false); setCreating(false); } }}
+          role="presentation"
+          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/85 px-2 pt-3 backdrop-blur-md sm:items-center sm:px-4"
         >
-          <div className="mx-auto max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[30px] border border-zinc-800 bg-zinc-950 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-label={creating ? 'Cadastrar produto de estoque' : 'Selecionar produto de estoque'} className="mx-auto max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[30px] border border-zinc-700 bg-zinc-950 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[30px]">
             <div className="sticky top-0 z-10 -mx-1 flex justify-between gap-3 bg-zinc-950/95 px-1 pb-3 backdrop-blur">
               <div>
                 <h3 className="font-heading text-lg font-black text-zinc-100">
@@ -311,13 +311,16 @@ export function StockProductPicker({
               <button
                 type="button"
                 onClick={() => {
+                  if (busy) return;
                   if (creating) {
                     setCreating(false);
                   } else {
                     setOpen(false);
                   }
                 }}
-                className="grid h-10 w-10 place-items-center rounded-full bg-zinc-900 text-zinc-400"
+                aria-label={creating ? "Voltar para seleção de produtos" : "Fechar seleção de produtos"}
+                disabled={busy}
+                className="grid h-11 w-11 place-items-center rounded-full bg-zinc-900 text-zinc-300 disabled:opacity-50"
               >
                 <X size={18} />
               </button>
@@ -336,6 +339,7 @@ export function StockProductPicker({
                     onChange={(event) =>
                       setQuery(event.target.value)
                     }
+                    aria-label="Buscar produto ativo para compra"
                     placeholder="Buscar produto ativo"
                     className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-11 pr-3 text-sm text-zinc-100 outline-none focus:border-amber-500"
                   />
