@@ -8,6 +8,6 @@ const checks = [
  ['falha de cópia apresenta erro',route.includes("toast.error('Não foi possível copiar.")],
  ['falha do feedback tátil não impede persistência', route.includes('catch { /* feedback tátil é opcional */ }') && route.includes('await safeRouteHaptic();\n      await startRoute(route.id)')],
  ['fechar rota mantém fila iFood',route.includes('ifoodPendingConfirmations') && route.includes("params.set('route', route.id)")],
- ['otimização e hotfix de paradas preservados',route.includes('const pendingStopGroups = useMemo(')],
+ ['otimização e hotfix de paradas preservados',route.includes('pendingStopGroups } = useOptimizedDeliveries(')],
 ];
 let bad=0;for(const [label,ok] of checks){console.log((ok?'OK: ':'ERRO: ')+label);if(!ok)bad++;}if(bad)process.exit(1);console.log('V98 ROUTE SHARING INTEGRITY: OK');

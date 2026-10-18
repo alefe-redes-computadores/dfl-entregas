@@ -2,6 +2,15 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/verify-v110-purchases-stock-alerts.cjs',
+  'scripts/verify-v109-cards-finance-ux.cjs',
+  'scripts/verify-v108-stock-finance-performance.cjs',
+  'scripts/verify-v107-message-trace.cjs',
+  'scripts/verify-v106-drag-route-consistency.cjs',
+  'scripts/verify-v105-drag-stock-performance.cjs',
+  'scripts/verify-v104-route-earnings.cjs',
+  'scripts/verify-v103-mobile-cards.cjs',
+  'scripts/verify-v102-experience.cjs',
   'scripts/verify-v101-release-candidate.cjs',
   'scripts/verify-v100-6-closure-authority.cjs',
   'scripts/audit-v100-6-release-gate.cjs',

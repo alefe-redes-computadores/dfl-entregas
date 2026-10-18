@@ -62,11 +62,25 @@ export default function StockPage() {
   const leaveStock=()=>{sessionStorage.removeItem('dfl-stock-scroll');sessionStorage.removeItem('dfl-stock-anchor');sessionStorage.removeItem('dfl-stock-query');router.replace('/loja')};
   const active=useMemo(()=>products.filter(p=>p.active),[products]);
   const commercialHealth=useMemo(()=>commercialCoverage(active),[active]);
-  const stockBrain=useMemo(()=>stockIntelligenceSummary(active,movements),[active,movements]);
-  const recommendationMap=useMemo(()=>new Map(buildStockRecommendations(active,movements).map(item=>[item.productId,item])),[active,movements]);
+  const movementsByProduct=useMemo(()=>{
+    const index=new Map<string,typeof movements>();
+    for(const movement of movements){
+      const group=index.get(movement.product_id);
+      if(group)group.push(movement);else index.set(movement.product_id,[movement]);
+    }
+    return index;
+  },[movements]);
+  const recommendations=useMemo(()=>buildStockRecommendations(active,movements),[active,movements]);
+  const stockBrain=useMemo(()=>stockIntelligenceSummary(active,movements,recommendations),[active,movements,recommendations]);
+  const recommendationMap=useMemo(()=>new Map(recommendations.map(item=>[item.productId,item])),[recommendations]);
   const suggested=useMemo(()=>active.filter(p=>{const r=recommendationMap.get(p.id);if(!r)return false;return guardedStockRecommendation(p,r).quantity>0}).sort(prioritySort),[active,recommendationMap]);
   const commercialMissing=useMemo(()=>active.filter(p=>commercialCoverage([p]).attention>0),[active]);
-  const daily=useMemo(()=>active.map(p=>({p,signal:buildDailyStockSignal(p,movements)})).filter(x=>x.signal.suggested>0&&(Math.max(x.p.minimum_quantity,x.p.ideal_quantity||0)>0||x.signal.usesWeekday)).sort((a,b)=>b.signal.suggested-a.signal.suggested),[active,movements]);
+  const daily=useMemo(()=>{
+    const now=new Date();
+    return active.map(product=>({p:product,signal:buildDailyStockSignal(product,movementsByProduct.get(product.id)||[],now,recommendationMap.get(product.id))}))
+      .filter(x=>x.signal.suggested>0&&(Math.max(x.p.minimum_quantity,x.p.ideal_quantity||0)>0||x.signal.usesWeekday))
+      .sort((a,b)=>b.signal.suggested-a.signal.suggested);
+  },[active,movementsByProduct,recommendationMap]);
   const visible=useMemo(()=>rankStockProducts(active.filter(p=>filter==='todos'||stockLevel(p)===filter),query).sort(query.trim()?()=>0:prioritySort),[active,filter,query]);
   const groups=useMemo(()=>Object.entries(visible.reduce<Record<string,StockProduct[]>>((all,p)=>{const key=stockProductCategory(p.name,p.category);(all[key]||=[]).push(p);return all},{})).map(([category,items])=>[category,[...items].sort((a,b)=>naturalStockNameCompare(a.name,b.name))] as [string,StockProduct[]]).sort(([a],[b])=>stockCategoryOrder(a)-stockCategoryOrder(b)||a.localeCompare(b,'pt-BR')),[visible]);
   const reviewOrder=useMemo(()=>groups.flatMap(([,items])=>items),[groups]);

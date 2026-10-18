@@ -21,11 +21,9 @@ const normalize = (value: unknown) =>
 
 function neighborhoodOf(
   delivery: Delivery,
-  customers: Customer[],
+  customersById: Map<string, Customer>,
 ): string {
-  const customer = customers.find(
-    (item) => item.id === delivery.customer_id,
-  );
+  const customer = customersById.get(delivery.customer_id);
 
   if (customer?.neighborhood?.trim()) {
     return customer.neighborhood.trim();
@@ -76,6 +74,7 @@ export function RouteSequenceAdvisor({
       return null;
     }
 
+    const customersById = new Map(customers.map(customer => [customer.id, customer] as const));
     const current = [...deliveries].sort((a, b) => {
       const aOrder = a.order_index ?? Number.MAX_SAFE_INTEGER;
       const bOrder = b.order_index ?? Number.MAX_SAFE_INTEGER;
@@ -109,8 +108,8 @@ export function RouteSequenceAdvisor({
         continue;
       }
 
-      const fromNeighborhood = neighborhoodOf(from, customers);
-      const immediateNeighborhood = neighborhoodOf(immediate, customers);
+      const fromNeighborhood = neighborhoodOf(from, customersById);
+      const immediateNeighborhood = neighborhoodOf(immediate, customersById);
 
       if (!fromNeighborhood || !immediateNeighborhood) continue;
 
@@ -156,7 +155,7 @@ export function RouteSequenceAdvisor({
           if (candidate.is_urgent || candidate.order_locked) return false;
 
           return (
-            normalize(neighborhoodOf(candidate, customers)) ===
+            normalize(neighborhoodOf(candidate, customersById)) ===
             normalize(strongest.toNeighborhood)
           );
         },

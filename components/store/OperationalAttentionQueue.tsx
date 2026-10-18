@@ -19,7 +19,7 @@ const statusStyles: Record<AttentionKind, string> = {
   pix_pending: 'text-violet-300 bg-violet-400/10',
   collect: 'text-emerald-300 bg-emerald-400/10',
 };
-const money = (value: number) => value.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const money = (value: number) => (Number.isFinite(value) ? Math.max(0, value) : 0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const kindPriority: Record<AttentionKind,number> = {site_confirmation:0,pix_pending:1,site_dispatch:2,collect:3};
 export function OperationalAttentionQueue({orders,selectedDateKey,onFinance}:{orders:readonly Delivery[];selectedDateKey:string;onFinance:()=>void}) {
   const router=useRouter();

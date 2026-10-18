@@ -15,6 +15,7 @@ import {
   type SyncDiagnostic,
 } from '@/lib/sync-diagnostics';
 import { auth } from '@/lib/firebase';
+import { MessageTraceCard } from '@/components/diagnostics/MessageTraceCard';
 
 const DIAGNOSTICS_ADMIN_EMAIL = 'alefejohsefe@gmail.com';
 const SERVER_ORIGIN = (process.env.NEXT_PUBLIC_DFL_SERVER_ORIGIN?.trim() || 'https://dfl-entregas.vercel.app').replace(/\/+$/, '');
@@ -121,7 +122,7 @@ export default function OperationalDiagnosticsPage() {
       });
       const payload = await response.json();
       if (!response.ok || payload.ok !== true) throw new Error(payload.error || payload.relay?.results?.[0]?.error || 'Evento ainda nao foi enviado.');
-      toast.success('Evento confirmado pelo Site.', { id: 'recovery-event' });
+      toast.success('Site aceitou o evento. WhatsApp não verificado.', { id: 'recovery-event' });
       await loadRecovery();
       await initData();
       setEntries(readSyncDiagnostics());
@@ -223,15 +224,17 @@ export default function OperationalDiagnosticsPage() {
 
       <section className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-4">
         <div className="flex items-start justify-between gap-3">
-          <div><div className="flex items-center gap-2"><Send size={17} className="text-violet-400"/><b className="text-sm text-zinc-100">Recuperacao Site</b></div><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Consulta somente ao abrir e reprocessa um evento escolhido. Sem polling.</p></div>
+          <div><div className="flex items-center gap-2"><Send size={17} className="text-violet-400"/><b className="text-sm text-zinc-100">Recuperacao Site</b></div><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Confirma apenas o relay Entregas → Site. Não prova envio de WhatsApp. Consulta somente ao abrir; sem polling.</p></div>
           <button type="button" disabled={Boolean(recoveryBusy)} onClick={() => void loadRecovery()} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-400 disabled:opacity-50" aria-label="Consultar fila"><RefreshCw size={15} className={recoveryBusy === 'loading' ? 'animate-spin' : ''}/></button>
         </div>
         {recovery && <>
           <div className="mt-3 grid grid-cols-4 gap-1.5">{(['pending','processing','failed','dead_letter'] as const).map((status)=><div key={status} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-2 text-center"><b className="block text-sm text-zinc-100">{recovery.stats[status] || 0}</b><span className="text-[7px] uppercase text-zinc-600">{status === 'dead_letter' ? 'bloqueado' : status}</span></div>)}</div>
           <div className="mt-3 space-y-2">{recovery.issues.map((issue)=><article key={issue.eventId} className="rounded-xl border border-zinc-800 bg-black/20 p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><b className="block truncate text-[10px] text-zinc-200">{issue.eventType}</b><span className="block truncate text-[8px] text-zinc-600">{issue.entityId} · tentativa {issue.attempts}</span></div><span className={`rounded-md px-1.5 py-1 text-[7px] font-black uppercase ${issue.status === 'failed' || issue.status === 'dead_letter' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>{issue.status}</span></div>{issue.lastError&&<p className="mt-2 line-clamp-2 text-[9px] text-red-300/80">{issue.lastError}</p>}<button type="button" disabled={Boolean(recoveryBusy)} onClick={()=>void retryEvent(issue.eventId)} className="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/[.07] text-[9px] font-black text-violet-300 disabled:opacity-50"><RotateCcw size={13} className={recoveryBusy === issue.eventId ? 'animate-spin' : ''}/>{recoveryBusy === issue.eventId ? 'Reprocessando...' : 'Reprocessar este evento'}</button></article>)}</div>
-          {!recovery.issues.length&&<p className="mt-3 rounded-xl border border-dashed border-zinc-800 p-4 text-center text-[10px] text-emerald-400">Fila reversa saudavel. Nenhuma pendencia.</p>}
+          {!recovery.issues.length&&<p className="mt-3 rounded-xl border border-dashed border-zinc-800 p-4 text-center text-[10px] text-emerald-400">Sem pendência no relay Entregas → Site. WhatsApp não verificado.</p>}
         </>}
       </section>
+
+      <MessageTraceCard />
 
       {pendingPreview.length > 0 && (
         <section className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/35 p-4">

@@ -11,6 +11,7 @@ import {
 import type { Delivery, Route } from '@/types';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { deriveDeliveryPaymentState, deliveryEconomicValue } from '@/lib/delivery-finance';
 
 export interface StoreDashboardData {
   selectedDate: Date;
@@ -88,7 +89,7 @@ export function useStoreDashboard(): StoreDashboardData {
         const key = dateKey(value);
         datesWithOperation.add(key);
 
-        if (key === selectedDateKey) {
+        if (key === selectedDateKey && !isCancelledSiteDelivery(delivery)) {
           selectedDateOrders.push(delivery);
         }
       }
@@ -131,11 +132,12 @@ export function useStoreDashboard(): StoreDashboardData {
 
     for (const order of selectedDateOrders) {
       if (isCancelledSiteDelivery(order)) continue;
-      const value = order.value || 0;
+      const value = deliveryEconomicValue(order);
 
       faturamentoTotal += value;
 
-      if (order.is_paid || order.completed) {
+      // Entrega concluída é fato logístico, NÃO confirmação financeira.
+      if (deriveDeliveryPaymentState(order) === 'paid') {
         receivedTotal += value;
       }
 

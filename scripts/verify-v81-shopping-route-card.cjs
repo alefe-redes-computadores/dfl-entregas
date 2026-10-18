@@ -1,7 +1,7 @@
 const fs=require('node:fs');const read=file=>fs.readFileSync(file,'utf8');const ok=(condition,label)=>{if(!condition)throw new Error(`V81: ${label}`);console.log('OK:',label)};
 const card=read('lib/route-share-card.ts'),route=read('components/home/RouteAccordion.tsx'),shopping=read('components/stock-supplies/ShoppingSession.tsx'),pre=read('scripts/pre-apk.cjs');
 ok(card.includes('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY')&&card.includes('maps.googleapis.com/maps/api/staticmap'),'imagem tenta mapa estático oficial');
-ok(card.includes('usedRealMap = false')&&card.includes('if (mapUrl)')&&card.includes('CHECKLIST OPERACIONAL')&&card.includes('ANTES DE SAIR')&&!card.includes('Não é um mapa geográfico.')&&!card.includes('bezierCurveTo'),'falha de mapa possui fallback operacional explícito e compacto, sem geografia fictícia');
+ok(card.includes('map: HTMLImageElement | null = null')&&card.includes('if (mapUrl)')&&card.includes('CONFERÊNCIA DE SAÍDA')&&card.includes('ANTES DE SAIR')&&!card.includes('Não é um mapa geográfico.')&&!card.includes('bezierCurveTo'),'falha de mapa possui fallback operacional explícito e compacto, sem geografia fictícia');
 ok(!card.includes("params.append('path'")&&card.includes('coordinates('),'mapa real só com coordenadas e sem rota reta inventada');
 ok(card.includes('groupDeliveriesByStop'),'marcadores representam paradas físicas');
 ok(route.includes('buildRouteShareCard')&&route.includes('Share.share')&&route.includes('Filesystem.writeFile'),'APK compartilha imagem e mensagem');

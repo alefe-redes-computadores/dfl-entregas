@@ -246,6 +246,7 @@ export function StockSupplyForm({
   const [dirty, setDirty] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [draftRestoredAt, setDraftRestoredAt] = useState('');
+  const [draftStorageFailed, setDraftStorageFailed] = useState(false);
   const allowLeaveRef = useRef(false);
   const submitInFlight = useRef(false);
   const [submitting, setSubmitting] = useState(false);
@@ -291,7 +292,7 @@ export function StockSupplyForm({
     const saved = readStockSupplyDraft<PersistedFormDraft>(draftKey);
     if (!saved) return;
     if (initial?.updated_at && Date.parse(saved.savedAt) <= Date.parse(initial.updated_at)) {
-      removeStockSupplyDraft(draftKey);
+      try { removeStockSupplyDraft(draftKey); } catch { /* sem storage, formulário permanece disponível */ }
       return;
     }
     const value = saved.value;
@@ -317,8 +318,9 @@ export function StockSupplyForm({
   useEffect(() => {
     if (!dirty || typeof window === 'undefined') return;
     const timer = window.setTimeout(() => {
-      writeStockSupplyDraft(draftKey, formDraft);
-    }, 350);
+      try { writeStockSupplyDraft(draftKey, formDraft); setDraftStorageFailed(false); }
+      catch { setDraftStorageFailed(true); /* edição continua em memória */ }
+    }, 600);
     return () => window.clearTimeout(timer);
   }, [dirty, draftKey, formDraft]);
 
@@ -361,8 +363,15 @@ export function StockSupplyForm({
   }, [dirty]);
 
   const leaveForm = (discard: boolean) => {
-    if (discard) removeStockSupplyDraft(draftKey);
-    else writeStockSupplyDraft(draftKey, formDraft);
+    try {
+      if (discard) removeStockSupplyDraft(draftKey);
+      else writeStockSupplyDraft(draftKey, formDraft);
+    } catch {
+      if (!discard) {
+        toast.error('Não foi possível guardar o rascunho neste aparelho.', { description: 'Copie as informações ou libere espaço antes de sair.' });
+        return;
+      }
+    }
     allowLeaveRef.current = true;
     setDirty(false);
     setLeaveOpen(false);
@@ -666,6 +675,7 @@ export function StockSupplyForm({
 
   return (
     <form onInputCapture={() => setDirty(true)} onClickCapture={(event) => { const target = event.target as HTMLElement; if (target.closest('button') && !target.closest('button[type="submit"]')) setDirty(true); }} onSubmit={submit} className="flex flex-col gap-5 pb-10" noValidate>
+      {draftStorageFailed && <p role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs font-semibold text-amber-200">Rascunho não salvo neste aparelho. Libere espaço antes de sair ou finalize a compra com internet.</p>}
       <section className="rounded-[26px] border border-amber-500/20 bg-amber-500/[.05] p-4">
         <div className="flex items-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-2xl bg-amber-500/10 text-amber-400">

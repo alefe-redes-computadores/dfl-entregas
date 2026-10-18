@@ -1,0 +1,44 @@
+// V103 — contracts for route/card UX. No Firestore calls, no synthetic confirmations.
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const read = path => fs.readFileSync(path, 'utf8');
+const card = read('components/home/DeliveryCard.tsx');
+const route = read('components/home/RouteAccordion.tsx');
+const hook = read('hooks/useOptimizedDeliveries.ts');
+const logistics = read('components/store/PerformanceModals.tsx');
+const advisor = read('components/home/RouteSequenceAdvisor.tsx');
+const intelligence = read('components/home/PreRouteIntelligence.tsx');
+assert.match(hook, /return useMemo\(\(\) => \{/);
+assert.match(hook, /\[deliveries, getCustomerById, customerSnapshot\]/);
+assert.match(card, /const swipeSurfaceRef = useRef/);
+assert.match(card, /swipeSurfaceRef\.current\.style\.transform/);
+assert.doesNotMatch(card, /setSwipeOffset\(/, 'A gesture should not set React state for every pixel');
+assert.match(card, /Math\.abs\(dx\) < 88/);
+assert.match(card, /Math\.abs\(dx\) <= Math\.abs\(dy\) \* 1\.5/);
+assert.match(card, /if \(dx < 0 && wasComplete\)/, 'Swipe may not undo completed deliveries');
+assert.match(card, /reorderBusyRef\.current = true/);
+assert.match(card, /finally \{\s*reorderBusyRef\.current = false/);
+assert.match(card, /disabled=\{reorderBusy \|\| \(position \|\| 1\) <= 1\}/);
+assert.match(card, /disabled=\{reorderBusy \|\| \(position \|\| 1\) >= pendingCount\}/);
+assert.match(card, /Detalhes da parada/);
+assert.match(card, /groupedToCollect/);
+assert.match(card, /groupedPixPending/);
+assert.match(card, /Valor do pedido/);
+assert.match(card, /normalizedWhatsappPhone &&/);
+assert.match(card, /Aguardando confirmação do fechamento/);
+assert.match(route, /pendingStopGroups\.map\(\(group, index\)/);
+assert.match(route, /const byId = new Map\(representatives/);
+assert.match(route, /Resumo operacional da rota/);
+assert.match(route, /isNotStarted && !isVirtualRoute/);
+assert.match(logistics, /Ganho calculado/);
+assert.match(logistics, /Acerto diário/);
+assert.match(logistics, /Duração da rota/);
+assert.match(logistics, /Copiar resumo/);
+assert.match(logistics, /deriveDeliveryPaymentState\(item\)==='paid'/);
+assert.match(logistics, /Filtrar por confirmação de pagamento/);
+assert.match(advisor, /const customersById = new Map/);
+assert.match(intelligence, /useMemo\(\(\) => buildPreRouteContext/);
+for (const item of [card, route, hook, logistics, advisor, intelligence]) {
+  assert.ok(!/\b(onSnapshot|runTransaction|collection\()/.test(item), 'Presentation enhancement must not add realtime reads or transactions');
+}
+console.log('V103 UX mobile, gestos, cálculo por rota e extrato: contratos aprovados');

@@ -16,7 +16,7 @@ ok(health.includes("'Apresentações repetidas'")&&health.includes("commercialPr
 ok(healthUi.includes('Sugestão:')&&healthUi.includes('item.impact')&&healthUi.includes('nada é alterado sozinho'), 'revisão explica impacto sem autocorreção');
 ok(!shopping.includes('<select value={presentationIds[product.id]')&&shopping.includes('role="radiogroup"'), 'forma de compra não usa select nativo');
 ok(route.includes('routePreviewStops')&&route.includes('Sequência da rota'), 'rota possui prévia compacta da sequência');
-ok(route.includes("sequenceExpanded?routePreviewStops.length:3")&&route.includes("groupDeliveriesByStop(sortedDeliveries.filter"), 'prévia respeita paradas físicas e densidade compacta do card');
+ok(route.includes("sequenceExpanded?routePreviewStops.length:3")&&route.includes("pendingStopGroups.map((group, index)"), 'prévia respeita paradas físicas e densidade compacta do card');
 ok(!route.includes('staticMapUrl('), 'prévia não baixa mapa remoto por card');
 ok(!health.includes('firebase')&&!health.includes('firestore')&&!health.includes('onSnapshot'), 'diagnóstico permanece local');
 console.log('\nV83 ESTOQUE + COMPRAS + ROTAS: CONTRATOS OK');

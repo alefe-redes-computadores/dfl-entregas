@@ -4,7 +4,7 @@ const ok=(v,m)=>{console.log((v?'OK: ':'ERRO: ')+m);if(!v)errors++};
 const c=fs.readFileSync('components/home/DeliveryCard.tsx','utf8');
 const s=fs.readFileSync('store/useAppStore.ts','utf8');
 const w=fs.readFileSync('lib/whatsapp.ts','utf8');
-ok(!c.includes('GripVertical'),'arrasto redundante removido do card');
+ok(c.includes('onPointerDown={handleReorderPointerDown}') && c.includes('data-dfl-stop-index={canReorder ? position : undefined}'),'arrasto dedicado por parada física sem afetar o swipe');
 ok(!c.includes('pendingCount > 1 &&\n    !manualLocked'),'controle não desaparece quando travado');
 ok(!c.includes('disabled={manualLocked}'),'setas continuam disponíveis para decisão manual explícita');
 ok(!s.includes("{ metadata: { order_locked: false, order_source: 'manual'"),'movimento manual preserva trava do otimizador');

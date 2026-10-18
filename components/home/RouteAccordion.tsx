@@ -69,6 +69,7 @@ import { bestOperationalAddress } from '@/lib/operational-address';
 import { deliveryStopKey, groupDeliveriesByStop } from '@/lib/route-stops';
 import { routeDeliveryRevision as indexedRouteDeliveryRevision } from '@/lib/route-card-revision';
 import { buildRouteShareCard } from '@/lib/route-share-card';
+import { calculateMotoboyFee } from '@/lib/motoboy-analytics';
 
 interface RouteAccordionProps {
   route: Route;
@@ -84,6 +85,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [fuzzyModalOpen, setFuzzyModalOpen] = useState(false);
   const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
   const [isCopyMenuOpen, setIsCopyMenuOpen] = useState(false);
+  const [showAdvancedShares, setShowAdvancedShares] = useState(false);
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [currentFuzzyList, setCurrentFuzzyList] = useState<any[]>([]);
   const [pendingActionType, setPendingActionType] = useState<'copy1' | 'copy2' | 'copy3' | 'maps' | null>(null);
@@ -124,6 +126,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const selectedDate = useAppStore((state) => state.selectedDate);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const closeRoute = useAppStore((state) => state.closeRoute);
+  const closingRoute = useAppStore((state) => state.closingRouteIds.includes(route.id));
   const reopenRoute = useAppStore((state) => state.reopenRoute);
   const startRoute = useAppStore((state) => state.startRoute);
   const deleteRoute = useAppStore((state) => state.deleteRoute);
@@ -152,17 +155,19 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       allRoutes,
     ],
   );
+  // Um único índice para os cards, preview e organizador. Quando um cliente
+  // altera endereço/bairro, o snapshot invalida a geografia da rota.
+  const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress, neighborMeta, stopMeta, allStopGroups, pendingStopGroups } = useOptimizedDeliveries(deliveries, getCustomerById, customers);
   // Derived operational figures share one snapshot instead of regrouping per JSX render.
-  const { totalDeliveries, pendingDeliveriesCount, totalStops, pendingStopsCount, progressPercent, routeTotalValue } = useMemo(() => {
+  const { totalDeliveries, pendingDeliveriesCount, totalStops, pendingStopsCount, progressPercent } = useMemo(() => {
     const totalDeliveries = deliveries.length;
     const pending = deliveries.filter((delivery) => !delivery.completed);
     const pendingDeliveriesCount = pending.length;
-    const totalStops = groupDeliveriesByStop(deliveries).length;
-    const pendingStopsCount = groupDeliveriesByStop(pending).length;
-    const routeTotalValue = deliveries.reduce((sum, delivery) => sum + (delivery.value || 0), 0);
+    const totalStops = allStopGroups.length;
+    const pendingStopsCount = pendingStopGroups.length;
     const progressPercent = totalDeliveries ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
-    return { totalDeliveries, pendingDeliveriesCount, totalStops, pendingStopsCount, progressPercent, routeTotalValue };
-  }, [deliveries]);
+    return { totalDeliveries, pendingDeliveriesCount, totalStops, pendingStopsCount, progressPercent };
+  }, [deliveries, allStopGroups, pendingStopGroups]);
   const operationalRouteDate = routeDate(route);
   const operationalRouteDateKey = operationalRouteDate ? dateKey(operationalRouteDate) : '';
   const routeDetailsHref = operationalRouteDateKey
@@ -205,18 +210,20 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   const motoboyObj = motoboys.find((m) => m.name === route.motoboy_name);
+  const routePaymentRule = motoboyObj?.payment_rule;
+  const routeEarnings = routePaymentRule?.type === 'per_delivery'
+    ? calculateMotoboyFee(routePaymentRule, totalStops).amount
+    : null;
+
   const MotoIcon = motoboyObj?.avatar?.includes('woman') ? UserRound : motoboyObj?.avatar?.includes('bike') ? Bike : User;
 
-  const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress, neighborMeta, stopMeta } = useOptimizedDeliveries(deliveries, getCustomerById);
-  const pendingStopGroups = useMemo(() => groupDeliveriesByStop(pendingDeliveries), [pendingDeliveries]);
-  const allStopGroups = useMemo(() => groupDeliveriesByStop(sortedDeliveries), [sortedDeliveries]);
-  const routePreviewStops = useMemo(() => groupDeliveriesByStop(sortedDeliveries.filter((item) => !item.completed)).map((group, index) => {
+  const routePreviewStops = useMemo(() => pendingStopGroups.map((group, index) => {
     const delivery = group.representative;
     const customer = getCustomerById(delivery.customer_id);
     const address = bestOperationalAddress(delivery.address_string, customer?.address) || 'Endereço pendente';
     const parts = address.split(',').map((part) => part.trim()).filter(Boolean);
     return { number:stopMeta.get(delivery.id)?.stopNumber ?? index + 1, customer:customer?.name || delivery.customer_name || `Parada ${index + 1}`, place:parts.at(-1) || parts[0] || 'Endereço pendente', grouped:group.deliveries.length };
-  }), [getCustomerById, sortedDeliveries, stopMeta]);
+  }), [getCustomerById, pendingStopGroups, stopMeta]);
 
   const optimizerRows = useMemo(() => {
     const representatives = pendingStopGroups.map((group) => group.representative);
@@ -224,9 +231,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     const orderIds = optimizerOrder.length > 0
       ? optimizerOrder
       : representatives.map((delivery) => delivery.id);
+    // Lookup O(1) por ID: mover a rota não deve varrer todas as paradas N vezes.
+    const byId = new Map(representatives.map((delivery) => [delivery.id, delivery] as const));
 
     return orderIds
-      .map((id) => representatives.find((delivery) => delivery.id === id))
+      .map((id) => byId.get(id))
       .filter(Boolean)
       .map((delivery) => {
         const customer = getCustomerById(delivery!.customer_id);
@@ -849,7 +858,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         <div className="flex shrink-0 items-center gap-1.5">
           {!isCompleted ? (
             <span className={clsx("max-w-[104px] whitespace-normal rounded-xl px-2 py-1 text-center text-[10px] font-black leading-tight min-[390px]:max-w-none min-[390px]:whitespace-nowrap min-[390px]:rounded-full min-[390px]:px-2.5 min-[390px]:text-xs", pendingDeliveriesCount === 0 && totalDeliveries > 0 ? "bg-emerald-500 text-white" : isInProgress ? "bg-sky-500/20 text-sky-400" : "bg-zinc-800 text-zinc-400")}>
-              {pendingDeliveriesCount === 0 && totalDeliveries > 0
+              {closingRoute ? 'Conferindo fechamento…' : pendingDeliveriesCount === 0 && totalDeliveries > 0
                 ? 'Finalizar rota'
                 : pendingStopsCount === pendingDeliveriesCount
                   ? `${pendingDeliveriesCount} pendente${pendingDeliveriesCount !== 1 ? 's' : ''}`
@@ -866,7 +875,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               <div className="flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 rounded-full">
                 <CheckCircle2 size={14} className="text-emerald-400" />
                 <span className="text-emerald-400 font-bold text-[11px]">
-                  {isPrivacyMode ? 'R$ •••••' : `R$ ${routeTotalValue.toFixed(2).replace('.', ',')}`}
+                  {routeEarnings === null ? 'Rota concluída' : isPrivacyMode ? 'R$ •••••' : `Ganho R$ ${routeEarnings.toFixed(2).replace('.', ',')}`}
                 </span>
               </div>
             </div>
@@ -874,6 +883,16 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <ChevronDown size={18} className={clsx('text-zinc-500 transition-transform duration-200 ml-1', isOpen && 'rotate-180')} />
         </div>
       </button>
+
+      {closingRoute && <div role="status" aria-live="polite" className="mx-3 mb-2 rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-[11px] font-semibold text-sky-200">Última entrega salva. Conferindo e fechando a rota no servidor…</div>}
+      {isOpen && totalDeliveries > 0 && (
+        <div className="mx-3 mb-2 flex flex-wrap items-center gap-1.5" aria-label="Resumo operacional da rota">
+          <span className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1 text-[10px] font-bold text-zinc-300">{totalDeliveries} pedido{totalDeliveries === 1 ? '' : 's'} · {totalStops} parada{totalStops === 1 ? '' : 's'}</span>
+          <span className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1 text-[10px] font-bold text-zinc-300">{pendingStopsCount} parada{pendingStopsCount === 1 ? '' : 's'} pendente{pendingStopsCount === 1 ? '' : 's'}</span>
+          {isCompleted && routeDuration && <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/[.07] px-2 py-1 text-[10px] font-bold text-emerald-300">Tempo de rota: {routeDuration}</span>}
+          {routeEarnings !== null && <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/[.07] px-2 py-1 text-[10px] font-bold text-emerald-300">{isPrivacyMode ? 'Ganho •••' : `Ganho previsto R$ ${routeEarnings.toFixed(2).replace('.', ',')}`}</span>}
+        </div>
+      )}
 
       {isOpen && !isCompleted && !isVirtualRoute && routePreviewStops.length > 0 && (
         <div className="px-3 pb-3" aria-label="Prévia da sequência da rota">
@@ -885,7 +904,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         </div>
       )}
 
-      {isOpen && (
+      {isOpen && isNotStarted && !isVirtualRoute && (
         <div className="px-4 pb-3">
           <PreRouteIntelligence
             route={route}
@@ -1291,39 +1310,28 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <div className="dfl-bottom-sheet safe-bottom relative flex max-h-[88dvh] flex-col overflow-y-auto rounded-t-[30px] p-5 pb-6 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-200" onClick={(event) => event.stopPropagation()}>
              <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-zinc-700" />
              <div className="mb-4 flex items-center justify-between gap-3">
-               <div><h3 className="flex items-center gap-2 font-heading text-lg font-black text-zinc-50"><Copy size={18} className="text-emerald-400"/> {routeCopyBusy ? 'Copiando mensagem…' : 'Copiar para o motoboy'}</h3><p className="mt-1 text-[10px] text-zinc-500">Escolha a informação que deseja enviar no WhatsApp.</p></div>
+               <div><h3 className="flex items-center gap-2 font-heading text-lg font-black text-zinc-50"><Copy size={18} className="text-emerald-400"/> {routeCopyBusy ? 'Copiando mensagem…' : 'Copiar para o motoboy'}</h3><p className="mt-1 text-[10px] text-zinc-500">Duas opções principais, com detalhes extras quando precisar.</p></div>
                <button aria-label="Fechar" onClick={() => setIsCopyMenuOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-800 text-zinc-400 active:scale-90"><X size={18}/></button>
              </div>
 
              <div className="flex flex-col gap-2.5">
-                <button disabled={routeCardBusy} onClick={() => void shareRouteCard('full')} className="flex items-center gap-3 rounded-2xl border border-violet-500/20 bg-violet-500/[.055] p-4 text-left transition active:scale-[.985] disabled:opacity-50">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-violet-500/15 text-violet-300"><MapPinned size={20}/></div>
-                  <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">{routeCardBusy ? 'Preparando rota…' : 'Rota completa'}</span><span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Imagem confiável + rota, contatos e checklist. Sem mapa fictício.</span></div>
-                </button>
-                <button disabled={routeCopyBusy || routeCardBusy} onClick={() => handleCopyMessage(1)} className="flex items-center gap-3 rounded-2xl border border-sky-500/20 bg-sky-500/[.055] p-4 text-left transition active:scale-[.985]">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-400"><Copy size={20}/></div>
-                  <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">Copiar texto da rota</span><span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Alternativa para pesquisar e encaminhar sem imagem.</span></div>
-                </button>
-
-                <button disabled={routeCardBusy} onClick={() => void shareRouteCard('checklist')} className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[.085] p-4 text-left transition active:scale-[.985] disabled:opacity-50">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-300"><ClipboardCheck size={20}/></div>
-                  <div className="flex flex-col"><span className="text-sm font-black text-zinc-100">Compartilhar conferência + imagem</span><span className="mt-1 text-[11px] font-medium leading-relaxed text-zinc-300">Segunda mensagem: bebidas, códigos e checklist com imagem operacional.</span></div>
-                </button>
-                <button disabled={routeCopyBusy || routeCardBusy} onClick={() => handleCopyMessage(2)} className="flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[.055] p-4 text-left transition active:scale-[.985]">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-400"><ClipboardCheck size={20}/></div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-black text-zinc-100">Checklist de saída</span>
-                    <span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Bebidas, maquininha, códigos e contatos que exigem atenção.</span>
-                  </div>
-                </button>
-
-                <button disabled={routeCopyBusy || routeCardBusy} onClick={() => handleCopyMessage(3)} className="flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[.055] p-4 text-left transition active:scale-[.985]">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-300"><Wallet size={20}/></div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-black text-zinc-100">Dinheiro da rota</span>
-                    <span className="mt-1 text-[10px] font-medium leading-relaxed text-zinc-500">Recebimentos, trocos e valor físico esperado na volta.</span>
-                  </div>
-                </button>
+               <p className="text-[11px] font-semibold text-zinc-400">Escolha como o motoboy receberá a conferência desta rota.</p>
+               <button type="button" disabled={routeCardBusy || routeCopyBusy} onClick={() => void shareRouteCard('checklist')} className="flex min-h-[76px] items-center gap-3 rounded-2xl border border-emerald-500/35 bg-emerald-500/[.11] p-4 text-left disabled:opacity-50">
+                 <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-300"><MapPinned size={23}/></span>
+                 <span><b className="block text-sm text-zinc-100">Checklist com imagem</b><small className="mt-1 block text-[11px] leading-relaxed text-zinc-400">Resumo visual, bebidas, cobranças e códigos. Escolha o destinatário.</small></span>
+               </button>
+               <button type="button" disabled={routeCopyBusy || routeCardBusy} onClick={() => void handleCopyMessage(2)} className="flex min-h-[72px] items-center gap-3 rounded-2xl border border-zinc-700 bg-zinc-800/70 p-4 text-left disabled:opacity-50">
+                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-300"><Copy size={21}/></span>
+                 <span><b className="block text-sm text-zinc-100">Somente texto</b><small className="mt-1 block text-[11px] leading-relaxed text-zinc-400">Copia o checklist, sem gerar imagem.</small></span>
+               </button>
+               <button type="button" aria-expanded={showAdvancedShares} onClick={()=>setShowAdvancedShares(value=>!value)} className="flex min-h-11 items-center justify-between rounded-xl px-3 text-xs font-bold text-zinc-400">
+                 Outras mensagens da rota <ChevronDown size={17} className={showAdvancedShares?'rotate-180':''}/>
+               </button>
+               {showAdvancedShares && <div className="grid grid-cols-1 gap-2 border-t border-zinc-800 pt-3">
+                 <button disabled={routeCardBusy} onClick={() => void shareRouteCard('full')} className="min-h-12 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-left text-xs font-bold text-zinc-200">Rota completa com imagem</button>
+                 <button disabled={routeCopyBusy || routeCardBusy} onClick={() => void handleCopyMessage(1)} className="min-h-12 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-left text-xs font-bold text-zinc-200">Copiar rota e contatos</button>
+                 <button disabled={routeCopyBusy || routeCardBusy} onClick={() => void handleCopyMessage(3)} className="min-h-12 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-left text-xs font-bold text-zinc-200">Copiar dinheiro e conferência</button>
+               </div>}
              </div>
           </div>
         </div>

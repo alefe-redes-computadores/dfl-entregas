@@ -4,6 +4,7 @@ import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 import { routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
+import { paintDflBrand, paintFittedText } from '@/lib/share-card-brand';
 
 export type RouteShareCard = { dataUrl: string; usedRealMap: boolean };
 
@@ -43,13 +44,6 @@ function roundBox(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.fill();
 }
 
-function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
-  if (ctx.measureText(text).width <= maxWidth) return text;
-  let trimmed = text;
-  while (trimmed.length > 1 && ctx.measureText(`${trimmed}…`).width > maxWidth) trimmed = trimmed.slice(0, -1);
-  return `${trimmed}…`;
-}
-
 const operationalMoney = (value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export async function buildRouteShareCard(
@@ -59,79 +53,92 @@ export async function buildRouteShareCard(
   explicitCoordinates?: { origin?: string | null; stops?: Record<string, string | null> },
 ): Promise<RouteShareCard> {
   const groups = groupDeliveriesByStop(deliveries);
-  const canvas = document.createElement('canvas');
-  const width = 1080;
-  const height = Math.max(1450, 900 + groups.length * 108 + 340);
-  canvas.width = width;
-  canvas.height = Math.min(height, 6000);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas indisponível.');
-  const paint = (value: string, x: number, y: number, font = '700 26px Arial', color = '#e5e7eb', max = 900) => {
-    ctx.font = font; ctx.fillStyle = color; ctx.fillText(fitText(ctx, value, max), x, y);
-  };
-  const surface = ctx.createLinearGradient(0, 0, 1080, canvas.height);
-  surface.addColorStop(0, '#09151e'); surface.addColorStop(1, '#09090b');
-  ctx.fillStyle = surface; ctx.fillRect(0, 0, width, canvas.height);
-  paint('DFL  /  ENTREGAS', 54, 76, '900 29px Arial', '#38bdf8');
-  paint(route.name, 54, 163, '900 65px Arial', '#f8fafc');
-  paint(`${route.motoboy_name}  ·  ${deliveries.length} pedidos  ·  ${groups.length} paradas`, 56, 211, '700 28px Arial', '#cbd5e1');
-  const departure = firstValidTimestamp(routeStartedAt(route));
-  const now = new Date();
-  const displayTime = departure || now;
-  paint(`${departure ? 'Saída' : 'Imagem emitida'}: ${displayTime.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`, 56, 251, '600 25px Arial', '#94a3b8');
-
-  const paid = deliveries.filter(item => deriveDeliveryPaymentState(item) === 'paid').length;
-  const cardOrders = deliveries.filter(item => deriveDeliveryPaymentState(item) !== 'paid' && item.payment_method?.includes('cartao'));
-  const cashOrders = deliveries.filter(item => deriveDeliveryPaymentState(item) !== 'paid' && item.payment_method === 'dinheiro');
-  const pendingCodes = deliveries.filter(item => item.origin === 'ifood' && !item.confirmation_code).length;
-  const drinkOrders = deliveries.filter(item => Boolean(item.drinks?.trim())).length;
-  roundBox(ctx, 48, 278, 984, 105, 22, '#172533');
-  paint(`${paid} pagos  ·  ${deliveries.length - paid} pendentes  ·  ${pendingCodes} códigos`, 76, 321, '800 29px Arial', '#f8fafc');
-  paint(`${cardOrders.length} cartão  ·  ${cashOrders.length} dinheiro  ·  ${drinkOrders} pedidos com bebida`, 76, 361, '700 25px Arial', '#cbd5e1');
-
-  let y = 425;
   const origin = explicitCoordinates?.origin || coordinates(storeAddress);
   const points = groups.map(group => explicitCoordinates?.stops?.[group.representative.id] || coordinates(group.representative.address_string || ''));
   const mapUrl = staticMapUrl(origin, points);
-  let usedRealMap = false;
+  let map: HTMLImageElement | null = null;
   if (mapUrl) {
-    try {
-      const map = await loadImage(mapUrl);
-      roundBox(ctx, 48, y, 984, 370, 20, '#17212b');
-      ctx.save(); ctx.beginPath(); ctx.roundRect(48, y, 984, 370, 20); ctx.clip();
-      ctx.drawImage(map, 48, y, 984, 370); ctx.restore();
-      usedRealMap = true;
-      y += 395;
-    } catch { /* Sem mapa: os dados operacionais seguem disponíveis. */ }
+    try { map = await loadImage(mapUrl); } catch { /* Sem mapa confiável: priorizar dados operacionais. */ }
   }
-  paint('PARADAS  /  ORDEM DE ENTREGA', 54, y + 20, '900 28px Arial', '#38bdf8');
-  y += 46;
+  const paid = deliveries.filter(item => deriveDeliveryPaymentState(item) === 'paid').length;
+  const chargeable = deliveries.filter(item => deriveDeliveryPaymentState(item) !== 'paid' && item.payment_method !== 'pix');
+  const pendingPix = deliveries.filter(item => deriveDeliveryPaymentState(item) !== 'paid' && item.payment_method === 'pix');
+  const cardOrders = chargeable.filter(item => /cart[aã]o|cartao|cr[eé]dito|d[eé]bito/i.test(item.payment_method || ''));
+  const cashOrders = chargeable.filter(item => item.payment_method === 'dinheiro');
+  const pendingCodes = deliveries.filter(item => item.origin === 'ifood' && !item.confirmation_code).length;
+  const drinkGroups = new Map<string, number>();
+  for (const item of deliveries) {
+    const label = (item.drinks || '').trim();
+    if (!label) continue;
+    drinkGroups.set(label, (drinkGroups.get(label) || 0) + 1);
+  }
+  const drinks = [...drinkGroups.entries()].map(([name, count]) => `${count}× ${name}`);
+  const stopsHeight = groups.length * 116;
+  const mapHeight = map ? 320 : 0;
+  const checklistHeight = 196 + (drinks.length ? 46 + Math.min(drinks.length, 5) * 36 : 0);
+  const requestedHeight = 457 + mapHeight + 25 + stopsHeight + checklistHeight + 105;
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = Math.min(Math.max(830, requestedHeight), 8500);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas indisponível.');
+  const text = (value: string, x: number, y: number, font = '700 26px Arial', color = '#e5e7eb', max = 900) => {
+    ctx.font = font;ctx.fillStyle = color;ctx.fillText(paintFittedText(ctx, value, max), x, y);
+  };
+  const bg = ctx.createLinearGradient(0, 0, 1080, canvas.height);
+  bg.addColorStop(0, '#081b1c');bg.addColorStop(1, '#090d14');
+  ctx.fillStyle = bg;ctx.fillRect(0, 0, 1080, canvas.height);
+  ctx.fillStyle = '#10b981';ctx.fillRect(0, 0, 1080, 11);
+  await paintDflBrand(ctx, 54, 48, 88);
+  text('DFL ENTREGAS', 165, 87, '900 27px Arial', '#34d399');
+  text('CONFERÊNCIA DE SAÍDA', 165, 123, '700 23px Arial', '#94a3b8');
+  text(route.name || 'Rota', 54, 219, '900 67px Arial', '#ffffff');
+  text(`${route.motoboy_name}  •  ${deliveries.length} pedidos  •  ${groups.length} paradas`, 56, 265, '700 29px Arial', '#cbd5e1');
+  const departure = firstValidTimestamp(routeStartedAt(route));
+  text(`Emitida ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${departure ? '  •  Saída ' + departure.toLocaleTimeString('pt-BR', {timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}) : ''}`, 56, 300, '600 23px Arial', '#7b929c');
+  roundBox(ctx, 48, 324, 984, 95, 23, '#13292c');
+  text(`${paid} pagos`, 74, 362, '900 31px Arial', '#6ee7b7');
+  text(`${chargeable.length} a cobrar`, 328, 362, '900 31px Arial', '#fbbf24');
+  text(`${pendingCodes} códigos`, 675, 362, '900 31px Arial', '#93c5fd');
+  text(`${pendingPix.length} Pix pendente  •  ${cashOrders.length} dinheiro  •  ${cardOrders.length} cartão`, 75, 400, '600 24px Arial', '#cbd5e1');
+  let y = 457;
+  if (map) {
+    ctx.save();ctx.beginPath();ctx.roundRect(48, y, 984, 300, 24);ctx.clip();ctx.drawImage(map, 48, y, 984, 300);ctx.restore();
+    y += 321;
+  }
+  text('PARADAS  /  ORDEM DE ENTREGA', 54, y, '900 28px Arial', '#34d399');y += 25;
+  let skipped = 0;
   groups.forEach((group, index) => {
-    if (y + 98 >= canvas.height - 340) return;
+    if (y + 108 >= canvas.height - checklistHeight - 110) { skipped += 1; return; }
     const stop = group.representative;
     const unpaid = group.deliveries.filter(item => deriveDeliveryPaymentState(item) !== 'paid');
-    const amount = unpaid.reduce((sum, item) => sum + Math.max(0, Number(item.customer_charge ?? item.value) || 0), 0);
+    const toCollect = unpaid.filter(item => item.payment_method !== 'pix');
+    const pix = unpaid.filter(item => item.payment_method === 'pix');
+    const collectAmount = toCollect.reduce((sum, item) => sum + Math.max(0, Number(item.customer_charge ?? item.value) || 0), 0);
+    const pixAmount = pix.reduce((sum, item) => sum + Math.max(0, Number(item.customer_charge ?? item.value) || 0), 0);
     const names = [...new Set(group.deliveries.map(item => item.customer_name || '').filter(Boolean))];
     const neighborhood = canonicalizeOperationalAddress(stop.address_string || '').neighborhood || stop.address_string || 'Destino';
-    const drinks = group.deliveries.map(item => item.drinks?.trim()).filter(Boolean).join(' + ');
+    const drink = group.deliveries.map(item => item.drinks?.trim()).filter(Boolean).join(' + ');
     const code = group.deliveries.some(item => item.origin === 'ifood' && !item.confirmation_code);
-    const status = unpaid.length ? (unpaid.every(item => item.payment_method === 'pix') ? `PIX PENDENTE ${operationalMoney(amount)}` : `RECEBER ${operationalMoney(amount)}`) : 'PAGO';
-    roundBox(ctx, 48, y, 984, 94, 16, '#181f29');
-    paint(String(index + 1).padStart(2, '0'), 72, y + 42, '900 29px Arial', '#38bdf8', 60);
-    paint(neighborhood, 140, y + 38, '800 28px Arial', '#f8fafc', 540);
-    paint(names[0] || 'Cliente', 715, y + 38, '700 23px Arial', '#cbd5e1', 270);
-    paint(`${status}${code ? '  ·  CÓDIGO' : ''}${drinks ? `  ·  BEBIDA: ${drinks}` : ''}`, 140, y + 76, '700 22px Arial', unpaid.length ? '#fbbf24' : '#34d399', 850);
-    y += 108;
+    const status = collectAmount > 0 ? `COBRAR ${operationalMoney(collectAmount)}` : pixAmount > 0 ? `PIX PENDENTE ${operationalMoney(pixAmount)}` : 'PAGO';
+    const tone = collectAmount > 0 || pixAmount > 0 ? '#fbbf24' : '#34d399';
+    roundBox(ctx, 48, y, 984, 106, 20, '#152028');
+    roundBox(ctx, 62, y + 20, 64, 63, 16, '#223342');
+    text(String(index + 1).padStart(2, '0'), 74, y + 63, '900 28px Arial', '#7dd3fc');
+    text(neighborhood, 148, y + 41, '800 29px Arial', '#f8fafc', 580);
+    text(names[0] || 'Cliente', 756, y + 41, '600 22px Arial', '#cbd5e1', 246);
+    text([status, code ? 'CÓDIGO' : '', drink ? `BEBIDA: ${drink}` : ''].filter(Boolean).join('  ·  '), 148, y + 79, '700 23px Arial', tone, 820);
+    y += 116;
   });
-  if (y + 98 >= canvas.height - 340) {
-    paint('Continue a sequência na mensagem compartilhada.', 54, y + 25, '700 24px Arial', '#94a3b8');
-    y += 45;
+  if (skipped) {text(`+ ${skipped} paradas — detalhes no texto enviado`, 54, y + 25, '600 25px Arial', '#94a3b8');y += 43;}
+  roundBox(ctx, 48, y + 10, 984, checklistHeight - 12, 25, '#10262c');
+  text('ANTES DE SAIR', 76, y + 60, '900 31px Arial', '#7dd3fc');
+  text(cardOrders.length ? `MAQUININHA  •  ${cardOrders.length} cobrança(s)` : 'MAQUININHA  •  não necessária', 76, y + 112, '800 26px Arial', cardOrders.length ? '#fbbf24' : '#cbd5e1');
+  text(`${pendingCodes} códigos iFood  •  ${pendingPix.length} Pix a confirmar`, 76, y + 155, '700 25px Arial', '#e2e8f0');
+  if (drinks.length) {
+    text('BEBIDAS PARA CONFERIR', 76, y + 208, '900 26px Arial', '#34d399');
+    drinks.slice(0, 5).forEach((drink, i) => text(drink, 76, y + 245 + i * 36, '700 24px Arial', '#f8fafc'));
   }
-  const footerY = Math.min(Math.max(y + 20, canvas.height - 260), canvas.height - 250);
-  roundBox(ctx, 48, footerY, 984, 188, 20, '#14212b');
-  paint('ANTES DE SAIR', 76, footerY + 43, '900 29px Arial', '#38bdf8');
-  paint(cardOrders.length ? `MAQUININHA: ${cardOrders.length} cobrança(s) · ${operationalMoney(cardOrders.reduce((sum, item) => sum + Number(item.customer_charge ?? item.value ?? 0), 0))}` : 'Cartão: nenhuma cobrança na entrega', 76, footerY + 91, '700 25px Arial', cardOrders.length ? '#fbbf24' : '#d1d5db');
-  paint(`Conferir ${drinkOrders} pedido(s) com bebida e ${pendingCodes} código(s)`, 76, footerY + 133, '700 25px Arial', '#e2e8f0');
-  paint(usedRealMap ? 'MAPA DE COORDENADAS VALIDADAS' : 'CHECKLIST OPERACIONAL', 58, canvas.height - 27, '800 22px Arial', '#64748b');
-  return { dataUrl: canvas.toDataURL('image/png'), usedRealMap };
+  text('DFL  •  Conferir antes de iniciar a viagem', 54, canvas.height - 42, '700 22px Arial', '#748891');
+  return { dataUrl: canvas.toDataURL('image/png'), usedRealMap: Boolean(map) };
 }

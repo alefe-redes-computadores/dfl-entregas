@@ -6,7 +6,7 @@ check(cache.includes('WeakMap<Delivery[], Map<string, string>>'),'index cache us
 check(cache.includes('for (const item of deliveries)'),'single pass creates the per-route revision index');
 check(source.includes('indexedRouteDeliveryRevision(state.deliveries, route.id)'),'route reads one indexed revision');
 check(!source.includes('state.deliveries\n      .filter'),'old per-card full-list selector removed');
-check(source.includes('const { totalDeliveries, pendingDeliveriesCount')&&source.includes('}, [deliveries]);'),'route summary memoized');
+check(source.includes('const { totalDeliveries, pendingDeliveriesCount')&&source.includes('}, [deliveries, allStopGroups, pendingStopGroups]);'),'route summary memoized');
 check(source.includes('const departureChecklist = useMemo('),'checklist memoized');
 check(source.includes('const clientsWithPhone = useMemo('),'phone list memoized');
 check(!cache.includes('firebase')&&!cache.includes('firestore'),'no additional Firebase reads');

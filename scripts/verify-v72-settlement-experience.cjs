@@ -15,5 +15,5 @@ ok(page.includes("'all'|'none'|'partial'")&&page.includes("'separate'|'offset'|'
 ok(analytics.includes('cashTendered')&&analytics.includes('cashChange')&&analytics.includes('cashHandedOverAmount'),'dinheiro recebido troco e caixa separados');
 ok(types.includes('settlement_cash_tendered?: number')&&types.includes('settlement_cash_change?: number'),'auditoria financeira persistida');
 ok(page.includes("text:summary()"),'compartilhamento inclui data e resumo descritivo');
-ok(page.includes("row('Acréscimos'")&&page.includes("'#34d399'")&&page.includes("row('Abatimentos'")&&page.includes("'#fb7185'"),'imagem usa semântica verde e vermelha');
+ok(page.includes("financeRow('Acréscimos'")&&page.includes("'#34d399'")&&page.includes("financeRow('Abatimentos'")&&page.includes("'#fb7185'"),'imagem usa semântica verde e vermelha');
 console.log('V72 ACERTO INTELIGENTE: ZERO ERROS');

@@ -154,6 +154,8 @@ interface AppState {
   authLoaded: boolean;
   hasHydrated: boolean;
   routes: Route[];
+  /** Somente UI: rotas aguardando confirmação remota de fechamento. */
+  closingRouteIds: string[];
   deliveries: (Delivery & { is_expanded?: boolean })[];
   customers: Customer[];
   motoboys: Motoboy[];
@@ -402,6 +404,7 @@ export const useAppStore = create<AppState>()(
       authLoaded: false,
       hasHydrated: false,
       routes: [],
+      closingRouteIds: [],
       deliveries: [],
       customers: [],
       motoboys: [],
@@ -2207,6 +2210,10 @@ export const useAppStore = create<AppState>()(
           throw new Error('Conclua todas as entregas antes de finalizar a rota.');
         }
 
+        // Estado transitório imediato, sem anunciar fechamento antes da confirmação do servidor.
+        if (get().closingRouteIds.includes(routeId)) return;
+        set((state) => ({ closingRouteIds: [...state.closingRouteIds, routeId] }));
+        try {
         // Autoridade remota: não fechar uma rota com lista de entregas desatualizada.
         // Esta consulta acontece SOMENTE na ação explícita de fechamento.
         const remoteRouteDeliveries = await getDocs(query(
@@ -2345,6 +2352,9 @@ export const useAppStore = create<AppState>()(
             'Rota finalizada, mas houve falha ao preparar confirmações do iFood:',
             error,
           );
+        }
+        } finally {
+          set((state) => ({ closingRouteIds: state.closingRouteIds.filter((id) => id !== routeId) }));
         }
       },
 

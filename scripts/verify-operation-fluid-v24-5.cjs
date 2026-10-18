@@ -15,7 +15,7 @@ ok(route.includes('const routeDeliveryRevision = useAppStore'), 'rota usa revis�
 ok(!route.includes('const deliveryState = useAppStore((state) => state.deliveries);'), 'rota não acorda por qualquer expansão');
 ok(card.includes('state.deliveries.find((item) => item.id === delivery.id)?.is_expanded'), 'card observa só sua expansão');
 ok(!card.includes('const allDeliveries = useAppStore'), 'card não assina array inteiro por recorrência');
-ok(!card.includes('GripVertical') && card.includes('ArrowUp') && card.includes('ArrowDown'), 'drag removido e setas preservadas');
+ok(card.includes('onPointerDown={handleReorderPointerDown}') && card.includes('ArrowUp') && card.includes('ArrowDown'), 'arrasto na alça e setas acessíveis preservadas');
 ok(whats.includes('🥤 *Bebida:* *${delivery.drinks.trim()}*'), 'bebida individual destacada');
 ok(whats.includes('*Pegar com o cliente:*'), 'checklist iFood ganhou hierarquia');
 ok(confirm.includes('manualBusyIds.has(item.id)'), 'confirmação iFood trava clique duplo');

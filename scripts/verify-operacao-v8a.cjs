@@ -14,7 +14,7 @@ const checks=[
   ['Delivery persiste payment_state',files.types.includes('payment_state?: DeliveryPaymentState;')],
   ['legado possui fallback financeiro',files.finance.includes('deriveDeliveryPaymentState')],
   ['input novo normaliza estado',files.finance.includes('paymentStateForInput')],
-  ['Pix pendente é explícito',files.finance.includes("return 'Pix pendente'")],
+  ['Pix pendente é explícito',files.finance.includes("delivery.payment_method === 'pix' ? 'Pix pendente' : 'Pagamento pendente'")],
   ['nova multi-order persiste estado',files.nova.includes('payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid)')],
   ['nova comum persiste estado',files.nova.includes('payment_state:paymentStateForInput(paymentMethod,isPaid)')],
   ['edição persiste estado',files.editar.includes('payment_state: paymentStateForInput(paymentMethod, isPaid)')],

@@ -9,7 +9,7 @@ assert.ok(!wa.includes('link direto na Mensagem 1'));
 assert.ok(!wa.includes('Bebidas da bag'));
 assert.ok(!wa.includes('PIX QR`; stopsNeedingPosMachine'));
 assert.ok(delivery.includes('delivery.order_index + 1'));
-for(const token of ['ANTES DE SAIR','CHECKLIST OPERACIONAL','routeStartedAt(route)','cardOrders','pendingCodes','groupDeliveriesByStop','deriveDeliveryPaymentState']) assert.ok(card.includes(token),`imagem não usa ${token}`);
+for(const token of ['ANTES DE SAIR','CONFERÊNCIA DE SAÍDA','routeStartedAt(route)','cardOrders','pendingCodes','groupDeliveriesByStop','deriveDeliveryPaymentState']) assert.ok(card.includes(token),`imagem não usa ${token}`);
 assert.ok(!card.includes('Mapa indisponível para esta rota.'));
 assert.ok(!card.includes('Posições ilustrativas'));
 assert.ok(!card.includes('Não é um mapa geográfico.'));

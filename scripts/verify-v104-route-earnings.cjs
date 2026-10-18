@@ -1,0 +1,24 @@
+// V104: contrato de relatório de rota, imagem e semântica financeira.
+const fs=require('node:fs');const assert=require('node:assert/strict');
+const report=fs.readFileSync('lib/route-performance.ts','utf8');
+const card=fs.readFileSync('lib/route-earnings-card.ts','utf8');
+const modals=fs.readFileSync('components/store/PerformanceModals.tsx','utf8');
+assert.match(report,/groupDeliveriesByStop\(deliveries\)/);
+assert.match(report,/group\.deliveries\.every\(item => item\.completed\)/);
+assert.match(report,/rule\?\.type === 'per_delivery'/);
+assert.match(report,/Regra diária\/fixa/);
+assert.match(report,/route\.status === 'fechada'/);
+assert.match(report,/routePerformanceText/);
+assert.match(card,/paintDflBrand/);
+assert.match(card,/Ganho calculado|GANHO CALCULADO/);
+assert.match(card,/Resultado operacional, não é comprovante de pagamento/);
+assert.doesNotMatch(card,/faturamento|vendas líquidas|valor vendido/i);
+assert.match(modals,/const routeReports=useMemo/);
+assert.match(modals,/buildRouteEarningsCard/);
+assert.match(modals,/shareLock\.current/);
+assert.match(modals,/Share\.share/);
+assert.match(modals,/Filesystem\.writeFile/);
+assert.match(modals,/Compartilhar imagem da/);
+assert.match(modals,/Desative o modo privacidade/);
+assert.ok(!/(onSnapshot|runTransaction|collection\()/.test(report+card),'Relatório não adiciona consultas Firestore');
+console.log('V104: relatório por rota, cálculo seguro, exportação e privacidade OK');

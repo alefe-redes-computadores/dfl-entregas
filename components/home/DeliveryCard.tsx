@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, Globe2, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle
+  Smartphone, Store, Globe2, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle, GripVertical
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import clsx from 'clsx';
@@ -20,7 +20,8 @@ import { compactAddressForCard, hasHouseNumber } from "@/lib/operational-address
 import { auditOperationalAddress } from '@/lib/address-quality';
 import { SiteOrderSnapshot } from '@/components/home/SiteOrderSnapshot';
 import { customerRecurrence } from '@/lib/customer-recurrence';
-import { deliveryPaymentStateLabel, deriveDeliveryPaymentState } from '@/lib/delivery-finance';
+import { deliveryPaymentStateLabel, deriveDeliveryPaymentState, deliveryCustomerCharge, deliveryEconomicValue } from '@/lib/delivery-finance';
+import { summarizeStopFinance } from '@/lib/delivery-stop-finance';
 import { ownerContextLabel } from '@/lib/owner-order-context';
 
 interface DeliveryCardProps {
@@ -59,8 +60,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   );
   const groupedDeliveries = stopDeliveries?.length ? stopDeliveries : [delivery];
   const isGroupedStop = groupedDeliveries.length > 1;
-  const groupedTotal = groupedDeliveries.reduce((sum, item) => sum + (item.customer_charge ?? item.value ?? 0), 0);
+  const groupedFinance = useMemo(() => summarizeStopFinance(groupedDeliveries), [stopDeliveries, delivery]);
+  const groupedTotal = groupedFinance.economicTotal;
   const groupedPending = groupedDeliveries.filter((item) => !item.completed).length;
+  const groupedToCollect = groupedDeliveries.filter(item => deriveDeliveryPaymentState(item) === 'collect_on_delivery');
+  const groupedPixPending = groupedDeliveries.filter(item => deriveDeliveryPaymentState(item) === 'pending');
+  const groupedCollectValue = groupedFinance.collectTotal;
   const groupedCodes = Array.from(new Set(groupedDeliveries.map((item) => item.confirmation_code?.replace(/\D/g, '').slice(0, 4)).filter((code): code is string => Boolean(code))));
   const commonConfirmationCode = groupedCodes.length === 1 ? groupedCodes[0] : customer?.last_confirmation_code || '';
 
@@ -72,8 +77,30 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [swipeOffset, setSwipeOffset] = useState(0);
+  // Movimentar o cartão via ref evita renderizar ~1.000 linhas de JSX a cada pixel.
+  const swipeSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const swipeOffsetRef = useRef(0);
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [isSwiping, setIsSwiping] = useState(false);
+  const reorderBusyRef = useRef(false);
+  const [reorderBusy, setReorderBusy] = useState(false);
+  // Alça dedicada: não disputa o gesto horizontal de concluir/expandir.
+  const reorderGesture = useRef<null | {
+    pointerId: number;
+    startY: number;
+    origin: number;
+    target: number;
+    moved: boolean;
+    targets: Array<{ index: number; middle: number; element: HTMLElement }>;
+    highlighted: HTMLElement | null;
+  }>(null);
+  const [dropTargetPosition, setDropTargetPosition] = useState<number | null>(null);
+  // Arraste longo: acompanha a lista perto das bordas sem recalcular a rota
+  // inteira nem transformar cada pixel em atualização React.
+  const reorderAutoScrollFrame = useRef<number | null>(null);
+  const reorderPointerY = useRef<number | null>(null);
+  const reorderAutoScrollStep = useRef(0);
+
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const touchCurrentX = useRef(0);
@@ -86,6 +113,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const [completionBusy, setCompletionBusy] = useState(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
+  useEffect(() => () => {
+    if (reorderAutoScrollFrame.current !== null) {
+      window.cancelAnimationFrame(reorderAutoScrollFrame.current);
+      reorderAutoScrollFrame.current = null;
+    }
+    const highlighted = reorderGesture.current?.highlighted;
+    if (highlighted) {
+      highlighted.style.outline = '';
+      highlighted.style.outlineOffset = '';
+    }
+    reorderGesture.current = null;
+  }, []);
 
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -120,6 +159,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isVIP = Boolean(customerTier);
 
   const shortAddress = compactAddressForCard(delivery.address_string, customer?.address, customer?.neighborhood);
+  const mapTarget = delivery.maps_link || customer?.maps_link || (shortAddress && shortAddress !== 'Endereço pendente' ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shortAddress)}` : '');
   const hasCoordinatesOrLink = !!(customer?.maps_link || delivery.maps_link);
   const hasStreetNumber = hasHouseNumber(shortAddress);
   const addressQuality = auditOperationalAddress(
@@ -276,7 +316,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       const routeDeliveries = getDeliveriesByRoute(route.id);
       const remainingPending = routeDeliveries.filter((item) => !completedIds.has(item.id) && !item.completed).length;
       if (remainingPending === 0) {
-        toast.success('Todas as entregas foram concluídas. A rota foi fechada automaticamente.');
+        toast.info('Última entrega registrada. Aguardando confirmação do fechamento da rota.');
       }
     } catch (error) {
       console.error('Erro inesperado ao concluir parada:', error);
@@ -424,66 +464,227 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     route.status === 'aberta' &&
     !delivery.completed &&
     position !== undefined &&
-    pendingCount > 1;
+    pendingCount > 1 && !completionBusy;
 
   const moveStop = async (targetIndex: number) => {
-    if (!canReorder) return;
+    if (!canReorder || reorderBusyRef.current) return;
     const currentIndex = Math.max(0, (position || 1) - 1);
     const boundedTarget = Math.max(0, Math.min(targetIndex, pendingCount - 1));
     if (boundedTarget === currentIndex) {
       toast.info(targetIndex < currentIndex ? 'Esta parada já é a primeira.' : 'Esta parada já é a última.');
       return;
     }
+    reorderBusyRef.current = true;
+    setReorderBusy(true);
     try {
       await moveDeliveryToIndex(route.id, delivery.id, boundedTarget);
       impact(ImpactStyle.Light);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a nova posição.');
+    } finally {
+      reorderBusyRef.current = false;
+      setReorderBusy(false);
     }
   };
 
 
+  const stopReorderAutoScroll = () => {
+    reorderAutoScrollStep.current = 0;
+    reorderPointerY.current = null;
+    if (reorderAutoScrollFrame.current !== null) {
+      window.cancelAnimationFrame(reorderAutoScrollFrame.current);
+      reorderAutoScrollFrame.current = null;
+    }
+  };
+
+  const clearReorderGesture = () => {
+    stopReorderAutoScroll();
+    const gesture = reorderGesture.current;
+    if (gesture?.highlighted) {
+      gesture.highlighted.style.outline = '';
+      gesture.highlighted.style.outlineOffset = '';
+    }
+    reorderGesture.current = null;
+    setDropTargetPosition(null);
+  };
+
+  const updateReorderTarget = (clientY: number) => {
+    const gesture = reorderGesture.current;
+    if (!gesture) return;
+    let nearest = gesture.targets[0];
+    if (!nearest) return;
+    // O centro da parada precisa ser relido depois de rolar a página.
+    let nearestDistance = Math.abs(clientY - (nearest.element.getBoundingClientRect().top + nearest.element.getBoundingClientRect().height / 2));
+    for (const candidate of gesture.targets.slice(1)) {
+      const rect = candidate.element.getBoundingClientRect();
+      const distance = Math.abs(clientY - rect.top - rect.height / 2);
+      if (distance < nearestDistance) {
+        nearest = candidate;
+        nearestDistance = distance;
+      }
+    }
+    if (nearest.index === gesture.target && gesture.highlighted === nearest.element) return;
+    if (gesture.highlighted) {
+      gesture.highlighted.style.outline = '';
+      gesture.highlighted.style.outlineOffset = '';
+    }
+    nearest.element.style.outline = '2px solid rgba(56,189,248,.9)';
+    nearest.element.style.outlineOffset = '2px';
+    gesture.highlighted = nearest.element;
+    gesture.target = nearest.index;
+    setDropTargetPosition(nearest.index + 1);
+  };
+
+  const advanceReorderAutoScroll = () => {
+    reorderAutoScrollFrame.current = null;
+    const gesture = reorderGesture.current;
+    const clientY = reorderPointerY.current;
+    const step = reorderAutoScrollStep.current;
+    if (!gesture || !gesture.moved || clientY === null || step === 0) return;
+    const previousY = window.scrollY;
+    window.scrollBy(0, step);
+    updateReorderTarget(clientY);
+    // Sem espaço para rolar (início/fim da página): não agendar RAF em loop.
+    if (Math.abs(window.scrollY - previousY) < 0.5) return;
+    reorderAutoScrollFrame.current = window.requestAnimationFrame(advanceReorderAutoScroll);
+  };
+
+  const handleReorderPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!canReorder || reorderBusyRef.current || reorderGesture.current) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.stopPropagation();
+    event.preventDefault();
+    const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-dfl-stop-index]'))
+      .filter((element) => element.dataset.dflRouteId === route.id)
+      .map((element) => ({
+        index: Number(element.dataset.dflStopIndex) - 1,
+        middle: element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2,
+        element,
+      }))
+      .filter((target) => Number.isInteger(target.index) && target.index >= 0 && target.index < pendingCount);
+    if (targets.length < 2) return;
+    const origin = Math.max(0, (position || 1) - 1);
+    reorderGesture.current = {
+      pointerId: event.pointerId, startY: event.clientY, origin, target: origin,
+      moved: false, targets, highlighted: null,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDropTargetPosition(origin + 1);
+  };
+
+  const handleReorderPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const gesture = reorderGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    if (!gesture.moved && Math.abs(event.clientY - gesture.startY) < 8) return;
+    gesture.moved = true;
+    reorderPointerY.current = event.clientY;
+    updateReorderTarget(event.clientY);
+    const edge = 88;
+    const y = event.clientY;
+    const distance = Math.min(y, window.innerHeight - y);
+    const strength = Math.max(0, Math.min(1, (edge - distance) / edge));
+    reorderAutoScrollStep.current = strength === 0 ? 0 : (y < edge ? -1 : 1) * Math.max(2, Math.round(strength * 18));
+    if (reorderAutoScrollStep.current === 0) {
+      if (reorderAutoScrollFrame.current !== null) {
+        window.cancelAnimationFrame(reorderAutoScrollFrame.current);
+        reorderAutoScrollFrame.current = null;
+      }
+    } else if (reorderAutoScrollFrame.current === null) {
+      reorderAutoScrollFrame.current = window.requestAnimationFrame(advanceReorderAutoScroll);
+    }
+  };
+
+  const handleReorderPointerEnd = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const gesture = reorderGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const shouldMove = gesture.moved && gesture.origin !== gesture.target;
+    const target = gesture.target;
+    clearReorderGesture();
+    if (shouldMove) {
+      suppressCardClick.current = true;
+      window.setTimeout(() => { suppressCardClick.current = false; }, 300);
+      void moveStop(target);
+    }
+  };
+
   const resetCardSwipe = () => {
-    setSwipeOffset(0); setIsSwiping(false);
-    touchStartX.current = 0; touchStartY.current = 0; touchCurrentX.current = 0; touchCurrentY.current = 0; swipeAxis.current = null;
+    const element = swipeSurfaceRef.current;
+    if (element) {
+      element.style.transition = 'transform 180ms ease-out';
+      element.style.transform = 'translateX(0px)';
+    }
+    swipeOffsetRef.current = 0;
+    setSwipeDirection(null);
+    setIsSwiping(false);
+    touchStartX.current = 0;
+    touchStartY.current = 0;
+    touchCurrentX.current = 0;
+    touchCurrentY.current = 0;
+    swipeAxis.current = null;
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1 || completionBusy || reorderBusyRef.current) return;
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, textarea, select, [data-no-card-swipe=\"true\"]')) { resetCardSwipe(); return; }
-    const touch=e.touches[0]; touchStartX.current=touch.clientX; touchStartY.current=touch.clientY; touchCurrentX.current=touch.clientX; touchCurrentY.current=touch.clientY; swipeAxis.current='pending'; setIsSwiping(false);
+    if (target.closest('button, a, input, textarea, select, [data-no-card-swipe="true"]')) return;
+    const touch = e.touches[0];
+    touchStartX.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+    touchCurrentX.current = touch.clientX;
+    touchCurrentY.current = touch.clientY;
+    swipeAxis.current = 'pending';
+    if (swipeSurfaceRef.current) swipeSurfaceRef.current.style.transition = 'none';
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartX.current || swipeAxis.current === 'vertical') return;
-    const touch=e.touches[0]; touchCurrentX.current=touch.clientX; touchCurrentY.current=touch.clientY;
-    const dx=touchCurrentX.current-touchStartX.current; const dy=touchCurrentY.current-touchStartY.current;
+    if (e.touches.length !== 1 || swipeAxis.current === null || swipeAxis.current === 'vertical') return;
+    const touch = e.touches[0];
+    touchCurrentX.current = touch.clientX;
+    touchCurrentY.current = touch.clientY;
+    const dx = touchCurrentX.current - touchStartX.current;
+    const dy = touchCurrentY.current - touchStartY.current;
     if (swipeAxis.current === 'pending') {
-      if (Math.hypot(dx,dy) < 9) return;
-      if (Math.abs(dy) >= Math.abs(dx) * 0.8) { swipeAxis.current='vertical'; setSwipeOffset(0); setIsSwiping(false); return; }
-      swipeAxis.current='horizontal'; setIsSwiping(true);
+      if (Math.hypot(dx, dy) < 14) return;
+      // Rolagem diagonal não pode acionar baixa nem expansão.
+      if (Math.abs(dy) * 1.25 >= Math.abs(dx)) {
+        swipeAxis.current = 'vertical';
+        return;
+      }
+      swipeAxis.current = 'horizontal';
+      setIsSwiping(true);
     }
     if (swipeAxis.current !== 'horizontal') return;
-    setSwipeOffset(Math.max(-112,Math.min(112,dx*0.82)));
+    const offset = Math.max(-112, Math.min(112, dx * 0.82));
+    swipeOffsetRef.current = offset;
+    if (swipeSurfaceRef.current) swipeSurfaceRef.current.style.transform = `translateX(${offset}px)`;
+    const direction = offset > 55 ? 'right' : offset < -55 ? 'left' : null;
+    // Só dois possíveis re-renders durante o gesto: armar/desarmar a ação.
+    setSwipeDirection((previous) => previous === direction ? previous : direction);
   };
 
-  const handleTouchEnd = async () => {
+  const handleTouchEnd = () => {
     if (swipeAxis.current !== 'horizontal') { resetCardSwipe(); return; }
-    const dx=touchCurrentX.current-touchStartX.current; const finalOffset=swipeOffset; resetCardSwipe();
+    const dx = touchCurrentX.current - touchStartX.current;
+    const dy = touchCurrentY.current - touchStartY.current;
+    const wasComplete = !delivery.completed;
+    resetCardSwipe();
     suppressCardClick.current = true;
-    window.setTimeout(() => { suppressCardClick.current = false; }, 250);
-    if (dx <= -76 || finalOffset <= -62) await handleTriggerAction('complete');
-    else if (dx >= 76 || finalOffset >= 62) await handleTriggerAction('expand');
+    window.setTimeout(() => { suppressCardClick.current = false; }, 300);
+    if (Math.abs(dx) < 88 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
+    if (dx < 0 && wasComplete) void handleTriggerAction('complete');
+    if (dx > 0) void handleTriggerAction('expand');
   };
 
   const handleTouchCancel = () => resetCardSwipe();
 
-  const isDraggingRight = swipeOffset > 15;
-  const isDraggingLeft = swipeOffset < -15;
+  const isDraggingRight = swipeDirection === 'right';
+  const isDraggingLeft = swipeDirection === 'left';
 
   return (
     <>
-      <div className={clsx(
+      <div data-dfl-route-id={route.id} data-dfl-stop-index={canReorder ? position : undefined} className={clsx(
           "relative overflow-hidden rounded-[18px] transition-all duration-200",
           delivery.completed ? "opacity-80" : "shadow-sm",
           isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
@@ -510,6 +711,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         </div>
 
         <div
+          ref={swipeSurfaceRef}
           onClick={(event) => {
             const target = event.target as HTMLElement;
             if (isSwiping || suppressCardClick.current || target.closest('button, a, input, textarea, select, [data-no-card-swipe="true"]')) return;
@@ -519,7 +721,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           onTouchCancel={handleTouchCancel}
-          style={{ transform: `translateX(${swipeOffset}px)`, touchAction: 'pan-y' }}
+          style={{ touchAction: 'pan-y' }}
           className={clsx("relative z-10 flex w-full flex-col bg-zinc-900", !isSwiping && "transition-transform duration-200")}
         >
           <div className={clsx("flex flex-col", isExpanded ? "p-4" : "px-3 py-2.5")}>
@@ -546,9 +748,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     </p>
                   </div>
                   <div className="flex flex-col items-end">
-                    <p className="text-sm font-black text-emerald-400 tracking-tight shrink-0">
-                      {isPrivacyMode ? 'R$ •••••' : `R$ ${(isGroupedStop ? groupedTotal : (delivery.value || 0)).toFixed(2).replace('.', ',')}`}
+                    <span className="block text-right text-[8px] font-bold uppercase tracking-wide text-zinc-500">{isGroupedStop ? 'Valor dos pedidos' : 'Valor do pedido'}</span>
+                    <p className="text-sm font-black text-zinc-200 tracking-tight shrink-0">
+                      {isPrivacyMode ? 'R$ •••••' : `R$ ${(isGroupedStop ? groupedTotal : deliveryEconomicValue(delivery)).toFixed(2).replace('.', ',')}`}
                     </p>
+                    {(isGroupedStop ? groupedFinance.hasDifferentCustomerCharge : Math.abs(deliveryEconomicValue(delivery) - deliveryCustomerCharge(delivery)) >= 0.005) && (
+                      <span className="mt-0.5 block text-right text-[9px] font-semibold text-amber-300">Cliente paga: {isPrivacyMode ? 'R$ •••' : `R$ ${(isGroupedStop ? groupedFinance.customerTotal : deliveryCustomerCharge(delivery)).toFixed(2).replace('.', ',')}`}</span>
+                    )}
                   </div>
                 </div>
 
@@ -556,6 +762,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {isSiteOrder && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-sky-300">Site</span>}
                   {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
+                  {isGroupedStop && !isExpanded && groupedFinance.collectCount > 0 && <span className="rounded-md border border-amber-500/25 bg-amber-500/[.07] px-2 py-0.5 text-[9px] font-bold text-amber-300">{groupedFinance.collectCount} cobrar</span>}
+                  {isGroupedStop && !isExpanded && groupedFinance.pendingCount > 0 && <span className="rounded-md border border-violet-500/25 bg-violet-500/[.07] px-2 py-0.5 text-[9px] font-bold text-violet-300">{groupedFinance.pendingCount} Pix/pendência</span>}
                   {!isGroupedStop && operationalContextLabel && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black text-sky-300">{operationalContextLabel}</span>}
                   {!isGroupedStop && !isDeveloperTest && customerTier && <span className="rounded-md border border-amber-500/20 bg-amber-500/[.08] px-2 py-0.5 text-[9px] font-black text-amber-300">{customerTier === 'super' ? 'Supercliente' : 'Frequente'} · {recurrence.completedOrders} concluídos</span>}
                   {!isGroupedStop && recurrence.milestoneLabel && <button type="button" onClick={(event) => { event.stopPropagation(); toast.info('Marco de cliente direto', { description: recurrence.milestoneLabel || undefined }); }} className="rounded-md border border-violet-500/25 bg-violet-500/[.08] px-2 py-0.5 text-[9px] font-black text-violet-300">{recurrence.milestoneLabel}</button>}
@@ -590,7 +798,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   )}
                 </div>
 
-                {isGroupedStop && (
+                {isGroupedStop && isExpanded && (
                   <div className="mt-2 rounded-xl border border-violet-500/20 bg-violet-500/[.04] p-2">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <span className="text-[9px] font-black uppercase tracking-[.12em] text-violet-300">Pedidos desta parada</span>
@@ -603,10 +811,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     <div className="space-y-1.5">
                       {groupedDeliveries.map((item, index) => {
                         const itemCustomer = getCustomerById(item.customer_id);
-                        const charge = item.customer_charge ?? item.value ?? 0;
+                        const charge = deliveryCustomerCharge(item);
                         const itemCode = item.confirmation_code?.replace(/\D/g, '').slice(0, 4);
                         const itemPayment = deriveDeliveryPaymentState(item);
-                        const paymentLabel = itemPayment === 'paid' ? 'Pago' : itemPayment === 'pending' ? 'Pix pendente' : item.payment_method === 'dinheiro' ? (item.change_for ? `Cobrar dinheiro · troco p/ R$ ${item.change_for.toFixed(2).replace('.', ',')}` : 'Cobrar dinheiro') : 'Cobrar cartão';
+                        const paymentLabel = itemPayment === 'paid' ? 'Pago' : itemPayment === 'pending' ? 'Pix pendente' : item.payment_method === 'dinheiro' ? (item.change_for ? `Cobrar dinheiro · troco p/ ${isPrivacyMode ? 'R$ •••' : `R$ ${item.change_for.toFixed(2).replace('.', ',')}`}` : 'Cobrar dinheiro') : 'Cobrar cartão';
                         return (
                           <div key={item.id} className="flex items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/55 px-2.5 py-2">
                             <span className={clsx("flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[9px] font-black", item.completed ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-300")}>{item.completed ? '✓' : index + 1}</span>
@@ -624,7 +832,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                                 {item.drinks?.trim() ? ` · ${item.drinks.trim()}` : ''}
                               </p>
                             </div>
-                            <span className="shrink-0 text-[10px] font-black text-emerald-400">R$ {charge.toFixed(2).replace('.', ',')}</span>
+                            <span className="shrink-0 text-[10px] font-black text-emerald-400">{isPrivacyMode ? 'R$ •••' : `R$ ${charge.toFixed(2).replace('.', ',')}`}</span>
                             <Link href={`/entregas/editar?id=${item.id}${operationalDateQuery}`} onClick={(event) => event.stopPropagation()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400" title="Editar este pedido">
                               <Pencil size={11} />
                             </Link>
@@ -670,11 +878,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                     <div className="flex items-center gap-2.5">
                       <a
-                        href={delivery.maps_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(delivery.address_string)}`}
+                        href={mapTarget || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="relative h-10 w-10 shrink-0 rounded-xl overflow-hidden border border-emerald-500/20 bg-emerald-500/[0.07] flex items-center justify-center active:scale-95 transition-all group"
-                        title="Ver no Google Maps"
+                        onClick={event=>{if(!mapTarget){event.preventDefault();toast.warning('Confira o endereço antes de abrir o mapa.');}}}
+                        aria-label={mapTarget ? 'Abrir localização no Google Maps' : 'Endereço sem mapa válido'}
+                        title={mapTarget ? 'Ver no Google Maps' : 'Revisar endereço'}
                       >
                         <div className="absolute inset-0 bg-emerald-500/10 opacity-60 group-hover:opacity-100" />
                         <MapIcon size={17} className="text-emerald-400 relative z-10" />
@@ -683,10 +893,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       <div className="flex flex-col gap-1 truncate flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap truncate">
                           {isGroupedStop ? (
-                            <span className="flex items-center gap-1 rounded border border-violet-500/20 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-black text-violet-300">
-                              <CheckSquare size={10} />
-                              Pagamentos por pedido
-                            </span>
+                            <>
+                              {groupedToCollect.length > 0 && <span className="inline-flex items-center gap-1 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[10px] font-black text-amber-300"><Banknote size={11}/> {groupedToCollect.length} cobrar · {isPrivacyMode ? 'R$ •••' : `R$ ${groupedCollectValue.toFixed(2).replace('.', ',')}`}</span>}
+                              {groupedPixPending.length > 0 && <span className="inline-flex items-center gap-1 rounded-lg border border-violet-500/25 bg-violet-500/10 px-2 py-1 text-[10px] font-black text-violet-300"><QrCode size={11}/> {groupedPixPending.length} pagamento{groupedPixPending.length===1?'':'s'} pendente{groupedPixPending.length===1?'':'s'}</span>}
+                              {groupedToCollect.length === 0 && groupedPixPending.length === 0 && <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] font-black text-emerald-300"><CheckCircle2 size={11}/> Todos pagos</span>}
+                            </>
                           ) : paymentState === 'paid' ? (
                             <span className="flex items-center gap-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1.5 py-0.5 text-[10px] font-black shrink-0">
                               <CheckCircle2 size={10} /> Pago
@@ -695,7 +906,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             <span className={clsx("flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-black shrink-0", payment.className)}>
                               <PaymentIcon size={10} />
                               {paymentState === 'pending' ? 'Pix pendente' : payment.label === 'Dinheiro'
-                                ? `Cobrar dinheiro ${delivery.change_for ? `(Troco p/ R$ ${delivery.change_for.toFixed(2).replace('.', ',')})` : ''}`
+                                ? `Cobrar dinheiro ${delivery.change_for ? `(Troco p/ ${isPrivacyMode ? '•••' : `R$ ${delivery.change_for.toFixed(2).replace('.', ',')}`})` : ''}`
                                 : 'Cobrar cartão'}
                             </span>
                           )}
@@ -723,12 +934,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       </div>
                     </div>
 
-                    {isExpanded && (delivery.completed || route.status === 'fechada') && (
-                      <div className="flex items-center gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 px-3 py-2 text-[10px] font-bold text-zinc-500">
-                        {delivery.completed ? 'Entrega concluída — posição preservada' : 'Rota fechada — ordem bloqueada'}
-                      </div>
-                    )}
-
                     <div className="grid grid-cols-1 gap-1.5 border-t border-zinc-800/40 pt-1.5 min-[390px]:grid-cols-[minmax(0,1fr)_auto] min-[390px]:items-center">
                       <div className="flex min-w-0 items-center gap-1.5">
                         <button
@@ -742,7 +947,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           <Copy size={13} className="text-emerald-500" /> Copiar Dados
                         </button>
 
-                        {!isGroupedStop && activePhone && (
+                        {!isGroupedStop && normalizedWhatsappPhone && (
                           <a
                             href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`}
                             target="_blank"
@@ -757,8 +962,26 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       </div>
 
                       {!isExpanded && canReorder && (
-                        <div className="flex min-w-0 items-center justify-end gap-1.5">
-                          <button type="button" onClick={async(e)=>{e.stopPropagation();try{const nextLocked=!orderLocked;const changedAt=new Date().toISOString();await Promise.all(groupedDeliveries.map((item)=>updateDelivery(item.id,{order_locked:nextLocked,order_source:'manual',order_updated_at:changedAt})));toast.success(nextLocked?'Parada travada na sequência.':'Parada destravada.')}catch{toast.error('Não foi possível alterar a trava.')}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Inteligente':'Fixar'}</button>
+                        <div className="flex min-w-0 items-center justify-end gap-1.5" aria-label="Reordenar parada">
+                          <button type="button" disabled={reorderBusy} onClick={async(e)=>{e.stopPropagation();if(reorderBusyRef.current)return;reorderBusyRef.current=true;setReorderBusy(true);try{const nextLocked=!orderLocked;const changedAt=new Date().toISOString();for(const item of groupedDeliveries)await updateDelivery(item.id,{order_locked:nextLocked,order_source:'manual',order_updated_at:changedAt});toast.success(nextLocked?'Parada travada na sequência.':'Parada destravada.')}catch{toast.error('Não foi possível alterar a trava.')}finally{reorderBusyRef.current=false;setReorderBusy(false)}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black disabled:opacity-40 ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Inteligente':'Fixar'}</button>
+                          <button
+                            type="button"
+                            data-no-card-swipe="true"
+                            disabled={reorderBusy}
+                            onPointerDown={handleReorderPointerDown}
+                            onPointerMove={handleReorderPointerMove}
+                            onPointerUp={handleReorderPointerEnd}
+                            onPointerCancel={clearReorderGesture}
+                            onLostPointerCapture={clearReorderGesture}
+                            onClick={(event) => event.stopPropagation()}
+                            style={{ touchAction: 'none' }}
+                            className={`flex h-9 min-w-9 items-center justify-center gap-1 rounded-xl border px-2 text-[10px] font-black active:scale-95 ${dropTargetPosition !== null ? 'border-sky-400/70 bg-sky-500/15 text-sky-200' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}
+                            aria-label={dropTargetPosition === null ? 'Segure e arraste para reposicionar a parada' : `Solte para mover até a parada ${dropTargetPosition}`}
+                            title="Arrastar parada"
+                          >
+                            <GripVertical size={16}/>
+                            {dropTargetPosition !== null && <span aria-live="polite">{dropTargetPosition}</span>}
+                          </button>
                           <div className="flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
                             <button
                               type="button"
@@ -767,6 +990,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                                 await moveStop(Math.max(0, (position || 1) - 2));
                               }}
                               className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100 disabled:opacity-30"
+                              disabled={reorderBusy || (position || 1) <= 1}
                               aria-label="Mover uma posição para cima"
                             >
                               <ArrowUp size={13} />
@@ -779,6 +1003,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                                 await moveStop(position || 1);
                               }}
                               className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100 disabled:opacity-30"
+                              disabled={reorderBusy || (position || 1) >= pendingCount}
                               aria-label="Mover uma posição para baixo"
                             >
                               <ArrowDown size={13} />
@@ -799,7 +1024,25 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           {isExpanded && (
             <div className="animate-in slide-in-from-top-2 fade-in duration-200">
               <div className="px-4 pb-3 flex flex-col gap-2.5">
-                <div className="flex items-center gap-2 pl-12 flex-wrap">
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/45 p-3" aria-label="Resumo da parada">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Detalhes da parada</span>
+                    <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${delivery.completed ? 'bg-emerald-500/10 text-emerald-300' : 'bg-sky-500/10 text-sky-300'}`}>{delivery.completed ? 'Concluída' : isGroupedStop ? `${groupedPending} pedidos pendentes` : 'Pendente'}</span>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold leading-relaxed text-zinc-200">{shortAddress || 'Endereço não informado'}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+                    {position !== undefined && <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">Parada {position}</span>}
+                    <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">{isGroupedStop ? `${groupedDeliveries.length} pedidos` : isSiteOrder ? 'Pedido do Site' : isIfood ? 'Pedido iFood' : 'Pedido direto'}</span>
+                    {!delivery.completed && groupedCodeDeliveries.length > 0 && <span className="rounded-lg bg-amber-500/10 px-2 py-1 font-bold text-amber-300">{groupedCodeDeliveries.length} código{groupedCodeDeliveries.length===1?'':'s'} para conferir</span>}
+                    {activePhone && <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-300">Contato disponível</span>}
+                  </div>
+                </div>
+                {(delivery.completed || route.status === 'fechada') && (
+                  <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.04] px-3 py-2 text-[10px] font-semibold text-emerald-300">
+                    {delivery.completed ? 'Entrega concluída · reordenação indisponível' : 'Rota fechada · ordem preservada'}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 pl-1 flex-wrap">
                   {hasCoordinatesOrLink ? (
                     <span className="flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
                       <Navigation size={10} /> Ponto Preciso Ativo
@@ -811,7 +1054,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   ) : null}
                 </div>
 
-                <div className="ml-12 mt-1">
+                <div className="mt-1">
                   <button
                     type="button"
                     data-no-card-swipe="true"

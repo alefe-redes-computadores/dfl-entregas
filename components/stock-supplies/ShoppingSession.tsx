@@ -5,10 +5,11 @@ import { Check, Download, Save, Search, ShoppingCart, TrendingDown, TrendingUp, 
 import { toast } from '@/lib/operational-toast';
 import type { StockSupply, StockSupplyItem } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
-import { shoppingPriceSignal, projectedAverageCost } from '@/lib/stock-shopping';
+import { indexShoppingPriceHistory, shoppingPriceSignal } from '@/lib/stock-shopping';
 import { formatBRLCents, moneyToNumber, numberToBRLInput } from '@/lib/money-input';
 import { downloadShoppingListPdf } from '@/lib/shopping-list-pdf';
 import { formatStockQuantity } from '@/lib/stock-quantity';
+import { buildStockCheckoutPreview } from '@/lib/stock-checkout-preview';
 
 type Draft = { checked: Record<string, boolean>; prices: Record<string, string> };
 const storageKey = (id: string) => `dfl-shopping-session:${id}`;
@@ -73,7 +74,9 @@ export function ShoppingSession({ supply, onFinish, busy }: {
   const [hydratedId, setHydratedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(35);
   const [finishing, setFinishing] = useState(false);
+  const [localDraftSaved, setLocalDraftSaved] = useState(true);
   const finishInFlight = useRef(false);
   // Evita recriar o rascunho após uma finalização confirmada, antes do unmount.
   const completedSessionRef = useRef<string | null>(null);
@@ -89,11 +92,12 @@ export function ShoppingSession({ supply, onFinish, busy }: {
 
   useEffect(() => {
     if (hydratedId !== supply.id || finishing || completedSessionRef.current === supply.id) return;
-    try { window.localStorage.setItem(storageKey(supply.id), JSON.stringify(draft)); }
-    catch { /* modo privado/armazenamento indisponível não deve impedir a compra */ }
+    try { window.localStorage.setItem(storageKey(supply.id), JSON.stringify(draft)); setLocalDraftSaved(true); }
+    catch { setLocalDraftSaved(false); /* a compra continua disponível, mas o progresso não é persistido */ }
   }, [draft, supply.id, hydratedId, finishing]);
 
   const productById = useMemo(() => new Map(products.map(product => [product.id, product])), [products]);
+  const priceHistoryByProduct = useMemo(() => indexShoppingPriceHistory(supplies), [supplies]);
   const items = useMemo(() => supply.items.map(item => {
     const price = moneyToNumber(draft.prices[item.id] || '');
     const purchaseQty = Number(item.purchase_quantity ?? 1);
@@ -107,13 +111,19 @@ export function ShoppingSession({ supply, onFinish, busy }: {
     };
   }), [draft.prices, supply.items]);
 
+  const previewByProduct = useMemo(() => buildStockCheckoutPreview(items, productById), [items, productById]);
   const count = items.filter(item => draft.checked[item.id]).length;
   const missingPrices = items.filter(item => draft.checked[item.id] && !(item.total_price && item.total_price > 0)).length;
   const total = items.reduce((sum, item) => sum + (item.total_price || 0), 0);
+  const confirmedTotal = items.reduce((sum, item) => sum + (draft.checked[item.id] ? item.total_price || 0 : 0), 0);
+  const normalizedQuery = normalized(query);
   const visibleItems = items.filter(item =>
     (!onlyPending || !draft.checked[item.id]) &&
-    (!query.trim() || normalized(item.name).includes(normalized(query.trim()))),
+    (!normalizedQuery || normalized(item.name).includes(normalizedQuery)),
   );
+  useEffect(() => { setVisibleLimit(35); }, [query, onlyPending, supply.id]);
+  const renderedItems = visibleItems.slice(0, visibleLimit);
+  const remainingItems = Math.max(0, visibleItems.length - renderedItems.length);
   const pending = items.length - count;
   const locked = busy || finishing || hydratedId !== supply.id;
 
@@ -147,7 +157,8 @@ export function ShoppingSession({ supply, onFinish, busy }: {
         <div className="min-w-0 flex-1">
           <h2 className="font-heading font-black text-zinc-100">Modo supermercado</h2>
           <p className="mt-1 text-[11px] text-zinc-400">{count} de {items.length} itens conferidos · {pending} pendentes</p>
-          <p className="mt-1 text-[10px] text-zinc-500">O progresso fica salvo neste aparelho até a compra ser finalizada.</p>
+          <p className="mt-1 text-[10px] text-zinc-500">O progresso fica salvo neste aparelho até a compra ser finalizada. Nenhuma entrada no estoque ocorre antes da confirmação.</p>
+          {!localDraftSaved && <p role="alert" className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] font-semibold text-amber-200">Não foi possível salvar o progresso local. Evite fechar esta tela antes de finalizar.</p>}
         </div>
         <WifiOff size={16} className="shrink-0 text-zinc-600" aria-label="Rascunho local"/>
       </div>
@@ -163,13 +174,14 @@ export function ShoppingSession({ supply, onFinish, busy }: {
         <button type="button" aria-pressed={onlyPending} onClick={() => setOnlyPending(value => !value)} className={`min-h-11 rounded-xl border px-3 text-xs font-bold ${onlyPending ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' : 'border-zinc-800 text-zinc-400'}`}>Pendentes · {pending}</button>
       </div>
       <div className="mt-4 space-y-2">
-        {visibleItems.map(item => {
+        {renderedItems.map(item => {
           const marked = draft.checked[item.id] === true;
           const product = productById.get(item.stock_product_id || '');
           const unitCost = item.unit_price || 0;
-          const signal = product ? shoppingPriceSignal(product, supplies, unitCost) : null;
-          const projected = product ? product.current_quantity + item.quantity : 0;
-          const nextCost = product ? projectedAverageCost(product, item.quantity, unitCost) : 0;
+          const signal = product ? shoppingPriceSignal(product, supplies, unitCost, priceHistoryByProduct) : null;
+          const preview = product ? previewByProduct.get(product.id) : undefined;
+          const projected = preview?.balanceAfter ?? 0;
+          const nextCost = preview?.averageCostAfter ?? null;
           return (
             <article key={item.id} className={`rounded-2xl border p-3 ${marked ? 'border-emerald-500/30 bg-emerald-500/[.05]' : 'border-zinc-800 bg-zinc-950/50'}`}>
               <button type="button" disabled={locked} aria-pressed={marked} aria-label={`${marked ? 'Desmarcar' : 'Conferir'} ${item.name}`} onClick={() => setDraft(previous => ({...previous, checked: {...previous.checked, [item.id]: !previous.checked[item.id]}}))} className="flex min-h-11 w-full items-center gap-3 text-left disabled:opacity-60">
@@ -180,17 +192,23 @@ export function ShoppingSession({ supply, onFinish, busy }: {
                 <input inputMode="numeric" disabled={locked} value={draft.prices[item.id] || 'R$ 0,00'} onChange={event => setDraft(previous => ({...previous, prices: {...previous.prices, [item.id]: formatBRLCents(event.target.value)}}))} className={`mt-1 h-11 w-full rounded-xl border bg-zinc-900 px-3 text-base font-bold text-zinc-100 outline-none disabled:opacity-60 ${marked && !item.total_price ? 'border-red-500/50' : 'border-zinc-800 focus:border-amber-500'}`}/>
               </label>
               {product && <div className="mt-2 rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-3">
-                <div className="flex items-center justify-between gap-2"><span className="text-[10px] text-zinc-500">Estoque {formatStockQuantity(product.current_quantity, product.unit)} → <b className="text-zinc-200">{formatStockQuantity(projected, product.unit)}</b></span>
+                <div className="flex items-center justify-between gap-2"><span className="text-[10px] text-zinc-500">Estoque após a compra {formatStockQuantity(product.current_quantity, product.unit)} → <b className="text-zinc-200">{formatStockQuantity(projected, product.unit)}</b>{preview && preview.lineCount > 1 ? <small className="block text-amber-300">Somando {preview.lineCount} itens deste produto</small> : null}</span>
                   {unitCost > 0 && signal && <span className={`flex shrink-0 items-center gap-1 text-[10px] font-bold ${signal.tone === 'good' ? 'text-emerald-400' : signal.tone === 'bad' ? 'text-red-400' : 'text-zinc-400'}`}>{signal.tone === 'good' ? <TrendingDown size={12}/> : signal.tone === 'bad' ? <TrendingUp size={12}/> : null}{signal.label}</span>}
                 </div>
-                {unitCost > 0 && <p className="mt-2 text-[10px] text-zinc-500">Novo custo médio: <b className="text-emerald-400">{currency(nextCost)}</b></p>}
+                {nextCost !== null && <p className="mt-2 text-[10px] text-zinc-500">Custo médio projetado: <b className="text-emerald-400">{currency(nextCost)}</b></p>}
+                {nextCost === null && <p className="mt-2 text-[10px] text-amber-300">Informe o preço de todos os itens deste produto para prever o custo médio.</p>}
               </div>}
             </article>
           );
         })}
       </div>
+      {remainingItems > 0 && <button type="button" onClick={() => setVisibleLimit(limit => limit + 35)} className="mt-3 flex h-12 w-full items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/[.06] text-xs font-bold text-amber-300">Mostrar mais itens ({remainingItems} restantes)</button>}
       {!visibleItems.length && <div className="mt-4 rounded-2xl border border-dashed border-zinc-800 p-6 text-center text-xs text-zinc-400">{onlyPending && !pending ? 'Todos os itens já foram conferidos.' : 'Nenhum item neste filtro.'}</div>}
-      <div className="mt-4 flex justify-between rounded-2xl bg-zinc-950/60 p-3 text-sm"><span className="text-zinc-400">Total dos produtos</span><strong className="text-emerald-400">{currency(total)}</strong></div>
+      <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+        <div><p className="text-[10px] font-bold text-zinc-500">Itens conferidos</p><p className="mt-1 text-base font-black text-emerald-400">{currency(confirmedTotal)}</p></div>
+        <div className="text-right"><p className="text-[10px] font-bold text-zinc-500">Lista completa · estimativa</p><p className="mt-1 text-base font-black text-zinc-200">{currency(total)}</p></div>
+        <p className="col-span-2 border-t border-zinc-800 pt-2 text-[10px] text-zinc-500">Valores informados para a compra; o total da lista inclui itens ainda não conferidos. O estoque só é atualizado após finalizar.</p>
+      </div>
       {missingPrices > 0 && <p role="alert" className="mt-2 text-xs font-bold text-red-300">{missingPrices} item(ns) marcado(s) sem preço válido.</p>}
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => downloadShoppingListPdf({...supply, items, total_amount: total}, draft.checked)} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-700 text-xs font-bold text-zinc-300"><Download size={16}/>Lista PDF</button>

@@ -20,6 +20,7 @@ function load(file) {
     console: { ...console, error: () => {} },
     require(id) {
       if (id === '@capacitor/core') return { Capacitor: { isNativePlatform: () => true, getPlatform: () => 'android' } };
+      if (id === '@capacitor/app') return { App: { getState: async () => ({ isActive: false }) } };
       if (id === '@capacitor/local-notifications') return { LocalNotifications: {
         createChannel: async () => {}, checkPermissions: async () => ({ display: permission }),
         getPending: async () => ({ notifications: [] }), cancel: async () => {},

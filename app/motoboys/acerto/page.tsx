@@ -12,6 +12,7 @@ import { pendingAdjustmentsForSettlement, settlementAdjustmentSnapshot, settleme
 import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { paintDflBrand, paintFittedText } from '@/lib/share-card-brand';
 
 const fromKey=(key:string)=>new Date(`${key}T12:00:00-03:00`);
 const shift=(key:string,days:number)=>{const date=fromKey(key);date.setDate(date.getDate()+days);return operationalDateKey(date);};
@@ -280,48 +281,42 @@ function Content(){
     if(imageBusy)return;
     setImageBusy(true);
     try{
-    const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1700;
+    const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1400;
     const ctx=canvas.getContext('2d');if(!ctx)return void toast.error('Não foi possível gerar a imagem.');
     const round=(x:number,y:number,w:number,h:number,r:number,fill:string,stroke?:string)=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}};
-    const gradient=ctx.createLinearGradient(0,0,1080,1700);gradient.addColorStop(0,'#07130f');gradient.addColorStop(.48,'#09090b');gradient.addColorStop(1,'#111116');ctx.fillStyle=gradient;ctx.fillRect(0,0,canvas.width,canvas.height);
-    const fit=(text:string,maxWidth:number)=>{if(ctx.measureText(text).width<=maxWidth)return text;let value=text;while(value.length>1&&ctx.measureText(`${value}…`).width>maxWidth)value=value.slice(0,-1);return `${value}…`;};
-    const wrap=(text:string,maxWidth:number,maxLines=2)=>{const words=text.split(/\s+/);const lines:string[]=[];let line='';for(const word of words){const next=line?`${line} ${word}`:word;if(ctx.measureText(next).width<=maxWidth)line=next;else{if(line)lines.push(line);line=word;if(lines.length===maxLines-1)break;}}if(line&&lines.length<maxLines)lines.push(line);if(words.join(' ').length>lines.join(' ').length&&lines.length)lines[lines.length-1]=fit(lines[lines.length-1],maxWidth);return lines;};
-    ctx.fillStyle='#10b981';ctx.fillRect(0,0,1080,16);ctx.globalAlpha=.16;ctx.beginPath();ctx.arc(960,70,290,0,Math.PI*2);ctx.fillStyle='#10b981';ctx.fill();ctx.globalAlpha=1;
-    round(64,64,952,190,38,'rgba(24,24,27,.88)','#27332f');round(88,88,76,76,22,'#10b981');ctx.fillStyle='#052e22';ctx.font='900 29px Arial';ctx.textAlign='center';ctx.fillText('DFL',126,137);ctx.textAlign='left';
-    ctx.fillStyle='#f4f4f5';ctx.font='900 45px Arial';ctx.fillText('ACERTO DO MOTOBOY',190,125);ctx.fillStyle='#a1a1aa';ctx.font='600 28px Arial';ctx.fillText(motoboy.name,190,170);ctx.fillStyle='#6ee7b7';ctx.font='700 25px Arial';ctx.fillText(fromKey(date).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}),190,210);
-    round(64,286,952,156,34,'rgba(14,165,233,.07)','#173947');const stat=(x:number,label:string,value:string)=>{ctx.fillStyle='#71717a';ctx.font='700 22px Arial';ctx.fillText(label.toUpperCase(),x,337);ctx.fillStyle='#f4f4f5';ctx.font='900 38px Arial';ctx.fillText(value,x,392);};stat(100,'Paradas físicas',String(data.physicalDeliveryCount));stat(405,'Pedidos',String(data.orderCount));stat(700,'Vendas em dinheiro',`R$ ${money(data.cashCollected)}`);
-    round(64,474,952,720,34,'rgba(24,24,27,.9)','#27272a');ctx.fillStyle='#d4d4d8';ctx.font='900 25px Arial';ctx.fillText('RESUMO FINANCEIRO',100,526);
-    let y=590;
-    const row=(label:string,value:string,tone='#f4f4f5')=>{ctx.fillStyle='#8b8b94';ctx.font='600 27px Arial';ctx.fillText(label,100,y);ctx.fillStyle=tone;ctx.font='800 30px Arial';ctx.textAlign='right';ctx.fillText(value,980,y);ctx.textAlign='left';ctx.strokeStyle='#242429';ctx.beginPath();ctx.moveTo(100,y+25);ctx.lineTo(980,y+25);ctx.stroke();y+=72;};
-    const detail=(label:string,value:string)=>{ctx.fillStyle='#71717a';ctx.font='600 22px Arial';ctx.fillText(`↳ ${label}`,120,y);ctx.fillStyle='#a1a1aa';ctx.font='700 23px Arial';ctx.textAlign='right';ctx.fillText(value,980,y);ctx.textAlign='left';y+=48;};
-    row('Acerto bruto',`R$ ${money(data.fee.amount)}`);
-    if(data.totalVales>0){
-      row('Abatimentos',`- R$ ${money(data.totalVales)}`,'#fb7185');
-      const deductions=adjustments.filter(item=>item.direction!=='addition');
-      deductions.slice(0,1).forEach(item=>detail(`${adjustmentKindLabel(item.kind)} · ${item.category_label||item.description}`,`R$ ${money(item.amount)}`));
-      if(deductions.length>1)detail(`+ ${deductions.length-1} outro${deductions.length>2?'s':''} abatimento${deductions.length>2?'s':''}`,'incluídos');
-    }
-    if(data.totalAdditions>0){
-      row('Acréscimos',`+ R$ ${money(data.totalAdditions)}`,'#34d399');
-      const additions=adjustments.filter(item=>item.direction==='addition');
-      additions.slice(0,1).forEach(item=>detail(`${adjustmentKindLabel(item.kind)} · ${item.category_label||item.description}`,`R$ ${money(item.amount)}`));
-      if(additions.length>1)detail(`+ ${additions.length-1} outro${additions.length>2?'s':''} acréscimo${additions.length>2?'s':''}`,'incluídos');
-    }
-    row('Clientes entregaram',`R$ ${money(data.cashInHand)}`,'#fbbf24');
-    row('Troco da loja',`- R$ ${money(data.cashChange)}`,'#fb7185');
-    row('Vendas líquidas',`R$ ${money(data.cashCollected)}`,'#a1a1aa');
-    row('Líquido do motoboy',`R$ ${money(data.liquidFee)}`,'#34d399');
-
-    const resultColor=data.settlementDirection==='store_credit'?'#f59e0b':'#10b981';
-    round(64,1260,952,246,38,resultColor);
-    ctx.fillStyle='#052e22';ctx.font='900 24px Arial';ctx.fillText('RESULTADO DO ACERTO',104,1315);
-    ctx.font='900 54px Arial';ctx.fillText(`R$ ${money(data.balance)}`,104,1384);
-    // Compatibilidade de contrato: substitui ctx.fillText(settlementTitle.slice por medição real.
-    ctx.font='900 25px Arial';ctx.fillText(fit(settlementTitle,850),104,1430);
-    // Compatibilidade de contrato: substitui ctx.fillText(settlementExplanation.slice por quebra visual.
-    ctx.font='700 22px Arial';wrap(settlementExplanation,850,2).forEach((line,index)=>ctx.fillText(line,104,1472+index*29));
-
-    ctx.fillStyle='#71717a';ctx.font='600 21px Arial';ctx.fillText(cashHandedOver?'Caixa das entregas conferido na loja':'Dinheiro considerado no acerto com o motoboy',72,1624);ctx.textAlign='right';ctx.fillText('Gerado pelo DFL Entregas',1008,1624);ctx.textAlign='left';
+    const gradient=ctx.createLinearGradient(0,0,1080,1400);gradient.addColorStop(0,'#09231f');gradient.addColorStop(.44,'#090e13');gradient.addColorStop(1,'#09090d');ctx.fillStyle=gradient;ctx.fillRect(0,0,1080,1400);
+    ctx.fillStyle='#10b981';ctx.fillRect(0,0,1080,12);
+    await paintDflBrand(ctx,64,65,102);
+    const label=(value:string,x:number,y:number,font:string,color:string,maxWidth:number)=>{ctx.textAlign='left';ctx.font=font;ctx.fillStyle=color;ctx.fillText(paintFittedText(ctx,value,maxWidth),x,y);};
+    label('DFL ENTREGAS',190,103,'900 30px Arial','#34d399',790);
+    label('ACERTO DO MOTOBOY',190,148,'900 41px Arial','#f8fafc',820);
+    label(motoboy.name,64,238,'900 50px Arial','#f8fafc',700);
+    label(fromKey(date).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}),65,283,'600 25px Arial','#94a3b8',860);
+    round(48,321,984,157,27,'#10282b','#1c4141');
+    const metric=(x:number,head:string,value:string)=>{label(head,x,369,'800 23px Arial','#94a3b8',280);label(value,x,427,'900 41px Arial','#f8fafc',280);};
+    metric(78,'PARADAS',String(data.physicalDeliveryCount));metric(393,'ROTAS',String(data.completedRoutes));metric(697,'DIÁRIA BRUTA',`R$ ${money(data.fee.amount)}`);
+    round(48,505,984,355,30,'#171b20','#2c3339');
+    label('COMPOSIÇÃO DA DIÁRIA',80,565,'900 28px Arial','#d4d4d8',900);
+    const financeRow=(name:string,value:string,y:number,color='#f8fafc')=>{
+      label(name,82,y,'700 28px Arial','#a3abb4',570);
+      ctx.textAlign='right';ctx.font='900 31px Arial';ctx.fillStyle=color;ctx.fillText(value,995,y);ctx.textAlign='left';
+    };
+    financeRow('Valor da diária',`R$ ${money(data.fee.amount)}`,632);
+    financeRow('Acréscimos',`+ R$ ${money(data.totalAdditions)}`,706,'#34d399');
+    financeRow('Abatimentos',`− R$ ${money(data.totalVales)}`,780,'#fb7185');
+    ctx.fillStyle='#343b42';ctx.fillRect(81,815,913,2);
+    label('DIÁRIA LÍQUIDA',82,846,'900 24px Arial','#d4d4d8',550);
+    ctx.textAlign='right';ctx.font='900 36px Arial';ctx.fillStyle='#6ee7b7';ctx.fillText(`R$ ${money(data.liquidFee)}`,994,851);ctx.textAlign='left';
+    round(48,884,984,211,30,'#102229','#234148');
+    label('DINHEIRO RECEBIDO DOS CLIENTES',80,933,'900 26px Arial','#7dd3fc',900);
+    financeRow('Recebido pelo motoboy',`R$ ${money(data.cashInHand)}`,995);
+    financeRow('Devolvido à loja',`R$ ${money(data.cashHandedOverAmount)}`,1053,'#f8fafc');
+    round(48,1117,984,204,33,data.settlementDirection==='store_credit'?'#8c5d12':data.settlementDirection==='settled'?'#243641':'#065f46');
+    const direction=data.settlementDirection==='store_credit'?'MOTOBOY DEVOLVE À LOJA':data.settlementDirection==='settled'?'ACERTO QUITADO':'LOJA PAGA AO MOTOBOY';
+    label(direction,80,1164,'900 28px Arial','#f8fafc',910);
+    label(`R$ ${money(data.balance)}`,80,1238,'900 65px Arial','#ffffff',850);
+    label(data.retainedCash>0?`Ainda com o motoboy: R$ ${money(data.retainedCash)}`:'Dinheiro da rota conferido no caixa',80,1290,'700 23px Arial','#e2e8f0',910);
+    label('DFL ENTREGAS  •  RESUMO DE CONFERÊNCIA',60,1363,'700 21px Arial','#7b919a',930);
     const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}.png`;
     if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:summary(),files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem gerada. Escolha onde compartilhar.');return;}
     const blob=await (await fetch(dataUrl)).blob();const file=new File([blob],filename,{type:'image/png'});if(navigator.share&&navigator.canShare?.({files:[file]})){await navigator.share({title:`Acerto · ${motoboy.name}`,text:summary(),files:[file]});return;}const link=document.createElement('a');link.download=filename;link.href=dataUrl;link.click();toast.info('Imagem baixada. Use Copiar resumo para enviar também o texto.');

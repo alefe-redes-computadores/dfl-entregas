@@ -1,7 +1,7 @@
 const fs=require('fs'),assert=require('assert');const read=p=>fs.readFileSync(p,'utf8');
 const route=read('components/home/RouteAccordion.tsx');const queue=read('components/store/OperationalAttentionQueue.tsx');
 assert(route.includes('stopMeta.get(delivery.id)?.stopNumber ?? index + 1'),'Physical stop positions must survive completed stops');
-assert(route.includes('[getCustomerById, sortedDeliveries, stopMeta]'),'Stop metadata must be memo dependency');
+assert(route.includes('[getCustomerById, pendingStopGroups, stopMeta]'),'Stop metadata and grouped pending stops must be memo dependencies');
 assert(route.includes('aria-expanded={isOpen}'),'Route collapse must be accessible');
 assert(route.includes('aria-expanded={sequenceExpanded}'),'Sequence collapse must be accessible');
 assert(route.includes('!isCompleted && !isVirtualRoute && routePreviewStops.length > 0'),'Finished routes must not show operational sequence');

@@ -78,8 +78,27 @@ export function commercialPurchasePlan(product: StockProduct, rawNeed: number, c
 export interface ShoppingPriceSignal { samples: number; median: number | null; latest: number | null; lowest: number | null; current: number; deltaPercent: number | null; tone: 'good' | 'neutral' | 'bad' | 'unknown'; label: string; }
 const median = (values: number[]) => { if (!values.length) return null; const sorted=[...values].sort((a,b)=>a-b); const middle=Math.floor(sorted.length/2); return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2; };
 
-export function shoppingPriceSignal(product: StockProduct, supplies: StockSupply[], current: number): ShoppingPriceSignal {
-  const rows = supplies.flatMap((supply) => supply.items.map((item) => ({ supply, item }))).filter(({supply,item}) => item.stock_product_id===product.id && Boolean(supply.stock_integrated_at) && !supply.stock_reversed_at && Number(comparableBaseUnitCost(item))>0).sort((a,b)=>new Date(b.supply.occurred_at).getTime()-new Date(a.supply.occurred_at).getTime());
+export type ShoppingPriceHistoryRow = { supply: StockSupply; item: StockSupply['items'][number] };
+export type ShoppingPriceHistoryIndex = Map<string, ShoppingPriceHistoryRow[]>;
+/** Reutiliza o histórico no modo supermercado sem varrer todas as compras a cada item. */
+export function indexShoppingPriceHistory(supplies: StockSupply[]): ShoppingPriceHistoryIndex {
+  const index: ShoppingPriceHistoryIndex = new Map();
+  for (const supply of supplies) {
+    if (!supply.stock_integrated_at || supply.stock_reversed_at) continue;
+    for (const item of supply.items) {
+      if (!item.stock_product_id || !(Number(comparableBaseUnitCost(item)) > 0)) continue;
+      const row = { supply, item };
+      const bucket = index.get(item.stock_product_id);
+      if (bucket) bucket.push(row);
+      else index.set(item.stock_product_id, [row]);
+    }
+  }
+  for (const rows of index.values()) rows.sort((a,b)=>new Date(b.supply.occurred_at).getTime()-new Date(a.supply.occurred_at).getTime());
+  return index;
+}
+
+export function shoppingPriceSignal(product: StockProduct, supplies: StockSupply[], current: number, index?: ShoppingPriceHistoryIndex): ShoppingPriceSignal {
+  const rows = index ? index.get(product.id) || [] : supplies.flatMap((supply) => supply.items.map((item) => ({ supply, item }))).filter(({supply,item}) => item.stock_product_id===product.id && Boolean(supply.stock_integrated_at) && !supply.stock_reversed_at && Number(comparableBaseUnitCost(item))>0).sort((a,b)=>new Date(b.supply.occurred_at).getTime()-new Date(a.supply.occurred_at).getTime());
   const values=rows.map(({item})=>Number(comparableBaseUnitCost(item)||0)).filter((value)=>value>0); const historicalMedian=median(values); const latest=values[0]??null; const lowest=values.length?Math.min(...values):null; const deltaPercent=historicalMedian&&current>0?((current-historicalMedian)/historicalMedian)*100:null;
   let tone:ShoppingPriceSignal['tone']='unknown'; let label='Sem histórico comparável';
   if(deltaPercent!==null){if(deltaPercent<=-5){tone='good';label=`${Math.abs(deltaPercent).toFixed(0)}% abaixo da mediana`;}else if(deltaPercent>=8){tone='bad';label=`${deltaPercent.toFixed(0)}% acima da mediana`;}else{tone='neutral';label='Dentro da faixa histórica';}}
@@ -87,5 +106,10 @@ export function shoppingPriceSignal(product: StockProduct, supplies: StockSupply
 }
 
 export function projectedAverageCost(product: StockProduct, addedQuantity: number, newUnitCost: number) {
-  const oldQuantity=Math.max(0,product.current_quantity); const oldCost=Math.max(0,product.average_cost||0); if(!(addedQuantity>0&&newUnitCost>0))return oldCost; if(oldQuantity<=0)return newUnitCost; return (oldQuantity*oldCost+addedQuantity*newUnitCost)/(oldQuantity+addedQuantity);
+  const oldQuantity=Math.max(0,product.current_quantity);
+  const knownCost=typeof product.average_cost==='number' && Number.isFinite(product.average_cost) && product.average_cost>=0;
+  const oldCost=knownCost?product.average_cost!:0;
+  if(!(addedQuantity>0&&newUnitCost>0)) return oldCost;
+  if(oldQuantity<=0 || !knownCost) return newUnitCost;
+  return (oldQuantity*oldCost+addedQuantity*newUnitCost)/(oldQuantity+addedQuantity);
 }

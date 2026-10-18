@@ -336,24 +336,25 @@ export function buildStockRecommendations(
   movements: StockMovement[],
   now = new Date(),
 ) {
+  // Indexacao por produto: O(movimentos + produtos), em vez de percorrer
+  // todo o historico para cada produto. Mantem a ordem original dos eventos.
+  const movementsByProduct = new Map<string, StockMovement[]>();
+  for (const movement of movements) {
+    const bucket = movementsByProduct.get(movement.product_id);
+    if (bucket) bucket.push(movement);
+    else movementsByProduct.set(movement.product_id, [movement]);
+  }
   return products.map((product) =>
-    buildStockRecommendation(
-      product,
-      movements,
-      now,
-    ),
+    buildStockRecommendation(product, movementsByProduct.get(product.id) || [], now),
   );
 }
 
 export function stockIntelligenceSummary(
   products: StockProduct[],
   movements: StockMovement[],
+  precomputed?: StockRecommendation[],
 ) {
-  const recommendations =
-    buildStockRecommendations(
-      products,
-      movements,
-    );
+  const recommendations = precomputed ?? buildStockRecommendations(products, movements);
 
   return {
     recommendations,

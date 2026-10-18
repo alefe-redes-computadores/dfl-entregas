@@ -30,7 +30,7 @@ ok(
 );
 
 ok(
-  route.includes("allStopGroups.map((stopGroup)") && route.includes("const allStopGroups = useMemo(() => groupDeliveriesByStop(sortedDeliveries)"),
+  route.includes("allStopGroups.map((stopGroup)") && route.includes("allStopGroups, pendingStopGroups } = useOptimizedDeliveries(deliveries, getCustomerById, customers)"),
   'render continua trabalhando por parada física'
 );
 

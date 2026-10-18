@@ -34,7 +34,7 @@ ok(intelligence.includes('stockObservedDays(firstDate, now, days)'), 'média usa
 ok(purchases.includes('const allProducts = useAppStore') && purchases.includes('const products = useMemo'), 'compras evita seletor instável');
 ok(routeCard.includes('deriveDeliveryPaymentState(item)') && routeCard.includes('explicitCoordinates'), 'imagem usa pagamento canônico e coordenadas explícitas');
 ok(route.includes('storeLatitude') && route.includes('storeMapsLink') && route.includes('stopPoints'), 'rota encaminha coordenadas já salvas sem geocodificação cega');
-ok(settlement.includes('ctx.fillRect(0,0,canvas.width,canvas.height)'), 'comprovante pinta toda a imagem');
-ok(settlement.includes('wrap(settlementExplanation,850,2)') && !settlement.includes('settlementExplanation.slice(0,70)'), 'resultado do acerto quebra texto sem corte cego');
+ok(settlement.includes('ctx.fillRect(0,0,1080,1400)'), 'comprovante pinta toda a imagem');
+ok(settlement.includes('paintFittedText(ctx,value,maxWidth)') && !settlement.includes('settlementExplanation.slice(0,70)'), 'resultado do acerto quebra texto sem corte cego');
 ok(!source.includes('firebase') && !source.includes('onSnapshot'), 'autoridade de estoque é local e sem listener');
 console.log('\nV85.1 FECHAMENTO VISUAL E ANALÍTICO: CONTRATOS OK');

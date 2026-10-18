@@ -1,0 +1,80 @@
+// V110 regression: pure supermarket projections, drafts, notification concurrency.
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const Module=require('node:module');
+const ts=require('typescript');
+const root=process.cwd();
+const originalResolve=Module._resolveFilename;
+Module._resolveFilename=function(request,parent,isMain,options){
+  if(request.startsWith('@/'))return originalResolve.call(this,path.join(root,request.slice(2))+'.ts',parent,isMain,options);
+  return originalResolve.call(this,request,parent,isMain,options);
+};
+Module._extensions['.ts']=function(mod,filename){
+  const result=ts.transpileModule(fs.readFileSync(filename,'utf8'),{fileName:filename,reportDiagnostics:true,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}});
+  const errors=(result.diagnostics||[]).filter(d=>d.category===ts.DiagnosticCategory.Error);
+  assert.equal(errors.length,0,`${filename}: ${errors.map(e=>ts.flattenDiagnosticMessageText(e.messageText,' ')).join('\n')}`);
+  mod._compile(result.outputText,filename);
+};
+const stock=require('../lib/stock-shopping.ts');
+const {buildStockCheckoutPreview}=require('../lib/stock-checkout-preview.ts');
+const p={id:'a',name:'Bacon',current_quantity:10,average_cost:2,unit:'kg'};
+const products=new Map([[p.id,p]]);
+const items=[{id:'a',stock_product_id:'a',quantity:3,unit:'kg',unit_price:3}, {id:'b',stock_product_id:'a',quantity:2,unit:'kg',unit_price:5}];
+let preview=buildStockCheckoutPreview(items,products).get('a');
+assert.equal(preview.lineCount,2);
+assert.equal(preview.incomingQuantity,5);
+assert.equal(preview.balanceAfter,15);
+assert.equal(preview.purchaseUnitCost,3.8);
+assert.equal(preview.averageCostAfter,2.6);
+assert.equal(stock.projectedAverageCost({...p,average_cost:undefined},5,4),4,'custo desconhecido não vale zero');
+assert.equal(stock.projectedAverageCost({...p,current_quantity:0},5,4),4);
+assert.equal(stock.projectedAverageCost(p,5,4), (10*2+5*4)/15);
+preview=buildStockCheckoutPreview([...items,{id:'c',stock_product_id:'a',quantity:1,unit:'kg'}],products).get('a');
+assert.equal(preview.balanceAfter,16);
+assert.equal(preview.averageCostAfter,null,'preço pendente impede previsão enganosa');
+assert.equal(buildStockCheckoutPreview([{stock_product_id:'unknown',quantity:5,unit_price:2}],products).size,0);
+const session=fs.readFileSync('components/stock-supplies/ShoppingSession.tsx','utf8');
+assert.match(session,/buildStockCheckoutPreview\(items, productById\)/);
+assert.match(session,/renderedItems = visibleItems\.slice\(0, visibleLimit\)/);
+assert.match(session,/setVisibleLimit\(limit => limit \+ 35\)/);
+assert.match(session,/Somando \{preview\.lineCount\} itens/);
+assert.match(session,/nextCost === null/);
+const form=fs.readFileSync('components/stock-supplies/StockSupplyForm.tsx','utf8');
+assert.match(form,/try \{ writeStockSupplyDraft\(draftKey, formDraft\); \}/);
+assert.match(form,/Não foi possível guardar o rascunho neste aparelho/);
+assert.match(form,/draftStorageFailed && <p role="alert"/);
+assert.match(session,/!localDraftSaved && <p role="alert"/);
+const notifier=fs.readFileSync('lib/native/notifications.ts','utf8');
+assert.match(notifier,/stockProductsInFlight = new Set<string>/);
+assert.match(notifier,/stockProductsInFlight\.add\(key\)/);
+assert.match(notifier,/finally \{\s*for \(const key of keys\) stockProductsInFlight\.delete\(key\)/);
+
+// Execute real notifier with a fake bridge and make the Android permission call deliberately slow.
+let scheduleCalls=0;
+let permissionGateResolve;
+let appStateCalls=0;
+const originalLoad=Module._load;
+Module._load=function(request,parent,isMain){
+  if(request==='@capacitor/core')return {Capacitor:{isNativePlatform:()=>true,getPlatform:()=> 'android'}};
+  if(request==='@capacitor/app')return {App:{getState:async()=>{ appStateCalls++; if(appStateCalls===1)await new Promise(resolve=>{permissionGateResolve=resolve}); return {isActive:false};}}};
+  if(request==='@capacitor/local-notifications')return {LocalNotifications:{checkPermissions:async()=>({display:'granted'}),createChannel:async()=>{},schedule:async()=>{scheduleCalls++}}};
+  return originalLoad.call(this,request,parent,isMain);
+};
+global.document={visibilityState:'hidden'};
+global.localStorage={getItem:()=>null,setItem:()=>{}};
+const {notifyStockThresholdChanges}=require('../lib/native/notifications.ts');
+(async()=>{
+  const before={id:'test-product-110',name:'Tomate',active:true,current_quantity:2,minimum_quantity:1};
+  const after={...before,current_quantity:0};
+  const first=notifyStockThresholdChanges([{before,after}]);
+  assert.equal(typeof permissionGateResolve,'function');
+  const second=await notifyStockThresholdChanges([{before,after}]);
+  assert.equal(second,false,'a chamada concorrente deve ser descartada');
+  permissionGateResolve();
+  assert.equal(await first,true);
+  assert.equal(scheduleCalls,1,'uma notificação efetiva para duas chamadas concorrentes');
+  assert.equal(await notifyStockThresholdChanges([{before,after}]),false,'cooldown preservado');
+  assert.equal(scheduleCalls,1);
+  console.log('V110: prévias consolidadas, custos, listas grandes, rascunhos e bloqueio de notificação concorrente OK');
+})().catch(error=>{console.error(error);process.exitCode=1}).finally(()=>{Module._load=originalLoad;});

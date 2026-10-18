@@ -1,5 +1,6 @@
 // lib/native/notifications.ts
 import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import type {
   DaySchedule,
@@ -22,6 +23,7 @@ const SUPPLY_CHECK_DELAY_MINUTES = 10;
 const ANDROID_CHANNEL_ID = 'dfl-operational-v1';
 const lastSent = new Map<string, number>();
 const notificationsInFlight = new Set<string>();
+const stockProductsInFlight = new Set<string>();
 
 type NotificationOwner =
   | 'immediate'
@@ -811,82 +813,58 @@ export async function notifyStockThresholdChanges(
   preferences?: Partial<NotificationPreferences>,
 ) {
   if (!resolveNotificationPreferences(preferences).enabled) return false;
-  // Movimentações feitas com o app aberto já recebem toast e feedback tátil.
-  // Evita empilhar uma notificação Android para cada toque da conferência.
-  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-    return false;
-  }
-
+  // Nunca avisar a mesma edição duas vezes. A trava é adquirida ANTES de
+  // qualquer await, cobrindo chamadas simultâneas de diferentes movimentações.
   const relevant = changes
-    .filter(({ after }) => after.active !== false && after.minimum_quantity > 0)
+    .filter(({ after }) => after.active !== false)
     .map(({ before, after }) => {
-      const zeroCrossed =
-        before.current_quantity > 0 && after.current_quantity <= 0;
-      const lowCrossed =
+      const zeroCrossed = before.current_quantity > 0 && after.current_quantity <= 0;
+      const lowCrossed = after.minimum_quantity > 0 &&
         before.current_quantity > after.minimum_quantity &&
         after.current_quantity <= after.minimum_quantity;
-
-      if (
-        zeroCrossed &&
-        preferenceEnabled(preferences, 'stockZero')
-      ) {
-        return {
-          product: after,
-          level: 'zero' as const,
-        };
-      }
-
-      if (
-        lowCrossed &&
-        preferenceEnabled(preferences, 'stockLow')
-      ) {
-        return {
-          product: after,
-          level: 'low' as const,
-        };
-      }
-
+      if (zeroCrossed && preferenceEnabled(preferences, 'stockZero')) return { product: after, level: 'zero' as const };
+      if (lowCrossed && preferenceEnabled(preferences, 'stockLow')) return { product: after, level: 'low' as const };
       return null;
     })
-    .filter(
-      (
-        item,
-      ): item is {
-        product: StockProduct;
-        level: 'zero' | 'low';
-      } => Boolean(item),
-    );
-
+    .filter((item): item is { product: StockProduct; level: 'zero' | 'low' } => Boolean(item));
   if (!relevant.length) return false;
-
-  const zero = relevant.filter((item) => item.level === 'zero');
-  const names = relevant
-    .slice(0, 3)
-    .map((item) => item.product.name)
-    .join(', ');
-  const rest = relevant.length > 3 ? ` e mais ${relevant.length - 3}` : '';
-
-  const title =
-    zero.length > 0
-      ? zero.length === 1
-        ? 'Produto zerado no estoque'
-        : `${zero.length} produtos zerados`
-      : relevant.length === 1
-        ? 'Estoque no nível de reposição'
-        : `${relevant.length} produtos precisam de reposição`;
-
-  const body =
-    zero.length > 0
+  const now = Date.now();
+  const alertable = relevant.filter((item) =>
+    now - persistentLastSent(`stock-product:${item.product.id}:${item.level}`) >= 2 * 60 * 60_000 &&
+    !stockProductsInFlight.has(`stock-product:${item.product.id}:${item.level}`),
+  );
+  if (!alertable.length) return false;
+  const keys = alertable.map(item => `stock-product:${item.product.id}:${item.level}`);
+  for (const key of keys) stockProductsInFlight.add(key);
+  try {
+    // Movimentações feitas com o app aberto recebem feedback na própria tela.
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') return false;
+    if (isNative()) {
+      try {
+        if ((await CapacitorApp.getState()).isActive) return false;
+      } catch { /* fallback para document.visibilityState */ }
+    }
+    const zero = alertable.filter((item) => item.level === 'zero');
+    const names = alertable.slice(0, 3).map((item) => item.product.name).join(', ');
+    const rest = alertable.length > 3 ? ` e mais ${alertable.length - 3}` : '';
+    const title = zero.length
+      ? (zero.length === 1 ? 'Produto zerado no estoque' : `${zero.length} produtos zerados`)
+      : (alertable.length === 1 ? 'Estoque no nível de reposição' : `${alertable.length} produtos precisam de reposição`);
+    const body = zero.length
       ? `${names}${rest}. Reponha o estoque antes que afete a operação.`
-      : `${names}${rest} atingiu${relevant.length === 1 ? '' : 'ram'} o nível mínimo cadastrado.`;
-
-  const key = `stock-threshold:${relevant
-    .map((item) => `${item.product.id}:${item.level}`)
-    .sort()
-    .join('|')}`;
-
-  return notifyOperational(key, title, body, {
-    cooldownMs: 30 * 60_000,
-    extra: { href: '/estoque/compras', dflGroupedStockAlert: true },
-  });
+      : `${names}${rest} atingiu${alertable.length === 1 ? '' : 'ram'} o nível mínimo cadastrado.`;
+    const key = `stock-threshold:${alertable
+      .map((item) => `${item.product.id}:${item.level}`)
+      .sort().join('|')}`;
+    const sent = await notifyOperational(key, title, body, {
+      cooldownMs: 30 * 60_000,
+      extra: { href: '/estoque/compras', dflGroupedStockAlert: true },
+    });
+    if (sent) {
+      for (const item of alertable) rememberSent(`stock-product:${item.product.id}:${item.level}`, now);
+    }
+    return sent;
+  } finally {
+    for (const key of keys) stockProductsInFlight.delete(key);
+  }
 }

@@ -1,7 +1,7 @@
 // components/home/PreRouteIntelligence.tsx
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   BrainCircuit,
   ChevronDown,
@@ -36,21 +36,14 @@ export function PreRouteIntelligence({
       highlightLimit: 3,
     });
 
-  if (
-    route.status !== 'aberta' ||
-    route.started_at ||
-    route.departure_time
-  ) {
-    return null;
-  }
-
-  const context = buildPreRouteContext({
+  const context = useMemo(() => buildPreRouteContext({
     route,
     deliveries,
     customers,
     memory: intelligence.memory,
-  });
+  }), [route, deliveries, customers, intelligence.memory]);
 
+  if (route.status !== 'aberta' || route.started_at || route.departure_time) return null;
   if (context.deliveryCount === 0) {
     return null;
   }

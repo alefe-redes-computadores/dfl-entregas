@@ -50,7 +50,7 @@ export const paymentStateForInput = (
 export const deliveryPaymentStateLabel = (delivery: Delivery) => {
   const state = deriveDeliveryPaymentState(delivery);
   if (state === 'paid') return 'Pago';
-  if (state === 'pending') return 'Pix pendente';
+  if (state === 'pending') return delivery.payment_method === 'pix' ? 'Pix pendente' : 'Pagamento pendente';
   return 'Cobrar na entrega';
 };
 

@@ -7,7 +7,7 @@ const stock=read('app/estoque/page.tsx');
 const categories=read('lib/stock-categories.ts');
 const settlement=read('app/motoboys/acerto/page.tsx');
 ok(route.includes("!optimizerApproximateIds.includes(delivery.id) ? optimizerResolvedPoints[delivery.id]") ,'mapa reutiliza somente coordenadas resolvidas confiáveis');
-ok(card.includes('customer_charge ?? item.value')&&card.includes('RECEBER')&&card.includes("item.drinks?.trim()"),'imagem resume cobrança e bebida por parada');
+ok(card.includes('customer_charge ?? item.value')&&card.includes('COBRAR')&&card.includes("item.drinks?.trim()"),'imagem resume cobrança e bebida por parada');
 ok(!card.includes('Não é um mapa geográfico.')&&!card.includes('Posições ilustrativas'),'fallback verboso removido');
 ok(stock.includes('Revisões do estoque')&&stock.includes('reviewOpen')&&stock.includes('<StockCriticalBanner products={active} />'),'conferências ficam em central compacta');
 ok(categories.includes("if (value === 'Frios') return 'indigo'")&&categories.includes("if (value === 'Limpeza e higiene') return 'sky'"),'categorias próximas recebem cores distintas');
