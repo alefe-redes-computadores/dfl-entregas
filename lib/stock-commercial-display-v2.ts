@@ -155,6 +155,17 @@ export function physicalStockDisplay(product:StockProduct){
       if(Math.abs(physical-Math.round(physical))<0.0001) return {primary:`${Math.round(physical)} ${Math.round(physical)===1?'un':'un'}`,secondary:`${number(current)} pct`};
     }
   }
+  const presentation=(product.presentations||[]).find(p=>
+    p.active && Number.isFinite(Number(p.conversion_quantity)) && Number(p.conversion_quantity)>0 &&
+    (Number(p.conversion_quantity)!==1 || p.purchase_unit!==product.unit));
+  if(presentation){
+    const equivalent=current/Number(presentation.conversion_quantity);
+    const label=humanPresentation(presentation,product.unit);
+    return {
+      primary:formatStockQuantity(current,product.unit),
+      secondary:`≈ ${number(equivalent,3)} ${label}${equivalent===1?'':' (equivalente)'}`,
+    };
+  }
   return {primary:formatStockQuantity(current,product.unit),secondary:null as string|null};
 }
 

@@ -11,7 +11,7 @@ function check(label, condition) {
   }
 }
 
-check('baixa usa todas as entregas pendentes da parada', source.includes("const targets = groupedDeliveries.filter((item) => !item.completed)"));
+check('baixa usa entregas pendentes ativas e exclui cancelamentos', source.includes('const targets = pendingOperationalStopDeliveries(groupedDeliveries)') && fs.readFileSync('lib/delivery-stop-pending.ts','utf8').includes('!isCancelledSiteDelivery(item)'));
 check('códigos são separados por id da entrega', source.includes('groupedCodeDrafts[item.id]'));
 check('cliente correto é consultado para cada pedido', source.includes('getCustomerById(item.customer_id)'));
 check('cada entrega é persistida individualmente', source.includes('await updateDelivery(item.id, updatePayload)'));

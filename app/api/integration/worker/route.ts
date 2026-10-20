@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import { adminDb } from '@/lib/integration/server/admin';
+import { relayStageSucceeded, recoveryCheckpointEligible, shouldAttemptDailyReports, reportsCheckpointEligible } from '@/lib/integration/worker-health';
 import { reconcileReverseTrackingOutbox, type ReverseReconcileOptions } from '@/lib/integration/server/reverseReconciler';
 import {
   drainReverseIntegrationEventIds,
@@ -64,13 +65,18 @@ async function claimAutomaticWork() {
     const lastTracking = Date.parse(typeof state.last_tracking_at === 'string' ? state.last_tracking_at : '');
     const tracking = !Number.isFinite(lastTracking) || now - lastTracking >= 15 * 60 * 1000;
     const lastReportsKey = typeof state.last_reports_key === 'string' ? state.last_reports_key : '';
-    // Snapshot diário fora da operação quente; mode=reports preserva refresh manual.
-    const reports = clock.hour === 4 && lastReportsKey !== clock.dateKey;
-    const statusRecoveryReplay =
-      state.status_recovery_v17_4_done !== true;
-    if (tracking || reports) transaction.set(ref, {
+    const lastReportsAttempt = Date.parse(typeof state.last_reports_attempt_at === 'string' ? state.last_reports_attempt_at : '');
+    // Apenas reservar a execução NÃO comprova que ela terminou.
+    // Se o worker cair, a próxima tentativa ocorre após 30 minutos, inclusive depois das 04h.
+    const reports = shouldAttemptDailyReports(clock.hour, lastReportsKey, clock.dateKey, lastReportsAttempt, now);
+    const lastRecoveryAttempt = Date.parse(typeof state.status_recovery_v17_4_attempt_at === 'string' ? state.status_recovery_v17_4_attempt_at : '');
+    // Uma recuperação que falhou ou encontrou página cheia não varre a base a cada minuto.
+    const statusRecoveryReplay = state.status_recovery_v17_4_done !== true &&
+      (!Number.isFinite(lastRecoveryAttempt) || now - lastRecoveryAttempt >= 15 * 60 * 1000);
+    if (tracking || reports || statusRecoveryReplay) transaction.set(ref, {
       ...(tracking ? { last_tracking_at: new Date(now).toISOString() } : {}),
-      ...(reports ? { last_reports_key: clock.dateKey, last_reports_at: new Date(now).toISOString() } : {}),
+      ...(reports ? { last_reports_attempt_at: new Date(now).toISOString() } : {}),
+      ...(statusRecoveryReplay ? { status_recovery_v17_4_attempt_at: new Date(now).toISOString() } : {}),
       updated_at: new Date(now).toISOString(),
     }, { merge: true });
     return { tracking, reports, statusRecoveryReplay, clock };
@@ -121,12 +127,17 @@ async function run(req: NextRequest) {
         )
       : null;
 
+  // Valor capturado antes da closure: o helper de checkpoint nao estreita
+  // o tipo discriminado de reconciliation para TypeScript.
+  const statusRecoveryReplayRead =
+    reconciliation && reconciliation.ok
+      ? reconciliation.value.statusRecoveryReplayRead
+      : 0;
+
   const statusRecoveryCheckpoint =
     mode === 'auto' &&
     schedule?.statusRecoveryReplay &&
-    reconciliation &&
-    reconciliation.ok &&
-    reconciliation.value.statusRecoveryReplayEnabled
+    recoveryCheckpointEligible(reconciliation, statusRecoveryRelay, 40)
       ? await stage('status-recovery-checkpoint', async () => {
           await adminDb
             .collection('integration_checkpoints')
@@ -134,8 +145,7 @@ async function run(req: NextRequest) {
             .set({
               status_recovery_v17_4_done: true,
               status_recovery_v17_4_at: new Date().toISOString(),
-              status_recovery_v17_4_read:
-                reconciliation.value.statusRecoveryReplayRead,
+              status_recovery_v17_4_read: statusRecoveryReplayRead,
               updated_at: new Date().toISOString(),
             }, { merge: true });
 
@@ -143,25 +153,47 @@ async function run(req: NextRequest) {
         })
       : null;
 
+  // Checkpoint de relatórios somente DEPOIS de reconciliação concluída.
+  // Preserva tentativas futuras em caso de falha (sem duplicar a cada minuto).
+  const reportsCheckpoint = reportsCheckpointEligible(Boolean(mode === 'auto' && schedule?.reports), reconciliation)
+    ? await stage('reports-checkpoint', async () => {
+        await adminDb.collection('integration_checkpoints').doc('worker_schedule_v72').set({
+          last_reports_key: schedule!.clock.dateKey,
+          last_reports_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { merge: true });
+        return { done: true };
+      })
+    : null;
+
   // Drain global permanece somente como rede de segurança da outbox.
   const relay = await stage('relay', () => drainReverseIntegrationOutbox());
 
   const scheduleOk = scheduleStage === null || scheduleStage.ok;
-  const reconciliationOk = reconciliation === null || reconciliation.ok;
-  const statusRecoveryRelayOk =
-    statusRecoveryRelay === null || statusRecoveryRelay.ok;
+  const reconciliationOk = reconciliation === null || (reconciliation.ok && reconciliation.value.ok === true);
+  const statusRecoveryRelayOk = relayStageSucceeded(statusRecoveryRelay);
   const statusRecoveryCheckpointOk =
     statusRecoveryCheckpoint === null || statusRecoveryCheckpoint.ok;
 
+  const relayDeliveryOk = relayStageSucceeded(relay);
+  const reportsCheckpointOk = reportsCheckpoint === null || reportsCheckpoint.ok;
   const ok =
     scheduleOk &&
     reconciliationOk &&
     statusRecoveryRelayOk &&
     statusRecoveryCheckpointOk &&
-    relay.ok;
+    reportsCheckpointOk &&
+    relayDeliveryOk;
+  if (relay.ok && !relayDeliveryOk) {
+    console.warn('[integration/reverse-worker] Relay executado com falhas de entrega ao Site', {
+      failed: relay.value.failed,
+      claimed: relay.value.claimed,
+    });
+  }
   const resourceExhausted =
     (scheduleStage !== null && !scheduleStage.ok && scheduleStage.resourceExhausted) ||
     (reconciliation !== null && !reconciliation.ok && reconciliation.resourceExhausted) ||
+    (reportsCheckpoint !== null && !reportsCheckpoint.ok && reportsCheckpoint.resourceExhausted) ||
     (!relay.ok && relay.resourceExhausted);
   console.log('[integration/reverse-worker]', { mode, ok, resourceExhausted, schedule, reconcileOptions });
   return NextResponse.json(
@@ -175,6 +207,9 @@ async function run(req: NextRequest) {
       reconciliation,
       statusRecoveryRelay,
       statusRecoveryCheckpoint,
+      reportsCheckpoint,
+      reportsNeedsReview: Boolean(mode === 'auto' && schedule?.reports && !reportsCheckpoint?.ok),
+      statusRecoveryNeedsReview: Boolean(schedule?.statusRecoveryReplay && reconciliation?.ok && statusRecoveryReplayRead >= 40),
       relay,
     },
     { status: ok ? 200 : resourceExhausted ? 429 : 207 },

@@ -1,4 +1,5 @@
 'use client';
+import { readActiveOperationalRouteId, rememberActiveOperationalRouteId } from '@/lib/route-ui-storage';
 import { formatBrazilPhone, normalizeBrazilPhone } from '@/lib/phone';
 
 import {
@@ -203,7 +204,7 @@ const [routeId, setRouteId] = useState('');
     if (currentStillEligible) return;
 
     if (typeof window !== 'undefined') {
-      const rememberedRouteId = localStorage.getItem('dfl-active-operational-route-v1');
+      const rememberedRouteId = readActiveOperationalRouteId();
       const rememberedRoute = openRoutes.find((route) => route.id === rememberedRouteId);
       if (rememberedRoute) {
         setRouteId(rememberedRoute.id);
@@ -675,7 +676,7 @@ const [routeId, setRouteId] = useState('');
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => { routeSelectionTouched.current = true; setRouteId(r.id); if(typeof window!=='undefined')localStorage.setItem('dfl-active-operational-route-v1',r.id); setIsRouteDropdownOpen(false); }}
+                  onClick={() => { routeSelectionTouched.current = true; setRouteId(r.id); rememberActiveOperationalRouteId(r.id); setIsRouteDropdownOpen(false); }}
                   className="flex items-center justify-between px-4 py-4 text-left text-sm active:bg-zinc-800 border-b border-zinc-800/50 last:border-0"
                 >
                   <span className={`font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>

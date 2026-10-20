@@ -78,41 +78,50 @@ export function useStoreAutomation() {
 
     let timer: number | undefined;
     let disposed = false;
+    // Foco, visibilidade e virada do minuto podem ocorrer juntos.
+    // Uma única atualização por vez evita gravações concorrentes no Firestore.
+    let checking = false;
 
     const checkOperationState = async () => {
-      const state = useAppStore.getState();
-      const settings = state.storeSettings;
-
-      if (!settings?.schedule) {
-        return;
-      }
-
-      const shouldBeOpen = isWithinSchedule(
-        new Date(),
-        settings.schedule,
-        settings.pauses,
-        settings.holidaysOverrides,
-      );
-
-      if (shouldBeOpen === Boolean(settings.isOpen)) {
-        return;
-      }
-
+      if (disposed || checking) return;
+      checking = true;
       try {
-        await state.updateStoreSettings({
-          isOpen: shouldBeOpen,
-        });
+        const state = useAppStore.getState();
+        const settings = state.storeSettings;
 
-        if (Capacitor.isNativePlatform()) {
-          void Haptics.impact({
-            style: ImpactStyle.Heavy,
-          });
+        if (!settings?.schedule) {
+          return;
         }
-      } catch (error) {
-        console.error(
-          'Falha ao atualizar estado automático da loja:',
-          error,
+
+        const shouldBeOpen = isWithinSchedule(
+          new Date(),
+          settings.schedule,
+          settings.pauses,
+          settings.holidaysOverrides,
         );
+
+        if (shouldBeOpen === Boolean(settings.isOpen)) {
+          return;
+        }
+
+        try {
+          await state.updateStoreSettings({
+            isOpen: shouldBeOpen,
+          });
+
+          if (Capacitor.isNativePlatform()) {
+            void Haptics.impact({
+              style: ImpactStyle.Heavy,
+            });
+          }
+        } catch (error) {
+          console.error(
+            'Falha ao atualizar estado automático da loja:',
+            error,
+          );
+        }
+      } finally {
+        checking = false;
       }
     };
 

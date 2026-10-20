@@ -46,6 +46,7 @@ import {
 } from '@/lib/customer-identity';
 import { stockProductCategory, suggestStockCategory } from '@/lib/stock-categories';
 import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop, moveStopToIndex, stopDeliveryIds } from '@/lib/route-stops';
+import { rollbackRouteOrderFields, withRouteOrderWriteLock } from '@/lib/route-order-write-guard';
 import { validOriginPoint } from '@/lib/store-origin';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingConfirmation, isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
@@ -59,6 +60,7 @@ import {
   stockExitExceeds,
 } from '@/lib/stock-precision';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { activeRouteDeliveries, canAutoCloseRoute } from '@/lib/route-closure-eligibility';
 import { groupStockSupplyItems, planStockSupplyLedger } from '@/lib/stock-supply-ledger';
 import { planStockMovement, planStockCount, type StockCountInput } from '@/lib/stock-mutation-plan';
 
@@ -133,10 +135,11 @@ async function autoOrganizeLoadedRouteAfterInsert(
   }
 
   const expanded = finalGroups.flatMap((group) => group.deliveries.map((delivery) => delivery.id));
+  const byDeliveryId = new Map(items.map((item) => [item.id, item] as const));
   const now = new Date().toISOString();
   const updates = expanded
     .map((id, index) => {
-      const current = items.find((item) => item.id === id);
+      const current = byDeliveryId.get(id);
       if (!current || current.order_locked === true) return null;
       if ((current.order_index ?? -1) === index && current.order_source === 'smart') return null;
       return { id, order_index: index, order_source: 'smart' as const, order_updated_at: now };
@@ -217,7 +220,7 @@ interface AppState {
   addDeliveries: (deliveries: Delivery[]) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
-  closeRoute: (routeId: string) => Promise<void>;
+  closeRoute: (routeId: string, options?: { effectiveEndTime?: string; autoClosedAt?: string }) => Promise<void>;
   reopenRoute: (routeId: string) => Promise<void>;
   reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
   moveDeliveryToIndex: (routeId: string, deliveryId: string, targetIndex: number) => Promise<void>;
@@ -2064,11 +2067,8 @@ export const useAppStore = create<AppState>()(
                 (delivery) => delivery.route_id === previousRouteId,
               );
             const previousRouteReadyToClose =
-              previousRoute?.status === 'aberta' &&
-              Boolean(routeStartedAt(previousRoute)) &&
-              remainingPreviousRouteDeliveries.every(
-                (delivery) => delivery.completed === true,
-              );
+              currentState.storeSettings.autoCloseCompletedRoutes !== false &&
+              canAutoCloseRoute(previousRoute, remainingPreviousRouteDeliveries);
 
             if (previousRouteReadyToClose && previousRoute) {
               void currentState.closeRoute(previousRoute.id).catch((closeError) => {
@@ -2087,19 +2087,13 @@ export const useAppStore = create<AppState>()(
             const routeDeliveries = currentState.deliveries.filter(
               (delivery) => delivery.route_id === nextDelivery.route_id,
             );
+            const route = currentState.routes.find((item) => item.id === nextDelivery.route_id);
             const allDone =
-              routeDeliveries.length > 0 &&
-              routeDeliveries.every((delivery) => delivery.completed === true);
+              currentState.storeSettings.autoCloseCompletedRoutes !== false &&
+              canAutoCloseRoute(route, routeDeliveries);
 
             if (allDone) {
-              const route = currentState.routes.find(
-                (item) => item.id === nextDelivery.route_id,
-              );
-              if (
-                route &&
-                route.status === 'aberta' &&
-                Boolean(routeStartedAt(route))
-              ) {
+              if (route) {
                 // O fechamento começa otimista, mas fila iFood/notificações e
                 // integrações posteriores continuam fora do caminho crítico.
                 void currentState.closeRoute(route.id).catch((closeError) => {
@@ -2161,11 +2155,8 @@ export const useAppStore = create<AppState>()(
               (delivery) => delivery.route_id === linkedRouteId,
             );
             const routeReadyToClose =
-              linkedRoute?.status === 'aberta' &&
-              Boolean(routeStartedAt(linkedRoute)) &&
-              remainingDeliveries.every(
-                (delivery) => delivery.completed === true,
-              );
+              currentState.storeSettings.autoCloseCompletedRoutes !== false &&
+              canAutoCloseRoute(linkedRoute, remainingDeliveries);
 
             if (routeReadyToClose && linkedRoute) {
               await currentState.closeRoute(linkedRoute.id);
@@ -2187,7 +2178,7 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      closeRoute: async (routeId) => {
+      closeRoute: async (routeId, options) => {
         if (isSyntheticOperationalRoute(routeId)) {
           throw new Error(
             'Este agrupador operacional não pode ser finalizado como rota.',
@@ -2206,8 +2197,8 @@ export const useAppStore = create<AppState>()(
           (delivery) => delivery.route_id === routeId,
         );
 
-        if (routeDeliveries.some((delivery) => !delivery.completed)) {
-          throw new Error('Conclua todas as entregas antes de finalizar a rota.');
+        if (activeRouteDeliveries(routeDeliveries).some((delivery) => !delivery.completed)) {
+          throw new Error('Conclua todas as entregas ativas antes de finalizar a rota.');
         }
 
         // Estado transitório imediato, sem anunciar fechamento antes da confirmação do servidor.
@@ -2220,7 +2211,8 @@ export const useAppStore = create<AppState>()(
           collection(db, 'deliveries'),
           where('route_id', '==', routeId),
         ));
-        const localIds = new Set(routeDeliveries.map((delivery) => delivery.id));
+        const localById = new Map(routeDeliveries.map((delivery) => [delivery.id, delivery] as const));
+        const localIds = new Set(localById.keys());
         const remoteIds = new Set(remoteRouteDeliveries.docs.map((snapshot) => snapshot.id));
         if (localIds.size !== remoteIds.size || [...remoteIds].some((id) => !localIds.has(id))) {
           throw new Error('As entregas desta rota mudaram em outro aparelho. Atualize antes de fechar.');
@@ -2230,7 +2222,8 @@ export const useAppStore = create<AppState>()(
           throw new Error('Rota grande demais para finalizar com segurança de uma vez. Solicite conferência.');
         }
 
-        const endTime = new Date().toISOString();
+        const now = new Date().toISOString();
+        const endTime = options?.effectiveEndTime || now;
         const routeRef = doc(db, 'routes', routeId);
         const deliveryRefs = routeDeliveries.map((delivery) => doc(db, 'deliveries', delivery.id));
         const finalEndTime = await runTransaction(db, async (transaction) => {
@@ -2246,21 +2239,28 @@ export const useAppStore = create<AppState>()(
           for (const snapshot of remoteDeliveries) {
             if (!snapshot.exists()) throw new Error('Uma entrega foi excluída em outro aparelho. Atualize a rota.');
             const remote = snapshot.data() as Delivery;
-            if (remote.route_id !== routeId || remote.completed !== true) {
-              throw new Error('Uma entrega ainda não foi concluída ou mudou de rota em outro aparelho. Atualize a tela.');
+            const local = localById.get(snapshot.id);
+            if (
+              remote.route_id !== routeId ||
+              isCancelledSiteDelivery(remote) !== (local ? isCancelledSiteDelivery(local) : false) ||
+              (!isCancelledSiteDelivery(remote) && remote.completed !== true)
+            ) {
+              throw new Error('Uma entrega foi alterada, cancelada ou ainda está pendente em outro aparelho. Atualize a rota.');
             }
           }
           const closedAt = remoteRoute.end_time || endTime;
           transaction.update(routeRef, {
             status: 'fechada',
             end_time: closedAt,
-            updated_at: endTime,
+            updated_at: now,
+            ...(options?.autoClosedAt ? { auto_closed_at: options.autoClosedAt } : {}),
           });
           routeDeliveries.forEach((delivery, index) => {
             if (delivery.source_system !== 'dfl_site') {
               transaction.update(deliveryRefs[index], {
                 analytics_sync_pending: true,
-                analytics_sync_requested_at: endTime,
+                // Registro de fila corresponde à gravação real, não ao horário histórico da rota.
+                analytics_sync_requested_at: now,
               });
             }
           });
@@ -2270,7 +2270,8 @@ export const useAppStore = create<AppState>()(
         // UI só anuncia conclusão depois da transação confirmada.
         set((state) => ({
           routes: state.routes.map((route) => route.id === routeId
-            ? { ...route, status: 'fechada', end_time: finalEndTime, updated_at: endTime }
+            ? { ...route, status: 'fechada', end_time: finalEndTime, updated_at: now,
+                ...(options?.autoClosedAt ? { auto_closed_at: options.autoClosedAt } : {}) }
             : route),
         }));
         void cancelRouteDurationReminder(routeId);
@@ -2337,7 +2338,7 @@ export const useAppStore = create<AppState>()(
               get().storeSettings.notificationPreferences,
               {
                 startedAt: routeStartedAt(routeBeforeClose) || undefined,
-                endedAt: endTime,
+                endedAt: finalEndTime,
                 motoboyName: routeBeforeClose.motoboy_name,
                 stops: groupDeliveriesByStop(routeDeliveries).length,
                 orders: routeDeliveries.length,
@@ -2430,7 +2431,7 @@ export const useAppStore = create<AppState>()(
         );
       },
 
-      setDeliveryOrder: async (routeId, orderedPendingIds, options) => {
+      setDeliveryOrder: async (routeId, orderedPendingIds, options) => withRouteOrderWriteLock(routeId, async () => {
         const state = get();
         const routeDeliveries = state.deliveries
           .filter((delivery) => delivery.route_id === routeId)
@@ -2442,9 +2443,10 @@ export const useAppStore = create<AppState>()(
 
         const uniqueIds = Array.from(new Set(orderedPendingIds));
         const validIds = uniqueIds.filter((id) => pendingById.has(id));
+        const selectedIds = new Set(validIds);
         const missingIds = pending
           .map((delivery) => delivery.id)
-          .filter((id) => !validIds.includes(id));
+          .filter((id) => !selectedIds.has(id));
 
         const finalPendingIds = expandStopOrder(
           [...validIds, ...missingIds],
@@ -2472,6 +2474,11 @@ export const useAppStore = create<AppState>()(
           ...delivery,
           order_index: index,
         }));
+
+        // Firestore permite até 500 escritas por lote; falhar antes do estado otimista.
+        if (normalized.length > 500) {
+          throw new Error('Esta rota excede o limite de 500 registros por reorganização. Divida a operação.');
+        }
 
         const now = new Date().toISOString();
         const metadata = options?.metadata;
@@ -2530,11 +2537,16 @@ export const useAppStore = create<AppState>()(
           });
           await batch.commit();
         } catch (error) {
-          set({ deliveries: state.deliveries });
+          const touched = new Set(normalized.map((delivery) => delivery.id));
+          set((current) => ({
+            deliveries: rollbackRouteOrderFields(
+              current.deliveries, state.deliveries, touched, now,
+            ),
+          }));
           console.error('Erro ao aplicar ordem da rota:', error);
           throw error;
         }
-      },
+      }),
 
 
       toggleDeliveryExpansion: (id, isExpanded) => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { canAutoCloseRoute } from '@/lib/route-closure-eligibility';
 import {
   dateKey,
   routeDate,
@@ -15,54 +15,59 @@ export function RouteOperations() {
   const routes = useAppStore((state) => state.routes);
   const deliveries = useAppStore((state) => state.deliveries);
   const settings = useAppStore((state) => state.storeSettings);
-  const updateRoute = useAppStore((state) => state.updateRoute);
+  const closeRoute = useAppStore((state) => state.closeRoute);
   const previousOpenRoutes = useRef<number | null>(null);
   const previousRoutes = useRef(routes);
   // Evita múltiplas gravações da mesma rota enquanto o Firestore confirma.
   const autoClosing = useRef(new Set<string>());
+  const failedAutoCloseAt = useRef(new Map<string, number>());
 
   useEffect(() => {
     if (!hydrated || settings.autoCloseCompletedRoutes === false) return;
 
     const today = dateKey(new Date());
-    routes
-      .filter(
-        (route) =>
-          route.status === 'aberta' &&
-          routeStartedAt(route) &&
-          !route.reopened_at &&
-          dateKey(routeDate(route) || new Date()) < today,
-      )
-      .forEach((route) => {
-        // Pedidos cancelados não são entregas pendentes e não devem
-        // impedir o fechamento; rotas só de cancelados NÃO fecham sozinhas.
-        const linked = deliveries.filter(
-          (delivery) => delivery.route_id === route.id && !isCancelledSiteDelivery(delivery),
-        );
-
-        if (linked.length && linked.every((delivery) => delivery.completed) && !autoClosing.current.has(route.id)) {
-          autoClosing.current.add(route.id);
-          const base = routeDate(route) || new Date();
-          const end = new Date(base);
-          end.setHours(23, 59, 0, 0);
-
-          void updateRoute(route.id, {
-            status: 'fechada',
-            end_time: route.end_time || end.toISOString(),
-            auto_closed_at: new Date().toISOString(),
-          }).catch((error) => {
-            console.warn('[ROUTE_OPERATIONS] Fechamento automático falhou; rota preservada.', error);
-          }).finally(() => {
-            autoClosing.current.delete(route.id);
-          });
-        }
+    const now = Date.now();
+    // Indexação linear, em vez de filtrar TODAS as entregas para CADA rota.
+    const deliveriesByRoute = new Map<string, typeof deliveries>();
+    for (const delivery of deliveries) {
+      if (!delivery.route_id) continue;
+      const linked = deliveriesByRoute.get(delivery.route_id) || [];
+      linked.push(delivery);
+      deliveriesByRoute.set(delivery.route_id, linked);
+    }
+    for (const route of routes) {
+      if (route.status !== 'aberta' || !routeStartedAt(route) || route.reopened_at) continue;
+      if (dateKey(routeDate(route) || new Date()) >= today) continue;
+      if (autoClosing.current.has(route.id)) continue;
+      // Falha de rede não deve causar nova transação a cada atualização de UI.
+      if (now - (failedAutoCloseAt.current.get(route.id) || 0) < 120_000) continue;
+      if (!canAutoCloseRoute(route, deliveriesByRoute.get(route.id) || [])) continue;
+      autoClosing.current.add(route.id);
+      const end = new Date(routeDate(route) || new Date());
+      end.setHours(23, 59, 0, 0);
+      void closeRoute(route.id, {
+        effectiveEndTime: route.end_time || end.toISOString(),
+        autoClosedAt: new Date().toISOString(),
+      }).then(() => {
+        failedAutoCloseAt.current.delete(route.id);
+      }).catch((error) => {
+        failedAutoCloseAt.current.set(route.id, Date.now());
+        console.warn('[ROUTE_OPERATIONS] Fechamento histórico não confirmado; rota preservada.', error);
+      }).finally(() => {
+        autoClosing.current.delete(route.id);
       });
+    }
+    // Evita reter referências de rotas já fechadas.
+    const openIds = new Set(routes.filter(route => route.status === 'aberta').map(route => route.id));
+    for (const id of failedAutoCloseAt.current.keys()) {
+      if (!openIds.has(id)) failedAutoCloseAt.current.delete(id);
+    }
   }, [
     deliveries,
     hydrated,
     routes,
     settings.autoCloseCompletedRoutes,
-    updateRoute,
+    closeRoute,
   ]);
 
 

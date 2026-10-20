@@ -77,6 +77,8 @@ export default function RoutesPage() {
     return value ? dateKey(value) === selectedDate : false;
   }), [routes, selectedDate]);
 
+  const searchTerm = useMemo(() => query.trim().toLocaleLowerCase('pt-BR'), [query]);
+
   const rows = useMemo(() => dayRoutes.map(route => {
     const linked = deliveriesByRoute.get(route.id) || [];
     const completed = linked.filter(delivery => delivery.completed).length;
@@ -105,8 +107,7 @@ export default function RoutesPage() {
             : 'montando';
     return { route, linked, completed, stops, amount, customerCharge, state };
   }).filter(({ route, state }) => {
-    const term = query.trim().toLocaleLowerCase('pt-BR');
-    return (filter === 'todas' || state === filter) && (!term || `${route.name} ${route.motoboy_name}`.toLocaleLowerCase('pt-BR').includes(term));
+    return (filter === 'todas' || state === filter) && (!searchTerm || `${route.name} ${route.motoboy_name}`.toLocaleLowerCase('pt-BR').includes(searchTerm));
   }).sort((a, b) => {
     const aDate = canonicalRouteDate(a.route);
     const bDate = canonicalRouteDate(b.route);
@@ -115,7 +116,7 @@ export default function RoutesPage() {
       (aDate ? new Date(aDate).getTime() : Number.POSITIVE_INFINITY) -
       (bDate ? new Date(bDate).getTime() : Number.POSITIVE_INFINITY)
     );
-  }), [dayRoutes, deliveriesByRoute, filter, query]);
+  }), [dayRoutes, deliveriesByRoute, filter, searchTerm]);
 
   const counts = useMemo(() => ({
     montando: dayRoutes.filter(

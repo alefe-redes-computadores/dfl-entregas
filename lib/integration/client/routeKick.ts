@@ -64,7 +64,7 @@ function shouldRetry(status: number, result: RouteKickResult | null) {
     return true;
   }
   if (status >= 500) return true;
-  return Number(result?.relay?.retryable || 0) > 0;
+  return Number(result?.relay?.retryable || 0) > 0 || Number(result?.relay?.inFlight || 0) > 0;
 }
 
 async function parseRouteKickResponse(response: Response) {

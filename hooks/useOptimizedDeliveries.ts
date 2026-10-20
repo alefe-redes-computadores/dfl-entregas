@@ -20,15 +20,17 @@ export function useOptimizedDeliveries(
   // A mesma rota renderiza ao expandir, copiar, arrastar e concluir entregas.
   // Não refazer agrupamentos, geografia de vizinhos e contagens por gesto.
   return useMemo(() => {
+    const customerById = new Map(customerSnapshot.map((customer) => [customer.id, customer] as const));
+    const customerFor = (id: string) => customerById.get(id) || getCustomerById(id);
     const neighborhoodCounts = deliveries.reduce((acc, delivery) => {
-      const customer = getCustomerById(delivery.customer_id);
+      const customer = customerFor(delivery.customer_id);
       const neighborhood = customer?.neighborhood?.trim().toLowerCase();
       if (neighborhood) acc[neighborhood] = (acc[neighborhood] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     const addressCounts = deliveries.reduce((acc, delivery) => {
-      const customer = getCustomerById(delivery.customer_id);
+      const customer = customerFor(delivery.customer_id);
       const key = normalizedAddress(delivery.address_string || customer?.address);
       if (key) acc[key] = (acc[key] || 0) + 1;
       return acc;
@@ -39,7 +41,13 @@ export function useOptimizedDeliveries(
     // remota nem geocoding aqui: montar/editar a rota permanece instantâneo.
     const sortedDeliveries = groups.flatMap((group) => group.deliveries);
     const pendingDeliveries = sortedDeliveries.filter((delivery) => !delivery.completed);
-    const pendingGroups = groupDeliveriesByStop(pendingDeliveries);
+    // A ordem/grupo da rota já está calculada: filtrar os membros pendentes
+    // evita ordenar a mesma coleção novamente a cada mutação operacional.
+    const pendingGroups = groups.flatMap((group) => {
+      if (group.pending.length === 0) return [];
+      const representative = group.pending[0];
+      return [{ ...group, representative, deliveries: group.pending, pending: group.pending, completed: [] }];
+    });
 
     const stopMeta = new Map<
       string,
@@ -60,7 +68,7 @@ export function useOptimizedDeliveries(
     const neighborMeta = neighborMetadata(
       groups.map((group) => {
         const delivery = group.representative;
-        const customer = getCustomerById(delivery.customer_id);
+        const customer = customerFor(delivery.customer_id);
         return {
           delivery,
           customer,

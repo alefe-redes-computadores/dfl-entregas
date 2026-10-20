@@ -35,6 +35,24 @@ async function sendOne(
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`Site respondeu HTTP ${response.status}: ${text.slice(0, 500)}`);
+    // Uma tela de erro com HTTP 200 (proxy/hosting) não é confirmação de ingestão.
+    if (/^\s*(?:<!doctype\s+html|<html\b)/i.test(text)) {
+      throw new Error('Site respondeu HTML em vez de confirmar o evento.');
+    }
+    // Compatibilidade: respostas antigas 2xx sem corpo seguem válidas.
+    // Respostas JSON explícitas de erro, porém, NUNCA podem marcar outbox como sent.
+    const declaredJson = /\bjson\b/i.test(response.headers.get('content-type') || '');
+    if (declaredJson || /^\s*[\[{]/.test(text)) {
+      let acknowledgment: unknown;
+      try { acknowledgment = JSON.parse(text); }
+      catch { throw new Error('Site respondeu JSON inválido no aceite do evento.'); }
+      if (acknowledgment && typeof acknowledgment === 'object' && !Array.isArray(acknowledgment)) {
+        const ack = acknowledgment as Record<string, unknown>;
+        if (ack.ok === false || ack.success === false || (typeof ack.error === 'string' && ack.error.trim())) {
+          throw new Error(`Site recusou o evento: ${JSON.stringify(ack).slice(0, 500)}`);
+        }
+      }
+    }
     return { status: response.status, body: text.slice(0, 1000) };
   } finally {
     clearTimeout(timer);

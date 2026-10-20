@@ -13,7 +13,7 @@ ok(native.includes("dataset.dflPlatform = 'android'"), 'Android marca plataforma
 ok(css.includes('top: calc(var(--dfl-native-statusbar-fallback, 48px) + 10px) !important'), 'toast usa top CSS nativo direto');
 ok(route.includes('const routeDeliveryRevision = useAppStore'), 'rota usa revisão granular');
 ok(!route.includes('const deliveryState = useAppStore((state) => state.deliveries);'), 'rota não acorda por qualquer expansão');
-ok(card.includes('state.deliveries.find((item) => item.id === delivery.id)?.is_expanded'), 'card observa só sua expansão');
+ok(card.includes('isDeliveryExpanded(state.deliveries, delivery.id)') && read('lib/delivery-expansion-index.ts').includes('new WeakMap'), 'card observa somente a própria expansão por índice fraco de snapshot');
 ok(!card.includes('const allDeliveries = useAppStore'), 'card não assina array inteiro por recorrência');
 ok(card.includes('onPointerDown={handleReorderPointerDown}') && card.includes('ArrowUp') && card.includes('ArrowDown'), 'arrasto na alça e setas acessíveis preservadas');
 ok(whats.includes('🥤 *Bebida:* *${delivery.drinks.trim()}*'), 'bebida individual destacada');

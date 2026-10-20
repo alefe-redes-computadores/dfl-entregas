@@ -2,11 +2,12 @@
 import { useRouter } from 'next/navigation';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
-import { TrendingUp, Package, Eye, EyeOff, Filter, Users, UserRound, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, Package, Eye, EyeOff, Filter, Users, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
+import { ClosedRoutesSection } from '@/components/home/ClosedRoutesSection';
 import type { Route } from '@/types';
 import { getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { firstValidTimestamp, saoPauloDateKey } from '@/lib/reports/time';
@@ -279,16 +280,6 @@ export default function HomePage() {
       );
     });
 
-    const closedRoutesByMotoboy =
-      closedRoutes.reduce((acc, route) => {
-        if (!acc[route.motoboy_name]) {
-          acc[route.motoboy_name] = [];
-        }
-
-        acc[route.motoboy_name].push(route);
-        return acc;
-      }, {} as Record<string, Route[]>);
-
     const activeMotoboyNames = new Set(
       baseRoutesDoDia.flatMap((route) => [
         route.motoboy_id || '',
@@ -318,7 +309,6 @@ export default function HomePage() {
       openRoutes,
       closedRoutes,
       readyRoutes,
-      closedRoutesByMotoboy,
       activeMotoboysToday,
     };
   }, [
@@ -345,9 +335,15 @@ export default function HomePage() {
     openRoutes,
     closedRoutes,
     readyRoutes,
-    closedRoutesByMotoboy,
     activeMotoboysToday,
   } = homeOperation;
+
+  // Ao mudar o dia, não manter filtro invisível de motoboy sem operação.
+  useEffect(() => {
+    if (globalMotoboy && !activeMotoboysToday.some((motoboy) => motoboy.name === globalMotoboy)) {
+      setGlobalMotoboy(null);
+    }
+  }, [activeMotoboysToday, globalMotoboy]);
 
   const hasOperationSummary =
     totalEntregas > 0 ||
@@ -369,14 +365,6 @@ export default function HomePage() {
           minute: '2-digit',
         })
       : '--:--';
-  };
-
-  // Função para pegar ícone do motoboy para o cabeçalho do grupo
-  const getMotoboyIcon = (name: string) => {
-    const m = motoboys.find(mb => mb.name === name);
-    if (m?.avatar?.includes('woman')) return UserRound;
-    if (m?.avatar?.includes('bike')) return Bike;
-    return Users;
   };
 
   return (
@@ -485,7 +473,7 @@ export default function HomePage() {
             <button
               key={m.id}
               onClick={() => setGlobalMotoboy(m.name)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${globalMotoboy === m.name ? 'bg-sky-500 text-zinc-950 shadow-[0_0_15px_rgba(14,165,233,0.3)]' : 'bg-zinc-900/60 border border-zinc-800 text-zinc-400 hover:text-sky-400'}`}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${globalMotoboy === m.name ? 'bg-emerald-500 text-zinc-950 shadow-[0_0_15px_rgba(16,185,129,0.15)]' : 'bg-zinc-900/60 border border-zinc-800 text-zinc-400 hover:text-emerald-400'}`}
             >
               <Users size={14} /> {m.name}
             </button>
@@ -561,39 +549,12 @@ export default function HomePage() {
       )}
 
       {closedRoutes.length > 0 && (
-        <div className="flex flex-col gap-4 mt-2">
-          <h2 className="px-1 font-heading text-sm font-bold uppercase tracking-wide text-zinc-500">
-            Finalizadas {globalMotoboy && `(${globalMotoboy})`}
-          </h2>
-
-          {globalMotoboy ? (
-            // Se tem filtro global, mostra a lista plana
-            closedRoutes.map((route) => (
-              <RouteAccordion key={route.id} route={route} />
-            ))
-          ) : (
-            // Sem filtro, agrupa por motoboy
-            Object.keys(closedRoutesByMotoboy).sort().map(motoboyName => {
-              const Icon = getMotoboyIcon(motoboyName);
-              return (
-                <div key={motoboyName} className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2 px-1">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-zinc-500">
-                      <Icon size={13} />
-                    </div>
-                    <h3 className="text-xs font-bold text-zinc-500">{motoboyName}</h3>
-                    <span className="ml-auto text-[10px] font-semibold text-zinc-700">{closedRoutesByMotoboy[motoboyName].length} rotas</span>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    {closedRoutesByMotoboy[motoboyName].map(route => (
-                      <RouteAccordion key={route.id} route={route} />
-                    ))}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+        <ClosedRoutesSection
+          key={`${selectedDateKey}:${globalMotoboy || 'all'}`}
+          routes={closedRoutes}
+          motoboys={motoboys}
+          motoboyFilter={globalMotoboy}
+        />
       )}
 
       {routesDoDia.length === 0 && (

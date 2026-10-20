@@ -2,6 +2,7 @@ import type { Delivery, Motoboy, Route } from '@/types';
 import { routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
+import { activeRouteDeliveries } from '@/lib/route-closure-eligibility';
 import { calculateMotoboyFee } from '@/lib/motoboy-analytics';
 
 /** Relatório apenas operacional. A diária não pode ser arbitrariamente dividida por rotas. */
@@ -30,10 +31,11 @@ export const moneyBR = (amount: number) => amount.toLocaleString('pt-BR', {
 });
 
 export function summarizeRoutePerformance(route: Route, deliveries: Delivery[], motoboy?: Motoboy): RoutePerformanceReport {
-  const groups = groupDeliveriesByStop(deliveries);
+  const active = activeRouteDeliveries(deliveries);
+  const groups = groupDeliveriesByStop(active);
   // Uma parada só é concluída quando todos os pedidos daquele endereço terminaram.
   const completedStops = groups.filter(group => group.deliveries.length > 0 && group.deliveries.every(item => item.completed)).length;
-  const completedOrders = deliveries.filter(item => item.completed).length;
+  const completedOrders = active.filter(item => item.completed).length;
   const started = firstValidTimestamp(routeStartedAt(route));
   const finished = route.status === 'fechada' ? firstValidTimestamp(route.end_time) : null;
   const elapsedMs = started && finished ? finished.getTime() - started.getTime() : -1;
@@ -48,7 +50,7 @@ export function summarizeRoutePerformance(route: Route, deliveries: Delivery[], 
     routeName: route.name || 'Rota', motoboyName: route.motoboy_name || 'Entregador',
     date: route.operational_date || (started ? started.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) : ''),
     status: route.status === 'fechada' ? 'Finalizada' : started ? 'Na rua' : 'Montando',
-    orders: deliveries.length, completedOrders,
+    orders: active.length, completedOrders,
     stops: groups.length, completedStops,
     durationMinutes, durationLabel: formatRouteDuration(durationMinutes),
     fee, feeDetail, feeLabel: fee === null ? 'Conferir acerto diário' : moneyBR(fee),

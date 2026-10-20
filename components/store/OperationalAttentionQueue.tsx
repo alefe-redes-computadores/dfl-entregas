@@ -26,6 +26,7 @@ export function OperationalAttentionQueue({orders,selectedDateKey,onFinance}:{or
   const [expanded,setExpanded]=useState(false);
   const [query,setQuery]=useState('');
   const [filter,setFilter]=useState<AttentionKind|'all'>('all');const [showAll,setShowAll]=useState(false);
+  const [additionalLimit,setAdditionalLimit]=useState(20);
   const tasks=useMemo(()=>operationalAttentionTasks(orders).sort((a,b)=>kindPriority[a.kind]-kindPriority[b.kind] || a.customer.localeCompare(b.customer,'pt-BR')),[orders]);
   const counts=useMemo(()=>tasks.reduce((acc,task)=>{acc[task.kind]++;return acc;},{site_confirmation:0,site_dispatch:0,pix_pending:0,collect:0} as Record<AttentionKind,number>),[tasks]);
   const effectiveFilter = filter !== 'all' && counts[filter] === 0 ? 'all' : filter;
@@ -41,7 +42,9 @@ export function OperationalAttentionQueue({orders,selectedDateKey,onFinance}:{or
       return normalized.split(/\s+/).every(token=>haystack.includes(token));
     });
   },[tasks,effectiveFilter,query]);
-  const shown=showAll?visible:visible.slice(0,8);
+  // Expansão em lotes: nunca montar dezenas/centenas de ações em um único toque.
+  const shown=showAll?visible.slice(0,additionalLimit):visible.slice(0,8);
+  const remaining=Math.max(0,visible.length-shown.length);
   const hasActiveSearch=Boolean(query.trim())||effectiveFilter!=='all';
   if(!tasks.length)return null;
   const entries: {kind:AttentionKind;icon:typeof ShoppingBag}[]=[{kind:'site_confirmation',icon:ShoppingBag},{kind:'site_dispatch',icon:Package},{kind:'pix_pending',icon:AlertCircle},{kind:'collect',icon:CreditCard}];
@@ -75,7 +78,7 @@ export function OperationalAttentionQueue({orders,selectedDateKey,onFinance}:{or
       </button>)}
       </div>
       {!visible.length&&<div role="status" className="mt-2 rounded-xl border border-dashed border-zinc-700 p-4 text-center text-xs text-zinc-400">Nenhuma pendência encontrada. Ajuste a busca ou selecione “Todas”.</div>}
-      {visible.length>8&&<button type="button" aria-expanded={showAll} onClick={()=>setShowAll(v=>!v)} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-xl border border-zinc-700/70 bg-zinc-900/60 px-3 text-xs font-bold text-zinc-200">{showAll?'Mostrar menos':`Mostrar todas as ${visible.length} ações`}</button>}
+      {visible.length>8&&<button type="button" aria-expanded={showAll} onClick={()=>{if(!showAll){setShowAll(true);setAdditionalLimit(20)}else if(remaining>0){setAdditionalLimit(limit=>limit+20)}else{setShowAll(false);setAdditionalLimit(20)}}} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-xl border border-zinc-700/70 bg-zinc-900/60 px-3 text-xs font-bold text-zinc-200">{showAll?(remaining>0?`Ver mais ${Math.min(20,remaining)} ações · ${shown.length} de ${visible.length}`:'Mostrar menos'):`Ver mais ações · ${visible.length} no total`}</button>}
       <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Confirmação comercial pertence ao DFL Site. Os atalhos abrem a tela responsável; nenhuma ação é executada automaticamente.</p>
     </div>}
   </section>;

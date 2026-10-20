@@ -14,8 +14,11 @@ import type { Delivery, DeliveryPaymentState, PaymentMethod } from '@/types';
 export const deriveDeliveryPaymentState = (
   input: Pick<Delivery, 'is_paid' | 'payment_method' | 'payment_state'>,
 ): DeliveryPaymentState => {
+  // O campo booleano também é gravado por fluxos e importadores legados.
+  // Uma atualização parcial pode deixar payment_state antigo após a quitação.
+  // Nunca solicitar uma segunda cobrança quando a baixa is_paid já foi registrada.
+  if (input.is_paid === true) return 'paid';
   if (input.payment_state) return input.payment_state;
-  if (input.is_paid) return 'paid';
 
   // Dinheiro/cartão são cobrados fisicamente na entrega.
   if (

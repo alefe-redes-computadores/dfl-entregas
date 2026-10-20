@@ -19,7 +19,9 @@ function write(ids: string[]) {
   if (typeof window === 'undefined') return;
   try {
     const safe = cleanIds(ids);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
+    const serialized = JSON.stringify(safe);
+    if (localStorage.getItem(STORAGE_KEY) === serialized) return;
+    localStorage.setItem(STORAGE_KEY, serialized);
     window.dispatchEvent(new CustomEvent(SITE_UNREAD_EVENT, { detail: safe.length }));
   } catch {
     // O badge nunca pode interromper a sincronizacao.
@@ -27,7 +29,13 @@ function write(ids: string[]) {
 }
 
 export function markUnreadSiteOrders(ids: string[]) {
-  write([...ids, ...readUnreadSiteOrderIds()]);
+  // Evita disparar atualização da UI quando a sincronização não trouxe pedido novo.
+  const incoming = cleanIds(ids);
+  if (!incoming.length) return;
+  const current = readUnreadSiteOrderIds();
+  const existing = new Set(current);
+  if (incoming.every(id => existing.has(id))) return;
+  write([...incoming, ...current]);
 }
 
 export function acknowledgeSiteOrders(ids?: string[]) {

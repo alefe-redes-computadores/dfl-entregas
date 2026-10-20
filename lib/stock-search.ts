@@ -9,11 +9,13 @@ export function normalizeStockSearch(value: string) {
     .trim();
 }
 
-function editDistance(a: string, b: string) {
+function editDistance(a: string, b: string, maxDistance = Infinity) {
+  if (Math.abs(a.length - b.length) > maxDistance) return maxDistance + 1;
   const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
   for (let i = 1; i <= a.length; i += 1) {
     let diagonal = previous[0];
     previous[0] = i;
+    let rowMin = previous[0];
     for (let j = 1; j <= b.length; j += 1) {
       const above = previous[j];
       previous[j] = Math.min(
@@ -22,7 +24,9 @@ function editDistance(a: string, b: string) {
         diagonal + (a[i - 1] === b[j - 1] ? 0 : 1),
       );
       diagonal = above;
+      rowMin = Math.min(rowMin, previous[j]);
     }
+    if (rowMin > maxDistance) return maxDistance + 1;
   }
   return previous[b.length];
 }
@@ -46,8 +50,8 @@ export function stockSearchScore(product: StockProduct, query: string) {
     const best = words.reduce((current, word) => {
       if (word.startsWith(token)) return Math.max(current, 90);
       const tolerance = token.length >= 7 ? 2 : token.length >= 4 ? 1 : 0;
-      if (tolerance && Math.abs(word.length - token.length) <= tolerance) {
-        const distance = editDistance(word, token);
+      if (tolerance && word.length <= 40 && token.length <= 40 && Math.abs(word.length - token.length) <= tolerance) {
+        const distance = editDistance(word, token, tolerance);
         if (distance <= tolerance) return Math.max(current, 70 - distance * 10);
       }
       return current;

@@ -8,6 +8,8 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { routeIfoodCodeProgress } from '@/lib/operational-home-actions';
 import type { Delivery, Route } from '@/types';
 import { extractLatLngFromMapsUrl } from '@/lib/maps';
 import { useAppStore } from '@/store/useAppStore';
@@ -34,6 +36,7 @@ export function OperationalCommandCenter({
   deliveries: Delivery[];
 }) {
   const router = useRouter();
+  const [showAllActions, setShowAllActions] = useState(false);
   const confirmationBacklog = useAppStore(
     (state) => state.ifoodPendingConfirmations,
   );
@@ -47,13 +50,13 @@ export function OperationalCommandCenter({
   // Backlog comercial global: não depende do dia nem da rota.
   // A regra canônica também exige pedido operacionalmente não concluído:
   // snapshot comercial "Pendente" em pedido já finalizado não gera ação fantasma.
-  const pendingSiteOrders = allDeliveries
+  const pendingSiteOrders = useMemo(() => allDeliveries
     .filter(isSiteOrderAwaitingConfirmation)
     .sort((a, b) => {
       const aTime = Date.parse(a.site_order_status_updated_at || a.createdAt || '');
       const bTime = Date.parse(b.site_order_status_updated_at || b.createdAt || '');
       return (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
-    });
+    }), [allDeliveries]);
 
   const oldestPendingSiteOrder = pendingSiteOrders[0];
   const oldestPendingSiteOrderLabel =
@@ -75,19 +78,9 @@ export function OperationalCommandCenter({
   );
 
   const openRouteIds = new Set(openRoutes.map((route) => route.id));
-  const activeRouteIfood = deliveries.filter(
-    (delivery) =>
-      delivery.origin === 'ifood' &&
-      Boolean(delivery.route_id) &&
-      openRouteIds.has(delivery.route_id as string),
-  );
-  const collectedRouteCodes = activeRouteIfood.filter(
-    (delivery) =>
-      delivery.confirmation_code?.replace(/\D/g, '').length === 4,
-  ).length;
-  const missingRouteCodes = Math.max(
-    0,
-    activeRouteIfood.length - collectedRouteCodes,
+  const routeCodes = useMemo(
+    () => routeIfoodCodeProgress(deliveries, openRouteIds),
+    [deliveries, routes],
   );
 
   const externalPending = confirmationBacklog.filter(
@@ -117,12 +110,12 @@ export function OperationalCommandCenter({
         )}`
       : '/confirmacoes';
 
-  const settlementTasks = buildPendingMotoboySettlements({
+  const settlementTasks = useMemo(() => buildPendingMotoboySettlements({
     motoboys,
     routes,
     deliveries,
     expenses: operationalExpenses,
-  });
+  }), [motoboys, routes, deliveries, operationalExpenses]);
   const firstSettlementTask = settlementTasks[0];
 
   const rows = [
@@ -192,11 +185,9 @@ export function OperationalCommandCenter({
       key: 'ifood-code',
       label: 'Códigos iFood da rota',
       description:
-        missingRouteCodes > 0
-          ? `${collectedRouteCodes} de ${activeRouteIfood.length} coletados · acompanhe durante a rota`
-          : 'Todos os códigos foram coletados · confirme após finalizar a rota',
-      count: activeRouteIfood.length,
-      badge: `${collectedRouteCodes}/${activeRouteIfood.length}`,
+        `${routeCodes.collected} de ${routeCodes.active} coletados · falta registrar durante a rota`,
+      count: routeCodes.missing,
+      badge: `${routeCodes.collected}/${routeCodes.active}`,
       href: '/confirmacoes',
       icon: ShieldAlert,
       tone: 'sky',
@@ -218,8 +209,9 @@ export function OperationalCommandCenter({
     .filter((item) => item.count > 0)
     .sort((a, b) => b.priority - a.priority);
 
-  const critical = visibleActionRows.filter((item) => item.priority >= 80);
-  const visibleRows = (critical.length > 0 ? critical : visibleActionRows).slice(0, 2);
+  // Duas prioridades à primeira vista; as demais são acessíveis sem ficar ocultas.
+  const visibleRows = showAllActions ? visibleActionRows : visibleActionRows.slice(0, 2);
+  const hiddenActions = visibleActionRows.length - visibleRows.length;
 
   if (visibleRows.length === 0) {
     if (openRoutes.length === 0 && pending.length === 0) return null;
@@ -254,11 +246,9 @@ export function OperationalCommandCenter({
             Só aparece o que pede decisão agora
           </p>
         </div>
-        {visibleActionRows.length > visibleRows.length && (
-          <span className="text-[9px] font-black text-zinc-700">
-            +{visibleActionRows.length - visibleRows.length}
-          </span>
-        )}
+        <span className="rounded-full border border-zinc-700/70 bg-zinc-950/50 px-2.5 py-1 text-[10px] font-black tabular-nums text-zinc-300">
+          {visibleActionRows.length} frente{visibleActionRows.length === 1 ? '' : 's'}
+        </span>
       </div>
 
       <div className="space-y-1.5">
@@ -297,6 +287,17 @@ export function OperationalCommandCenter({
           );
         })}
       </div>
+      {visibleActionRows.length > 2 && (
+        <button
+          type="button"
+          aria-expanded={showAllActions}
+          onClick={() => setShowAllActions((value) => !value)}
+          className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/30 px-3 text-[11px] font-bold text-zinc-300 transition active:bg-zinc-800"
+        >
+          {showAllActions ? 'Recolher ações' : `Ver mais ${hiddenActions} ação${hiddenActions === 1 ? '' : 'ões'}`}
+          <ChevronRight size={14} className={showAllActions ? '-rotate-90' : 'rotate-90'} />
+        </button>
+      )}
     </section>
   );
 }

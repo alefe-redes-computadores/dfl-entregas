@@ -31,7 +31,8 @@ export function operationalAttentionTasks(orders: readonly Delivery[]): Attentio
     const customer = (delivery.customer_name || 'Cliente não informado').trim();
     const orderRef = String(delivery.external_order_id || delivery.order_id || delivery.ifood_id || '').trim();
     const address = (delivery.address_string || '').trim();
-    const amount = Math.max(0, Number(delivery.customer_charge ?? delivery.value ?? 0) || 0);
+    const rawAmount = Number(delivery.customer_charge ?? delivery.value ?? 0);
+    const amount = Number.isFinite(rawAmount) ? Math.max(0, rawAmount) : 0;
     const add = (kind: AttentionKind) => tasks.push({ key: `${delivery.id}:${kind}`, deliveryId: delivery.id, kind, customer, orderRef, address, amount });
     if (delivery.source_system === 'dfl_site') {
       if (isSiteOrderAwaitingConfirmation(delivery)) add('site_confirmation');

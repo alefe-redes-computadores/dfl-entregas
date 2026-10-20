@@ -1,6 +1,8 @@
 // components/home/OperationalRadar.tsx
 'use client';
 
+import { useMemo } from 'react';
+
 import {
   AlertTriangle,
   CheckCircle2,
@@ -98,6 +100,7 @@ export function OperationalRadar() {
     highlightLimit: 2,
   });
   const routes = useAppStore((state) => state.routes);
+  const routeIds = useMemo(() => new Set(routes.map((route) => route.id)), [routes]);
   const { hiddenIds, hideForToday, mutedToday, muteForToday } = useHiddenInsightsToday();
 
   if (mutedToday) return null;
@@ -118,7 +121,7 @@ export function OperationalRadar() {
   const candidateRouteId =
     signal.category === 'routes'
       ? signal.entityIds?.find((id) =>
-          routes.some((route) => route.id === id),
+          routeIds.has(id),
         )
       : undefined;
 

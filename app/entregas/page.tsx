@@ -121,12 +121,18 @@ export default function DeliveriesPage() {
     [deliveries, selectedDate],
   );
 
+  // A lista diária pode conter centenas de pedidos. Resolver cliente e rota
+  // apenas uma vez por atualização do snapshot evita buscas N×M na renderização.
+  const routeById = useMemo(() => new Map(routes.map((route) => [route.id, route])), [routes]);
+  const customerById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
+  const normalizedQuery = useMemo(() => normalize(query.trim()), [query]);
+
   const rows = useMemo(
     () =>
       dayDeliveries
         .map((delivery) => {
-          const route = routes.find((item) => item.id === delivery.route_id);
-          const customer = customers.find((item) => item.id === delivery.customer_id);
+          const route = routeById.get(delivery.route_id || '');
+          const customer = customerById.get(delivery.customer_id || '');
           const mode = getFulfillmentMode(delivery);
           const logistics = isDeliveryFulfillment(delivery);
 
@@ -164,7 +170,7 @@ export default function DeliveriesPage() {
 
           const matchesOrigin = origin === 'todas' || delivery.origin === origin;
           const matchesFulfillment = fulfillment === 'todas' || mode === fulfillment;
-          const matchesQuery = !query.trim() || haystack.includes(normalize(query));
+          const matchesQuery = !normalizedQuery || haystack.includes(normalizedQuery);
 
           return matchesStatus && matchesOrigin && matchesFulfillment && matchesQuery;
         })
@@ -172,13 +178,13 @@ export default function DeliveriesPage() {
           (a, b) =>
             new Date(deliveryDate(a.delivery)).getTime() - new Date(deliveryDate(b.delivery)).getTime(),
         ),
-    [customers, dayDeliveries, fulfillment, origin, query, routes, status],
+    [customerById, dayDeliveries, fulfillment, origin, normalizedQuery, routeById, status],
   );
 
   const totals = useMemo(() => {
     const attention = dayDeliveries.filter((delivery) => {
       if (isCancelledSiteDelivery(delivery)) return false;
-      const route = routes.find((item) => item.id === delivery.route_id);
+      const route = routeById.get(delivery.route_id || '');
       const logistics = isDeliveryFulfillment(delivery);
       return (
         (logistics && (!delivery.route_id || !route || !delivery.address_string)) ||
@@ -193,7 +199,7 @@ export default function DeliveriesPage() {
       attention,
       cancelled: dayDeliveries.filter(isCancelledSiteDelivery).length,
     };
-  }, [dayDeliveries, routes]);
+  }, [dayDeliveries, routeById]);
 
   const calendarDays = useMemo(() => {
     const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);

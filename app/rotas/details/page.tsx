@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -55,14 +55,10 @@ export default function RouteDetailsPage() {
   const deliveries = useMemo(
     () =>
       allDeliveries
-        .filter((item) => item.route_id === id && !isCancelledSiteDelivery(item))
-        .sort(
-          (a, b) =>
-            (a.order_index ?? 9999) -
-            (b.order_index ?? 9999),
-        ),
+        .filter((item) => item.route_id === id && !isCancelledSiteDelivery(item)),
     [allDeliveries, id],
   );
+  const physicalStops = useMemo(() => groupDeliveriesByStop(deliveries), [deliveries]);
   const startRoute = useAppStore((state) => state.startRoute);
   const closeRoute = useAppStore((state) => state.closeRoute);
   const reopenRoute = useAppStore((state) => state.reopenRoute);
@@ -71,6 +67,9 @@ export default function RouteDetailsPage() {
 
   const [busy, setBusy] = useState(false);
   const [departureChecklistOpen, setDepartureChecklistOpen] = useState(false);
+  const [visibleStops, setVisibleStops] = useState(8);
+
+  useEffect(() => setVisibleStops(8), [id]);
 
   if (!route) {
     return (
@@ -96,7 +95,8 @@ export default function RouteDetailsPage() {
 
   const pending = deliveries.filter((item) => !item.completed).length;
   const completed = deliveries.length - pending;
-  const totalStops = groupDeliveriesByStop(deliveries).length;
+  const totalStops = physicalStops.length;
+  const visibleStopGroups = physicalStops.slice(0, visibleStops);
   const routeFinance = sumDeliveryFinance(deliveries);
   const total = routeFinance.economicValue;
   const customerCharge = routeFinance.customerCharge;
@@ -260,11 +260,11 @@ export default function RouteDetailsPage() {
           <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/55 p-3">
             <Wallet size={15} className="text-emerald-400" />
             <p className="mt-2 text-lg font-black text-emerald-400">
-              R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {isPrivacyMode ? 'R$ •••' : `R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             </p>
             {Math.abs(total - customerCharge) > 0.009 && (
               <p className="mt-1 text-[9px] font-bold text-zinc-600">
-                Cobrado: R$ {customerCharge.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                Cobrado: {isPrivacyMode ? 'R$ •••' : `R$ ${customerCharge.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               </p>
             )}
             <p className="text-[10px] text-zinc-600">Valor dos pedidos</p>
@@ -335,46 +335,98 @@ export default function RouteDetailsPage() {
         </div>
 
         <div className="space-y-2">
-          {deliveries.map((delivery, index) => (
-            <button
-              key={delivery.id}
-              onClick={() =>
-                router.push(`/entregas/details?id=${delivery.id}${dateSuffix}`)
-              }
-              className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left active:scale-[0.99] ${
-                delivery.completed
-                  ? 'border-emerald-500/15 bg-emerald-500/[.025]'
-                  : 'border-zinc-800 bg-zinc-900/45'
-              }`}
-            >
-              <span
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-black ${
-                  delivery.completed
-                    ? 'bg-emerald-500/10 text-emerald-400'
-                    : 'bg-zinc-800 text-zinc-400'
+          {visibleStopGroups.map((stop, index) => {
+            const allDone = stop.pending.length === 0;
+            const main = stop.representative;
+            return (
+              <section
+                key={stop.key}
+                className={`overflow-hidden rounded-2xl border ${
+                  allDone
+                    ? 'border-emerald-500/20 bg-emerald-500/[.025]'
+                    : 'border-zinc-800 bg-zinc-900/45'
                 }`}
               >
-                {index + 1}
-              </span>
+                <div className="flex items-center gap-3 px-3 py-3">
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-black ${
+                      allDone ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-200'
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-black text-zinc-200">
+                      Parada {index + 1}
+                      {stop.deliveries.length > 1 && (
+                        <span className="ml-2 text-[10px] font-semibold text-zinc-500">
+                          {stop.deliveries.length} pedidos
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-1 truncate text-[11px] text-zinc-500">
+                      <MapPin size={10} className="mr-1 inline" />
+                      {main.address_string || 'Endereço não informado'}
+                    </p>
+                  </div>
+                  {allDone ? (
+                    <CheckCircle2 size={18} className="shrink-0 text-emerald-400" aria-label="Parada concluída" />
+                  ) : (
+                    <span className="text-[10px] font-bold text-amber-400">
+                      {stop.pending.length} pendente{stop.pending.length === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
 
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-black text-zinc-200">
-                  {delivery.customer_name ||
-                    `Pedido ${delivery.order_id || 'sem número'}`}
-                </p>
-                <p className="mt-1 truncate text-[11px] text-zinc-600">
-                  <MapPin size={10} className="mr-1 inline" />
-                  {delivery.address_string || 'Endereço não informado'}
-                </p>
-              </div>
+                <div className="border-t border-zinc-800/70 px-2 pb-2">
+                  {stop.deliveries.map((delivery) => (
+                    <button
+                      key={delivery.id}
+                      type="button"
+                      onClick={() => router.push(`/entregas/details?id=${delivery.id}${dateSuffix}`)}
+                      className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-2 text-left active:bg-zinc-800/60"
+                      aria-label={`Abrir detalhes de ${delivery.customer_name || `pedido ${delivery.order_id || delivery.id}`}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold text-zinc-200">
+                          {delivery.customer_name || `Pedido ${delivery.order_id || 'sem número'}`}
+                        </p>
+                        {delivery.order_id && (
+                          <p className="mt-0.5 truncate text-[10px] text-zinc-500">
+                            Pedido {delivery.order_id}
+                          </p>
+                        )}
+                      </div>
+                      {delivery.completed ? (
+                        <CheckCircle2 size={15} className="shrink-0 text-emerald-400" />
+                      ) : (
+                        <ChevronRight size={15} className="shrink-0 text-zinc-500" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
 
-              {delivery.completed ? (
-                <CheckCircle2 size={18} className="shrink-0 text-emerald-400" />
-              ) : (
-                <ChevronRight size={17} className="shrink-0 text-zinc-700" />
-              )}
+          {totalStops > visibleStopGroups.length && (
+            <button
+              type="button"
+              onClick={() => setVisibleStops((count) => Math.min(totalStops, count + 8))}
+              className="min-h-11 w-full rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-xs font-bold text-zinc-200 active:bg-zinc-800"
+            >
+              Mostrar mais {Math.min(8, totalStops - visibleStopGroups.length)} paradas
             </button>
-          ))}
+          )}
+          {visibleStops > 8 && (
+            <button
+              type="button"
+              onClick={() => setVisibleStops(8)}
+              className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-bold text-zinc-500 active:text-zinc-200"
+            >
+              Recolher sequência
+            </button>
+          )}
 
           {deliveries.length === 0 && (
             <div className="rounded-2xl border border-dashed border-zinc-800 py-9 text-center">

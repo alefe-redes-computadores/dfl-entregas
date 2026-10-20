@@ -7,6 +7,7 @@ import { committedStockQuantityMap } from '@/lib/stock-shopping';
 import {
   Suspense,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -123,7 +124,13 @@ function Content() {
       state.addStockMovement,
   );
 
-  const activeProducts = useAppStore((state) => state.stockProducts.filter((item) => item.active));
+  // O seletor deve retornar uma referência estável; filter() aqui causava
+  // renderizações extras a cada notificação do Zustand.
+  const stockProducts = useAppStore((state) => state.stockProducts);
+  const activeProducts = useMemo(
+    () => stockProducts.filter((item) => item.active),
+    [stockProducts],
+  );
   const stockSupplies = useAppStore((state) => state.stockSupplies);
 
   const [type, setType] =
@@ -264,10 +271,56 @@ function Content() {
     ) ||
     insufficientStock;
 
+  // Conferir e avançar não é uma movimentação: não cria lançamento zero,
+  // não altera custos e não gera notificação de estoque artificial.
+  const skipUnchangedAndNext = async () => {
+    const queue = (() => { try { return JSON.parse(sessionStorage.getItem('dfl-stock-review-queue') || '[]') as string[]; } catch { return []; } })();
+    const ordered = queue.length ? queue.map(pid => activeProducts.find(item => item.id === pid)).filter(Boolean) : activeProducts;
+    const index = ordered.findIndex(item => item?.id === product.id);
+    const next = index >= 0 ? ordered[index + 1] : undefined;
+    sessionStorage.setItem('dfl-stock-anchor', next?.id || product.id);
+    if (next) {
+      toast.success('Saldo conferido, sem alteração.');
+      router.replace(`/estoque/movimentar?id=${next.id}&from=estoque`);
+      return;
+    }
+    try {
+      const changes = JSON.parse(sessionStorage.getItem('dfl-stock-review-changes') || '[]');
+      if (changes.length) await notifyStockThresholdChanges(changes, useAppStore.getState().storeSettings.notificationPreferences);
+    } catch {}
+    sessionStorage.removeItem('dfl-stock-review-changes');
+    sessionStorage.removeItem('dfl-stock-review-queue');
+    toast.success('Conferência concluída. Nenhum movimento criado para itens sem alteração.');
+    router.replace('/estoque');
+  };
+
   const submit = async (
     event: React.FormEvent,
   ) => {
     event.preventDefault();
+
+    // O fluxo em sequência permite conferir e seguir sem entrada/saída fictícia.
+    // Para zerar um saldo positivo, informe 0 na operação Contagem ou Ajuste.
+    if (from === 'estoque' && submitIntent === 'next' &&
+      (!quantity.trim() ||
+        ((type === 'contagem' || type === 'ajuste') &&
+          !quantityInvalid &&
+          Math.abs(resultingBalance - product.current_quantity) <= stockQuantityTolerance(product.unit)))) {
+      if (savingRef.current) return;
+      savingRef.current = true;
+      setBusy(true);
+      try { await skipUnchangedAndNext(); }
+      finally { savingRef.current = false; setBusy(false); }
+      return;
+    }
+
+    // Contagem/ajuste com saldo idêntico é conferência, não movimentação.
+    if ((type === 'contagem' || type === 'ajuste') && !quantityInvalid &&
+        Math.abs(resultingBalance - product.current_quantity) <= stockQuantityTolerance(product.unit)) {
+      toast.success('Saldo conferido sem alteração. Nenhuma movimentação criada.');
+      router.replace(from === 'estoque' ? '/estoque' : `/estoque/detalhes?id=${product.id}`);
+      return;
+    }
 
     if (quantityInvalid) {
       setAttempted(true);
@@ -833,8 +886,10 @@ function Content() {
               <SkipForward size={18} />
               {busy &&
               submitIntent === 'next'
-                ? 'Salvando...'
-                : 'Salvar e próximo'}
+                ? 'Processando...'
+                : !quantity.trim() || ((type === 'contagem' || type === 'ajuste') && !quantityInvalid && Math.abs(resultingBalance - product.current_quantity) <= stockQuantityTolerance(product.unit))
+                  ? 'Conferido · próximo'
+                  : 'Salvar e próximo'}
             </button>
           )}
         </div>

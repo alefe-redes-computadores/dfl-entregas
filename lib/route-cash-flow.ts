@@ -1,5 +1,6 @@
 import type { Delivery } from '@/types';
-import { deliveryCustomerCharge } from '@/lib/delivery-finance';
+import { deliveryCustomerCharge, deriveDeliveryPaymentState } from '@/lib/delivery-finance';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 
 const safeMoney = (value: unknown) => {
   const number = Number(value || 0);
@@ -24,7 +25,8 @@ export function routeCashFlow(deliveries: Delivery[], initialCashInput = 0) {
   const cashOrders = deliveries
     .filter(
       (delivery) =>
-        !delivery.is_paid &&
+        !isCancelledSiteDelivery(delivery) &&
+        deriveDeliveryPaymentState(delivery) === 'collect_on_delivery' &&
         delivery.payment_method === 'dinheiro',
     )
     .map((delivery) => {
@@ -78,6 +80,12 @@ export function routeCashFlow(deliveries: Delivery[], initialCashInput = 0) {
     unusedInitialCash,
     expectedPhysicalReturn,
   };
+}
+
+/** Ação Dinheiro só existe quando há cédulas na bag ou cobrança física real. */
+export function hasPhysicalCashForRoute(deliveries: Delivery[], initialCash = 0): boolean {
+  const flow = routeCashFlow(deliveries, initialCash);
+  return flow.initialCash > 0 || flow.cashOrders.length > 0;
 }
 
 export function parseMoneyDraft(raw: string) {

@@ -33,6 +33,7 @@ import {
   commercialPurchasePlan,
 } from '@/lib/stock-shopping';
 import { humanPurchasePlan } from '@/lib/stock-commercial-display-v2';
+import { invalidStockPurchaseSelections, validateStockPurchaseQuantity } from '@/lib/stock-purchase-draft';
 import { guardedStockRecommendation } from '@/lib/stock-recommendation-guard';
 import { formatCommercialPlan, isDiscretePurchaseUnit,
   normalizeTypedPurchaseQuantity,
@@ -243,16 +244,26 @@ export default function ShoppingList() {
   ).filter((product) => !showOnlySelected || selected[product.id]),
   [showAll, products, suggested, query, showOnlySelected, selected]);
 
-  const chosen = products.filter(
-    (product) =>
-      selected[product.id] &&
-      parseStockQuantityInput(
-        quantities[product.id] || '0',
-      ) > 0,
+  const selectedProducts = products.filter((product) => selected[product.id]);
+  const purchaseUnitFor = (product: StockProduct) =>
+    commercialPurchasePlan(product, 1, 0, presentationIds[product.id]).presentation?.purchase_unit || product.unit;
+  const invalidSelected = invalidStockPurchaseSelections(
+    products, selected, quantities, purchaseUnitFor,
+  );
+  const chosen = selectedProducts.filter((product) =>
+    validateStockPurchaseQuantity(quantities[product.id], purchaseUnitFor(product)).valid,
   );
 
   const create = async () => {
-    if (busy || !chosen.length) return;
+    if (busy) return;
+    if (invalidSelected.length) {
+      toast.error(`Revise a quantidade de ${invalidSelected[0].name}. Nenhum item será omitido silenciosamente.`);
+      return;
+    }
+    if (!chosen.length) {
+      toast.error('Selecione ao menos um produto com quantidade válida.');
+      return;
+    }
     setBusy(true);
 
     try {
@@ -315,8 +326,8 @@ export default function ShoppingList() {
     }
   };
 
-  const selectedCount = chosen.length;
-  const hiddenSelectedCount = chosen.filter((item) => !displayed.some((shown) => shown.id === item.id)).length;
+  const visibleIds = new Set(displayed.map((item) => item.id));
+  const hiddenSelectedCount = selectedProducts.filter((item) => !visibleIds.has(item.id)).length;
   const selectableDisplayed = displayed.filter(product => !selected[product.id]);
   const selectedDisplayedCount = displayed.length - selectableDisplayed.length;
   const toggleVisibleSelection = () => {
@@ -392,9 +403,13 @@ export default function ShoppingList() {
           {query && <button type="button" onClick={() => setQuery('')} aria-label="Limpar busca"><X size={16} className="text-zinc-400" /></button>}
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <div aria-live="polite" className="flex items-center gap-2 text-xs font-bold text-zinc-300"><ShoppingBasket size={16} className="text-amber-400" />{selectedCount} {selectedCount === 1 ? 'item escolhido' : 'itens escolhidos'}</div>
+          <div aria-live="polite" className="flex items-center gap-2 text-xs font-bold text-zinc-300"><ShoppingBasket size={16} className="text-amber-400" />{selectedProducts.length} {selectedProducts.length === 1 ? 'item escolhido' : 'itens escolhidos'}</div>
           <button type="button" aria-pressed={showOnlySelected} onClick={() => {setShowOnlySelected((current) => !current); if(!showOnlySelected) { setShowAll(true); setQuery(''); }}} className={`min-h-10 rounded-xl border px-3 text-[11px] font-bold ${showOnlySelected ? 'border-amber-500/50 bg-amber-500/10 text-amber-300' : 'border-zinc-700 text-zinc-400'}`}>{showOnlySelected ? 'Exibindo escolhidos' : 'Revisar escolhidos'}</button>
         </div>
+        {!!invalidSelected.length && <div role="alert" className="mt-3 rounded-xl border border-red-500/30 bg-red-500/[.07] px-3 py-2 text-[11px] font-bold text-red-300">
+          {invalidSelected.length} item(ns) selecionado(s) com quantidade inválida ou arredondada para zero. Corrija antes de montar a compra. Primeiro: {invalidSelected[0].name}.
+          <button type="button" onClick={()=>{setShowAll(true);setShowOnlySelected(true);setQuery('')}} className="ml-2 underline underline-offset-2">Revisar</button>
+        </div>}
         {!!displayed.length && <div role="group" aria-label="Seleção em lote de produtos" className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800 pt-2">
           <span role="status" aria-live="polite" className="text-[11px] text-zinc-400">{displayed.length} visíveis · {selectedDisplayedCount} selecionados nesta lista</span>
           <button type="button" onClick={toggleVisibleSelection} disabled={busy} className="min-h-11 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-[11px] font-bold text-amber-300 disabled:opacity-50">{selectableDisplayed.length ? 'Selecionar visíveis' : 'Desmarcar visíveis'}</button>
@@ -616,7 +631,9 @@ export default function ShoppingList() {
                       [product.id]: String(Number(Math.max(0, normalized).toFixed(3))),
                     }));
                   }}
-                  className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-right font-black text-zinc-100 outline-none"
+                  aria-label={`Quantidade de compra de ${product.name}`}
+                  aria-invalid={!!selected[product.id] && !validateStockPurchaseQuantity(quantities[product.id] ?? String(purchasePlan?.purchaseQuantity || 1), purchasePlan?.presentation?.purchase_unit || product.unit).valid}
+                  className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-right font-black text-zinc-100 outline-none aria-invalid:border-red-500/60"
                 />
                 </div>
               </div>
@@ -661,15 +678,17 @@ export default function ShoppingList() {
       <a href="#dfl-purchase-review" className="mb-2 mt-5 flex min-h-10 items-center justify-center rounded-xl border border-zinc-800 text-[11px] font-bold text-zinc-400">Voltar à busca e revisão</a>
       <button
         onClick={create}
-        disabled={busy || !chosen.length}
+        disabled={busy || !selectedProducts.length}
         className="sticky bottom-[calc(var(--dfl-safe-bottom)+12px)] z-20 mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-amber-300/40 bg-amber-500 font-black text-zinc-950 shadow-[0_8px_35px_rgba(0,0,0,.45)] disabled:opacity-40"
       >
         <Save size={18} />
         {busy
           ? 'Montando...'
-          : `Montar compra com ${chosen.length} item${
-              chosen.length === 1 ? '' : 's'
-            }`}
+          : invalidSelected.length
+            ? `Revisar ${invalidSelected.length} quantidade(s)`
+            : `Montar compra com ${chosen.length} item${
+                chosen.length === 1 ? '' : 's'
+              }`}
       </button>
     </div>
   );

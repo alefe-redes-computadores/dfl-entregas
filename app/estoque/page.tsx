@@ -19,26 +19,31 @@ import { formatCommercialPlan } from '@/lib/stock-commercial';
 import { humanPurchasePlan, naturalStockNameCompare, physicalStockDisplay } from '@/lib/stock-commercial-display-v2';
 import { buildDailyStockSignal } from '@/lib/stock-daily-plan';
 import { guardedStockRecommendation } from '@/lib/stock-recommendation-guard';
-import { commercialCoverage } from '@/lib/stock-commercial-health';
+import { commercialCoverage, commercialProductStatus } from '@/lib/stock-commercial-health';
+import { parseStockPanelPreferences } from '@/lib/stock-panel-preferences';
+import { readStockUiStorage, writeStockUiStorage, removeStockUiStorage } from '@/lib/stock-local-ui-storage';
 import type { StockProduct } from '@/types';
 import { rankStockProducts } from '@/lib/stock-search';
 
 export default function StockPage() {
   const router=useRouter(); const products=useAppStore(s=>s.stockProducts); const movements=useAppStore(s=>s.stockMovements);const supplies=useAppStore(s=>s.stockSupplies);const committedMap=useMemo(()=>committedStockQuantityMap(supplies),[supplies]);
-  const [query,setQuery]=useState(()=>typeof window==='undefined'?'':(sessionStorage.getItem('dfl-stock-query')||'')); const [filterOpen,setFilterOpen]=useState(false); const [brainOpen,setBrainOpen]=useState(false); const [reviewOpen,setReviewOpen]=useState(false); const [moreOpen,setMoreOpen]=useState(false);
-  const [planningTab,setPlanningTab]=useState<'dia'|'montar'>(()=>typeof window==='undefined'?'dia':((localStorage.getItem('dfl-stock-planning-tab') as 'dia'|'montar')||'dia'));
-  const [filter,setFilter]=useState<'todos'|'baixo'|'zero'>(()=>typeof window==='undefined'?'todos':((localStorage.getItem('dfl-stock-filter') as 'todos'|'baixo'|'zero')||'todos'));
-  const [collapsed,setCollapsed]=useState<Record<string,boolean>>(()=>{if(typeof window==='undefined')return{};try{return JSON.parse(localStorage.getItem('dfl-stock-collapsed')||'{}')}catch{return{}}});
+  const [query,setQuery]=useState(()=>readStockUiStorage('session','dfl-stock-query')||''); const [filterOpen,setFilterOpen]=useState(false); const [brainOpen,setBrainOpen]=useState(false); const [reviewOpen,setReviewOpen]=useState(false); const [moreOpen,setMoreOpen]=useState(false); const [commercialOnly,setCommercialOnly]=useState(false);
+  const [planningTab,setPlanningTab]=useState<'dia'|'montar'>(()=>typeof window==='undefined'?'dia':parseStockPanelPreferences({planningTab: readStockUiStorage('local','dfl-stock-planning-tab')}).planningTab);
+  const [filter,setFilter]=useState<'todos'|'baixo'|'zero'>(()=>typeof window==='undefined'?'todos':parseStockPanelPreferences({filter:readStockUiStorage('local','dfl-stock-filter')}).filter);
+  const [collapsed,setCollapsed]=useState<Record<string,boolean>>(()=>typeof window==='undefined'?{}:parseStockPanelPreferences({collapsed:readStockUiStorage('local','dfl-stock-collapsed')}).collapsed);
+  const [categoryLimits,setCategoryLimits]=useState<Record<string,number>>({});
   const restoredScroll=useRef(false);
-  useEffect(()=>{localStorage.setItem('dfl-stock-filter',filter)},[filter]);
-  useEffect(()=>{sessionStorage.setItem('dfl-stock-query',query)},[query]);
-  useEffect(()=>{localStorage.setItem('dfl-stock-collapsed',JSON.stringify(collapsed))},[collapsed]);
-  useEffect(()=>{localStorage.setItem('dfl-stock-planning-tab',planningTab)},[planningTab]);
+  const scrollFrame=useRef<number|null>(null);
+  useEffect(()=>{writeStockUiStorage('local','dfl-stock-filter',filter)},[filter]);
+  useEffect(()=>{writeStockUiStorage('session','dfl-stock-query',query)},[query]);
+  useEffect(()=>{writeStockUiStorage('local','dfl-stock-collapsed',JSON.stringify(collapsed))},[collapsed]);
+  useEffect(()=>{writeStockUiStorage('local','dfl-stock-planning-tab',planningTab)},[planningTab]);
   useEffect(()=>{
     if(restoredScroll.current||!products.length)return;
     restoredScroll.current=true;
-    const y=Number(sessionStorage.getItem('dfl-stock-scroll')||0);
-    const anchor=sessionStorage.getItem('dfl-stock-anchor');
+    const rawY=Number(readStockUiStorage('session','dfl-stock-scroll')||0);
+    const y=Number.isFinite(rawY)?Math.max(0,Math.min(rawY,5_000_000)):0;
+    const anchor=readStockUiStorage('session','dfl-stock-anchor');
     if(y<=0&&!anchor)return;
     let tries=0;
     const restore=()=>{
@@ -48,7 +53,7 @@ export default function StockPage() {
         element.scrollIntoView({block:'center',behavior:'auto'});
         element.classList.add('ring-1','ring-emerald-400/50');
         window.setTimeout(()=>element.classList.remove('ring-1','ring-emerald-400/50'),1200);
-        sessionStorage.removeItem('dfl-stock-anchor');
+        removeStockUiStorage('session','dfl-stock-anchor');
         return;
       }
       if(y>0)window.scrollTo({top:y,behavior:'auto'});
@@ -57,11 +62,32 @@ export default function StockPage() {
     };
     requestAnimationFrame(restore);
   },[products.length]);
-  useEffect(()=>{const save=()=>sessionStorage.setItem('dfl-stock-scroll',String(window.scrollY));window.addEventListener('scroll',save,{passive:true});return()=>{save();window.removeEventListener('scroll',save)}},[]);
-  const rememberAndPush=(href:string,productId?:string)=>{sessionStorage.setItem('dfl-stock-scroll',String(window.scrollY));if(productId)sessionStorage.setItem('dfl-stock-anchor',productId);router.push(href)};
-  const leaveStock=()=>{sessionStorage.removeItem('dfl-stock-scroll');sessionStorage.removeItem('dfl-stock-anchor');sessionStorage.removeItem('dfl-stock-query');router.replace('/loja')};
+  useEffect(()=>{
+    // Guardar o scroll em cada evento causa I/O síncrono em excesso no Android.
+    const save=()=>{
+      if(scrollFrame.current!==null)return;
+      scrollFrame.current=window.requestAnimationFrame(()=>{
+        scrollFrame.current=null;
+        writeStockUiStorage('session','dfl-stock-scroll',String(window.scrollY));
+      });
+    };
+    window.addEventListener('scroll',save,{passive:true});
+    return()=>{
+      window.removeEventListener('scroll',save);
+      if(scrollFrame.current!==null)window.cancelAnimationFrame(scrollFrame.current);
+      writeStockUiStorage('session','dfl-stock-scroll',String(window.scrollY));
+    };
+  },[]);
+  const rememberAndPush=(href:string,productId?:string)=>{writeStockUiStorage('session','dfl-stock-scroll',String(window.scrollY));if(productId)writeStockUiStorage('session','dfl-stock-anchor',productId);router.push(href)};
+  const leaveStock=()=>{removeStockUiStorage('session','dfl-stock-scroll');removeStockUiStorage('session','dfl-stock-anchor');removeStockUiStorage('session','dfl-stock-query');router.replace('/loja')};
   const active=useMemo(()=>products.filter(p=>p.active),[products]);
   const commercialHealth=useMemo(()=>commercialCoverage(active),[active]);
+  const stockCounts=useMemo(()=>active.reduce((counts,p)=>{
+    const level=stockLevel(p);
+    if(level==='zero')counts.zero+=1;
+    if(level==='baixo')counts.baixo+=1;
+    return counts;
+  },{zero:0,baixo:0}),[active]);
   const movementsByProduct=useMemo(()=>{
     const index=new Map<string,typeof movements>();
     for(const movement of movements){
@@ -74,30 +100,37 @@ export default function StockPage() {
   const stockBrain=useMemo(()=>stockIntelligenceSummary(active,movements,recommendations),[active,movements,recommendations]);
   const recommendationMap=useMemo(()=>new Map(recommendations.map(item=>[item.productId,item])),[recommendations]);
   const suggested=useMemo(()=>active.filter(p=>{const r=recommendationMap.get(p.id);if(!r)return false;return guardedStockRecommendation(p,r).quantity>0}).sort(prioritySort),[active,recommendationMap]);
-  const commercialMissing=useMemo(()=>active.filter(p=>commercialCoverage([p]).attention>0),[active]);
+  const commercialMissing=useMemo(()=>active.filter(p=>{const status=commercialProductStatus(p);return status==='fractional_without_presentation'||status==='invalid_presentation'}),[active]);
   const daily=useMemo(()=>{
     const now=new Date();
     return active.map(product=>({p:product,signal:buildDailyStockSignal(product,movementsByProduct.get(product.id)||[],now,recommendationMap.get(product.id))}))
       .filter(x=>x.signal.suggested>0&&(Math.max(x.p.minimum_quantity,x.p.ideal_quantity||0)>0||x.signal.usesWeekday))
       .sort((a,b)=>b.signal.suggested-a.signal.suggested);
   },[active,movementsByProduct,recommendationMap]);
-  const visible=useMemo(()=>rankStockProducts(active.filter(p=>filter==='todos'||stockLevel(p)===filter),query).sort(query.trim()?()=>0:prioritySort),[active,filter,query]);
-  const groups=useMemo(()=>Object.entries(visible.reduce<Record<string,StockProduct[]>>((all,p)=>{const key=stockProductCategory(p.name,p.category);(all[key]||=[]).push(p);return all},{})).map(([category,items])=>[category,[...items].sort((a,b)=>naturalStockNameCompare(a.name,b.name))] as [string,StockProduct[]]).sort(([a],[b])=>stockCategoryOrder(a)-stockCategoryOrder(b)||a.localeCompare(b,'pt-BR')),[visible]);
+  const commercialAttentionIds=useMemo(()=>new Set(commercialMissing.map(p=>p.id)),[commercialMissing]);
+  const visible=useMemo(()=>rankStockProducts(active.filter(p=>(filter==='todos'||stockLevel(p)===filter)&&(!commercialOnly||commercialAttentionIds.has(p.id))),query).sort(query.trim()?()=>0:prioritySort),[active,filter,query,commercialOnly,commercialAttentionIds]);
+  const groups=useMemo(()=>{
+    const rank=new Map(visible.map((p,i)=>[p.id,i]));
+    return Object.entries(visible.reduce<Record<string,StockProduct[]>>((all,p)=>{const key=stockProductCategory(p.name,p.category);(all[key]||=[]).push(p);return all},{}))
+      .map(([category,items])=>[category,[...items].sort(query.trim()?((a,b)=>(rank.get(a.id)||0)-(rank.get(b.id)||0)):prioritySort)] as [string,StockProduct[]])
+      .sort(([a],[b])=>stockCategoryOrder(a)-stockCategoryOrder(b)||a.localeCompare(b,'pt-BR'));
+  },[visible,query]);
   const reviewOrder=useMemo(()=>groups.flatMap(([,items])=>items),[groups]);
+  const reviewIds=useMemo(()=>JSON.stringify(reviewOrder.map(item=>item.id)),[reviewOrder]);
   const money=(value:number)=>value.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
   return <div className="dfl-page">
     <header className="flex items-center justify-between"><div className="flex items-center gap-3"><button onClick={leaveStock} className="grid h-12 w-12 place-items-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400"><ChevronLeft size={21}/></button><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-emerald-400">Controle físico</p><h1 className="font-heading text-2xl font-black text-zinc-100">Estoque</h1></div></div></header>
     <section className="sticky top-[calc(var(--dfl-safe-top)+8px)] z-30 rounded-[20px] border border-zinc-800 bg-zinc-950/95 p-2 shadow-xl backdrop-blur-xl"><div className="flex gap-2"><div className="relative min-w-0 flex-1"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} aria-label="Pesquisar produtos e categorias do estoque" placeholder="Buscar produto ou categoria" className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-10 pr-10 text-sm text-zinc-100 outline-none focus:border-emerald-500/60"/>{query&&<button aria-label="Limpar busca" onClick={()=>setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500"><X size={16}/></button>}</div><button type="button" aria-label="Filtrar estoque" aria-expanded={filterOpen} aria-pressed={filter!=='todos'} onClick={()=>setFilterOpen(v=>!v)} className={`grid h-12 w-12 place-items-center rounded-xl border ${filter!=='todos'?'border-emerald-500/35 bg-emerald-500/10 text-emerald-400':'border-zinc-800 bg-zinc-900 text-zinc-500'}`}><SlidersHorizontal size={17}/></button></div>{query&&<p className="px-1 pt-2 text-[9px] font-bold text-zinc-500">{visible.length} resultado{visible.length===1?'':'s'} · painéis ocultos durante a busca</p>}</section>
-    <div className={`flex gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-2 ${filterOpen?'':'opacity-95'}`} role="group" aria-label="Estado do estoque">{(['todos','baixo','zero'] as const).map(key=><button key={key} type="button" aria-pressed={filter===key} onClick={()=>{setFilter(key);setFilterOpen(false)}} className={`h-9 flex-1 rounded-xl text-[10px] font-black ${filter===key?'bg-emerald-500/10 text-emerald-400':'text-zinc-500'}`}>{key==='todos'?'Todos':key==='baixo'?`Baixo · ${active.filter(p=>stockLevel(p)==='baixo').length}`:`Zerado · ${active.filter(p=>stockLevel(p)==='zero').length}`}</button>)}</div>
+    <div className={`flex gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-2 ${filterOpen?'':'opacity-95'}`} role="group" aria-label="Estado do estoque">{(['todos','baixo','zero'] as const).map(key=><button key={key} type="button" aria-pressed={filter===key} onClick={()=>{setFilter(key);setFilterOpen(false)}} className={`h-9 flex-1 rounded-xl text-[10px] font-black ${filter===key?'bg-emerald-500/10 text-emerald-400':'text-zinc-500'}`}>{key==='todos'?'Todos':key==='baixo'?`Baixo · ${stockCounts.baixo}`:`Zerado · ${stockCounts.zero}`}</button>)}</div>
     {!query&&<section className="grid grid-cols-2 gap-2">
       <CompactMetric label="Produtos ativos" value={String(active.length)} />
-      <CompactMetric label="Zerados" value={String(active.filter(p=>stockLevel(p)==='zero').length)} alert={active.some(p=>stockLevel(p)==='zero')} />
+      <CompactMetric label="Zerados" value={String(stockCounts.zero)} alert={active.some(p=>stockLevel(p)==='zero')} />
       <CompactMetric label="Reposições sugeridas" value={String(suggested.length)} alert={suggested.length>0} />
       <CompactMetric label="Valor estimado" value={money(stockValue(active))} />
       <CompactMetric label="Compras abertas" value={String(supplies.filter(s=>s.status==='solicitado').length)} />
     </section>}
     {!query&&<section className="grid grid-cols-3 gap-2"><Shortcut icon={ClipboardCheck} label="Contagem" color="text-sky-400" onClick={()=>rememberAndPush('/estoque/contagem')}/><Shortcut icon={ListChecks} label="Comprar" color="text-amber-400" onClick={()=>rememberAndPush('/estoque/compras')}/><Shortcut icon={moreOpen?X:Boxes} label={moreOpen?'Fechar':'Mais'} color="text-emerald-400" onClick={()=>setMoreOpen(v=>!v)}/>{moreOpen&&<><Shortcut icon={BarChart3} label="Relatórios" color="text-emerald-400" onClick={()=>rememberAndPush('/estoque/relatorios')}/><Shortcut icon={Archive} label="Arquivados" color="text-zinc-400" onClick={()=>rememberAndPush('/estoque/arquivados')}/><Shortcut icon={Store} label="Fornecedores" color="text-orange-400" onClick={()=>rememberAndPush('/estoque/fornecedores')}/><Shortcut icon={BadgeDollarSign} label="Preços" color="text-lime-400" onClick={()=>rememberAndPush('/estoque/precos')}/><Shortcut icon={WandSparkles} label="Catálogo" color="text-violet-400" onClick={()=>rememberAndPush('/estoque/catalogo')}/></>}</section>}
-    {!query&&<section className="overflow-hidden rounded-[20px] border border-sky-500/15 bg-sky-500/[.035]"><button type="button" onClick={()=>setReviewOpen(value=>!value)} className="flex w-full items-center gap-3 p-3.5 text-left"><span className="grid h-9 w-9 place-items-center rounded-xl bg-sky-500/10 text-sky-400"><ClipboardCheck size={17}/></span><div className="min-w-0 flex-1"><p className="text-xs font-black text-zinc-200">Revisões do estoque</p><p className="mt-0.5 text-[9px] text-zinc-500">{commercialHealth.attention} embalagens · alertas e conferências em um só lugar</p></div><ChevronDown size={16} className={`text-sky-400 transition ${reviewOpen?'rotate-180':''}`}/></button>{reviewOpen&&<div className="space-y-2 border-t border-sky-500/10 p-2.5"><StockCriticalBanner products={active} /><BeverageStockReview />{commercialHealth.attention>0&&<button type="button" onClick={()=>router.push(commercialMissing.length===1?`/estoque/editar?id=${commercialMissing[0].id}&from=estoque`:'/estoque?commercial=missing')} className="flex w-full items-center justify-between rounded-xl bg-zinc-950/40 p-3 text-left"><div><p className="text-[10px] font-black text-sky-300">Formas de compra</p><p className="mt-1 text-[9px] text-zinc-500">{commercialHealth.attention} produto{commercialHealth.attention===1?' precisa':'s precisam'} informar a embalagem real.</p></div><ChevronLeft size={15} className="rotate-180 text-sky-400"/></button>}<StockCatalogHealth products={active} onOpen={(productId)=>rememberAndPush(`/estoque/editar?id=${productId}&from=estoque`,productId)}/></div>}</section>}
+    {!query&&<section className="overflow-hidden rounded-[20px] border border-sky-500/15 bg-sky-500/[.035]"><button type="button" onClick={()=>setReviewOpen(value=>!value)} className="flex w-full items-center gap-3 p-3.5 text-left"><span className="grid h-9 w-9 place-items-center rounded-xl bg-sky-500/10 text-sky-400"><ClipboardCheck size={17}/></span><div className="min-w-0 flex-1"><p className="text-xs font-black text-zinc-200">Revisões do estoque</p><p className="mt-0.5 text-[9px] text-zinc-500">{commercialHealth.attention} embalagens · alertas e conferências em um só lugar</p></div><ChevronDown size={16} className={`text-sky-400 transition ${reviewOpen?'rotate-180':''}`}/></button>{reviewOpen&&<div className="space-y-2 border-t border-sky-500/10 p-2.5"><StockCriticalBanner products={active} /><BeverageStockReview />{commercialHealth.attention>0&&<button type="button" onClick={()=>commercialMissing.length===1?rememberAndPush(`/estoque/editar?id=${commercialMissing[0].id}&from=estoque`,commercialMissing[0].id):(setCommercialOnly(true),setReviewOpen(false),setFilter('todos'),setQuery(''))} className="flex w-full items-center justify-between rounded-xl bg-zinc-950/40 p-3 text-left"><div><p className="text-[10px] font-black text-sky-300">Formas de compra</p><p className="mt-1 text-[9px] text-zinc-500">{commercialHealth.attention} produto{commercialHealth.attention===1?' precisa':'s precisam'} informar a embalagem real.</p></div><ChevronLeft size={15} className="rotate-180 text-sky-400"/></button>}<StockCatalogHealth products={active} onOpen={(productId)=>rememberAndPush(`/estoque/editar?id=${productId}&from=estoque`,productId)}/></div>}</section>}
     {!query&&suggested.length>0&&<section className="rounded-[22px] border border-amber-500/25 bg-amber-500/[.055] p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -132,7 +165,7 @@ export default function StockPage() {
         <button type="button" onClick={()=>rememberAndPush('/estoque/compras')} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-500 text-[10px] font-black text-zinc-950"><ListChecks size={15}/>Abrir montagem da compra</button>
       </div>}
     </section>}
-    <section className="space-y-3" aria-label="Produtos do estoque"><div role="status" aria-live="polite" className="flex items-center justify-between gap-2 px-1 text-[10px] text-zinc-500"><span>{visible.length} {visible.length===1?'produto encontrado':'produtos encontrados'}</span>{filter!=='todos'&&<button type="button" onClick={()=>setFilter('todos')} className="min-h-9 rounded-lg border border-zinc-700 px-3 font-bold text-emerald-300">Ver todos</button>}</div>{groups.map(([category,items])=>{const attention=items.filter(p=>stockLevel(p)!=='ok').length;const isCollapsed=Boolean(collapsed[category]);return <section key={category} className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/35"><button onClick={()=>setCollapsed(v=>({...v,[category]:!v[category]}))} className="flex w-full items-center gap-3 p-4 text-left"><span className={`grid h-9 w-9 place-items-center rounded-xl border ${stockCategoryVisualClasses(category)}`}><StockCategoryIcon category={category} size={16}/></span><div className="min-w-0 flex-1"><h2 className="truncate font-heading text-sm font-black text-zinc-200">{category}</h2><p className="mt-0.5 text-[9px] text-zinc-600">{items.length} {items.length===1?'produto':'produtos'}{attention?` · ${attention} em atenção`:''}</p></div><ChevronDown size={17} className={`text-zinc-600 transition-transform ${isCollapsed?'-rotate-90':''}`}/></button>{!isCollapsed&&<div className="border-t border-zinc-800/70">{items.map(product=><ProductRow key={product.id} product={product} recommendation={recommendationMap.get(product.id)} committed={committedMap.get(product.id)||0} open={()=>rememberAndPush(`/estoque/detalhes?id=${product.id}&from=estoque`,product.id)} move={()=>{sessionStorage.setItem('dfl-stock-review-queue',JSON.stringify(reviewOrder.map(item=>item.id)));rememberAndPush(`/estoque/movimentar?id=${product.id}&from=estoque`,product.id)}}/>)}</div>}</section>})}{!groups.length&&<div className="dfl-empty" role="status"><PackagePlus size={34} className="mx-auto text-zinc-700"/><p className="mt-3 text-sm font-bold text-zinc-300">{query.trim()?'Nenhum produto corresponde à busca':filter==='zero'?'Nenhum produto zerado':filter==='baixo'?'Nenhum produto com estoque baixo':'Nenhum produto cadastrado'}</p>{(query.trim()||filter!=='todos')&&<button type="button" onClick={()=>{setQuery('');setFilter('todos')}} className="mt-3 min-h-11 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 text-xs font-black text-emerald-300">Limpar busca e filtros</button>}</div>}</section>
+    <section className="space-y-3" aria-label="Produtos do estoque"><div role="status" aria-live="polite" className="flex items-center justify-between gap-2 px-1 text-[10px] text-zinc-500"><span>{commercialOnly?'Embalagens para revisar · ':''}{visible.length} {visible.length===1?'produto encontrado':'produtos encontrados'}</span>{(filter!=='todos'||commercialOnly)&&<button type="button" onClick={()=>{setFilter('todos');setCommercialOnly(false)}} className="min-h-9 rounded-lg border border-zinc-700 px-3 font-bold text-emerald-300">Limpar filtros</button>}</div>{groups.map(([category,items])=>{const attention=items.filter(p=>stockLevel(p)!=='ok').length;const isCollapsed=Boolean(collapsed[category]);return <section key={category} className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/35"><button onClick={()=>setCollapsed(v=>({...v,[category]:!v[category]}))} className="flex w-full items-center gap-3 p-4 text-left"><span className={`grid h-9 w-9 place-items-center rounded-xl border ${stockCategoryVisualClasses(category)}`}><StockCategoryIcon category={category} size={16}/></span><div className="min-w-0 flex-1"><h2 className="truncate font-heading text-sm font-black text-zinc-200">{category}</h2><p className="mt-0.5 text-[9px] text-zinc-600">{items.length} {items.length===1?'produto':'produtos'}{attention?` · ${attention} em atenção`:''}</p></div><ChevronDown size={17} className={`text-zinc-600 transition-transform ${isCollapsed?'-rotate-90':''}`}/></button>{!isCollapsed&&<div className="border-t border-zinc-800/70">{items.slice(0,categoryLimits[category]||24).map(product=><ProductRow key={product.id} product={product} recommendation={recommendationMap.get(product.id)} committed={committedMap.get(product.id)||0} open={()=>rememberAndPush(`/estoque/detalhes?id=${product.id}&from=estoque`,product.id)} move={()=>{writeStockUiStorage('session','dfl-stock-review-queue',reviewIds);rememberAndPush(`/estoque/movimentar?id=${product.id}&from=estoque`,product.id)}}/>)}{items.length>24&&<button type="button" onClick={()=>setCategoryLimits(prev=>({...prev,[category]:(prev[category]||24)>=items.length?24:Math.min(items.length,(prev[category]||24)+24)}))} className="flex min-h-11 w-full items-center justify-center gap-2 border-t border-zinc-800/70 bg-zinc-950/25 px-3 text-[11px] font-bold text-zinc-300 active:bg-zinc-800" aria-label={(categoryLimits[category]||24)>=items.length?`Recolher itens de ${category}`:`Ver mais produtos de ${category}`}><ChevronDown size={14} className={(categoryLimits[category]||24)>=items.length?'rotate-180':''}/>{(categoryLimits[category]||24)>=items.length?'Recolher produtos':`Ver mais ${Math.min(24,items.length-(categoryLimits[category]||24))} · ${Math.min(categoryLimits[category]||24,items.length)} de ${items.length}`}</button>}</div>}</section>})}{!groups.length&&<div className="dfl-empty" role="status"><PackagePlus size={34} className="mx-auto text-zinc-700"/><p className="mt-3 text-sm font-bold text-zinc-300">{query.trim()?'Nenhum produto corresponde à busca':commercialOnly?'Nenhuma embalagem pendente de revisão':filter==='zero'?'Nenhum produto zerado':filter==='baixo'?'Nenhum produto com estoque baixo':'Nenhum produto cadastrado'}</p>{(query.trim()||filter!=='todos'||commercialOnly)&&<button type="button" onClick={()=>{setQuery('');setFilter('todos');setCommercialOnly(false)}} className="mt-3 min-h-11 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 text-xs font-black text-emerald-300">Limpar busca e filtros</button>}</div>}</section>
   </div>;
 }
 function CompactMetric({label,value,alert=false}:{label:string;value:string;alert?:boolean}){return <div className={`rounded-2xl border px-3.5 py-3 ${alert?'border-amber-500/25 bg-amber-500/[.055]':'border-zinc-800 bg-zinc-900/45'}`}><p className={`text-[9px] font-bold ${alert?'text-amber-400':'text-zinc-600'}`}>{label}</p><p className="mt-1 truncate text-base font-black text-zinc-100">{value}</p></div>}

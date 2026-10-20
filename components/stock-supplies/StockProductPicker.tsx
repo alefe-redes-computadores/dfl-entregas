@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Boxes,
   Check,
@@ -18,13 +18,11 @@ import { formatStockQuantity } from '@/lib/stock-quantity';
 import { SUPPLY_UNIT_LABELS } from '@/lib/stock-supply';
 import { StockCategoryPicker } from '@/components/stock/StockCategoryPicker';
 import { canonicalStockCategory, stockCategoryOrder, suggestStockCategory } from '@/lib/stock-categories';
+import { canonicalStockProductName } from '@/lib/stock-product-identity';
 import type {
   StockProduct,
   StockSupplyUnit,
 } from '@/types';
-
-const normalize = (value: string) =>
-  value.trim().toLocaleLowerCase('pt-BR');
 
 const units = Object.entries(
   SUPPLY_UNIT_LABELS,
@@ -57,12 +55,15 @@ export function StockProductPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [showOtherProducts, setShowOtherProducts] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(30);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Mercearia');
   const [unit, setUnit] =
     useState<StockSupplyUnit>('un');
   const [busy, setBusy] = useState(false);
+  // A trava síncrona cobre dois toques antes de React atualizar o botão.
+  const createBusyRef = useRef(false);
 
   const selected =
     allProducts.find((product) => product.id === value) ||
@@ -103,6 +104,8 @@ export function StockProductPicker({
     [preferredRank, products, query],
   );
 
+  const visibleFiltered = useMemo(() => filtered.slice(0, visibleLimit), [filtered, visibleLimit]);
+  const remainingCount = Math.max(0, filtered.length - visibleFiltered.length);
   const displaySections = useMemo(() => {
     const groupByCategory = (items: StockProduct[]) =>
       Object.entries(
@@ -134,11 +137,11 @@ export function StockProductPicker({
             a.localeCompare(b, 'pt-BR'),
         );
 
-    const preferred = filtered.filter((product) =>
+    const preferred = visibleFiltered.filter((product) =>
       preferredRank.has(product.id),
     );
 
-    const others = filtered.filter(
+    const others = visibleFiltered.filter(
       (product) => !preferredRank.has(product.id),
     );
 
@@ -147,7 +150,7 @@ export function StockProductPicker({
         {
           key: 'all' as const,
           label: null,
-          groups: groupByCategory(filtered),
+          groups: groupByCategory(visibleFiltered),
         },
       ];
     }
@@ -169,7 +172,7 @@ export function StockProductPicker({
         : []),
     ];
   }, [
-    filtered,
+    visibleFiltered,
     preferredRank,
     preferredSectionLabel,
   ]);
@@ -178,10 +181,11 @@ export function StockProductPicker({
     query.trim().length >= 2 &&
     !allProducts.some(
       (product) =>
-        normalize(product.name) === normalize(query),
+        canonicalStockProductName(product.name) === canonicalStockProductName(query),
     );
 
   const create = async () => {
+    if (createBusyRef.current) return;
     const clean = (name || query).trim();
 
     if (clean.length < 2) {
@@ -189,6 +193,15 @@ export function StockProductPicker({
       return;
     }
 
+    // Revalidar no envio: a busca pode ter mudado enquanto o modal esteve aberto.
+    if (allProducts.some(product => canonicalStockProductName(product.name) === canonicalStockProductName(clean))) {
+      toast.error('Já existe um produto com esse nome. Selecione-o na lista.');
+      setCreating(false);
+      setQuery(clean);
+      setVisibleLimit(30);
+      return;
+    }
+    createBusyRef.current = true;
     setBusy(true);
 
     try {
@@ -227,6 +240,7 @@ export function StockProductPicker({
           : 'Não foi possível cadastrar o produto.',
       );
     } finally {
+      createBusyRef.current = false;
       setBusy(false);
     }
   };
@@ -237,6 +251,7 @@ export function StockProductPicker({
         type="button"
         onClick={() => {
           setShowOtherProducts(false);
+          setVisibleLimit(30);
           setOpen(true);
         }}
         aria-invalid={invalid}
@@ -336,9 +351,7 @@ export function StockProductPicker({
                   <input
                     autoFocus
                     value={query}
-                    onChange={(event) =>
-                      setQuery(event.target.value)
-                    }
+                    onChange={(event) => { setQuery(event.target.value); setVisibleLimit(30); }}
                     aria-label="Buscar produto ativo para compra"
                     placeholder="Buscar produto ativo"
                     className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-11 pr-3 text-sm text-zinc-100 outline-none focus:border-amber-500"
@@ -553,6 +566,12 @@ export function StockProductPicker({
                         </section>
                       );
                     })}
+                    {remainingCount > 0 && (
+                      <button type="button" onClick={() => setVisibleLimit(limit => limit + 30)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/50 px-3 text-xs font-bold text-zinc-300 active:bg-zinc-800">
+                        Ver mais {Math.min(30, remainingCount)} · {visibleFiltered.length} de {filtered.length} produtos
+                        <ChevronDown size={15} />
+                      </button>
+                    )}
                   </div>
                 )}
               </>

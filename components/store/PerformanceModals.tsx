@@ -7,7 +7,7 @@ import type { StoreDashboardData } from '@/hooks/useStoreDashboard';
 import { deliveryDate, OPERATION_TIME_ZONE, routeDate, routeStartedAt } from '@/lib/operational-time';
 import type { Delivery } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
-import { calculateMotoboyFee, normalizeName } from '@/lib/motoboy-analytics';
+import { calculateMotoboyFee, getMotoboyDayData, normalizeName } from '@/lib/motoboy-analytics';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
 import { fulfillmentLabel, getFulfillmentMode } from '@/lib/delivery-mode';
 import { deriveDeliveryPaymentState, deliveryEconomicValue } from '@/lib/delivery-finance';
@@ -54,6 +54,7 @@ function Logistics(props:Props){
   const team = useAppStore(state => state.motoboys);
   const [sharingRoute,setSharingRoute]=useState<string|null>(null);
   const shareLock=useRef(false);
+  const [expandedSettlement,setExpandedSettlement]=useState<string|null>(null);
   const names=useMemo(()=>Array.from(new Set(data.selectedDateRoutes.map(route=>route.motoboy_name))).sort((a,b)=>a.localeCompare(b,'pt-BR')),[data.selectedDateRoutes]);
   const routes=useMemo(()=>data.selectedDateRoutes.filter(route=>motoboy==='all'||route.motoboy_name===motoboy).sort((a,b)=>new Date(routeDate(a)||0).getTime()-new Date(routeDate(b)||0).getTime()),[data.selectedDateRoutes,motoboy]);
   const deliveriesByRoute=useMemo(()=>{
@@ -74,6 +75,19 @@ function Logistics(props:Props){
     }));
   },[routes,deliveriesByRoute,team]);
   const deliveryCount=useMemo(()=>routes.reduce((sum,route)=>sum+(routeReports.get(route.id)?.orders||0),0),[routes,routeReports]);
+  // A regra de remuneração é apurada UMA vez por entregador no dia.
+  // Não somar bases fixas/híbridas por rota: isso duplicaria a diária.
+  const daySummaries=useMemo(()=>team.filter(member=>
+    data.selectedDateRoutes.some(route=>
+      route.motoboy_id ? route.motoboy_id===member.id : normalizeName(route.motoboy_name)===normalizeName(member.name)
+    ) && (motoboy==='all'||normalizeName(motoboy)===normalizeName(member.name))
+  ).map(member=>{
+    const day=getMotoboyDayData(member,data.selectedDateKey,data.selectedDateRoutes,data.selectedDateDeliveries);
+    return {member,day};
+  }),[team,data.selectedDateRoutes,data.selectedDateDeliveries,data.selectedDateKey,motoboy]);
+  const configuredDayTotal=daySummaries.filter(item=>item.member.payment_rule).reduce((sum,item)=>sum+item.day.fee.amount,0);
+  const incompleteDayRules=daySummaries.filter(item=>!item.member.payment_rule).length;
+
   const exportRouteImage=async(routeId:string)=>{
     if(shareLock.current)return;
     if(props.isPrivacyMode){toast.warning('Desative o modo privacidade para exportar valores.');return;}
@@ -99,6 +113,15 @@ function Logistics(props:Props){
   };
   return <div className="fixed inset-0 z-[110] overflow-y-auto bg-zinc-950"><div className="sticky top-0 z-10 space-y-4 border-b border-zinc-800 bg-zinc-950/95 p-4 pt-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur-xl"><Header title="Resumo de rotas" subtitle="O caminho da operação neste dia" icon={Bike} onClose={props.closeLogistics} tone="sky"/><DateBar data={data} tone="sky"/></div><main className="space-y-5 p-4 pb-32">
     <div className="grid grid-cols-3 gap-2"><Stat value={routes.length} label="Rotas"/><Stat value={deliveryCount} label="Entregas"/><Stat value={routes.filter(route=>route.status==='fechada').length} label="Finalizadas" tone="green"/></div>
+    <section className="rounded-[22px] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[.09] to-zinc-900/70 p-3.5" aria-label="Prévia do acerto diário dos motoboys">
+      <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Acerto diário · prévia</p><p className="mt-1 text-xl font-black text-zinc-100">{props.isPrivacyMode?'R$ •••':money(configuredDayTotal)}</p></div><div className="text-right text-[10px] font-semibold text-zinc-400">{daySummaries.length} motoboy(s)<p className="mt-1 text-emerald-300">Base calculada uma vez por pessoa</p></div></div>
+      <p className="mt-2 text-[11px] text-zinc-400">Projeção bruta pelas paradas concluídas; não é pagamento liquidado. Vales, adiantamentos, caixa recebido e saldos anteriores são conferidos no acerto definitivo.</p>
+      {incompleteDayRules>0&&<p className="mt-2 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] font-bold text-amber-300">{incompleteDayRules} motoboy(s) sem regra configurada: valores fora do total.</p>}
+      <div className="mt-3 space-y-2">{daySummaries.map(({member,day})=><div key={member.id} className="rounded-xl border border-zinc-800 bg-zinc-950/55">
+        <button type="button" aria-expanded={expandedSettlement===member.id} onClick={()=>setExpandedSettlement(v=>v===member.id?null:member.id)} className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left"><UserRound size={15} className="text-emerald-400"/><span className="min-w-0 flex-1 truncate text-xs font-bold text-zinc-100">{member.name}</span><span className="text-[11px] text-zinc-500">{day.physicalDeliveryCount} paradas</span><span className="min-w-[76px] text-right text-xs font-black text-emerald-300">{!member.payment_rule?'Sem regra':props.isPrivacyMode?'R$ •••':money(day.fee.amount)}</span><ChevronRight size={14} className={`text-zinc-500 transition-transform ${expandedSettlement===member.id?'rotate-90':''}`}/></button>
+        {expandedSettlement===member.id&&<div className="space-y-2 border-t border-zinc-800 px-3 py-3 text-[11px] text-zinc-400"><p>{day.routes.length} rota(s) · {day.orderCount} pedido(s) · {day.physicalDeliveryCount} parada(s) física(s)</p><p>{member.payment_rule?day.fee.description:'Configure a regra de remuneração da pessoa na equipe.'}</p>{day.routeBreakdown.map(item=><div key={item.routeId} className="flex justify-between gap-2"><span className="truncate">{item.label}</span><span className="shrink-0">{item.physicalDeliveryCount} paradas · {item.orderCount} pedidos</span></div>)}<p className="font-semibold text-emerald-300">Diária fixa ou base híbrida incluída uma única vez neste total.</p></div>}
+      </div>)}</div>
+    </section>
     {names.length>1&&<div className="flex flex-wrap gap-2">{['all',...names].map(name=><button key={name} onClick={()=>setMotoboy(name)} className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-bold ${motoboy===name?'bg-zinc-100 text-zinc-950':'border border-zinc-800 bg-zinc-900 text-zinc-400'}`}><UserRound size={12} className="mr-1 inline"/>{name==='all'?'Equipe toda':name}</button>)}</div>}
     <div className="space-y-3">{routes.map((route,index)=>{
       const report=routeReports.get(route.id)!;
@@ -116,7 +139,7 @@ function Logistics(props:Props){
         </button>
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-800 pt-3">
           <div className="rounded-xl bg-zinc-950/45 px-3 py-2"><p className="text-[9px] font-bold uppercase text-zinc-500">Duração da rota</p><p className="mt-1 text-sm font-black text-zinc-100">{routeDuration|| (routeStartedAt(route)?'Em andamento':'Não iniciada')}</p></div>
-          <div className="rounded-xl bg-emerald-500/[.06] px-3 py-2"><p className="text-[9px] font-bold uppercase text-emerald-400">{fee===null?'Remuneração':'Ganho calculado'}</p><p className="mt-1 text-sm font-black text-emerald-300">{fee===null?'Acerto diário':props.isPrivacyMode?'R$ •••':money(fee)}</p></div>
+          <div className="rounded-xl bg-emerald-500/[.06] px-3 py-2"><p className="text-[9px] font-bold uppercase text-emerald-400">{fee===null?'Acerto por dia':'Ganho variável da rota'}</p><p className="mt-1 text-sm font-black text-emerald-300">{fee===null?'Ver acerto diário':props.isPrivacyMode?'R$ •••':money(fee)}</p></div>
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2">
           <button type="button" onClick={()=>router.push(`/rotas/details?id=${route.id}&date=${encodeURIComponent(data.selectedDateKey)}`)} className="min-h-11 rounded-xl border border-zinc-700 bg-zinc-950/55 px-2 text-[11px] font-bold text-zinc-200">Ver rota</button>

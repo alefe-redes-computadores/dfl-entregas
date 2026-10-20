@@ -13,6 +13,7 @@ import type { Delivery, Customer, Route } from '@/types';
 import { copyDeliveryToClipboard } from '@/lib/whatsapp';
 import { MiniMap } from '@/components/deliveries/MiniMap';
 import { useAppStore } from '@/store/useAppStore';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { dateKey, deliveryDate, routeStartedAt } from '@/lib/operational-time';
@@ -20,6 +21,8 @@ import { compactAddressForCard, hasHouseNumber } from "@/lib/operational-address
 import { auditOperationalAddress } from '@/lib/address-quality';
 import { SiteOrderSnapshot } from '@/components/home/SiteOrderSnapshot';
 import { customerRecurrence } from '@/lib/customer-recurrence';
+import { isDeliveryExpanded } from '@/lib/delivery-expansion-index';
+import { pendingOperationalStopDeliveries } from '@/lib/delivery-stop-pending';
 import { deliveryPaymentStateLabel, deriveDeliveryPaymentState, deliveryCustomerCharge, deliveryEconomicValue } from '@/lib/delivery-finance';
 import { summarizeStopFinance } from '@/lib/delivery-stop-finance';
 import { ownerContextLabel } from '@/lib/owner-order-context';
@@ -53,16 +56,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
-  const isExpanded = useAppStore(
-    (state) =>
-      state.deliveries.find((item) => item.id === delivery.id)?.is_expanded ||
-      false,
-  );
+  const isExpanded = useAppStore((state) => isDeliveryExpanded(state.deliveries, delivery.id));
   const groupedDeliveries = stopDeliveries?.length ? stopDeliveries : [delivery];
   const isGroupedStop = groupedDeliveries.length > 1;
   const groupedFinance = useMemo(() => summarizeStopFinance(groupedDeliveries), [stopDeliveries, delivery]);
   const groupedTotal = groupedFinance.economicTotal;
-  const groupedPending = groupedDeliveries.filter((item) => !item.completed).length;
+  const groupedPending = pendingOperationalStopDeliveries(groupedDeliveries).length;
+  // O estado visual representa a parada física inteira, não só o pedido representante.
+  const stopCompleted = isGroupedStop ? groupedPending === 0 : delivery.completed;
   const groupedToCollect = groupedDeliveries.filter(item => deriveDeliveryPaymentState(item) === 'collect_on_delivery');
   const groupedPixPending = groupedDeliveries.filter(item => deriveDeliveryPaymentState(item) === 'pending');
   const groupedCollectValue = groupedFinance.collectTotal;
@@ -233,7 +234,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
   };
 
-  const pendingGroupedDeliveries = groupedDeliveries.filter((item) => !item.completed);
+  const pendingGroupedDeliveries = pendingOperationalStopDeliveries(groupedDeliveries);
   const requiresConfirmationCode = (item: Delivery) => {
     const itemIsIfood = item.origin === 'ifood' || !item.origin;
     const skipsCode = item.payment_method === 'dinheiro' || item.payment_method?.includes('cartao');
@@ -266,7 +267,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   };
 
   const executeCompletion = async (codeInput?: string | Record<string, string>) => {
-    const targets = groupedDeliveries.filter((item) => !item.completed);
+    const targets = pendingOperationalStopDeliveries(groupedDeliveries);
     if (targets.length === 0 || completionBusyRef.current) return;
     completionBusyRef.current = true;
     setCompletionBusy(true);
@@ -314,9 +315,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       );
 
       const routeDeliveries = getDeliveriesByRoute(route.id);
-      const remainingPending = routeDeliveries.filter((item) => !completedIds.has(item.id) && !item.completed).length;
+      const remainingPending = routeDeliveries.filter((item) => !isCancelledSiteDelivery(item) && !completedIds.has(item.id) && !item.completed).length;
       if (remainingPending === 0) {
-        toast.info('Última entrega registrada. Aguardando confirmação do fechamento da rota.');
+        toast.info('Última entrega salva. Conferindo fechamento seguro no servidor.', { duration: 2200 });
       }
     } catch (error) {
       console.error('Erro inesperado ao concluir parada:', error);
@@ -414,7 +415,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         return;
       }
 
-      const newStatus = !delivery.completed;
+      const newStatus = pendingGroupedDeliveries.length > 0 || !delivery.completed;
       if (!newStatus) {
         try {
           await updateDelivery(delivery.id, { completed: false });
@@ -528,7 +529,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       gesture.highlighted.style.outline = '';
       gesture.highlighted.style.outlineOffset = '';
     }
-    nearest.element.style.outline = '2px solid rgba(56,189,248,.9)';
+    nearest.element.style.outline = '2px solid rgba(16,185,129,.9)';
     nearest.element.style.outlineOffset = '2px';
     gesture.highlighted = nearest.element;
     gesture.target = nearest.index;
@@ -561,14 +562,19 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         middle: element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2,
         element,
       }))
-      .filter((target) => Number.isInteger(target.index) && target.index >= 0 && target.index < pendingCount);
+      .filter((target) => Number.isInteger(target.index) && target.index >= 0 && target.index < pendingCount)
+      .sort((a, b) => a.index - b.index);
     if (targets.length < 2) return;
     const origin = Math.max(0, (position || 1) - 1);
     reorderGesture.current = {
       pointerId: event.pointerId, startY: event.clientY, origin, target: origin,
       moved: false, targets, highlighted: null,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      clearReorderGesture();
+    }
     setDropTargetPosition(origin + 1);
   };
 
@@ -668,7 +674,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     if (swipeAxis.current !== 'horizontal') { resetCardSwipe(); return; }
     const dx = touchCurrentX.current - touchStartX.current;
     const dy = touchCurrentY.current - touchStartY.current;
-    const wasComplete = !delivery.completed;
+    const wasComplete = groupedPending > 0;
     resetCardSwipe();
     suppressCardClick.current = true;
     window.setTimeout(() => { suppressCardClick.current = false; }, 300);
@@ -686,12 +692,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     <>
       <div data-dfl-route-id={route.id} data-dfl-stop-index={canReorder ? position : undefined} className={clsx(
           "relative overflow-hidden rounded-[18px] transition-all duration-200",
-          delivery.completed ? "opacity-80" : "shadow-sm",
-          isUrgent && !delivery.completed && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
-          isNeighbor && !delivery.completed && "border-amber-500/30",
+          stopCompleted ? "opacity-80" : "shadow-sm",
+          isUrgent && !stopCompleted && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
+          isNeighbor && !stopCompleted && "border-amber-500/30",
           isExpanded
             ? "bg-zinc-900 border border-amber-500/35 shadow-[0_14px_34px_rgba(0,0,0,0.32)]"
-            : delivery.completed
+            : stopCompleted
               ? "bg-zinc-900/24 border border-emerald-500/12"
               : "bg-zinc-900/35 border border-zinc-800/70"
         )}
@@ -942,9 +948,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             e.stopPropagation();
                             await copyStop();
                           }}
-                          className="flex min-w-0 items-center gap-1.5 h-8 px-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/40 active:scale-95 text-[11px] font-bold transition-all shadow-sm"
+                          disabled={copyBusy}
+                          aria-busy={copyBusy}
+                          className="flex min-w-0 items-center gap-1.5 h-9 px-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/40 active:scale-95 text-[11px] font-bold transition-all shadow-sm disabled:opacity-50"
                         >
-                          <Copy size={13} className="text-emerald-500" /> Copiar Dados
+                          {copyBusy ? <LoaderCircle size={13} className="animate-spin text-emerald-400" /> : <Copy size={13} className="text-emerald-500" />} {copyBusy ? 'Copiando…' : 'Copiar dados'}
                         </button>
 
                         {!isGroupedStop && normalizedWhatsappPhone && (
@@ -975,7 +983,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             onLostPointerCapture={clearReorderGesture}
                             onClick={(event) => event.stopPropagation()}
                             style={{ touchAction: 'none' }}
-                            className={`flex h-9 min-w-9 items-center justify-center gap-1 rounded-xl border px-2 text-[10px] font-black active:scale-95 ${dropTargetPosition !== null ? 'border-sky-400/70 bg-sky-500/15 text-sky-200' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}
+                            className={`flex h-9 min-w-9 items-center justify-center gap-1 rounded-xl border px-2 text-[10px] font-black active:scale-95 ${dropTargetPosition !== null ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-200' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}
                             aria-label={dropTargetPosition === null ? 'Segure e arraste para reposicionar a parada' : `Solte para mover até a parada ${dropTargetPosition}`}
                             title="Arrastar parada"
                           >
@@ -1027,7 +1035,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/45 p-3" aria-label="Resumo da parada">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Detalhes da parada</span>
-                    <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${delivery.completed ? 'bg-emerald-500/10 text-emerald-300' : 'bg-sky-500/10 text-sky-300'}`}>{delivery.completed ? 'Concluída' : isGroupedStop ? `${groupedPending} pedidos pendentes` : 'Pendente'}</span>
+                    <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${stopCompleted ? 'bg-emerald-500/10 text-emerald-300' : 'bg-sky-500/10 text-sky-300'}`}>{stopCompleted ? 'Concluída' : isGroupedStop ? `${groupedPending} pedidos pendentes` : 'Pendente'}</span>
                   </div>
                   <p className="mt-2 text-xs font-semibold leading-relaxed text-zinc-200">{shortAddress || 'Endereço não informado'}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
@@ -1037,9 +1045,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     {activePhone && <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-300">Contato disponível</span>}
                   </div>
                 </div>
-                {(delivery.completed || route.status === 'fechada') && (
+                {(stopCompleted || route.status === 'fechada') && (
                   <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.04] px-3 py-2 text-[10px] font-semibold text-emerald-300">
-                    {delivery.completed ? 'Entrega concluída · reordenação indisponível' : 'Rota fechada · ordem preservada'}
+                    {stopCompleted ? 'Parada concluída · reordenação indisponível' : 'Rota fechada · ordem preservada'}
                   </div>
                 )}
                 <div className="flex items-center gap-2 pl-1 flex-wrap">

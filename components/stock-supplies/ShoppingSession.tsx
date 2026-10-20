@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Download, Save, Search, ShoppingCart, TrendingDown, TrendingUp, WifiOff, X } from 'lucide-react';
+import { Check, Download, Save, Search, ShoppingCart, TrendingDown, TrendingUp, HardDrive, X } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import type { StockSupply, StockSupplyItem } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
@@ -10,8 +10,9 @@ import { formatBRLCents, moneyToNumber, numberToBRLInput } from '@/lib/money-inp
 import { downloadShoppingListPdf } from '@/lib/shopping-list-pdf';
 import { formatStockQuantity } from '@/lib/stock-quantity';
 import { buildStockCheckoutPreview } from '@/lib/stock-checkout-preview';
+import { reconcileShoppingDraft, shoppingSupplySignature, type ShoppingSessionDraft } from '@/lib/stock-shopping-session-state';
 
-type Draft = { checked: Record<string, boolean>; prices: Record<string, string> };
+type Draft = ShoppingSessionDraft;
 const storageKey = (id: string) => `dfl-shopping-session:${id}`;
 const currency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
@@ -28,10 +29,8 @@ function defaultUnitPrice(item: StockSupplyItem): number {
 }
 
 function emptyDraft(items: StockSupplyItem[]): Draft {
-  return {
-    checked: {},
-    prices: Object.fromEntries(items.map(item => [item.id, numberToBRLInput(defaultUnitPrice(item))])),
-  };
+  return reconcileShoppingDraft(items, null,
+    Object.fromEntries(items.map(item => [item.id, numberToBRLInput(defaultUnitPrice(item))])));
 }
 
 function readDraft(id: string, items: StockSupplyItem[]): Draft {
@@ -39,27 +38,20 @@ function readDraft(id: string, items: StockSupplyItem[]): Draft {
   try {
     const stored = JSON.parse(window.localStorage.getItem(storageKey(id)) || 'null') as unknown;
     if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return base;
-    const value = stored as { checked?: unknown; prices?: unknown };
-    const checked = value.checked && typeof value.checked === 'object' && !Array.isArray(value.checked)
-      ? value.checked as Record<string, unknown> : {};
-    const prices = value.prices && typeof value.prices === 'object' && !Array.isArray(value.prices)
-      ? value.prices as Record<string, unknown> : {};
-    // Narrow unknown once, before reading .length or returning a typed draft.
-    // Object.fromEntries over unknown would otherwise infer Record<string, unknown>.
-    const safePrices: Record<string, string> = { ...base.prices };
+    const raw = stored as { checked?: unknown; prices?: unknown; signatures?: unknown };
+    const safeRecord = (value: unknown): Record<string, unknown> =>
+      value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    const checked = safeRecord(raw.checked);
+    const prices = safeRecord(raw.prices);
+    const signatures = safeRecord(raw.signatures);
+    const safe: Draft = { checked: {}, prices: {}, signatures: {} };
     for (const item of items) {
-      const candidate = prices[item.id];
-      if (typeof candidate === 'string' && candidate.length <= 64) {
-        safePrices[item.id] = candidate;
-      }
+      safe.checked[item.id] = checked[item.id] === true;
+      if (typeof prices[item.id] === 'string') safe.prices[item.id] = prices[item.id] as string;
+      if (typeof signatures[item.id] === 'string') safe.signatures[item.id] = signatures[item.id] as string;
     }
-    return {
-      checked: Object.fromEntries(items.map(item => [item.id, checked[item.id] === true])),
-      prices: safePrices,
-    };
-  } catch {
-    return base;
-  }
+    return reconcileShoppingDraft(items, safe, base.prices);
+  } catch { return base; }
 }
 
 export function ShoppingSession({ supply, onFinish, busy }: {
@@ -71,7 +63,9 @@ export function ShoppingSession({ supply, onFinish, busy }: {
   const supplies = useAppStore(state => state.stockSupplies);
   // O primeiro render deve ser igual no servidor e no Android, antes de ler localStorage.
   const [draft, setDraft] = useState<Draft>(() => emptyDraft(supply.items));
-  const [hydratedId, setHydratedId] = useState<string | null>(null);
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
+  const activeSupplyIdRef = useRef<string | null>(null);
+  const saveDraftRef = useRef<(() => void) | null>(null);
   const [query, setQuery] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(35);
@@ -81,20 +75,45 @@ export function ShoppingSession({ supply, onFinish, busy }: {
   // Evita recriar o rascunho após uma finalização confirmada, antes do unmount.
   const completedSessionRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    completedSessionRef.current = null;
-    setHydratedId(null);
-    setDraft(readDraft(supply.id, supply.items));
-    setHydratedId(supply.id);
-    // Uma compra diferente tem progresso diferente, mesmo quando o componente é reutilizado.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supply.id]);
+  const supplySignature = shoppingSupplySignature(supply.items);
+  const hydrationKey = `${supply.id}:${supplySignature}`;
 
   useEffect(() => {
-    if (hydratedId !== supply.id || finishing || completedSessionRef.current === supply.id) return;
-    try { window.localStorage.setItem(storageKey(supply.id), JSON.stringify(draft)); setLocalDraftSaved(true); }
-    catch { setLocalDraftSaved(false); /* a compra continua disponível, mas o progresso não é persistido */ }
-  }, [draft, supply.id, hydratedId, finishing]);
+    const sameSupply = activeSupplyIdRef.current === supply.id;
+    if (!sameSupply) completedSessionRef.current = null;
+    activeSupplyIdRef.current = supply.id;
+    // Uma atualização do pedido depois da finalização não deve ressuscitar
+    // o rascunho já removido do armazenamento local.
+    if (completedSessionRef.current === supply.id) return;
+    // Mesmo pedido editado com nova quantidade: preserva preços, mas exige
+    // conferir novamente apenas as linhas fisicamente modificadas.
+    setDraft(previous => sameSupply
+      ? reconcileShoppingDraft(supply.items, previous, emptyDraft(supply.items).prices)
+      : readDraft(supply.id, supply.items));
+    setHydratedKey(hydrationKey);
+    // A assinatura é o contrato das linhas, não a identidade do array React.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrationKey]);
+
+  useEffect(() => {
+    if (hydratedKey !== hydrationKey || finishing || completedSessionRef.current === supply.id) return;
+    // Debounce de escrita síncrona no Android; o flush em pagehide assegura
+    // o progresso quando a tela for fechada logo após uma alteração.
+    const persist = () => {
+      try { window.localStorage.setItem(storageKey(supply.id), JSON.stringify(draft)); setLocalDraftSaved(true); }
+      catch { setLocalDraftSaved(false); }
+    };
+    saveDraftRef.current = persist;
+    const timer = window.setTimeout(persist, 250);
+    return () => { window.clearTimeout(timer); if (saveDraftRef.current === persist) saveDraftRef.current = null; };
+  }, [draft, supply.id, hydratedKey, hydrationKey, finishing]);
+
+  useEffect(() => {
+    const flush = () => { if (hydratedKey === hydrationKey && !finishing && completedSessionRef.current !== supply.id) saveDraftRef.current?.(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', flush);
+    return () => { window.removeEventListener('pagehide', flush); document.removeEventListener('visibilitychange', flush); };
+  }, [hydratedKey, hydrationKey, finishing, supply.id]);
 
   const productById = useMemo(() => new Map(products.map(product => [product.id, product])), [products]);
   const priceHistoryByProduct = useMemo(() => indexShoppingPriceHistory(supplies), [supplies]);
@@ -125,7 +144,7 @@ export function ShoppingSession({ supply, onFinish, busy }: {
   const renderedItems = visibleItems.slice(0, visibleLimit);
   const remainingItems = Math.max(0, visibleItems.length - renderedItems.length);
   const pending = items.length - count;
-  const locked = busy || finishing || hydratedId !== supply.id;
+  const locked = busy || finishing || hydratedKey !== hydrationKey;
 
   const finish = async () => {
     if (locked || finishInFlight.current) return;
@@ -151,16 +170,16 @@ export function ShoppingSession({ supply, onFinish, busy }: {
   };
 
   return (
-    <section className="mt-5 rounded-[28px] border border-amber-500/25 bg-amber-500/[.04] p-4" aria-label="Conferência no supermercado">
+    <section className="mt-5 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-3.5 sm:p-4" aria-label="Conferência no supermercado">
       <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-400"><ShoppingCart size={19}/></span>
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400"><ShoppingCart size={19}/></span>
         <div className="min-w-0 flex-1">
-          <h2 className="font-heading font-black text-zinc-100">Modo supermercado</h2>
+          <h2 className="font-heading font-black text-zinc-100">Conferência da compra</h2>
           <p className="mt-1 text-[11px] text-zinc-400">{count} de {items.length} itens conferidos · {pending} pendentes</p>
-          <p className="mt-1 text-[10px] text-zinc-500">O progresso fica salvo neste aparelho até a compra ser finalizada. Nenhuma entrada no estoque ocorre antes da confirmação.</p>
+          <p className="mt-1 text-[10px] text-zinc-500">Progresso salvo neste aparelho. Se quantidade ou embalagem mudar, o item precisará de nova conferência. O estoque só entra após finalizar.</p>
           {!localDraftSaved && <p role="alert" className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] font-semibold text-amber-200">Não foi possível salvar o progresso local. Evite fechar esta tela antes de finalizar.</p>}
         </div>
-        <WifiOff size={16} className="shrink-0 text-zinc-600" aria-label="Rascunho local"/>
+        <HardDrive size={16} className="shrink-0 text-emerald-400/70" aria-label="Rascunho armazenado neste aparelho"/>
       </div>
       <div role="progressbar" aria-valuemin={0} aria-valuemax={items.length || 1} aria-valuenow={count} aria-label="Itens conferidos" className="mt-4 h-2 overflow-hidden rounded-full bg-zinc-900">
         <div className="h-full rounded-full bg-emerald-500 transition-all" style={{width:`${items.length ? count / items.length * 100 : 0}%`}} />

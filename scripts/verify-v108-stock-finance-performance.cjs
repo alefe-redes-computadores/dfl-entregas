@@ -41,7 +41,7 @@ for(let i=0;i<products.length;i++){
   const after=daily.buildDailyStockSignal(products[i],index.get(products[i].id),now,indexed[i]);
   assert.deepEqual(after,before,`Plano do dia divergente no produto ${products[i].id}`);
 }
-assert.deepEqual(stock.stockIntelligenceSummary(products,moves,indexed),stock.stockIntelligenceSummary(products,moves));
+assert.deepEqual(stock.stockIntelligenceSummary(products,moves,indexed),stock.stockIntelligenceSummary(products,moves,old));
 const supplies=[
   {id:'s1',occurred_at:'2026-10-15T11:00:00-03:00',stock_integrated_at:'2026-10-15',items:[{stock_product_id:'a',quantity:2,unit_price:5,total_price:10},{stock_product_id:'b',quantity:4,unit_price:6,total_price:24}]},
   {id:'s2',occurred_at:'2026-10-14T11:00:00-03:00',stock_integrated_at:'2026-10-14',items:[{stock_product_id:'a',quantity:5,unit_price:8,total_price:40}]},
