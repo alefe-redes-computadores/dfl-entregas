@@ -20,7 +20,7 @@ jobs:
       - name: Dependencias do projeto
         run: npm ci
       - name: Ferramentas temporarias do emulador
-        run: npm install --no-save --package-lock=false firebase-tools@14 @firebase/rules-unit-testing@5
+        run: npm install --no-save --package-lock=false firebase-tools@14 @firebase/rules-unit-testing@3.0.4
       - name: Gate estatico de seguranca R26
         run: node scripts/verify-v111-r26-security-gate.cjs
       - name: Firebase Emulator R26 (projeto DEMO; sem tokens ou secrets)

@@ -20,7 +20,7 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
       - name: Adicionar somente ferramental de testes
-        run: npm install --no-save --package-lock=false firebase-tools@14 @firebase/rules-unit-testing@5
+        run: npm install --no-save --package-lock=false firebase-tools@14 @firebase/rules-unit-testing@3.0.4
       - name: Testar Firebase Rules R24 em projeto demo isolado
         env:
           FIRESTORE_EMULATOR_HOST: 127.0.0.1:8086
