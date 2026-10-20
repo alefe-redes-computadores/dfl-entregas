@@ -1,6 +1,6 @@
-import { validateCommercialPresentations, cleanCommercialPresentations } from '@/lib/stock-presentation-integrity';
-// app/estoque/novo/page.tsx
 'use client';
+// app/estoque/novo/page.tsx
+import { validateCommercialPresentations, cleanCommercialPresentations } from '@/lib/stock-presentation-integrity';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, Save, ShoppingCart } from 'lucide-react';
