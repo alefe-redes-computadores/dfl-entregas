@@ -6,12 +6,12 @@ import { BellRing,
   Activity,
   ChevronRight,
   LogOut,
+  ShieldCheck,
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { UserAvatar } from '@/components/UserAvatar';
-
-const DIAGNOSTICS_ADMIN_EMAIL = 'alefejohsefe@gmail.com';
+import { isSuperadminUid } from '@/lib/access/roles';
 
 export default function MaisPage() {
   const router = useRouter();
@@ -19,7 +19,7 @@ export default function MaisPage() {
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
   const fullName = user?.displayName?.trim() || 'Usuário DFL';
-  const isDiagnosticsAdmin = user?.email?.trim().toLowerCase() === DIAGNOSTICS_ADMIN_EMAIL;
+  const isDiagnosticsAdmin = isSuperadminUid(user?.uid);
 
   const handleLogout = async () => {
     try {
@@ -80,6 +80,16 @@ export default function MaisPage() {
             </div>
             <ChevronRight size={18} className="shrink-0 text-zinc-600" />
           </button>
+
+          {isDiagnosticsAdmin && <button
+            type="button"
+            onClick={() => router.push('/mais/acessos')}
+            className="flex w-full items-center gap-4 border-b border-zinc-800/80 p-4 text-left transition-colors active:bg-zinc-800/50"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400"><ShieldCheck size={20}/></div>
+            <div className="min-w-0 flex-1"><p className="font-semibold text-zinc-100">Equipe e permissoes</p><p className="text-xs text-zinc-500">Preparar acessos, funcoes e vinculos de funcionarios</p></div>
+            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
+          </button>}
 
           {isDiagnosticsAdmin && <button
             type="button"

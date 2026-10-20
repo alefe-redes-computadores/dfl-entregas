@@ -1,0 +1,30 @@
+name: DFL R26 - Auditoria Firestore isolada
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  firestore-emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Dependencias do projeto
+        run: npm ci
+      - name: Ferramentas temporarias do emulador
+        run: npm install --no-save --package-lock=false firebase-tools@14 @firebase/rules-unit-testing@5
+      - name: Gate estatico de seguranca R26
+        run: node scripts/verify-v111-r26-security-gate.cjs
+      - name: Firebase Emulator R26 (projeto DEMO; sem tokens ou secrets)
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8087
+          GCLOUD_PROJECT: demo-dfl-entregas-r26
+        run: npx firebase emulators:exec --only firestore --project demo-dfl-entregas-r26 --config firebase.r26-emulator.json 'node scripts/test-v111-r26-firestore-emulator.cjs'

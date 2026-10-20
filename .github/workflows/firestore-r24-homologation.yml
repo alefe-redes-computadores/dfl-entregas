@@ -1,0 +1,28 @@
+name: DFL R24 - Testar regras no emulador
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  firestore-emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Adicionar somente ferramental de testes
+        run: npm install --no-save --package-lock=false firebase-tools@14 @firebase/rules-unit-testing@5
+      - name: Testar Firebase Rules R24 em projeto demo isolado
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8086
+          GCLOUD_PROJECT: demo-dfl-entregas-r24
+        run: npx firebase emulators:exec --only firestore --project demo-dfl-entregas-r24 --config firebase.r24-emulator.json 'node scripts/test-v111-r24-firestore-emulator.cjs'

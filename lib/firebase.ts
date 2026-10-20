@@ -5,9 +5,11 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  memoryLocalCache,
   type Firestore,
 } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { isIsolatedStaffOrigin } from '@/lib/access/staffOrigin';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -37,6 +39,10 @@ const createFirestore = (): Firestore => {
     return getFirestore(app);
   }
 
+  // Se a inicializacao de memoria falhar no dominio staff, NAO recuar ao cache padrao.
+  if (isIsolatedStaffOrigin(window.location.origin)) {
+    return initializeFirestore(app, { localCache: memoryLocalCache() });
+  }
   try {
     return initializeFirestore(app, {
       localCache: persistentLocalCache({

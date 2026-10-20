@@ -1,0 +1,13 @@
+// DFL V111 R23 - regra ATUAL: somente UID do superadministrador.
+// NÃO substituir pelo candidato R22 até homologação no Firebase Emulator.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function superadmin() {
+      return request.auth != null && request.auth.uid == 'zIfbMxD1SQNvtlX9y6YUsEz2TXC3';
+    }
+    match /{document=**} {
+      allow read, write: if superadmin();
+    }
+  }
+}

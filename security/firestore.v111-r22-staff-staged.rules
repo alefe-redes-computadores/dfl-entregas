@@ -1,0 +1,60 @@
+// DFL V111 R22 — CANDIDATO PARA HOMOLOGACAO; NAO PUBLICAR AINDA.
+// Mantenha a regra owner-only V111 R21 no Firebase Console até validacao.
+// Objetivo: NUNCA dar ao funcionario acesso a colecoes administrativas raiz.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function owner() {
+      return signedIn() && request.auth.uid == 'zIfbMxD1SQNvtlX9y6YUsEz2TXC3';
+    }
+    function self(uid) { return signedIn() && !owner() && request.auth.uid == uid; }
+    function staffPath(uid) {
+      return /databases/$(database)/documents/staff_accounts/$(uid);
+    }
+    function activeStaff(uid) {
+      return self(uid)
+        && exists(staffPath(uid))
+        && get(staffPath(uid)).data.uid == uid
+        && get(staffPath(uid)).data.status == 'active';
+    }
+    function authorizedArea(uid, section) {
+      return activeStaff(uid)
+        && (
+          (section == 'home' && 'home' in get(staffPath(uid)).data.permissions)
+          || (section == 'routes' && 'routes_read' in get(staffPath(uid)).data.permissions)
+          || (section == 'deliveries' && 'deliveries_read' in get(staffPath(uid)).data.permissions)
+          || (section == 'stock' && 'stock_read' in get(staffPath(uid)).data.permissions)
+          || (section == 'purchases' && 'purchases_read' in get(staffPath(uid)).data.permissions)
+        )
+        && (
+          get(staffPath(uid)).data.role != 'motoboy' ||
+          (section != 'stock' && section != 'purchases')
+        )
+        && (
+          get(staffPath(uid)).data.role != 'compras' ||
+          (section != 'routes' && section != 'deliveries')
+        )
+        && (
+          (section != 'routes' && section != 'deliveries') ||
+          get(staffPath(uid)).data.role != 'motoboy' ||
+          (('linkedMotoboyId' in get(staffPath(uid)).data) && get(staffPath(uid)).data.linkedMotoboyId is string)
+        );
+    }
+    // Proprietario: mesmo contrato publicado atualmente.
+    match /{document=**} {
+      allow read, write: if owner();
+    }
+    // Funcionarios veem APENAS o proprio registro, nunca listam contas.
+    match /staff_accounts/{uid} {
+      allow get: if self(uid);
+      allow list, create, update, delete: if false;
+    }
+    // Projecoes isoladas por UID e secao. Sem acesso a documentos-raiz.
+    match /staff_workspaces/{uid}/{section}/{itemId} {
+      allow get: if authorizedArea(uid, section);
+      allow list: if authorizedArea(uid, section) && request.query.limit <= 40;
+      allow create, update, delete: if false;
+    }
+  }
+}

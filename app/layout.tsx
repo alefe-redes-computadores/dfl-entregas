@@ -69,9 +69,9 @@ export default function RootLayout({
           <ClientInit />
           <NativeRuntime />
           <PwaRuntime />
-          <StoreAutomation />
-          <RouteOperations />
           <AuthGuard>
+            <StoreAutomation />
+            <RouteOperations />
             <SiteOrderNotificationWatcher />
             <div className="dfl-shell relative mx-auto flex w-full flex-col overflow-x-hidden bg-zinc-950/95 text-zinc-100">
               <Header />

@@ -2,6 +2,12 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/verify-v111-r26-security-gate.cjs',
+  'scripts/verify-v111-r25-offline-boundary.cjs',
+  'scripts/verify-v111-r24-revocation.cjs',
+  'scripts/verify-v111-r23-verified-staging.cjs',
+  'scripts/verify-v111-r22-staff-isolation.cjs',
+  'scripts/verify-v111-r21-access-foundation.cjs',
   'scripts/verify-v111-r20-next-client-directives.cjs',
   'scripts/verify-v111-r19-conciliation.cjs',
   'scripts/verify-v111-r18-release-candidate.cjs',

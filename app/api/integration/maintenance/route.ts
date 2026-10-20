@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isSuperadminUid } from '@/lib/access/roles';
 import type { DocumentData } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/integration/server/admin';
 import { adminAuth } from '@/lib/integration/server/adminAuth';
@@ -22,6 +23,7 @@ async function authorize(req: NextRequest) {
   const header = req.headers.get('authorization') || '';
   if (!header.startsWith('Bearer ')) throw new Error('UNAUTHORIZED');
   const decoded = await adminAuth.verifyIdToken(header.slice(7));
+  if (!isSuperadminUid(decoded.uid)) throw new Error('UNAUTHORIZED');
   if (!decoded.email) throw new Error('UNAUTHORIZED');
   const allowlist = (process.env.DFL_ADMIN_EMAILS || '').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
   if (allowlist.length > 0 && !allowlist.includes(decoded.email.toLowerCase())) throw new Error('UNAUTHORIZED');

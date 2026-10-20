@@ -1,0 +1,64 @@
+// DFL V111 R26 - REGRA CANDIDATA PARA EMULADOR, NAO PUBLICAR.
+// Producao deve permanecer OWNER-ONLY ate auditoria e autorizacao explicita.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function owner() {
+      return signedIn() && request.auth.uid == 'zIfbMxD1SQNvtlX9y6YUsEz2TXC3';
+    }
+    function isOwnUid(uid) {
+      return signedIn() && !owner() && request.auth.uid == uid;
+    }
+    function accountRef(uid) {
+      return /databases/$(database)/documents/staff_accounts/$(uid);
+    }
+    function activeAccount(uid) {
+      return isOwnUid(uid)
+        && exists(accountRef(uid))
+        && get(accountRef(uid)).data.uid == uid
+        && get(accountRef(uid)).data.status == 'active'
+        && get(accountRef(uid)).data.role in ['motoboy','compras','operacao','personalizado']
+        && get(accountRef(uid)).data.permissions is list;
+    }
+    function hasPermission(uid, area) {
+      return (area == 'home' && 'home' in get(accountRef(uid)).data.permissions)
+          || (area == 'routes' && 'routes_read' in get(accountRef(uid)).data.permissions)
+          || (area == 'deliveries' && 'deliveries_read' in get(accountRef(uid)).data.permissions)
+          || (area == 'stock' && 'stock_read' in get(accountRef(uid)).data.permissions)
+          || (area == 'purchases' && 'purchases_read' in get(accountRef(uid)).data.permissions);
+    }
+    function roleAllows(uid, area) {
+      return (get(accountRef(uid)).data.role != 'motoboy'
+          || ((area != 'stock' && area != 'purchases')
+              && ((area != 'routes' && area != 'deliveries')
+                  || (get(accountRef(uid)).data.keys().hasAll(['linkedMotoboyId'])
+                      && get(accountRef(uid)).data.linkedMotoboyId is string
+                      && get(accountRef(uid)).data.linkedMotoboyId.size() > 0))))
+        && (get(accountRef(uid)).data.role != 'compras'
+            || (area != 'routes' && area != 'deliveries'));
+    }
+    function canReadStaffArea(uid, area) {
+      return activeAccount(uid) && hasPermission(uid, area) && roleAllows(uid, area);
+    }
+    // Regra coringa abrange SOMENTE o proprietário. As permissões adicionais
+    // abaixo nunca dão leitura das coleções-raiz ao funcionário.
+    match /{document=**} {
+      allow read, write: if owner();
+    }
+    match /staff_accounts/{uid} {
+      // Consulta do próprio status (inclusive suspenso) para logout/revogação.
+      allow get: if isOwnUid(uid);
+      allow list, create, update, delete: if false;
+    }
+    match /staff_workspaces/{uid}/{area}/{docId} {
+      allow get: if canReadStaffArea(uid, area);
+      allow list: if canReadStaffArea(uid, area)
+        && request.query.limit is int
+        && request.query.limit > 0
+        && request.query.limit <= 40;
+      // Escritas passam exclusivamente por APIs administrativas autenticadas.
+      allow create, update, delete: if false;
+    }
+  }
+}

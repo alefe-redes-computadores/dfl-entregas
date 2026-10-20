@@ -1,0 +1,57 @@
+// V111 R24 - CANDIDATA PARA EMULADOR. NAO PUBLICAR NO FIREBASE AINDA.
+// Contrato ativo em producao segue owner-only.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner() {
+      return request.auth != null && request.auth.uid == 'zIfbMxD1SQNvtlX9y6YUsEz2TXC3';
+    }
+    function ownAccount(uid) {
+      return request.auth != null && request.auth.uid == uid && !owner();
+    }
+    function staffRecord(uid) {
+      return get(/databases/$(database)/documents/staff_accounts/$(uid));
+    }
+    function activeStaff(uid) {
+      return ownAccount(uid)
+        && staffRecord(uid).data.uid == uid
+        && staffRecord(uid).data.status == 'active'
+        && staffRecord(uid).data.role in ['motoboy', 'compras', 'operacao', 'personalizado']
+        && staffRecord(uid).data.permissions is list;
+    }
+    function mayRead(uid, section) {
+      return activeStaff(uid) && (
+        (section == 'home' && 'home' in staffRecord(uid).data.permissions)
+        || (section == 'routes' && 'routes_read' in staffRecord(uid).data.permissions)
+        || (section == 'deliveries' && 'deliveries_read' in staffRecord(uid).data.permissions)
+        || (section == 'stock' && 'stock_read' in staffRecord(uid).data.permissions)
+        || (section == 'purchases' && 'purchases_read' in staffRecord(uid).data.permissions)
+      )
+      && (staffRecord(uid).data.role != 'motoboy'
+          || ((section != 'stock' && section != 'purchases')
+              && ((section != 'routes' && section != 'deliveries')
+                  || (staffRecord(uid).data.keys().hasAll(['linkedMotoboyId'])
+                      && staffRecord(uid).data.linkedMotoboyId is string
+                      && staffRecord(uid).data.linkedMotoboyId.size() > 0))))
+      && (staffRecord(uid).data.role != 'compras'
+          || (section != 'routes' && section != 'deliveries'));
+    }
+    match /{document=**} {
+      allow read, write: if owner();
+    }
+    // A conta proprio UID e somente leitura, inclusive suspensa.
+    match /staff_accounts/{uid} {
+      allow get: if ownAccount(uid);
+      allow list, create, update, delete: if false;
+    }
+    match /staff_workspaces/{uid}/{section}/{itemId} {
+      allow get: if mayRead(uid,section);
+      allow list: if mayRead(uid,section)
+        && request.query.limit is int
+        && request.query.limit > 0
+        && request.query.limit <= 40;
+      allow create, update, delete: if false;
+    }
+    // Todas as colecoes administrativas raiz continuam disponiveis somente ao owner.
+  }
+}

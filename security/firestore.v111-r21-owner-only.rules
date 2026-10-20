@@ -1,0 +1,15 @@
+// DFL V111 R21: ESPELHO de politica administrativa OWNER-ONLY.
+// NAO publicado automaticamente. NAO libera funcionarios. Nao editar a regra
+// real sem auditoria das colecoes/queries e plano de rollback.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function superadmin() {
+      return request.auth != null
+        && request.auth.uid == 'zIfbMxD1SQNvtlX9y6YUsEz2TXC3';
+    }
+    match /{document=**} {
+      allow read, write: if superadmin();
+    }
+  }
+}

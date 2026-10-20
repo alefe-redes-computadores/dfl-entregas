@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isSuperadminUid } from '@/lib/access/roles';
 import { adminAuth } from '@/lib/integration/server/admin';
 import { drainReverseIntegrationEventIds } from '@/lib/integration/server/reverseRelay';
 import { recentReverseOutboxIssues, reverseOutboxStats } from '@/lib/integration/server/reverseOutboxRepository';
@@ -12,6 +13,7 @@ async function authorize(req: NextRequest) {
   const header = req.headers.get('authorization') || '';
   if (!header.startsWith('Bearer ')) throw new Error('UNAUTHORIZED');
   const decoded = await adminAuth.verifyIdToken(header.slice(7));
+  if (!isSuperadminUid(decoded.uid)) throw new Error('UNAUTHORIZED');
   const email = String(decoded.email || '').trim().toLowerCase();
   const configured = (process.env.DFL_ADMIN_EMAILS || OWNER_EMAIL)
     .split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
