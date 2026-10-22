@@ -112,27 +112,26 @@ export function ShiftBriefing() {
             {activeMotoboys.length
               ? activeMotoboys.length + ' entregador' + (activeMotoboys.length === 1 ? '' : 'es') + ' ativo' + (activeMotoboys.length === 1 ? '' : 's')
               : 'Nenhum entregador ativo'}
-            {' · '}{stockAttention} alerta{stockAttention === 1 ? '' : 's'} de estoque
           </p>
         </div>
         <button type="button" disabled={busy} onClick={start} className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-500 px-3.5 text-[11px] font-black text-zinc-950 shadow-lg shadow-emerald-500/10 active:scale-95 disabled:opacity-50">
           <Play size={14} />{busy ? 'Abrindo...' : 'Abrir'}
         </button>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-emerald-500/10 pt-3">
-        <button type="button" onClick={() => router.push('/estoque?review=beverages')} className="flex min-h-11 items-center gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[.06] px-3 text-left active:scale-[.98]">
+      {(beverageReview.length > 0 || stockAttention > 0 || addressReview > 0) && <div className="mt-3 grid grid-cols-2 gap-2 border-t border-emerald-500/10 pt-3">
+        {beverageReview.length > 0 && <button type="button" onClick={() => router.push('/estoque?review=beverages')} className="flex min-h-11 items-center gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[.06] px-3 text-left active:scale-[.98]">
           <GlassWater size={15} className="shrink-0 text-sky-400" />
-          <span className="text-[9px] font-black text-zinc-300">{beverageReview.length ? beverageReview.length + ' bebida' + (beverageReview.length === 1 ? '' : 's') + ' para revisar' : 'Bebidas conferidas'}</span>
-        </button>
-        <div className="flex min-h-11 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/30 px-3">
+          <span className="text-[10px] font-black text-zinc-300">{beverageReview.length} bebida{beverageReview.length === 1 ? '' : 's'} para revisar</span>
+        </button>}
+        {stockAttention > 0 && <button type="button" onClick={() => router.push('/estoque')} className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[.05] px-3 text-left active:scale-[.98]">
           <PackageSearch size={15} className="shrink-0 text-amber-400" />
-          <span className="text-[9px] font-black text-zinc-400">{stockAttention ? stockAttention + ' saldo' + (stockAttention === 1 ? '' : 's') + ' em atenção' : 'Saldos sem alerta'}</span>
-        </div>
+          <span className="text-[10px] font-black text-zinc-300">{stockAttention} saldo{stockAttention === 1 ? '' : 's'} para revisar</span>
+        </button>}
         {addressReview > 0 && <button type="button" onClick={() => router.push(`/entregas?date=${encodeURIComponent(today)}`)} className="col-span-2 flex min-h-11 items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.07] px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
           <PackageSearch size={15} className="shrink-0 text-amber-300" />
           <span className="text-[10px] font-bold text-amber-200">{addressReview} entrega{addressReview === 1 ? '' : 's'} de hoje sem endereço · conferir antes da saída</span>
         </button>}
-      </div>
+      </div>}
     </section>
   );
 }

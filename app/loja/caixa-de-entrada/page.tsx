@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SiteInboxPanel } from "@/components/store/SiteInboxPanel";
-import { siteInboxProjection } from "@/lib/operation/siteInboxPolicy";
 import { OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 import { classifyInboxDrafts, inboxViewDrafts, type InboxView } from '@/lib/operation/inboxPresentation';
 import {
@@ -54,8 +53,6 @@ export default function DeliveryInboxPage() {
 
   const customers = useAppStore((state) => state.customers);
   const deliveries = useAppStore((state) => state.deliveries);
-
-  const sitePendingCount = useMemo(() => channel==='site' ? siteInboxProjection(deliveries).total : 0, [channel, deliveries]);
 
   const today = dateKey(new Date());
 
@@ -313,14 +310,10 @@ export default function DeliveryInboxPage() {
             </h1>
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-center">
-            <p className="text-sm font-black">
-              {channel==='site' ? sitePendingCount : active.length}
-            </p>
-            <p className="text-[8px] font-bold uppercase text-zinc-500">
-              pendentes
-            </p>
-          </div>
+          {channel === 'manual' && <div role="status" aria-label={`${active.length} rascunhos pendentes`} className="rounded-xl border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-center">
+            <p className="text-sm font-black">{active.length}</p>
+            <p className="text-[8px] font-bold uppercase text-zinc-500">pendentes</p>
+          </div>}
         </div>
       </header>
 

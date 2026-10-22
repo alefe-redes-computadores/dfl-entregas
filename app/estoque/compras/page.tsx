@@ -365,16 +365,10 @@ export default function ShoppingList() {
           />
           <div>
             <p className="text-sm font-black text-zinc-100">
-              {suggested.length}{' '}
-              {suggested.length === 1
-                ? 'reposição sugerida'
-                : 'reposições sugeridas'}
+              Revisão rápida da compra
             </p>
             <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
-              A inteligência combina seus níveis
-              configurados com consumo real quando
-              existe amostra suficiente. Nada é
-              comprado automaticamente.
+              Ajuste quantidades e embalagens antes de registrar a compra. Nenhum produto é comprado automaticamente.
             </p>
           </div>
         </div>

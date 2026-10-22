@@ -14,7 +14,7 @@ import type { Delivery, Route } from '@/types';
 import { extractLatLngFromMapsUrl } from '@/lib/maps';
 import { useAppStore } from '@/store/useAppStore';
 import { buildPendingMotoboySettlements } from '@/lib/motoboy-settlement-tasks';
-import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
+import { siteInboxSummary } from '@/lib/operation/siteInboxSummary';
 import { siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
@@ -54,26 +54,10 @@ export function OperationalCommandCenter({
   // Backlog comercial global: não depende do dia nem da rota.
   // A regra canônica também exige pedido operacionalmente não concluído:
   // snapshot comercial "Pendente" em pedido já finalizado não gera ação fantasma.
-  const pendingSiteOrders = useMemo(() => allDeliveries
-    .filter(isSiteOrderAwaitingConfirmation)
-    .sort((a, b) => {
-      const aTime = Date.parse(a.site_order_status_updated_at || a.createdAt || '');
-      const bTime = Date.parse(b.site_order_status_updated_at || b.createdAt || '');
-      return (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
-    }), [allDeliveries]);
-
   const siteInbox = useMemo(() => siteInboxProjection(allDeliveries), [allDeliveries]);
   const allRoutes = useAppStore(state => state.routes);
   const allRouteIds = useMemo(() => new Set(allRoutes.map(route => route.id)), [allRoutes]);
   const corruptLinks = pending.filter(item => item.route_id && !allRouteIds.has(item.route_id));
-
-  const oldestPendingSiteOrder = pendingSiteOrders[0];
-  const oldestPendingSiteOrderLabel =
-    oldestPendingSiteOrder?.external_order_id?.trim() ||
-    oldestPendingSiteOrder?.order_id?.trim() ||
-    '';
-  const oldestPendingSiteCustomer =
-    oldestPendingSiteOrder?.customer_name?.trim() || '';
 
   const noAddress = pending.filter(
     (delivery) => !delivery.address_string?.trim() && (!delivery.source_system || delivery.route_id),
@@ -130,8 +114,8 @@ export function OperationalCommandCenter({
   const rows = [
     {
       key: 'site-inbox',
-      label: 'Pedidos do Site aguardando organização',
-      description: `${siteInbox.ready} prontos para rota · ${siteInbox.commercial} confirmar no Site · ${siteInbox.scheduled} agendados · ${siteInbox.review} revisar`,
+      label: 'Pedidos do Site',
+      description: siteInboxSummary(siteInbox),
       count: siteInbox.total,
       href: '/loja/caixa-de-entrada?aba=site',
       icon: Inbox,

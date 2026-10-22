@@ -256,9 +256,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     const skipsCode = item.payment_method === 'dinheiro' || item.payment_method?.includes('cartao');
     return itemIsIfood && !skipsCode;
   };
-  const storedConfirmationCode = (item: Delivery) => (
-    item.confirmation_code || ''
-  ).replace(/\D/g, '').slice(0, 4);
+  const storedConfirmationCode = (item: Delivery) => orderConfirmationCode(item.confirmation_code);
   const groupedCodeDeliveries = pendingGroupedDeliveries.filter(requiresConfirmationCode);
   const groupedCodeMode = pendingGroupedDeliveries.length > 1;
 
@@ -296,7 +294,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         const suppliedCode = typeof codeInput === 'string'
           ? (item.id === delivery.id ? codeInput : '')
           : codeInput?.[item.id];
-        const codeToSave = (suppliedCode || storedConfirmationCode(item)).replace(/\D/g, '').slice(0, 4);
+        const codeToSave = orderConfirmationCode(suppliedCode || storedConfirmationCode(item));
         const updatePayload: Partial<Delivery> = { completed: true };
         if (codeToSave) updatePayload.confirmation_code = codeToSave;
 
@@ -764,7 +762,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   <div className="flex items-center gap-1.5 truncate max-w-[170px]">
                     <p className="font-heading text-sm font-black tracking-tight text-zinc-50 truncate flex items-center gap-1">
                       {isGroupedStop
-                        ? `${groupedDeliveries.length} pedidos · 1 parada`
+                        ? `${groupedDeliveries.length} pedidos nesta parada`
                         : customer?.name || delivery.customer_name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
                       {!isGroupedStop && isVIP && <Crown size={12} className="text-amber-500 shrink-0" />}
                     </p>
@@ -791,7 +789,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   {!isGroupedStop && recurrence.milestoneLabel && <button type="button" onClick={(event) => { event.stopPropagation(); toast.info('Marco de cliente direto', { description: recurrence.milestoneLabel || undefined }); }} className="rounded-md border border-violet-500/25 bg-violet-500/[.08] px-2 py-0.5 text-[9px] font-black text-violet-300">{recurrence.milestoneLabel}</button>}
                   {isGroupedStop ? (
                     <span className="bg-violet-500/15 border border-violet-500/30 text-violet-300 px-2 py-0.5 rounded-md text-[10px] font-black shrink-0">
-                      {groupedDeliveries.length} pedidos · {groupedPending} pendente{groupedPending === 1 ? '' : 's'}
+                      {groupedPending === 0 ? 'Todos concluídos' : `${groupedPending} pendente${groupedPending === 1 ? '' : 's'}`}
                     </span>
                   ) : isIfood && delivery.order_id ? (
                     <span className="bg-red-500/15 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0">
@@ -1055,8 +1053,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   </div>
                   <p className="mt-2 text-xs font-semibold leading-relaxed text-zinc-200">{shortAddress || 'Endereço não informado'}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
-                    {position !== undefined && <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">Parada {position}</span>}
-                    <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">{isGroupedStop ? `${groupedDeliveries.length} pedidos` : isSiteOrder ? 'Pedido do Site' : isIfood ? 'Pedido iFood' : 'Pedido direto'}</span>
+                    {!isGroupedStop && position !== undefined && <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">Parada {position}</span>}
+                    <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">{isGroupedStop ? 'Vários pedidos na parada' : isSiteOrder ? 'Pedido do Site' : isIfood ? 'Pedido iFood' : 'Pedido direto'}</span>
                     {!delivery.completed && groupedCodeDeliveries.length > 0 && <span className="rounded-lg bg-amber-500/10 px-2 py-1 font-bold text-amber-300">{groupedCodeDeliveries.length} código{groupedCodeDeliveries.length===1?'':'s'} para conferir</span>}
                     {activePhone && <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-300">Contato disponível</span>}
                   </div>

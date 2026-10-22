@@ -83,21 +83,15 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
     }finally{lock.current=false;setSaving(false);}
   };
   return <section className="space-y-3" aria-label="Pedidos recebidos do Site">
-    <div className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.045] p-3.5">
-      <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-300"><Inbox size={20}/></span>
-        <div className="min-w-0 flex-1"><h2 className="text-sm font-black text-zinc-100">Pedidos do Site · sem rota</h2>
-          <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">Os pedidos já existem na sincronização. Aqui você confere e escolhe o destino, sem duplicar a entrega ou confirmar a venda automaticamente.</p>
-        </div>
-        <span className="rounded-xl bg-zinc-950/60 px-2.5 py-1.5 text-lg font-black tabular-nums text-zinc-100">{projection.total}</span>
+    <div className="flex items-center gap-3 rounded-[20px] border border-emerald-500/15 bg-emerald-500/[.045] px-3.5 py-3">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-300"><Inbox size={18}/></span>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-black text-zinc-100">Pedidos do Site</h2>
+        <p className="mt-0.5 text-[11px] text-zinc-400">Confira e escolha a rota quando o pedido estiver liberado.</p>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-1.5 text-center text-[10px]">
-        <div className="rounded-xl bg-zinc-950/50 p-2"><b className="block text-base text-emerald-300">{projection.ready}</b><span className="text-zinc-500">Prontos</span></div>
-        <div className="rounded-xl bg-zinc-950/50 p-2"><b className="block text-base text-amber-300">{projection.commercial}</b><span className="text-zinc-500">Confirmar</span></div>
-        <div className="rounded-xl bg-zinc-950/50 p-2"><b className="block text-base text-sky-300">{projection.scheduled+projection.review}</b><span className="text-zinc-500">Aguardar/revisar</span></div>
-      </div>
+      <span aria-label={`${projection.total} pedidos aguardando organização`} className="shrink-0 rounded-xl bg-zinc-950/60 px-3 py-1.5 text-lg font-black tabular-nums text-zinc-100">{projection.total}</span>
     </div>
-    <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar pedidos do Site">
+    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Filtrar pedidos do Site">
       {([['all','Todos',projection.total],['pronto','Prontos',projection.ready],['confirmar','Comercial',projection.commercial],['aguardar_agenda','Agendados',projection.scheduled],['revisar','Revisar',projection.review]] as const).map(([key,label,count])=><button key={key} type="button" aria-pressed={filter===key} onClick={()=>setFilter(key)} className={`min-h-10 shrink-0 rounded-xl border px-3 text-[11px] font-bold ${filter===key?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label} · {count}</button>)}
     </div>
     {!shown.length?<div className="rounded-2xl border border-dashed border-zinc-800 p-7 text-center"><CheckCircle2 size={24} className="mx-auto text-emerald-400"/><p className="mt-2 text-xs font-bold text-zinc-300">Nenhum pedido nesta seleção</p><p className="mt-1 text-[10px] text-zinc-500">Novos pedidos entram automaticamente quando a sincronização chegar.</p></div>:null}
@@ -105,7 +99,7 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
       const expanded=editing===delivery.id;
       return <article key={delivery.id} className={`scroll-mt-28 rounded-[20px] border p-3.5 ${tones[state]}`}>
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wide">{duplicate?'Possível pedido duplicado · revisar origem':captions[state]}</p><h3 className="mt-1 truncate text-sm font-black text-zinc-100">{delivery.customer_name||'Cliente do Site'} · #{delivery.external_order_id||delivery.order_id||delivery.id}</h3></div>
+          <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wide">{duplicate?'Possível pedido duplicado · revisar origem':captions[state]}</p><h3 className="mt-1 truncate text-sm font-black text-zinc-100">{delivery.customer_name||'Cliente do Site'}</h3><p className="mt-0.5 truncate font-mono text-[10px] text-zinc-400">Pedido #{delivery.external_order_id||delivery.order_id||delivery.id}</p></div>
           <span className="shrink-0 text-sm font-black text-zinc-100">{amount(Number(delivery.customer_charge??delivery.value))}</span>
         </div>
         {duplicate&&<p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-200">Foram encontrados registros com o mesmo ID externo. Confira e concilie os pedidos antes de alocar uma rota.</p>}

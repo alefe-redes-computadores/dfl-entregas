@@ -364,7 +364,7 @@ export default function HomePage() {
             <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Operação do período</p>
             <h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">Visão rápida</h2>
           </div>
-          <p className="text-[10px] font-bold text-zinc-600">{completedDeliveries}/{totalEntregas} entregas</p>
+          <p className="text-[10px] font-bold text-zinc-500">{pendingDeliveries > 0 ? `${pendingDeliveries} pendentes` : 'Entregas em dia'}</p>
         </div>
         <div className="grid grid-cols-3 overflow-hidden rounded-[22px] border border-zinc-800 bg-zinc-900/40">
           <a
@@ -414,7 +414,7 @@ export default function HomePage() {
                   })}`}
             </p>
             <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">
-              Pedidos
+              Faturamento do período
             </p>
           </div>
         </div>

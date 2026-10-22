@@ -918,8 +918,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         <div className="mx-3 mb-2 flex flex-wrap items-center gap-1.5" aria-label="Resumo operacional da rota">
           <span className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1 text-[10px] font-bold text-zinc-300">{totalDeliveries} pedido{totalDeliveries === 1 ? '' : 's'} · {totalStops} parada{totalStops === 1 ? '' : 's'}</span>
           <span className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1 text-[10px] font-bold text-zinc-300">{pendingStopsCount} parada{pendingStopsCount === 1 ? '' : 's'} pendente{pendingStopsCount === 1 ? '' : 's'}</span>
-          {isCompleted && routeDuration && <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/[.07] px-2 py-1 text-[10px] font-bold text-emerald-300">Tempo de rota: {routeDuration}</span>}
-          {routeEarnings !== null && <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/[.07] px-2 py-1 text-[10px] font-bold text-emerald-300">{isPrivacyMode ? 'Ganho •••' : `Ganho previsto R$ ${routeEarnings.toFixed(2).replace('.', ',')}`}</span>}
+          {!isCompleted && routeEarnings !== null && <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/[.07] px-2 py-1 text-[10px] font-bold text-emerald-300">{isPrivacyMode ? 'Ganho •••' : `Ganho previsto R$ ${routeEarnings.toFixed(2).replace('.', ',')}`}</span>}
         </div>
       )}
 

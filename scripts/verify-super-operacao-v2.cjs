@@ -65,7 +65,7 @@ const checks = [
   ],
   [
     'card fala parada',
-    f.c.includes('pedidos · 1 parada'),
+    f.c.includes('pedidos nesta parada') && f.c.includes('groupedPending'),
   ],
 ];
 

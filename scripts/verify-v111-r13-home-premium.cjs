@@ -48,7 +48,7 @@ const pre = read('scripts/pre-apk.cjs');
 check('status iFood usa cálculo centralizado', /routeIfoodCodeProgress\(deliveries, openRouteIds\)/.test(component));
 check('a fila só recebe os códigos faltantes', /count: routeCodes\.missing/.test(component));
 check('código coletado não substitui confirmação externa', component.includes('externalPending.length') && component.includes('confirmationHref'));
-check('backlog global memorizado', /const pendingSiteOrders = useMemo\(/.test(component));
+check('backlog global memorizado', /const siteInbox = useMemo\(\(\) => siteInboxProjection\(allDeliveries\)/.test(component) && /siteInboxSummary\(siteInbox\)/.test(component) && !/pendingSiteOrders = useMemo\(/.test(component));
 check('operações críticas ordenadas antes da limitação', /\.sort\(\(a, b\) => b\.priority - a\.priority\)/.test(component));
 check('no máximo duas ações inicialmente', /visibleActionRows\.slice\(0, 2\)/.test(component));
 check('fila integral acessível sob expansão', /showAllActions \? visibleActionRows/.test(component));

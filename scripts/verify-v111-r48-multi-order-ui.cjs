@@ -20,7 +20,7 @@ check(create.includes('stopSource&&sameCustomerAddress(stopSource.address_string
 check(create.indexOf('const [drinks, setDrinks]') < create.indexOf('const activeDrinks ='),'Estado criado antes de ler campo ativo');
 check(create.indexOf('const [observation, setObservation]') < create.indexOf('const activeObservation ='),'Observação criada antes de ler campo ativo');
 check(create.includes('firstMultiOrderIssue(drafts)')&&lib.includes("kind:'duplicate_ifood_id'"),'IDs duplicados bloqueados antes de gravar');
-check(card.includes("const storedConfirmationCode = (item: Delivery) => (") && card.includes("item.confirmation_code || ''"),'Confirmação agrupada usa o código do próprio pedido');
+check(card.includes('storedConfirmationCode = (item: Delivery) => orderConfirmationCode(item.confirmation_code)') && card.includes('const codeToSave = orderConfirmationCode(suppliedCode || storedConfirmationCode(item))'),'Confirmação agrupada usa código estrito do próprio pedido, sem truncamento');
 check(card.includes('const groupedPaymentRows = useMemo('),'Financeiro de parada reutilizado');
 check(card.includes('groupedDeliveries.every(') && card.includes("item.origin === 'ifood'") && card.includes('orderConfirmationCode(item.confirmation_code)'), 'Código comum somente quando todos os pedidos iFood têm o mesmo código válido');
 const pre=file('scripts/pre-apk.cjs');const tests=[...pre.matchAll(/^\s*'(scripts\/[^']+\.cjs)'/gm)].map(m=>m[1]);check(tests.length>=178,'no mínimo 178 suítes anteriores preservadas');check(new Set(tests).size===tests.length,'Nenhuma suíte duplicada');for(const item of tests)check(fs.existsSync(item),'Suíte presente '+item);
