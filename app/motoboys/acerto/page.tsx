@@ -13,6 +13,7 @@ import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { paintDflBrand, paintFittedText } from '@/lib/share-card-brand';
+import { activeRouteDeliveries } from '@/lib/route-closure-eligibility';
 
 const fromKey=(key:string)=>new Date(`${key}T12:00:00-03:00`);
 const shift=(key:string,days:number)=>{const date=fromKey(key);date.setDate(date.getDate()+days);return operationalDateKey(date);};
@@ -215,7 +216,7 @@ function Content(){
 
     const openRoutes=data.routes.filter(route=>route.status!=='fechada');
     const routeIds=new Set(data.routes.map(route=>route.id));
-    const pending=deliveries.filter(delivery=>routeIds.has(delivery.route_id)&&!delivery.completed);
+    const pending=activeRouteDeliveries(deliveries).filter(delivery=>routeIds.has(delivery.route_id)&&!delivery.completed);
     if(openRoutes.length||pending.length)return void toast.error('Finalize a operação antes de confirmar o acerto.',{description:`${openRoutes.length} rota(s) aberta(s) · ${pending.length} entrega(s) pendente(s).`});
 
     const now=new Date().toISOString();

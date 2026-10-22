@@ -12,8 +12,10 @@ export function reverseDrainOutcome(
   const succeeded = (stage: ReverseOperationResult | null) =>
     stage === null || (
       stage.ok === true &&
+      typeof (stage.failed ?? 0) === 'number' &&
       Number.isFinite(stage.failed ?? 0) &&
       (stage.failed ?? 0) === 0 &&
+      typeof (stage.unsettled ?? 0) === 'number' &&
       Number.isFinite(stage.unsettled ?? 0) &&
       (stage.unsettled ?? 0) === 0
     );

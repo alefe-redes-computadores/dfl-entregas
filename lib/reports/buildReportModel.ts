@@ -97,28 +97,29 @@ function buildPeriod(
     };
   }
 
-  const validKeys = normalized
-    .map((item) => item.reportDateKey)
-    .filter((value): value is string => Boolean(value))
-    .sort(compareDateKeys);
+  // O período completo precisa só da data mais antiga, não ordenar todo
+  // o histórico. Preserva a inclusão dos registros sem data no relatório.
+  let firstDateKey: string | null = null;
+  for (const item of normalized) {
+    const key = item.reportDateKey;
+    if (key && (!firstDateKey || compareDateKeys(key, firstDateKey) < 0)) {
+      firstDateKey = key;
+    }
+  }
 
   return {
     key,
     label: PERIOD_LABELS[key],
-    start: validKeys[0] ? dateFromKey(validKeys[0]) : null,
+    start: firstDateKey ? dateFromKey(firstDateKey) : null,
     end: dateFromKey(endKey),
     previousStart: null,
     previousEnd: null,
   };
 }
 
-function inPeriod(item: ReportDelivery, start: Date | null, end: Date): boolean {
+function inPeriod(item: ReportDelivery, startKey: string | null, endKey: string): boolean {
   if (!item.reportDateKey) return false;
-  if (!start) return true;
-
-  const startKey = saoPauloDateKey(start);
-  const endKey = saoPauloDateKey(end);
-
+  if (!startKey) return true;
   return (
     compareDateKeys(item.reportDateKey, startKey) >= 0 &&
     compareDateKeys(item.reportDateKey, endKey) <= 0
@@ -257,12 +258,22 @@ function buildRouteTimings(
   routes: Route[],
   deliveries: ReportDelivery[],
 ): { trusted: RouteTimingRow[]; suspicious: number } {
-  const deliveryRouteIds = new Set(deliveries.map((delivery) => delivery.route_id));
+  // Um índice único evita varrer TODAS as entregas para cada rota fechada.
+  // Contamos inclusive IDs repetidos da coleção, exatamente como o filtro
+  // histórico (não deduplicar pedidos nem inventar entregas concluídas).
+  const deliveryCountByRoute = new Map<string, number>();
+  for (const delivery of deliveries) {
+    if (!delivery.route_id) continue;
+    deliveryCountByRoute.set(
+      delivery.route_id,
+      (deliveryCountByRoute.get(delivery.route_id) ?? 0) + 1,
+    );
+  }
   const trusted: RouteTimingRow[] = [];
   let suspicious = 0;
 
   routes.forEach((route) => {
-    if (!deliveryRouteIds.has(route.id)) return;
+    if (!deliveryCountByRoute.has(route.id)) return;
     if (route.status !== 'fechada') return;
 
     const durationMinutes =
@@ -278,9 +289,7 @@ function buildRouteTimings(
       routeName: route.name || route.id,
       motoboyName: route.motoboy_name || 'Não atribuído',
       durationMinutes: Number(durationMinutes.toFixed(1)),
-      deliveryCount: deliveries.filter(
-        (delivery) => delivery.route_id === route.id,
-      ).length,
+      deliveryCount: deliveryCountByRoute.get(route.id) ?? 0,
     });
   });
 
@@ -540,17 +549,22 @@ export function buildReportModel(input: {
 
   // Itens sem data não são incluídos em filtros temporais. Em "Todo período",
   // eles continuam nas métricas não temporais para que não desapareçam.
+  // São Paulo é calculado uma vez por janela, não duas vezes por entrega.
+  const periodStartKey = period.start ? saoPauloDateKey(period.start) : null;
+  const periodEndKey = saoPauloDateKey(period.end);
+  const previousStartKey = period.previousStart ? saoPauloDateKey(period.previousStart) : null;
+  const previousEndKey = period.previousEnd ? saoPauloDateKey(period.previousEnd) : null;
   const current =
     input.periodKey === 'all'
       ? normalized
       : normalized.filter((delivery) =>
-          inPeriod(delivery, period.start, period.end),
+          inPeriod(delivery, periodStartKey, periodEndKey),
         );
 
   const previous =
-    period.previousStart && period.previousEnd
+    previousStartKey && previousEndKey
       ? normalized.filter((delivery) =>
-          inPeriod(delivery, period.previousStart, period.previousEnd as Date),
+          inPeriod(delivery, previousStartKey, previousEndKey),
         )
       : [];
 

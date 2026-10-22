@@ -7,6 +7,7 @@ import type { Customer, Delivery, Route } from '@/types';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { routeCashFlow } from '@/lib/route-cash-flow';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
+import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 
 type Props = {
   route: Route;
@@ -68,8 +69,7 @@ export function RouteDepartureChecklist({
       missingAddress: !(delivery.address_string || customer?.address)?.trim(),
       missingConfirmation:
         delivery.origin === 'ifood' &&
-        !delivery.confirmation_code?.trim() &&
-        !customer?.last_confirmation_code?.trim(),
+        !orderConfirmationCode(delivery.confirmation_code),
     };
   }), [deliveries, getCustomerById]);
 

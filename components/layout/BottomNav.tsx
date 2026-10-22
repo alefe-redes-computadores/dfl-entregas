@@ -18,7 +18,8 @@ import {
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { readUnreadSiteOrderIds, SITE_UNREAD_EVENT } from '@/lib/site-order-inbox';
+import { siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
+import { useAppStore } from '@/store/useAppStore';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Início', icon: Home },
@@ -37,14 +38,9 @@ export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [showAddSheet, setShowAddSheet] = useState(false);
-  const [siteUnread, setSiteUnread] = useState(0);
-
-  useEffect(() => {
-    const refresh = () => setSiteUnread(readUnreadSiteOrderIds().length);
-    refresh();
-    window.addEventListener(SITE_UNREAD_EVENT, refresh);
-    return () => window.removeEventListener(SITE_UNREAD_EVENT, refresh);
-  }, []);
+  // Backlog persistido nas Deliveries; badge nao depende de memoria de aviso local.
+  const deliveries = useAppStore(state => state.deliveries);
+  const siteUnread = siteInboxProjection(deliveries).total;
 
   const addMode: AddMode =
     (pathname === '/estoque' || pathname.startsWith('/estoque/compras') || pathname.startsWith('/estoque/catalogo'))

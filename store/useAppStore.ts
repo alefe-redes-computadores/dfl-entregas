@@ -3,6 +3,8 @@ import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
 import { toast } from '@/lib/operational-toast';
 import { persist } from 'zustand/middleware';
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField, runTransaction, query, where } from 'firebase/firestore';
+import { createSerializedWriteQueue } from '@/lib/store/serializedWriteQueue';
+import { rollbackAddedEntity, rollbackUpdatedEntity, rollbackDeletedEntity, rollbackAddedEntities, rollbackUpdatedEntities } from '@/lib/operation/optimisticRollback';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from '@/lib/firebase';
 import { Capacitor } from '@capacitor/core';
@@ -33,6 +35,7 @@ import {
 } from '@/lib/operational-time';
 import { isClosedSettlement, settlementDocumentId } from '@/lib/motoboy-settlement-authority';
 import { reconcileIfoodConfirmation } from '@/lib/ifood-confirmation-authority';
+import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { fuelingDate } from '@/lib/fueling-analytics';
 import { INITIAL_STOCK_PRODUCTS, INITIAL_STOCK_SUPPLIERS, STOCK_CATALOG_VERSION } from '@/lib/stock-catalog';
 import {
@@ -51,6 +54,7 @@ import { validOriginPoint } from '@/lib/store-origin';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingConfirmation, isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
+import { mergeCloudFirstById, mergeDeliveriesPreservingExpansion } from '@/lib/operation/snapshotMerge';
 import { markUnreadSiteOrders } from '@/lib/site-order-inbox';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 import { kickSiteRoute } from '@/lib/integration/client/routeKick';
@@ -60,6 +64,7 @@ import {
   stockExitExceeds,
 } from '@/lib/stock-precision';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { assertSiteRouteAllocation, siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
 import { activeRouteDeliveries, canAutoCloseRoute } from '@/lib/route-closure-eligibility';
 import { groupStockSupplyItems, planStockSupplyLedger } from '@/lib/stock-supply-ledger';
 import { planStockMovement, planStockCount, type StockCountInput } from '@/lib/stock-mutation-plan';
@@ -124,10 +129,11 @@ async function autoOrganizeLoadedRouteAfterInsert(
   if (freeStops.filter((stop) => Boolean(stop.point)).length < 2) return;
 
   const smartFree = buildSmartRouteOrder(origin, freeStops);
-  const smartByKey = new Map(
-    smartFree.map((stop) => [deliveryStopKey(stop.delivery), freeGroups.find((group) => group.key === deliveryStopKey(stop.delivery))!]),
-  );
-  const orderedFree = smartFree.map((stop) => smartByKey.get(deliveryStopKey(stop.delivery))!).filter(Boolean);
+  // Evita varrer todos os grupos livres para cada parada escolhida.
+  const freeByKey = new Map(freeGroups.map((group) => [group.key, group] as const));
+  const orderedFree = smartFree
+    .map((stop) => freeByKey.get(deliveryStopKey(stop.delivery)))
+    .filter((group): group is (typeof groups)[number] => Boolean(group));
   const finalGroups: typeof groups = [];
   let freeCursor = 0;
   for (let index = 0; index < groups.length; index += 1) {
@@ -219,6 +225,7 @@ interface AppState {
   addDelivery: (delivery: Delivery) => Promise<void>;
   addDeliveries: (deliveries: Delivery[]) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
+  allocateSiteDelivery: (deliveryId: string, target: {routeId: string} | {newRoute: {name: string; motoboyId: string}}) => Promise<string>;
   deleteDelivery: (id: string) => Promise<void>;
   closeRoute: (routeId: string, options?: { effectiveEndTime?: string; autoClosedAt?: string }) => Promise<void>;
   reopenRoute: (routeId: string) => Promise<void>;
@@ -329,6 +336,9 @@ const defaultSchedule = Object.fromEntries(
  * integração/estorno sempre espera a gravação anterior chegar ao Firestore.
  */
 const pendingStockSupplyWrites = new Map<string, Promise<void>>();
+
+// Todas as gravações do documento store_settings seguem a ordem das alterações locais.
+const queueStoreSettingsWrite = createSerializedWriteQueue();
 
 /**
  * V39 — orçamento de leituras Firestore.
@@ -460,11 +470,11 @@ export const useAppStore = create<AppState>()(
           const safeData =
             sanitizeForFirebase(newSettings);
 
-          await setDoc(
+          await queueStoreSettingsWrite(safeData, (snapshot) => setDoc(
             doc(db, 'store', 'store_settings'),
-            safeData,
+            snapshot,
             { merge: true },
-          );
+          ));
         } catch (error) {
           console.error(
             'Erro ao salvar configurações:',
@@ -635,22 +645,10 @@ export const useAppStore = create<AppState>()(
 
           const cloudStoreSettings = storeSnap.exists() ? storeSnap.data() : null;
 
-          const mergedRoutes = [...fbRoutes];
-          get().routes.forEach(local => {
-            if (!mergedRoutes.some(m => m.id === local.id)) mergedRoutes.push(local);
-          });
-
-          let mergedDeliveries: (Delivery & { is_expanded?: boolean })[] = [...fbDeliveries].map(fbDel => {
-            const localDel = get().deliveries.find(l => l.id === fbDel.id);
-            return {
-              ...fbDel,
-              is_expanded: localDel ? localDel.is_expanded : false
-            };
-          });
-
-          get().deliveries.forEach(local => {
-            if (!mergedDeliveries.some(m => m.id === local.id)) mergedDeliveries.push(local);
-          });
+          // R47: cloud authority and local UI state, with indexed reconciliation.
+          // No Firestore reads or writes are added by this merge.
+          const mergedRoutes = mergeCloudFirstById(fbRoutes, get().routes);
+          let mergedDeliveries = mergeDeliveriesPreservingExpansion(fbDeliveries, get().deliveries);
 
           mergedDeliveries.sort((a, b) => {
              const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
@@ -658,37 +656,20 @@ export const useAppStore = create<AppState>()(
              return orderA - orderB;
           });
 
-          const mergedCustomers = [...fbCustomers];
-          get().customers.forEach(local => {
-            if (!mergedCustomers.some(m => m.id === local.id)) mergedCustomers.push(local);
-          });
-
-          const mergedMotoboys = [...fbMotoboys];
-          get().motoboys.forEach(local => {
-            if (!mergedMotoboys.some(m => m.id === local.id)) mergedMotoboys.push(local);
-          });
-
-          const mergedFuelings = [...fbFuelings];
-          get().fuelings.forEach(local => {
-            if (!mergedFuelings.some(item => item.id === local.id)) mergedFuelings.push(local);
-          });
+          const mergedCustomers = mergeCloudFirstById(fbCustomers, get().customers);
+          const mergedMotoboys = mergeCloudFirstById(fbMotoboys, get().motoboys);
+          const mergedFuelings = mergeCloudFirstById(fbFuelings, get().fuelings);
           mergedFuelings.sort(
             (a, b) => fuelingDate(b).getTime() - fuelingDate(a).getTime(),
           );
 
-          const mergedStockSupplies = [...fbStockSupplies];
-          get().stockSupplies.forEach(local => {
-            if (!mergedStockSupplies.some(item => item.id === local.id)) mergedStockSupplies.push(local);
-          });
+          const mergedStockSupplies = mergeCloudFirstById(fbStockSupplies, get().stockSupplies);
           mergedStockSupplies.sort(
             (a, b) => new Date(b.occurred_at || b.created_at).getTime() - new Date(a.occurred_at || a.created_at).getTime(),
           );
 
-          const mergeById = <T extends { id: string }>(cloud: T[], local: T[]) => {
-            const merged = [...cloud];
-            local.forEach((item) => { if (!merged.some((current) => current.id === item.id)) merged.push(item); });
-            return merged;
-          };
+          // Preserve the historical mergeById call sites while removing O(n²) scans.
+          const mergeById = mergeCloudFirstById;
           const mergedTeamMembers = mergeById(fbTeamMembers, get().teamMembers).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
           const mergedStockSuppliers = mergeById(fbStockSuppliers, get().stockSuppliers).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
           const mergedStockProducts = mergeById(fbStockProducts, get().stockProducts).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
@@ -841,12 +822,7 @@ export const useAppStore = create<AppState>()(
 
           const mergedStockMovements = mergeById(fbStockMovements, get().stockMovements).sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
 
-          const mergedPendingConfirmations = [...fbPendingConfirmations];
-          get().ifoodPendingConfirmations.forEach(local => {
-            if (!mergedPendingConfirmations.some(item => item.id === local.id)) {
-              mergedPendingConfirmations.push(local);
-            }
-          });
+          const mergedPendingConfirmations = mergeCloudFirstById(fbPendingConfirmations, get().ifoodPendingConfirmations);
           mergedPendingConfirmations.sort(
             (a, b) =>
               new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
@@ -876,8 +852,9 @@ export const useAppStore = create<AppState>()(
               (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente'
             );
             markUnreadSiteOrders(newSiteOrders.map((delivery) => delivery.id));
+            const customerById = new Map(mergedCustomers.map((item) => [item.id, item] as const));
             newSiteOrders.slice(0, 3).forEach((delivery) => {
-              const customer = mergedCustomers.find((item) => item.id === delivery.customer_id);
+              const customer = customerById.get(delivery.customer_id || '');
               void notifyNewSiteOrder(
                 delivery.id,
                 customer?.name,
@@ -998,7 +975,7 @@ export const useAppStore = create<AppState>()(
           const safeData = sanitizeForFirebase(routeWithTimestamp);
           await setDoc(doc(db, 'routes', route.id), safeData);
         } catch (error) {
-          set((state) => ({ routes: state.routes.filter((r) => r.id !== route.id) }));
+          set((state) => ({ routes: rollbackAddedEntity(state.routes, routeWithTimestamp) }));
           console.error(error);
           throw error;
         } finally {
@@ -1007,14 +984,16 @@ export const useAppStore = create<AppState>()(
       },
 
       updateRoute: async (routeId, data) => {
-        const previousRoutes = get().routes;
+        const previousRoute = get().routes.find((route) => route.id === routeId);
+        if (!previousRoute) throw new Error('Rota não encontrada.');
         const now = new Date().toISOString();
         const nextData: Partial<Route> = { ...data, updated_at: now };
-        set((state) => ({ routes: state.routes.map((route) => route.id === routeId ? { ...route, ...nextData } : route) }));
+        const optimisticRoute: Route = { ...previousRoute, ...nextData };
+        set((state) => ({ routes: state.routes.map((route) => route.id === routeId ? optimisticRoute : route) }));
         try {
           await updateDoc(doc(db, 'routes', routeId), sanitizeForFirebase(nextData));
         } catch (error) {
-          set({ routes: previousRoutes });
+          set((state) => ({ routes: rollbackUpdatedEntity(state.routes, previousRoute, optimisticRoute) }));
           console.error('Erro ao atualizar rota:', error);
           throw error;
         }
@@ -1056,8 +1035,9 @@ export const useAppStore = create<AppState>()(
           started_by_name: startedByName,
           started_by_email: actor?.email || undefined,
         };
+        const optimisticRoute: Route = { ...current, started_at: now, updated_at: now, ...audit };
         set((state) => ({
-          routes: state.routes.map((r) => r.id === routeId ? { ...r, started_at: now, updated_at: now, ...audit } : r),
+          routes: state.routes.map((r) => r.id === routeId ? optimisticRoute : r),
         }));
         try {
           await updateDoc(doc(db, 'routes', routeId), sanitizeForFirebase({ started_at: now, departure_time: now, updated_at: now, ...audit }));
@@ -1097,7 +1077,7 @@ export const useAppStore = create<AppState>()(
           void notifyRouteStarted(routeId, current.name || 'Rota', current.motoboy_name || '', startedByName, stops, routeDeliveries.length, get().storeSettings.notificationPreferences);
           void scheduleRouteDurationReminder({ ...current, started_at: now, ...audit }, get().storeSettings.notificationPreferences);
         } catch (error) {
-          set({ routes: previousRoutes });
+          set((state) => ({ routes: rollbackUpdatedEntity(state.routes, current, optimisticRoute) }));
           console.error(error);
           throw error;
         }
@@ -1114,12 +1094,12 @@ export const useAppStore = create<AppState>()(
         if (get().deliveries.some((delivery) => delivery.route_id === routeId)) {
           throw new Error('Não é possível excluir uma rota que possui entregas.');
         }
-        const previousRoutes = get().routes;
+        const previousIndex = get().routes.findIndex((route) => route.id === routeId);
         set((state) => ({ routes: state.routes.filter((r) => r.id !== routeId) }));
         try {
           await deleteDoc(doc(db, 'routes', routeId));
         } catch (error) {
-          set({ routes: previousRoutes });
+          set((state) => ({ routes: rollbackDeletedEntity(state.routes, routeToDelete, previousIndex) }));
           console.error('Erro ao excluir rota:', error);
           throw error;
         }
@@ -1132,23 +1112,25 @@ export const useAppStore = create<AppState>()(
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await setDoc(doc(db, 'motoboys', motoboy.id), safeData);
         } catch (error) {
-          set((state) => ({ motoboys: state.motoboys.filter((item) => item.id !== motoboy.id) }));
+          set((state) => ({ motoboys: rollbackAddedEntity(state.motoboys, dataWithTimestamp) }));
           console.error(error);
           throw error;
         }
       },
 
       updateMotoboy: async (id, updatedData) => {
-        const previousMotoboys = get().motoboys;
+        const previousMotoboy = get().motoboys.find((item) => item.id === id);
+        if (!previousMotoboy) throw new Error('Motoboy não encontrado.');
         const dataWithTimestamp: Partial<Motoboy> = { ...updatedData, updated_at: new Date().toISOString() };
+        const optimisticMotoboy: Motoboy = { ...previousMotoboy, ...dataWithTimestamp };
         set((state) => ({
-          motoboys: state.motoboys.map((m) => m.id === id ? { ...m, ...dataWithTimestamp } as Motoboy : m)
+          motoboys: state.motoboys.map((m) => m.id === id ? optimisticMotoboy : m)
         }));
         try {
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await updateDoc(doc(db, 'motoboys', id), safeData);
         } catch (error) {
-          set({ motoboys: previousMotoboys });
+          set((state) => ({ motoboys: rollbackUpdatedEntity(state.motoboys, previousMotoboy, optimisticMotoboy) }));
           console.error(error);
           throw error;
         }
@@ -1183,12 +1165,12 @@ export const useAppStore = create<AppState>()(
           );
         }
 
-        const previousMotoboys = get().motoboys;
+        const previousIndex = get().motoboys.findIndex((item) => item.id === id);
         set((state) => ({ motoboys: state.motoboys.filter((m) => m.id !== id) }));
         try {
           await deleteDoc(doc(db, 'motoboys', id));
         } catch (error) {
-          set({ motoboys: previousMotoboys });
+          set((state) => ({ motoboys: rollbackDeletedEntity(state.motoboys, currentMotoboy, previousIndex) }));
           console.error(error);
           throw error;
         }
@@ -1206,27 +1188,29 @@ export const useAppStore = create<AppState>()(
         try {
           await setDoc(doc(db, 'fuelings', fueling.id), sanitizeForFirebase(dataWithTimestamp));
         } catch (error) {
-          set((state) => ({ fuelings: state.fuelings.filter((item) => item.id !== fueling.id) }));
+          set((state) => ({ fuelings: rollbackAddedEntity(state.fuelings, dataWithTimestamp) }));
           console.error('Erro ao adicionar compra de estoque:', error);
           throw error;
         }
       },
 
       updateFueling: async (id, updatedData) => {
-        const previousFuelings = get().fuelings;
+        const previousFueling = get().fuelings.find((item) => item.id === id);
+        if (!previousFueling) throw new Error('Compra não encontrada.');
         const dataWithTimestamp: Partial<Fueling> = {
           ...updatedData,
           updated_at: new Date().toISOString(),
         };
+        const optimisticFueling: Fueling = { ...previousFueling, ...dataWithTimestamp };
         set((state) => ({
           fuelings: state.fuelings.map((item) =>
-            item.id === id ? { ...item, ...dataWithTimestamp } as Fueling : item
+            item.id === id ? optimisticFueling : item
           ),
         }));
         try {
           await updateDoc(doc(db, 'fuelings', id), sanitizeForFirebase(dataWithTimestamp));
         } catch (error) {
-          set({ fuelings: previousFuelings });
+          set((state) => ({ fuelings: rollbackUpdatedEntity(state.fuelings, previousFueling, optimisticFueling) }));
           console.error('Erro ao atualizar compra de estoque:', error);
           throw error;
         }
@@ -1234,11 +1218,13 @@ export const useAppStore = create<AppState>()(
 
       deleteFueling: async (id) => {
         const previousFuelings = get().fuelings;
+        const previousFueling = previousFuelings.find((item) => item.id === id);
+        const previousIndex = previousFuelings.findIndex((item) => item.id === id);
         set((state) => ({ fuelings: state.fuelings.filter((item) => item.id !== id) }));
         try {
           await deleteDoc(doc(db, 'fuelings', id));
         } catch (error) {
-          set({ fuelings: previousFuelings });
+          set((state) => ({ fuelings: rollbackDeletedEntity(state.fuelings, previousFueling, previousIndex) }));
           console.error('Erro ao excluir compra de estoque:', error);
           throw error;
         }
@@ -1338,31 +1324,39 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteStockSupply: async (id) => {
-        const current = get().stockSupplies.find((item) => item.id === id);
+        const before = get().stockSupplies;
+        const current = before.find((item) => item.id === id);
         if (current?.stock_integrated_at) throw new Error('Compra já integrada ao estoque e não pode ser excluída.');
-        const previous = get().stockSupplies;
+        const originalIndex = before.findIndex((item) => item.id === id);
         set((state) => ({ stockSupplies: state.stockSupplies.filter((item) => item.id !== id) }));
         try {
           await deleteDoc(doc(db, 'stock_supplies', id));
         } catch (error) {
-          set({ stockSupplies: previous });
+          set((state) => ({ stockSupplies: rollbackDeletedEntity(state.stockSupplies, current, originalIndex) }));
           throw error;
         }
       },
 
       addStockSupplier: async (supplier) => {
-        const previous = get().stockSuppliers;
-        set({ stockSuppliers: [...previous, supplier].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) });
+        set((state) => ({ stockSuppliers: [...state.stockSuppliers, supplier].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) }));
         try { await setDoc(doc(db, 'stock_suppliers', supplier.id), sanitizeForFirebase(supplier)); }
-        catch (error) { set({ stockSuppliers: previous }); throw error; }
+        catch (error) {
+          set((state) => ({ stockSuppliers: rollbackAddedEntity(state.stockSuppliers, supplier) }));
+          throw error;
+        }
       },
 
       updateStockSupplier: async (id, data) => {
-        const previous = get().stockSuppliers;
+        const current = get().stockSuppliers.find((item) => item.id === id);
+        if (!current) throw new Error('Fornecedor não encontrado.');
         const next = { ...data, updated_at: new Date().toISOString() };
-        set({ stockSuppliers: previous.map((item) => item.id === id ? { ...item, ...next } : item) });
+        const optimistic = { ...current, ...next };
+        set((state) => ({ stockSuppliers: state.stockSuppliers.map((item) => item.id === id ? optimistic : item) }));
         try { await updateDoc(doc(db, 'stock_suppliers', id), sanitizeForFirebase(next)); }
-        catch (error) { set({ stockSuppliers: previous }); throw error; }
+        catch (error) {
+          set((state) => ({ stockSuppliers: rollbackUpdatedEntity(state.stockSuppliers, current, optimistic) }));
+          throw error;
+        }
       },
 
       seedStockCatalog: async () => {
@@ -1383,27 +1377,45 @@ export const useAppStore = create<AppState>()(
       },
 
       addTeamMember: async (member) => {
-        const previous = get().teamMembers;
-        set({ teamMembers: [...previous, member].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) });
+        set((state) => ({ teamMembers: [...state.teamMembers, member].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) }));
         try { await setDoc(doc(db, 'team_members', member.id), sanitizeForFirebase(member)); }
-        catch (error) { set({ teamMembers: previous }); throw error; }
+        catch (error) {
+          set((state) => ({ teamMembers: rollbackAddedEntity(state.teamMembers, member) }));
+          throw error;
+        }
       },
 
       updateTeamMember: async (id, data) => {
-        const previous = get().teamMembers;
+        const current = get().teamMembers.find((item) => item.id === id);
+        if (!current) throw new Error('Integrante da equipe não encontrado.');
         const next = { ...data, updated_at: new Date().toISOString() };
-        set({ teamMembers: previous.map((item) => item.id === id ? { ...item, ...next } : item) });
+        const optimistic = { ...current, ...next };
+        set((state) => ({ teamMembers: state.teamMembers.map((item) => item.id === id ? optimistic : item) }));
         try { await updateDoc(doc(db, 'team_members', id), sanitizeForFirebase(next)); }
-        catch (error) { set({ teamMembers: previous }); throw error; }
+        catch (error) {
+          set((state) => ({ teamMembers: rollbackUpdatedEntity(state.teamMembers, current, optimistic) }));
+          throw error;
+        }
       },
 
       addStockProduct: async (product) => {
-        const previous = get().stockProducts;
-        const previousMovements = get().stockMovements;
         const initial = product.current_quantity > 0 ? { id: `initial-${product.id}`, product_id: product.id, product_name: product.name, type: 'entrada' as const, quantity: product.current_quantity, balance_before: 0, balance_after: product.current_quantity, unit_cost: product.average_cost, reason: 'Saldo inicial do cadastro', occurred_at: product.created_at, created_at: product.created_at } : null;
-        set({ stockProducts: [...previous, product].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), stockMovements: initial ? [initial, ...previousMovements] : previousMovements });
-        try { const batch = writeBatch(db); batch.set(doc(db, 'stock_products', product.id), sanitizeForFirebase(product)); if (initial) batch.set(doc(db, 'stock_movements', initial.id), sanitizeForFirebase(initial)); await batch.commit(); }
-        catch (error) { set({ stockProducts: previous, stockMovements: previousMovements }); throw error; }
+        set((state) => ({
+          stockProducts: [...state.stockProducts, product].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+          stockMovements: initial ? [initial, ...state.stockMovements] : state.stockMovements,
+        }));
+        try {
+          const batch = writeBatch(db);
+          batch.set(doc(db, 'stock_products', product.id), sanitizeForFirebase(product));
+          if (initial) batch.set(doc(db, 'stock_movements', initial.id), sanitizeForFirebase(initial));
+          await batch.commit();
+        } catch (error) {
+          set((state) => ({
+            stockProducts: rollbackAddedEntity(state.stockProducts, product),
+            stockMovements: initial ? rollbackAddedEntity(state.stockMovements, initial) : state.stockMovements,
+          }));
+          throw error;
+        }
       },
 
       updateStockProduct: async (id, data) => {
@@ -1424,9 +1436,10 @@ export const useAppStore = create<AppState>()(
         }
 
         const next = { ...data, updated_at: new Date().toISOString() };
-        set({ stockProducts: previous.map((item) => item.id === id ? { ...item, ...next } : item) });
+        const optimistic = { ...current, ...next };
+        set((state) => ({ stockProducts: state.stockProducts.map((item) => item.id === id ? optimistic : item) }));
         try { await updateDoc(doc(db, 'stock_products', id), sanitizeForFirebase(next)); }
-        catch (error) { set({ stockProducts: previous }); throw error; }
+        catch (error) { set((state) => ({ stockProducts: rollbackUpdatedEntity(state.stockProducts, current, optimistic) })); throw error; }
       },
 
       cleanupDuplicateStockProducts: async () => {
@@ -1740,7 +1753,7 @@ export const useAppStore = create<AppState>()(
             }
           }
         } catch (error) {
-          set((state) => ({ deliveries: state.deliveries.filter((item) => item.id !== delivery.id) }));
+          set((state) => ({ deliveries: rollbackAddedEntity(state.deliveries, deliveryWithTimestamp) }));
           console.error(error);
           throw error;
         } finally {
@@ -1779,7 +1792,6 @@ export const useAppStore = create<AppState>()(
             updated_at: now,
           } as Delivery;
         });
-        const previous = get().deliveries;
         set((state) => ({ deliveries: [...prepared, ...state.deliveries] }));
         try {
           const batch = writeBatch(db);
@@ -1802,9 +1814,67 @@ export const useAppStore = create<AppState>()(
             }
           }
         } catch (error) {
-          set({ deliveries: previous, syncError: true });
+          set((state) => ({ deliveries: rollbackAddedEntities(state.deliveries, prepared), syncError: true }));
           console.error('Erro ao adicionar pedidos em lote:', error);
           throw error;
+        }
+      },
+
+      // R66: Firestore e a autoridade final. Nenhuma Delivery/Route duplicada e criada
+      // pela Caixa. Em cancelamento ou confirmacao tardia a transacao e reavaliada.
+      allocateSiteDelivery: async (deliveryId, target) => {
+        if (deliveryMutationLocks.has(`site-allocate:${deliveryId}`)) throw new Error('Ja existe uma alocacao em andamento para este pedido.');
+        deliveryMutationLocks.add(`site-allocate:${deliveryId}`);
+        try {
+          const initial = get();
+          // A UI e o Store precisam negar uma identidade externa em colisao.
+          // O Firestore continua sendo revalidado na transacao abaixo.
+          const localCandidate = siteInboxProjection(initial.deliveries).rows.find(row => row.delivery.id === deliveryId);
+          if (!localCandidate || localCandidate.state !== 'pronto' || localCandidate.duplicate) {
+            throw new Error('Pedido ainda não liberado ou identidade duplicada. Sincronize e revise na Caixa.');
+          }
+          const chosenMotoboy = 'newRoute' in target ? initial.motoboys.find(item => item.id === target.newRoute.motoboyId && item.active) : null;
+          if ('newRoute' in target && (!chosenMotoboy || !target.newRoute.name.trim())) throw new Error('Informe o nome da rota e um motoboy ativo.');
+          const now = new Date();
+          const nowIso = now.toISOString();
+          const routeId = 'newRoute' in target
+            ? `site-route-${now.getTime()}-${Math.random().toString(36).slice(2, 11)}`
+            : target.routeId;
+          if (!routeId || isSyntheticOperationalRoute(routeId)) throw new Error('Rota de destino invalida.');
+          const deliveryRef = doc(db, 'deliveries', deliveryId);
+          const routeRef = doc(db, 'routes', routeId);
+          const saved = await runTransaction(db, async (transaction) => {
+            const deliverySnap = await transaction.get(deliveryRef);
+            const routeSnap = await transaction.get(routeRef);
+            if (!deliverySnap.exists()) throw new Error('Pedido não encontrado no Firestore. Sincronize a Caixa.');
+            const remoteDelivery = { ...deliverySnap.data(), id: deliverySnap.id } as Delivery;
+            let route: Route;
+            if ('newRoute' in target) {
+              if (routeSnap.exists()) throw new Error('Identificador de rota já utilizado. Tente novamente.');
+              route = { id: routeId, name: target.newRoute.name.trim(), status: 'aberta',
+                motoboy_id: chosenMotoboy!.id, motoboy_name: chosenMotoboy!.name,
+                change_money: 0, drinks_summary: '', created_at: nowIso,
+                operational_date: dateKey(now), updated_at: nowIso };
+            } else {
+              if (!routeSnap.exists()) throw new Error('A rota selecionada não existe mais.');
+              route = { ...routeSnap.data(), id: routeSnap.id } as Route;
+            }
+            assertSiteRouteAllocation(remoteDelivery, route, now.getTime());
+            // A atribuição é logística. Não muda status comercial, conclusão, pagamento,
+            // histórico, código iFood ou evento de saída.
+            transaction.update(deliveryRef, { route_id: routeId, updated_at: nowIso });
+            if ('newRoute' in target) transaction.set(routeRef, sanitizeForFirebase(route));
+            return { remoteDelivery, route };
+          });
+          set(state => ({
+            routes: 'newRoute' in target && !state.routes.some(item => item.id === routeId)
+              ? [saved.route, ...state.routes] : state.routes,
+            deliveries: state.deliveries.map(item => item.id === deliveryId
+              ? { ...item, route_id: routeId, updated_at: nowIso } : item),
+          }));
+          return routeId;
+        } finally {
+          deliveryMutationLocks.delete(`site-allocate:${deliveryId}`);
         }
       },
 
@@ -1927,8 +1997,6 @@ export const useAppStore = create<AppState>()(
             : {}),
           updated_at: now,
         };
-        const previousDeliveries = state.deliveries;
-        const previousCustomers = state.customers;
         const customer = deliveryToUpdate.customer_id
           ? state.customers.find((item) => item.id === deliveryToUpdate.customer_id)
           : undefined;
@@ -1958,10 +2026,13 @@ export const useAppStore = create<AppState>()(
           };
         }
 
+        const optimisticCustomer: Customer | undefined = updatedCustomerData && customer
+          ? { ...customer, ...updatedCustomerData }
+          : undefined;
         set((current) => ({
           deliveries: current.deliveries.map((d) => d.id === id ? nextDelivery : d),
-          customers: updatedCustomerData && customer
-            ? current.customers.map((item) => item.id === customer.id ? { ...item, ...updatedCustomerData } : item)
+          customers: optimisticCustomer
+            ? current.customers.map((item) => item.id === optimisticCustomer.id ? optimisticCustomer : item)
             : current.customers,
         }));
 
@@ -2111,7 +2182,13 @@ export const useAppStore = create<AppState>()(
             console.error('Entrega salva, mas não foi possível fechar a rota automaticamente:', error);
             return;
           }
-          set({ deliveries: previousDeliveries, customers: previousCustomers, syncError: true });
+          set((current) => ({
+            deliveries: rollbackUpdatedEntity(current.deliveries, deliveryToUpdate, nextDelivery),
+            customers: customer && optimisticCustomer
+              ? rollbackUpdatedEntity(current.customers, customer, optimisticCustomer)
+              : current.customers,
+            syncError: true,
+          }));
           console.error(error);
           throw error;
         }
@@ -2134,7 +2211,7 @@ export const useAppStore = create<AppState>()(
           );
         }
 
-        const previousDeliveries = state.deliveries;
+        const previousIndex = state.deliveries.findIndex((delivery) => delivery.id === id);
         const linkedRouteId = deliveryToDelete.route_id;
 
         set((current) => ({
@@ -2172,7 +2249,7 @@ export const useAppStore = create<AppState>()(
             return;
           }
 
-          set({ deliveries: previousDeliveries, syncError: true });
+          set((state) => ({ deliveries: rollbackDeletedEntity(state.deliveries, deliveryToDelete, previousIndex), syncError: true }));
           console.error(error);
           throw error;
         }
@@ -2283,16 +2360,14 @@ export const useAppStore = create<AppState>()(
           const now = new Date().toISOString();
 
           const confirmationItems: IfoodPendingConfirmation[] = routeDeliveries
-            .filter((delivery) => delivery.origin === 'ifood')
+            .filter((delivery) => delivery.origin === 'ifood' && !isCancelledSiteDelivery(delivery))
             .map((delivery) => {
               const customer = current.customers.find(
                 (item) => item.id === delivery.customer_id,
               );
 
-              const code =
-                (delivery.confirmation_code || customer?.last_confirmation_code || '')
-                  .replace(/\D/g, '')
-                  .slice(0, 4);
+              // A memória do cliente não pertence a esta entrega.
+              const code = orderConfirmationCode(delivery.confirmation_code);
 
               const ifoodId = (delivery.ifood_id || '')
                 .replace(/\D/g, '')
@@ -2692,7 +2767,7 @@ export const useAppStore = create<AppState>()(
         try {
           await setDoc(doc(db, 'operational_expenses', expense.id), sanitizeForFirebase(expense));
         } catch (error) {
-          set({ operationalExpenses: previous });
+          set((state) => ({ operationalExpenses: rollbackAddedEntity(state.operationalExpenses, expense) }));
           console.error(error);
           throw error;
         }
@@ -2959,6 +3034,8 @@ export const useAppStore = create<AppState>()(
 
       deleteIfoodPendingConfirmation: async (id) => {
         const previous = get().ifoodPendingConfirmations;
+        const removed = previous.find((item) => item.id === id);
+        const previousIndex = previous.findIndex((item) => item.id === id);
         set((state) => ({
           ifoodPendingConfirmations: state.ifoodPendingConfirmations.filter(
             (item) => item.id !== id,
@@ -2968,7 +3045,7 @@ export const useAppStore = create<AppState>()(
         try {
           await deleteDoc(doc(db, 'ifood_pending_confirmations', id));
         } catch (error) {
-          set({ ifoodPendingConfirmations: previous });
+          set((state) => ({ ifoodPendingConfirmations: rollbackDeletedEntity(state.ifoodPendingConfirmations, removed, previousIndex) }));
           console.error(error);
           throw error;
         }
@@ -2981,23 +3058,25 @@ export const useAppStore = create<AppState>()(
           const safeData = sanitizeForFirebase(customerWithTimestamp);
           await setDoc(doc(db, 'customers', customer.id), safeData);
         } catch (error) {
-          set((state) => ({ customers: state.customers.filter((item) => item.id !== customer.id) }));
+          set((state) => ({ customers: rollbackAddedEntity(state.customers, customerWithTimestamp) }));
           console.error(error);
           throw error;
         }
       },
 
       updateCustomer: async (id, updatedData) => {
-        const previousCustomers = get().customers;
+        const previousCustomer = get().customers.find((item) => item.id === id);
+        if (!previousCustomer) throw new Error('Cliente não encontrado.');
         const dataWithTimestamp: Partial<Customer> = { ...updatedData, updated_at: new Date().toISOString() };
+        const optimisticCustomer: Customer = { ...previousCustomer, ...dataWithTimestamp };
         set((state) => ({
-          customers: state.customers.map((c) => c.id === id ? { ...c, ...dataWithTimestamp } as Customer : c)
+          customers: state.customers.map((c) => c.id === id ? optimisticCustomer : c)
         }));
         try {
           const safeData = sanitizeForFirebase(dataWithTimestamp);
           await updateDoc(doc(db, 'customers', id), safeData);
         } catch (error) {
-          set({ customers: previousCustomers });
+          set((state) => ({ customers: rollbackUpdatedEntity(state.customers, previousCustomer, optimisticCustomer) }));
           console.error(error);
           throw error;
         }
@@ -3067,9 +3146,12 @@ export const useAppStore = create<AppState>()(
           updated_at: now,
         };
 
-        const previousCustomers = state.customers;
-        const previousDeliveries = state.deliveries;
-
+        const sourceIndex = state.customers.findIndex((customer) => customer.id === sourceId);
+        const linkedDeliveryIds = new Set(linkedDeliveries.map((delivery) => delivery.id));
+        const optimisticLinkedDeliveries = allAfterMerge.filter((delivery) =>
+          linkedDeliveryIds.has(delivery.id),
+        );
+        // Somente as entidades deste lote podem ser revertidas se o batch falhar.
         set({
           customers: state.customers
             .filter((customer) => customer.id !== sourceId)
@@ -3103,11 +3185,13 @@ export const useAppStore = create<AppState>()(
           await batch.commit();
           return { deliveriesMoved: linkedDeliveries.length };
         } catch (error) {
-          set({
-            customers: previousCustomers,
-            deliveries: previousDeliveries,
+          set((current) => ({
+            customers: rollbackDeletedEntity(
+              rollbackUpdatedEntity(current.customers, target, mergedTarget), source, sourceIndex,
+            ),
+            deliveries: rollbackUpdatedEntities(current.deliveries, linkedDeliveries, optimisticLinkedDeliveries),
             syncError: true,
-          });
+          }));
           console.error('Erro ao consolidar clientes:', error);
           throw error;
         }

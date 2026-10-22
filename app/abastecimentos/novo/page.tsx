@@ -1,7 +1,7 @@
 // app/abastecimentos/novo/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -20,12 +20,15 @@ export default function NewStockSupplyPage() {
     (state) => state.addStockSupply,
   );
   const [busy, setBusy] = useState(false);
+  const saveInFlight = useRef(false);
 
   const save = async (value: StockSupplyFormValue) => {
-    if (busy) throw new Error('Compra já está sendo salva.');
+    if (saveInFlight.current) throw new Error('Compra já está sendo salva.');
 
+    saveInFlight.current = true;
     setBusy(true);
 
+    let committed = false;
     const now = new Date().toISOString();
     const supply: StockSupply = {
       id: `supply-${Date.now()}-${Math.random()
@@ -46,6 +49,7 @@ export default function NewStockSupplyPage() {
       });
 
       await operation;
+      committed = true;
       void feedbackSuccess();
 
       router.replace(
@@ -69,7 +73,10 @@ export default function NewStockSupplyPage() {
       );
       throw error;
     } finally {
-      setBusy(false);
+      if (!committed) {
+        saveInFlight.current = false;
+        setBusy(false);
+      }
     }
   };
 

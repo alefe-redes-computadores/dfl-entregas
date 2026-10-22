@@ -422,7 +422,8 @@ const [routeId, setRouteId] = useState('');
     if (c.phone) setPhone(formatPhoneInput(c.phone));
     if (c.observation) setObservation(c.observation);
     if (c.maps_link) setMapsLink(c.maps_link);
-    if (c.last_confirmation_code) setConfirmationCode(c.last_confirmation_code);
+    // Histórico do cliente não é código do pedido que está sendo editado.
+    // O código persistido no pedido continua disponível no carregamento da entrega.
     toast.success('Cliente carregado.');
   };
 

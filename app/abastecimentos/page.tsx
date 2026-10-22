@@ -70,6 +70,11 @@ export default function StockSuppliesPage() {
   const router = useRouter();
   const supplies = useAppStore((state) => state.stockSupplies);
   const suppliers = useAppStore((state) => state.stockSuppliers);
+  const suppliersById = useMemo(() => {
+    const index = new Map<string, (typeof suppliers)[number]>();
+    for (const supplier of suppliers) if (!index.has(supplier.id)) index.set(supplier.id, supplier);
+    return index;
+  }, [suppliers]);
 
   const [month, setMonth] = useState(() => new Date());
   const [query, setQuery] = useState('');
@@ -99,19 +104,17 @@ export default function StockSuppliesPage() {
     () =>
       monthly
         .filter((item) => {
+          // Filtre primeiro pelos campos baratos. A montagem do texto
+          // de todos os itens só acontece quando existe busca digitada.
+          if (status !== 'todos' && item.status !== status) return false;
+          if (actionOnly && item.status === 'conferido') return false;
+          if (buyer !== 'todos' && item.purchaser_name !== buyer) return false;
+          if (supplierFilter !== 'todos' && item.supplier !== supplierFilter) return false;
+          if (!normalizedQuery) return true;
           const haystack = `${item.supplier || ''} ${
             item.purchaser_name || ''
-          } ${item.items
-            .map((current) => current.name)
-            .join(' ')}`.toLocaleLowerCase('pt-BR');
-
-          return (
-            (status === 'todos' || item.status === status) &&
-            (!actionOnly || item.status !== 'conferido') &&
-            (buyer === 'todos' || item.purchaser_name === buyer) &&
-            (supplierFilter === 'todos' || item.supplier === supplierFilter) &&
-            haystack.includes(normalizedQuery)
-          );
+          } ${item.items.map((current) => current.name).join(' ')}`.toLocaleLowerCase('pt-BR');
+          return haystack.includes(normalizedQuery);
         })
         .sort(
           (a, b) =>
@@ -430,7 +433,7 @@ export default function StockSuppliesPage() {
                       }
                       className="flex w-full items-center gap-3 border-b border-zinc-800/70 p-4 text-left last:border-0 active:bg-zinc-800/50"
                     >
-                      <StockSupplierIcon supplier={suppliers.find((supplier)=>supplier.id===item.supplier_id)} />
+                      <StockSupplierIcon supplier={suppliersById.get(item.supplier_id || '')} />
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

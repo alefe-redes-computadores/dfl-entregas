@@ -1,7 +1,7 @@
 // app/confirmar/page.tsx
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -16,6 +16,7 @@ import { toast } from '@/lib/operational-toast';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { useAppStore } from '@/store/useAppStore';
+import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 
 const onlyDigits = (value: string, max: number) =>
   value.replace(/\D/g, '').slice(0, max);
@@ -33,11 +34,11 @@ function ConfirmarContent() {
   const searchParams = useSearchParams();
 
   const initialOrderId = useMemo(
-    () => onlyDigits(searchParams.get('orderId') || '', 8),
+    () => { const digits = (searchParams.get('orderId') || '').replace(/\D/g, ''); return digits.length === 8 ? digits : ''; },
     [searchParams]
   );
   const initialCode = useMemo(
-    () => onlyDigits(searchParams.get('code') || '', 4),
+    () => orderConfirmationCode(searchParams.get('code')),
     [searchParams]
   );
   const returnTo = safeInternalReturnTo(searchParams.get('returnTo'));
@@ -58,6 +59,18 @@ function ConfirmarContent() {
   const [orderId, setOrderId] = useState(initialOrderId);
   const [code, setCode] = useState(initialCode);
   const [copiedFirstValue, setCopiedFirstValue] = useState(false);
+  const submittingRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const beginSubmit = () => {
+    if (submittingRef.current) return false;
+    submittingRef.current = true;
+    setIsSubmitting(true);
+    return true;
+  };
+  const endSubmit = () => {
+    submittingRef.current = false;
+    setIsSubmitting(false);
+  };
 
   useEffect(() => {
     setOrderId(initialOrderId);
@@ -85,9 +98,8 @@ function ConfirmarContent() {
   }, [copiedFirstValue, initialOrderId]);
 
   const vibrate = async (style: ImpactStyle) => {
-    if (Capacitor.isNativePlatform()) {
-      await Haptics.impact({ style });
-    }
+    if (!Capacitor.isNativePlatform()) return;
+    try { await Haptics.impact({ style }); } catch { /* Haptics nunca bloqueia confirmação. */ }
   };
 
   const copyToClipboard = async (value: string, label: string) => {
@@ -96,9 +108,11 @@ function ConfirmarContent() {
       return;
     }
 
-    await vibrate(ImpactStyle.Light);
-    await navigator.clipboard.writeText(value);
-    toast.success(`${label} copiado.`);
+    try {
+      await vibrate(ImpactStyle.Light);
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copiado.`);
+    } catch { toast.error(`Não foi possível copiar ${label.toLowerCase()}.`); }
   };
 
   const leaveConfirmation = async () => {
@@ -115,8 +129,8 @@ function ConfirmarContent() {
       .filter((item) => {
         if (item.id === excludeId || (item.status || 'pending') !== 'pending') return false;
         if (current?.route_id && item.route_id !== current.route_id) return false;
-        const id = (item.ifood_id || '').replace(/\D/g, '').slice(0, 8);
-        const itemCode = (item.confirmation_code || '').replace(/\D/g, '').slice(0, 4);
+        const id = (item.ifood_id || '').replace(/\D/g, '');
+        const itemCode = orderConfirmationCode(item.confirmation_code);
         return id.length === 8 && itemCode.length === 4;
       })
       .sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
@@ -130,8 +144,8 @@ function ConfirmarContent() {
       return;
     }
 
-    const nextId = (next.ifood_id || '').replace(/\D/g, '').slice(0, 8);
-    const nextCode = (next.confirmation_code || '').replace(/\D/g, '').slice(0, 4);
+    const nextId = (next.ifood_id || '').replace(/\D/g, '');
+    const nextCode = orderConfirmationCode(next.confirmation_code);
     const remaining = readyPending(resolvedId).length;
 
     toast.success(message, {
@@ -148,17 +162,21 @@ function ConfirmarContent() {
       await leaveConfirmation();
       return;
     }
-
+    if (!beginSubmit()) return;
     try {
       await vibrate(ImpactStyle.Medium);
       const currentPending = pendingConfirmations.find((item) => item.id === pendingId);
+      if (!currentPending || (currentPending.status || 'pending') !== 'pending') {
+        toast.error('Pendência já resolvida ou indisponível.');
+        return;
+      }
       const delivery = currentPending?.delivery_id
         ? deliveries.find((item) => item.id === currentPending.delivery_id)
         : undefined;
       const customer = delivery?.customer_id
         ? customers.find((item) => item.id === delivery.customer_id)
         : undefined;
-      const validCode = (currentPending?.confirmation_code || code).replace(/\D/g, '').slice(0,4);
+      const validCode = orderConfirmationCode(currentPending?.confirmation_code || code);
 
       if (customer && validCode.length === 4) {
         const cleanObservation = (customer.observation || '')
@@ -180,7 +198,7 @@ function ConfirmarContent() {
       goNextOrLeave(pendingId, 'Confirmado no iFood. Próximo pedido preparado.');
     } catch {
       toast.error('Não foi possível concluir a pendência.');
-    }
+    } finally { endSubmit(); }
   };
 
   const invalidCodeAndContinue = async () => {
@@ -188,10 +206,14 @@ function ConfirmarContent() {
       toast.error('Esta confirmação não está vinculada a uma pendência.');
       return;
     }
-
+    if (!beginSubmit()) return;
     try {
       await vibrate(ImpactStyle.Heavy);
       const currentPending = pendingConfirmations.find((item) => item.id === pendingId);
+      if (!currentPending || (currentPending.status || 'pending') !== 'pending') {
+        toast.error('Pendência já resolvida ou indisponível.');
+        return;
+      }
       const delivery = currentPending?.delivery_id
         ? deliveries.find((item) => item.id === currentPending.delivery_id)
         : undefined;
@@ -225,7 +247,7 @@ function ConfirmarContent() {
       goNextOrLeave(pendingId, 'Código inválido registrado. Próximo pedido preparado.');
     } catch {
       toast.error('Não foi possível registrar o código inválido.');
-    }
+    } finally { endSubmit(); }
   };
 
   return (
@@ -333,6 +355,7 @@ function ConfirmarContent() {
             <button
               type="button"
               onClick={confirmExternalAndLeave}
+              disabled={isSubmitting}
               className="flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 text-xs font-black text-zinc-950 active:scale-[0.98]"
             >
               <CheckCircle2 size={15} />
@@ -341,6 +364,7 @@ function ConfirmarContent() {
             <button
               type="button"
               onClick={invalidCodeAndContinue}
+              disabled={isSubmitting}
               className="flex h-11 items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-[10px] font-black text-amber-300 active:scale-[0.98]"
               title="Código não funcionou"
               aria-label="Código não funcionou"

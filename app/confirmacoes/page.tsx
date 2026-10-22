@@ -1,7 +1,7 @@
 // app/confirmacoes/page.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
@@ -37,6 +37,8 @@ import {
   type IfoodConfirmationState,
 } from '@/lib/ifood-confirmations';
 import type { Delivery, IfoodPendingConfirmation } from '@/types';
+import { buildConfirmationIndexes } from '@/lib/ifood-confirmation-index';
+import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { deliveryCustomerCharge, deliveryEconomicValue, deliveryIfoodSubsidy } from '@/lib/delivery-finance';
 
 type QueueFilter = 'all' | IfoodConfirmationState;
@@ -128,6 +130,8 @@ export default function ConfirmacoesPage() {
   const [pendingDeleteManual, setPendingDeleteManual] = useState<IfoodPendingConfirmation | null>(null);
   const [deletingManual, setDeletingManual] = useState(false);
   const [manualBusyIds, setManualBusyIds] = useState<Set<string>>(() => new Set());
+  const manualBusyRef = useRef(new Set<string>());
+  const batchSavingRef = useRef(false);
   const [selectedDateKey, setSelectedDateKey] = useState(() => initialDateKey);
   const selectedDate = dateFromKey(selectedDateKey);
   const selectedDateLabel =
@@ -161,6 +165,11 @@ export default function ConfirmacoesPage() {
 
   const deliveryDateSuffix = `&date=${encodeURIComponent(selectedDateKey)}`;
 
+  const confirmationIndexes = useMemo(
+    () => buildConfirmationIndexes(deliveries, customers, routes),
+    [deliveries, customers, routes],
+  );
+
   const allIfood = useMemo(
     () => deliveries.filter((delivery) => isIfoodOrder(delivery)),
     [deliveries],
@@ -175,15 +184,18 @@ export default function ConfirmacoesPage() {
     [allIfood, selectedDateKey],
   );
 
+  const normalizedQueueQuery = useMemo(() => normalize(query.trim()), [query]);
   const queue = useMemo(
     () =>
       selectedIfood
         .filter((delivery) => !delivery.completed)
         .map((delivery) => {
-          const customer = customers.find((item) => item.id === delivery.customer_id);
-          const confirmation = getIfoodConfirmationInfo(delivery, customer);
+          const customer = confirmationIndexes.customersById.get(delivery.customer_id);
+          // A conta do cliente não prova o código deste pedido específico.
+          // Nunca classificar código histórico como confirmação pronta.
+          const confirmation = getIfoodConfirmationInfo(delivery);
           const created = deliveryDate(delivery);
-          const haystack = normalize(
+          const haystack = normalizedQueueQuery ? normalize(
             [
               delivery.order_id,
               delivery.ifood_id,
@@ -193,7 +205,7 @@ export default function ConfirmacoesPage() {
               customer?.phone,
               fulfillmentLabel(delivery),
             ].join(' '),
-          );
+          ) : '';
 
           return {
             delivery,
@@ -205,7 +217,7 @@ export default function ConfirmacoesPage() {
         })
         .filter(({ confirmation, haystack }) => {
           const matchesFilter = filter === 'all' || confirmation.state === filter;
-          const matchesQuery = !query.trim() || haystack.includes(normalize(query));
+          const matchesQuery = !normalizedQueueQuery || haystack.includes(normalizedQueueQuery);
           return matchesFilter && matchesQuery;
         })
         .sort((a, b) => {
@@ -226,14 +238,13 @@ export default function ConfirmacoesPage() {
             new Date(a.created || 0).getTime() - new Date(b.created || 0).getTime()
           );
         }),
-    [selectedIfood, customers, filter, query],
+    [selectedIfood, confirmationIndexes, filter, normalizedQueueQuery],
   );
 
   const metrics = useMemo(() => {
     const pending = selectedIfood.filter((delivery) => !delivery.completed);
     const withoutCode = pending.filter((delivery) => {
-      const customer = customers.find((item) => item.id === delivery.customer_id);
-      return getIfoodConfirmationInfo(delivery, customer).code.length !== 4;
+      return getIfoodConfirmationInfo(delivery).code.length !== 4;
     }).length;
     const completed = selectedIfood.filter((delivery) => delivery.completed).length;
 
@@ -242,11 +253,11 @@ export default function ConfirmacoesPage() {
       withoutCode,
       completed,
     };
-  }, [customers, selectedIfood]);
+  }, [selectedIfood]);
 
   const manualOperationalContext = (item: IfoodPendingConfirmation) => {
     const route = item.route_id
-      ? routes.find((current) => current.id === item.route_id)
+      ? confirmationIndexes.routesById.get(item.route_id)
       : undefined;
 
     if (!route) {
@@ -298,8 +309,8 @@ export default function ConfirmacoesPage() {
         .filter((item) => (item.status || 'pending') === 'pending')
         .filter((item) => !requestedRouteId || item.route_id === requestedRouteId)
         .sort((a, b) => {
-          const deliveryA = a.delivery_id ? deliveries.find((delivery) => delivery.id === a.delivery_id) : undefined;
-          const deliveryB = b.delivery_id ? deliveries.find((delivery) => delivery.id === b.delivery_id) : undefined;
+          const deliveryA = a.delivery_id ? confirmationIndexes.deliveriesById.get(a.delivery_id) : undefined;
+          const deliveryB = b.delivery_id ? confirmationIndexes.deliveriesById.get(b.delivery_id) : undefined;
           const completedA = new Date(deliveryA?.completed_at || a.created_at).getTime();
           const completedB = new Date(deliveryB?.completed_at || b.created_at).getTime();
           if (completedA !== completedB) return completedA - completedB;
@@ -310,7 +321,7 @@ export default function ConfirmacoesPage() {
 
           return contextA.routeName.localeCompare(contextB.routeName, 'pt-BR');
         }),
-    [deliveries, ifoodPendingConfirmations, requestedRouteId, routes],
+    [confirmationIndexes, ifoodPendingConfirmations, requestedRouteId],
   );
 
   const pendingOperationalCounts = useMemo(() => {
@@ -321,7 +332,7 @@ export default function ConfirmacoesPage() {
     });
 
     return counts;
-  }, [pendingManualConfirmations, routes]);
+  }, [pendingManualConfirmations, confirmationIndexes]);
 
   const resolvedManualConfirmations = useMemo(
     () =>
@@ -343,14 +354,29 @@ export default function ConfirmacoesPage() {
 
   const CODE_REVIEW_MARKER='[iFood] Último código informado não funcionou. Conferir novamente com o cliente.';
 
-  const markManualResolved = async (item: IfoodPendingConfirmation) => {
-    if (manualBusyIds.has(item.id)) return;
-    setManualBusyIds((current) => new Set(current).add(item.id));
+  // O estado React é visual. A trava síncrona evita duplo clique antes do re-render.
+  const withManualLock = async (id: string, action: () => Promise<void>) => {
+    if (manualBusyRef.current.has(id)) return;
+    manualBusyRef.current.add(id);
+    setManualBusyIds((current) => new Set(current).add(id));
+    try {
+      await action();
+    } finally {
+      manualBusyRef.current.delete(id);
+      setManualBusyIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  const markManualResolved = (item: IfoodPendingConfirmation) => withManualLock(item.id, async () => {
     try {
       await vibrate(ImpactStyle.Medium);
-      const delivery=item.delivery_id?deliveries.find((current)=>current.id===item.delivery_id):undefined;
-      const customer=delivery?.customer_id?customers.find((current)=>current.id===delivery.customer_id):undefined;
-      const code=(item.confirmation_code||delivery?.confirmation_code||'').replace(/\D/g,'').slice(0,4);
+      const delivery=item.delivery_id?confirmationIndexes.deliveriesById.get(item.delivery_id):undefined;
+      const customer=delivery?.customer_id?confirmationIndexes.customersById.get(delivery.customer_id):undefined;
+      const code=orderConfirmationCode(item.confirmation_code||delivery?.confirmation_code);
       const resolvedAt = new Date().toISOString();
       const writes: Promise<unknown>[] = [
         updateIfoodPendingConfirmation(item.id, {
@@ -370,20 +396,14 @@ export default function ConfirmacoesPage() {
       toast.success('Confirmado no iFood.',{description:code.length===4?'Código validado e mantido como referência do cliente.':undefined});
     } catch {
       toast.error('Não foi possível concluir a pendência.');
-    } finally {
-      setManualBusyIds((current) => {
-        const next = new Set(current);
-        next.delete(item.id);
-        return next;
-      });
     }
-  };
+  });
 
-  const markInvalidCode = async (item:IfoodPendingConfirmation) => {
+  const markInvalidCode = (item:IfoodPendingConfirmation) => withManualLock(item.id, async () => {
     try{
       await vibrate(ImpactStyle.Medium);
-      const delivery=item.delivery_id?deliveries.find((current)=>current.id===item.delivery_id):undefined;
-      const customer=delivery?.customer_id?customers.find((current)=>current.id===delivery.customer_id):undefined;
+      const delivery=item.delivery_id?confirmationIndexes.deliveriesById.get(item.delivery_id):undefined;
+      const customer=delivery?.customer_id?confirmationIndexes.customersById.get(delivery.customer_id):undefined;
       if(delivery?.confirmation_code){
         await updateDelivery(delivery.id,{confirmation_code:undefined});
       }
@@ -407,9 +427,9 @@ export default function ConfirmacoesPage() {
     }catch{
       toast.error('Não foi possível registrar o código inválido.');
     }
-  };
+  });
 
-  const restoreManualPending = async (item: IfoodPendingConfirmation) => {
+  const restoreManualPending = (item: IfoodPendingConfirmation) => withManualLock(item.id, async () => {
     try {
       await vibrate(ImpactStyle.Light);
       await updateIfoodPendingConfirmation(item.id, {
@@ -420,7 +440,7 @@ export default function ConfirmacoesPage() {
     } catch {
       toast.error('Não foi possível restaurar a pendência.');
     }
-  };
+  });
 
   const permanentlyDeleteManual = (item: IfoodPendingConfirmation) => {
     setPendingDeleteManual(item);
@@ -487,6 +507,16 @@ export default function ConfirmacoesPage() {
   };
 
   const savePendingBatch = async () => {
+    if (batchSavingRef.current) return;
+    batchSavingRef.current = true;
+    try {
+    await performPendingBatch();
+    } finally {
+      batchSavingRef.current = false;
+    }
+  };
+
+  const performPendingBatch = async () => {
     const parsed = parsePendingBatch(batchText);
 
     if (!parsed.length) {
@@ -527,24 +557,14 @@ export default function ConfirmacoesPage() {
         const idKey = normalizePendingKey(item.ifood_id);
         const orderKey = normalizePendingKey(item.order_id);
 
-        const linkedDelivery = deliveries.find((delivery) => {
-          const deliveryIfoodId = normalizePendingKey(delivery.ifood_id);
-          const deliveryOrderId = normalizePendingKey(delivery.order_id);
-
-          return Boolean(
-            (idKey && deliveryIfoodId === idKey) ||
-              (orderKey && deliveryOrderId === orderKey),
-          );
-        });
+        const linkedDelivery = confirmationIndexes.findLinkedDelivery(idKey, orderKey);
 
         if (!linkedDelivery) return item;
 
         const linkedRoute = linkedDelivery.route_id
-          ? routes.find((route) => route.id === linkedDelivery.route_id)
+          ? confirmationIndexes.routesById.get(linkedDelivery.route_id)
           : undefined;
-        const linkedCustomer = customers.find(
-          (customer) => customer.id === linkedDelivery.customer_id,
-        );
+        const linkedCustomer = confirmationIndexes.customersById.get(linkedDelivery.customer_id);
 
         return {
           ...item,
@@ -858,12 +878,12 @@ export default function ConfirmacoesPage() {
               type="button"
               onClick={() => {
                 const first=visibleManualConfirmations.find((item)=>{
-                  const id=(item.ifood_id||'').replace(/\D/g,'').slice(0,8);
-                  const code=(item.confirmation_code||'').replace(/\D/g,'').slice(0,4);
+                  const id=(item.ifood_id||'').replace(/\D/g,'');
+                  const code=orderConfirmationCode(item.confirmation_code);
                   return id.length===8&&code.length===4;
                 });
                 if(!first)return;
-                router.replace(`/confirmar?orderId=${encodeURIComponent((first.ifood_id||'').replace(/\D/g,'').slice(0,8))}&code=${encodeURIComponent((first.confirmation_code||'').replace(/\D/g,'').slice(0,4))}&pendingId=${encodeURIComponent(first.id)}&returnTo=${encodeURIComponent(confirmationReturn)}`);
+                router.replace(`/confirmar?orderId=${encodeURIComponent((first.ifood_id||'').replace(/\D/g,''))}&code=${encodeURIComponent(orderConfirmationCode(first.confirmation_code))}&pendingId=${encodeURIComponent(first.id)}&returnTo=${encodeURIComponent(confirmationReturn)}`);
               }}
               className="mb-3 flex h-12 w-full items-center justify-between rounded-2xl border border-sky-500/25 bg-sky-500/[.08] px-4 text-left active:scale-[.99]"
             >
@@ -1013,7 +1033,8 @@ export default function ConfirmacoesPage() {
                       <button
                         type="button"
                         onClick={() => markInvalidCode(item)}
-                        className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-400 active:scale-95"
+                        disabled={manualBusyIds.has(item.id)}
+                        className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-400 active:scale-95 disabled:opacity-40"
                         aria-label="Código não funcionou"
                         title="Código não funcionou"
                       >
@@ -1036,7 +1057,8 @@ export default function ConfirmacoesPage() {
                       <button
                         type="button"
                         onClick={() => restoreManualPending(item)}
-                        className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 font-black text-zinc-300 active:scale-95"
+                        disabled={manualBusyIds.has(item.id)}
+                        className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 font-black text-zinc-300 active:scale-95 disabled:opacity-40"
                       >
                         <TimerReset size={15} />
                         Restaurar para pendentes
@@ -1144,9 +1166,9 @@ export default function ConfirmacoesPage() {
                     </strong>
                     <Copy size={13} className="shrink-0 text-amber-400" />
                   </span>
-                  {confirmation.codeSource === 'customer' && (
-                    <span className="mt-1 block text-[9px] text-zinc-600">
-                      Recuperado do cadastro do cliente
+                  {confirmation.state === 'missing_code' && (
+                    <span className="mt-1 block text-[9px] text-amber-400/80">
+                      Informe o código deste pedido, não um código anterior.
                     </span>
                   )}
                 </button>

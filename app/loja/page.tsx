@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
@@ -26,6 +26,7 @@ import { storedOriginPoint, hasSpecificStoreAddress } from '@/lib/store-origin';
 import { extractLatLngFromMapsUrl, parseCoordinateString } from '@/lib/maps';
 import { SiteAdminHub } from '@/components/store/SiteAdminHub';
 import { OperationalAttentionQueue } from '@/components/store/OperationalAttentionQueue';
+import { loadHolidayCalendar } from '@/lib/store/holidayCache';
 
 const DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
@@ -79,8 +80,8 @@ export default function LojaPage() {
   // Expediente Avançado
   const [activeTab, setActiveTab] = useState<'horarios' | 'pausas' | 'feriados'>('horarios');
   const [schedule, setSchedule] = useState<Record<number, DaySchedule>>({});
-  const activeMotoboys = motoboys.filter((motoboy) => motoboy.active);
-  const activeScheduleDays = DAYS_OF_WEEK.map((name, index) => ({ name, index, data: schedule[index] || { active: false, shifts: [] } })).filter((item) => item.data.active && item.data.shifts.length > 0);
+  const activeMotoboys = useMemo(() => motoboys.filter((motoboy) => motoboy.active), [motoboys]);
+  const activeScheduleDays = useMemo(() => DAYS_OF_WEEK.map((name, index) => ({ name, index, data: schedule[index] || { active: false, shifts: [] } })).filter((item) => item.data.active && item.data.shifts.length > 0), [schedule]);
   const [pauses, setPauses] = useState<StorePause[]>([]);
   const [holidaysOverrides, setHolidaysOverrides] = useState<Record<string, HolidayOverride>>({});
   const [apiHolidays, setApiHolidays] = useState<any[]>([]);
@@ -130,52 +131,15 @@ export default function LojaPage() {
 
   useEffect(() => {
     if (!hasHydrated) return;
-
-    const controller = new AbortController();
-    const year = new Date().getFullYear();
-
-    fetch(
-      `https://brasilapi.com.br/api/feriados/v1/${year}`,
-      { signal: controller.signal },
-    )
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(
-            `BrasilAPI respondeu ${response.status}`,
-          );
-        }
-
-        return response.json();
+    let mounted = true;
+    void loadHolidayCalendar(new Date().getFullYear())
+      .then((holidays) => {
+        if (!mounted) return;
+        const yesterday = Date.now() - 86_400_000;
+        setApiHolidays(holidays.filter(holiday => new Date(holiday.date).getTime() >= yesterday));
       })
-      .then((data) => {
-        if (!Array.isArray(data)) return;
-
-        const yesterday =
-          Date.now() - 86_400_000;
-
-        setApiHolidays(
-          data.filter(
-            (holiday: any) =>
-              new Date(holiday.date).getTime() >=
-              yesterday,
-          ),
-        );
-      })
-      .catch((error) => {
-        if (
-          error instanceof DOMException &&
-          error.name === 'AbortError'
-        ) {
-          return;
-        }
-
-        console.warn(
-          'Não foi possível carregar feriados:',
-          error,
-        );
-      });
-
-    return () => controller.abort();
+      .catch(() => { /* Feriados externos são opcionais e não bloqueiam a Loja. */ });
+    return () => { mounted = false; };
   }, [hasHydrated]);
 
   const toggleStore = async () => {
@@ -421,22 +385,22 @@ export default function LojaPage() {
         </button>
 
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir entregas: ${dashboardData.totalEntregas} no período`} className="group relative min-h-[104px] overflow-hidden rounded-[20px] border border-amber-500/20 bg-gradient-to-br from-amber-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
+          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir entregas: ${dashboardData.totalEntregas} no período`} className="group relative min-h-[96px] overflow-hidden rounded-[18px] border border-amber-500/20 bg-gradient-to-br from-amber-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
             </div>
             <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Entregas <span className="ml-1 text-lg text-amber-300">{dashboardData.totalEntregas}</span></p>
-            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Consultar pedidos e pendências</p>
+            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.pendingDeliveries > 0 ? `${dashboardData.pendingDeliveries} entrega(s) pendente(s)` : 'Consultar pedidos e pendências'}</p>
           </button>
 
-          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir rotas: ${dashboardData.selectedDateRoutes.length} no período`} className="group relative min-h-[104px] overflow-hidden rounded-[20px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
+          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir rotas: ${dashboardData.selectedDateRoutes.length} no período · Acompanhar sequência e motoboys`} className="group relative min-h-[96px] overflow-hidden rounded-[18px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
             <div className="flex items-center justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
               <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
             </div>
             <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Rotas <span className="ml-1 text-lg text-sky-300">{dashboardData.selectedDateRoutes.length}</span></p>
-            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Acompanhar sequência e motoboys</p>
+            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.selectedDateRoutes.filter(route => route.status === 'aberta').length} rota(s) aberta(s) · sequência</p>
           </button>
 
           <div className="col-span-2 mt-1 flex items-center gap-2 px-1 pt-1">

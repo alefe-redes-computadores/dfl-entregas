@@ -5,6 +5,7 @@ import type {
   OperationalExpense,
   Route,
 } from '@/types';
+import { activeRouteDeliveries } from '@/lib/route-closure-eligibility';
 import {
   getMotoboyRoutes,
   operationalDateKey,
@@ -89,6 +90,7 @@ export function buildMotoboyLedger(input: {
 }) {
   const linkedRoutes = getMotoboyRoutes(input.motoboy, input.routes);
   const routeIds = new Set(linkedRoutes.map((route) => route.id));
+  const routesById = new Map(linkedRoutes.map((route) => [route.id, route] as const));
   const linkedDeliveries = input.deliveries.filter((delivery) =>
     routeIds.has(delivery.route_id),
   );
@@ -179,7 +181,7 @@ export function buildMotoboyLedger(input: {
   });
 
   linkedDeliveries.forEach((delivery) => {
-    const route = linkedRoutes.find((item) => item.id === delivery.route_id);
+    const route = routesById.get(delivery.route_id);
     const value = route ? routeOperationalDate(route) : undefined;
     if (!value) return;
 
@@ -210,7 +212,7 @@ export function buildMotoboyLedger(input: {
   return {
     linkedRoutes,
     linkedDeliveries,
-    completedDeliveries: linkedDeliveries.filter(
+    completedDeliveries: activeRouteDeliveries(linkedDeliveries).filter(
       (delivery) => delivery.completed,
     ),
     settlementExpenses,

@@ -47,7 +47,7 @@ export function mayReadStaffArea(account: StaffAccount | null, area: StaffArea):
   if (account.role === 'motoboy' && (area === 'stock' || area === 'purchases')) return false;
   if (account.role === 'compras' && (area === 'routes' || area === 'deliveries')) return false;
   if (area === 'routes' || area === 'deliveries') {
-    if (account.role === 'motoboy' && !account.linkedMotoboyId) return false;
+    if ((account.role === 'motoboy' || account.role === 'personalizado') && !account.linkedMotoboyId) return false;
   }
   return account.permissions.includes(STAFF_AREA_PERMISSION[area]);
 }

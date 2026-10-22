@@ -29,10 +29,12 @@ export function projectRoute(value: unknown, id: string): ProjectedStaffRow {
 }
 export function projectDelivery(value: unknown, id: string): ProjectedStaffRow {
   const x = asRecord(value);
+  const cancelled = x.source_system === 'dfl_site' &&
+    ['cancelado','cancelada','cancelled','canceled'].includes(String(x.site_order_status ?? '').trim().toLowerCase());
   return {
     title: `Entrega ${clean(id, 18)}`,
-    subtitle: x.completed === true ? 'Entrega concluída' : 'Entrega pendente',
-    status: x.completed === true ? 'Concluída' : 'Pendente',
+    subtitle: cancelled ? 'Pedido cancelado' : x.completed === true ? 'Entrega concluída' : 'Entrega pendente',
+    status: cancelled ? 'Cancelada' : x.completed === true ? 'Concluída' : 'Pendente',
   };
 }
 export function projectProduct(value: unknown, id: string): ProjectedStaffRow {

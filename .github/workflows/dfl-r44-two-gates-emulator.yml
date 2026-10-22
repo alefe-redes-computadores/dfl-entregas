@@ -1,0 +1,40 @@
+name: DFL R44 - Duas regras de acesso (EMULATOR DEMO)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare-owner-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Dependencias efemeras para testes (sem modificacao do lockfile)
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false firebase-tools@14 @firebase/rules-unit-testing@4
+      - name: Contratos locais e TypeScript
+        run: |
+          node scripts/verify-v111-r44-cross-module.cjs
+          node scripts/test-v111-r44-operational-regressions.cjs
+          node node_modules/typescript/bin/tsc --noEmit
+      - name: Regra publicada simulada — OWNER-ONLY, sem acesso staff
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8094
+          GCLOUD_PROJECT: demo-dfl-entregas-r44-owner
+        run: npx firebase emulators:exec --only firestore --project demo-dfl-entregas-r44-owner --config firebase.r44-owner-only-emulator.json 'node scripts/test-v111-r44-owner-only-emulator.cjs'
+      - name: Regra candidata — matriz de quatro perfis, sem acesso root
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8093
+          GCLOUD_PROJECT: demo-dfl-entregas-r43
+        run: npx firebase emulators:exec --only firestore --project demo-dfl-entregas-r43 --config firebase.r43-emulator.json 'node scripts/test-v111-r43-access-emulator.cjs'

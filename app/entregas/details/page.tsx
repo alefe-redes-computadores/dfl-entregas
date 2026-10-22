@@ -51,6 +51,7 @@ import {
 } from '@/lib/delivery-presentation';
 import { siteIntegrationStages } from '@/lib/site-integration-health';
 import { canMarkSitePickupReady, isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 
 const money = (value = 0) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -139,10 +140,10 @@ function DeliveryDetailsContent() {
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const channel = deliveryChannel(delivery);
   const visibleOrderNumber = deliveryOrderNumber(delivery);
-  const savedConfirmationCode =
-    delivery.confirmation_code || customer?.last_confirmation_code || '';
+  // O último código do cliente é histórico: nunca preenchê-lo em outra entrega.
+  const savedConfirmationCode = orderConfirmationCode(delivery.confirmation_code);
   const normalizedIfoodId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
-  const normalizedConfirmationCode = savedConfirmationCode.replace(/\D/g, '').slice(0, 4);
+  const normalizedConfirmationCode = savedConfirmationCode;
   const externalPending = isIfood
     ? ifoodPendingConfirmations.find(
         (item) =>
@@ -696,13 +697,11 @@ function DeliveryDetailsContent() {
           />
         )}
 
-        {(delivery.confirmation_code || customer?.last_confirmation_code) && (
-          <InfoRow
-            icon={ShieldCheck}
-            label="Código de confirmação"
-            value={delivery.confirmation_code || customer?.last_confirmation_code || ''}
-          />
-        )}
+        {savedConfirmationCode ? (
+          <InfoRow icon={ShieldCheck} label="Código deste pedido" value={savedConfirmationCode} />
+        ) : isIfood ? (
+          <InfoRow icon={AlertTriangle} label="Código deste pedido" value="Não informado — solicite ao cliente" />
+        ) : null}
       </section>
 
       {isIfoodModalOpen && (

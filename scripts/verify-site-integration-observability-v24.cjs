@@ -12,7 +12,7 @@ const api = read('app/api/integration/diagnostics/route.ts');
 const outbox = read('lib/integration/server/reverseOutboxRepository.ts');
 
 check('cabecalho exibe atualizacao relativa', header.includes('Atualizado ha ${minutes} min') && header.includes('latestSyncDiagnostic'));
-check('badge nasce apenas de pedidos novos observados no sync', store.includes('markUnreadSiteOrders(newSiteOrders.map') && nav.includes('SITE_UNREAD_EVENT'));
+check('badge operacional nasce das entregas sincronizadas; avisos continuam deduplicados', store.includes('markUnreadSiteOrders(newSiteOrders.map') && nav.includes('siteInboxProjection(deliveries).total'));
 check('abrir painel reconhece pedidos do Site', read('components/store/SiteAdminHub.tsx').includes('acknowledgeSiteOrders'));
 check('ficha possui quatro estagios de integracao', details.includes('siteIntegrationStages') && details.includes('Site → Entregas → Site'));
 check('divergencia usa somente a fila remota real', !store.includes('siteCompletionDivergences(mergedDeliveries)') && diagnostics.includes('recovery.stats'));

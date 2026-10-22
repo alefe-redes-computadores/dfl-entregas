@@ -35,6 +35,7 @@ import type { Route } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { DeliveryCard } from '@/components/home/DeliveryCard';
 import { RouteDepartureChecklist } from '@/components/routes/RouteDepartureChecklist';
+import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { useOptimizedDeliveries } from '@/hooks/useOptimizedDeliveries';
 
 import { Capacitor } from '@capacitor/core';
@@ -297,8 +298,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       missingAddress: !delivery.address_string?.trim(),
       missingConfirmation:
         delivery.origin === 'ifood' &&
-        !delivery.confirmation_code &&
-        !customer?.last_confirmation_code,
+        !orderConfirmationCode(delivery.confirmation_code),
     };
   }), [deliveries, getCustomerById]);
 

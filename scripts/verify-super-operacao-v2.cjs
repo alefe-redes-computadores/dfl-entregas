@@ -44,7 +44,7 @@ const checks = [
   ],
   [
     'multi pedido melhorado',
-    f.n.includes('Usar cliente principal nos pedidos'),
+    (f.n.includes('Usar cliente principal nos pedidos') || (f.n.includes('role="tablist"') && f.n.includes('setActiveDraftId(draft.id)') && f.n.includes('Salvar ${extraIfoodOrders.length + 1} pedidos'))),
   ],
   [
     'ranking exclui operacional',

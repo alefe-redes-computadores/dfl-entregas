@@ -33,8 +33,14 @@ export function parseTimestamp(value: TimestampLike): Date | null {
 
   if (typeof value === 'object') {
     if (typeof value.toDate === 'function') {
-      const date = value.toDate();
-      return Number.isFinite(date.getTime()) ? date : null;
+      // Dados legados malformados não podem derrubar Home/Relatórios.
+      // Uma conversão Firestore inválida vira ausência de data, sem inventá-la.
+      try {
+        const date = value.toDate();
+        return date instanceof Date && Number.isFinite(date.getTime()) ? date : null;
+      } catch {
+        return null;
+      }
     }
     if (typeof value.seconds === 'number') {
       const date = new Date(value.seconds * 1000);

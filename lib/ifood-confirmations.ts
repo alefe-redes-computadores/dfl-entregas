@@ -1,5 +1,6 @@
 // lib/ifood-confirmations.ts
 import type { Customer, Delivery } from '@/types';
+import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 
 export type IfoodConfirmationState = 'ready' | 'missing_code' | 'missing_id';
 export type IfoodConfirmationCodeSource = 'delivery' | 'customer' | 'none';
@@ -18,18 +19,12 @@ export function isIfoodOrder(delivery: Pick<Delivery, 'origin'>): boolean {
 
 export function getIfoodConfirmationInfo(
   delivery: Pick<Delivery, 'origin' | 'ifood_id' | 'confirmation_code'>,
-  customer?: Pick<Customer, 'last_confirmation_code'>,
+  _customer?: Pick<Customer, 'last_confirmation_code'>, // Histórico informativo, nunca confirma outro pedido.
 ): IfoodConfirmationInfo {
   const ifoodId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
-  const deliveryCode = (delivery.confirmation_code || '').replace(/\D/g, '').slice(0, 4);
-  const customerCode = (customer?.last_confirmation_code || '').replace(/\D/g, '').slice(0, 4);
-
-  const code = deliveryCode || customerCode;
-  const codeSource: IfoodConfirmationCodeSource = deliveryCode
-    ? 'delivery'
-    : customerCode
-      ? 'customer'
-      : 'none';
+  const code = orderConfirmationCode(delivery.confirmation_code);
+  // Histórico do cliente não autoriza este pedido, mesmo se for passado pelo chamador.
+  const codeSource: IfoodConfirmationCodeSource = code ? 'delivery' : 'none';
 
   if (ifoodId.length !== 8) {
     return {

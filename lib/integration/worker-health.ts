@@ -9,7 +9,14 @@ export type RelayStage =
   | null;
 
 export function relayStageSucceeded(stage: RelayStage): boolean {
-  return stage === null || (stage.ok && stage.value.ok === true && (stage.value.failed ?? 0) === 0);
+  return stage === null || (
+    stage.ok &&
+    stage.value.ok === true &&
+    Number.isFinite(stage.value.failed ?? 0) &&
+    (stage.value.failed ?? 0) === 0 &&
+    Number.isFinite(stage.value.unsettled ?? 0) &&
+    (stage.value.unsettled ?? 0) === 0
+  );
 }
 
 export type RecoveryStage =
@@ -28,10 +35,15 @@ export function recoveryCheckpointEligible(
   batchLimit: number,
 ): boolean {
   if (!reconciliation?.ok || !reconciliation.value.ok || !reconciliation.value.statusRecoveryReplayEnabled) return false;
+  const { statusRecoveryReplayRead: read, statusRecoveryReplayEventIds: ids } = reconciliation.value;
+  // Respostas parciais ou contadores malformados não provam conclusão.
+  if (!Number.isSafeInteger(batchLimit) || batchLimit <= 0 ||
+      !Number.isSafeInteger(read) || read < 0 || !Array.isArray(ids) ||
+      ids.some(id => typeof id !== 'string' || !id.trim()) || ids.length > read) return false;
   // Uma página cheia não prova que a recuperação histórica terminou.
-  if (reconciliation.value.statusRecoveryReplayRead >= batchLimit) return false;
+  if (read >= batchLimit) return false;
   // Quando nenhum evento foi gerado, não há relay a aguardar.
-  if (!reconciliation.value.statusRecoveryReplayEventIds.length) return true;
+  if (!ids.length) return true;
   return targetedRelay !== null && relayStageSucceeded(targetedRelay);
 }
 

@@ -1,10 +1,12 @@
 // lib/motoboy-analytics.ts
 import type { Delivery, Motoboy, MotoboyPaymentRule, MotoboySettlementAdjustment, Route } from '@/types';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
+import { activeRouteDeliveries } from '@/lib/route-closure-eligibility';
 
 export type ValeInput = MotoboySettlementAdjustment;
 export const normalizeName=(value?:string)=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLocaleLowerCase('pt-BR');
-export const operationalDateKey=(value:Date|string)=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
+const operationalDateFormatter = new Intl.DateTimeFormat('en-CA', {timeZone:'America/Sao_Paulo', year:'numeric', month:'2-digit', day:'2-digit'});
+export const operationalDateKey=(value:Date|string)=>operationalDateFormatter.format(new Date(value));
 // A competência é fixada na criação da rota, nunca no horário de saída/conclusão.
 // Os eventos preservam seus timestamps próprios para auditoria.
 export const routeOperationalDate=(route:Route)=>route.operational_date
@@ -44,17 +46,21 @@ export function getMotoboyDayData(
 ){
   const dayRoutes=getMotoboyRoutes(motoboy,routes).filter(route=>route.operational_date?route.operational_date===date:(routeOperationalDate(route)?operationalDateKey(routeOperationalDate(route)! as string)===date:false));
   const routeIds=new Set(dayRoutes.map(route=>route.id));
-  const completedDeliveries=deliveries.filter(delivery=>routeIds.has(delivery.route_id)&&delivery.completed===true);
-  // Agrupamento é por rota: visitar o mesmo endereço novamente em outra rota
-  // representa uma nova parada física e precisa ser remunerado novamente.
+  const completedDeliveries=activeRouteDeliveries(deliveries).filter(delivery=>routeIds.has(delivery.route_id)&&delivery.completed===true);
+  const completedByRoute=new Map<string,Delivery[]>();
+  for(const delivery of completedDeliveries){
+    const group=completedByRoute.get(delivery.route_id);
+    if(group)group.push(delivery);else completedByRoute.set(delivery.route_id,[delivery]);
+  }
+  // Uma mesma morada em duas rotas são duas paradas físicas distintas.
   const completedStops=dayRoutes.flatMap(route=>
-    groupDeliveriesByStop(completedDeliveries.filter(delivery=>delivery.route_id===route.id))
+    groupDeliveriesByStop(completedByRoute.get(route.id)||[])
   );
   const physicalDeliveryCount=completedStops.length;
   const orderCount=completedDeliveries.length;
   const groupedOrderCount=Math.max(0,orderCount-physicalDeliveryCount);
   const routeBreakdown=dayRoutes.map((route,index)=>{
-    const routeDeliveries=completedDeliveries.filter(delivery=>delivery.route_id===route.id);
+    const routeDeliveries=completedByRoute.get(route.id)||[];
     const routeStops=groupDeliveriesByStop(routeDeliveries);
     return {
       routeId:route.id,

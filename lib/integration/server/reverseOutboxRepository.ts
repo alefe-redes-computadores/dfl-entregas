@@ -18,6 +18,7 @@ const REVERSE_EVENT_TYPES = new Set([
 
 type Claimed = {
   refId: string;
+  workerId: string;
   event: IntegrationEventEnvelope;
   attempts: number;
 };
@@ -169,7 +170,7 @@ export async function claimReverseOutboxBatch(input: {
         updated_at: new Date(now).toISOString(),
         last_error: FieldValue.delete(),
       });
-      return { refId: candidate.id, event: eventFrom(data), attempts };
+      return { refId: candidate.id, workerId: input.workerId, event: eventFrom(data), attempts };
     });
     if (result) claimed.push(result);
   }
@@ -230,6 +231,7 @@ export async function claimReverseOutboxByEventId(input: {
       kind: 'claimed',
       item: {
         refId: ref.id,
+        workerId: input.workerId,
         event: eventFrom(data),
         attempts,
       },
@@ -237,35 +239,69 @@ export async function claimReverseOutboxByEventId(input: {
   });
 }
 
-export async function markReverseOutboxSent(refId: string) {
-  const now = new Date().toISOString();
-  await adminDb.collection(COLLECTION).doc(refId).update({
-    status: 'sent',
-    processed_at: now,
-    updated_at: now,
-    locked_by: FieldValue.delete(),
-    locked_at: FieldValue.delete(),
-    next_attempt_at: FieldValue.delete(),
-    last_error: FieldValue.delete(),
+/**
+ * A claim is valid only while the record is still processing with this worker
+ * and claim-attempt counter. A stale sender must NEVER finalize a renewed lease.
+ * We deliberately do not enforce elapsed lock time here: expiry alone doesn't
+ * revoke a claim; another transaction must have reclaimed it first.
+ */
+export type ReverseOutboxLease = { workerId: string; attempts: number };
+
+function isCurrentLease(data: DocumentData, lease: ReverseOutboxLease): boolean {
+  return data.status === 'processing' &&
+    typeof lease.workerId === 'string' &&
+    lease.workerId.length > 0 &&
+    data.locked_by === lease.workerId &&
+    Number.isSafeInteger(lease.attempts) &&
+    lease.attempts > 0 &&
+    Number(data.attempts) === lease.attempts;
+}
+
+export async function markReverseOutboxSent(
+  refId: string,
+  lease: ReverseOutboxLease,
+): Promise<boolean> {
+  const ref = adminDb.collection(COLLECTION).doc(refId);
+  return adminDb.runTransaction(async (tx: Transaction) => {
+    const current = await tx.get(ref);
+    if (!current.exists || !isCurrentLease(current.data()!, lease)) return false;
+    const now = new Date().toISOString();
+    tx.update(ref, {
+      status: 'sent',
+      processed_at: now,
+      updated_at: now,
+      locked_by: FieldValue.delete(),
+      locked_at: FieldValue.delete(),
+      next_attempt_at: FieldValue.delete(),
+      last_error: FieldValue.delete(),
+    });
+    return true;
   });
 }
 
 export async function markReverseOutboxFailed(input: {
   refId: string;
+  workerId: string;
   attempts: number;
   error: string;
   maxAttempts: number;
-}) {
-  const dead = input.attempts >= input.maxAttempts;
-  const backoffMs = Math.min(60 * 60_000, Math.max(5_000, 5_000 * 2 ** Math.max(0, input.attempts - 1)));
-  const now = Date.now();
-  await adminDb.collection(COLLECTION).doc(input.refId).update({
-    status: dead ? 'dead_letter' : 'failed',
-    last_error: input.error.slice(0, 1000),
-    updated_at: new Date(now).toISOString(),
-    ...(dead ? { next_attempt_at: FieldValue.delete() } : { next_attempt_at: new Date(now + backoffMs).toISOString() }),
-    locked_by: FieldValue.delete(),
-    locked_at: FieldValue.delete(),
+}): Promise<boolean> {
+  const ref = adminDb.collection(COLLECTION).doc(input.refId);
+  return adminDb.runTransaction(async (tx: Transaction) => {
+    const current = await tx.get(ref);
+    if (!current.exists || !isCurrentLease(current.data()!, input)) return false;
+    const dead = input.attempts >= input.maxAttempts;
+    const backoffMs = Math.min(60 * 60_000, Math.max(5_000, 5_000 * 2 ** Math.max(0, input.attempts - 1)));
+    const now = Date.now();
+    tx.update(ref, {
+      status: dead ? 'dead_letter' : 'failed',
+      last_error: input.error.slice(0, 1000),
+      updated_at: new Date(now).toISOString(),
+      ...(dead ? { next_attempt_at: FieldValue.delete() } : { next_attempt_at: new Date(now + backoffMs).toISOString() }),
+      locked_by: FieldValue.delete(),
+      locked_at: FieldValue.delete(),
+    });
+    return true;
   });
 }
 
@@ -303,6 +339,11 @@ export async function recentReverseOutboxIssues(limit = 16) {
         lastError: data.last_error ? String(data.last_error).slice(0, 240) : null,
       };
     }))
-    .sort((a, b) => Date.parse(b.updatedAt || b.occurredAt) - Date.parse(a.updatedAt || a.occurredAt))
+    .sort((a, b) => {
+      const aTime = Date.parse(a.updatedAt || a.occurredAt);
+      const bTime = Date.parse(b.updatedAt || b.occurredAt);
+      const delta = (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+      return delta || a.eventId.localeCompare(b.eventId);
+    })
     .slice(0, safeLimit);
 }

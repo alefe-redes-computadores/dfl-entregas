@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { SiteInboxPanel } from "@/components/store/SiteInboxPanel";
+import { siteInboxProjection } from "@/lib/operation/siteInboxPolicy";
+import { OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
+import { classifyInboxDrafts, inboxViewDrafts, type InboxView } from '@/lib/operation/inboxPresentation';
 import {
   ArrowLeft,
   ClipboardPaste,
@@ -28,6 +32,7 @@ import { dateKey } from "@/lib/operational-time";
 import {
   cleanupDeliveryInbox,
   createInboxDraft,
+  dedupeInboxImport,
   loadInboxDay,
   recoverInterruptedInboxDrafts,
   saveInboxDay,
@@ -42,15 +47,25 @@ const sourceMeta = {
 
 export default function DeliveryInboxPage() {
   const router = useRouter();
+  const params = useSearchParams();
+  const [channel,setChannel]=useState<'site'|'manual'>(params.get('aba')==='site'?'site':'manual');
+  const focusedSiteOrder=params.get('pedido');
+  useEffect(()=>{if(params.get('aba')==='site')setChannel('site');},[params]);
 
   const customers = useAppStore((state) => state.customers);
   const deliveries = useAppStore((state) => state.deliveries);
+
+  const sitePendingCount = useMemo(() => channel==='site' ? siteInboxProjection(deliveries).total : 0, [channel, deliveries]);
 
   const today = dateKey(new Date());
 
   const [text, setText] = useState("");
   const [drafts, setDrafts] = useState<DeliveryInboxDraft[]>([]);
   const [processing, setProcessing] = useState(false);
+  const importLock = useRef(false);
+  const [view, setView] = useState<InboxView>('todos');
+  const [visibleLimit, setVisibleLimit] = useState(OPERATION_FIRST_BATCH);
+  useEffect(() => setVisibleLimit(OPERATION_FIRST_BATCH), [view, today]);
 
   const neighborhoods = useMemo(
     () =>
@@ -83,25 +98,22 @@ export default function DeliveryInboxPage() {
     });
   };
 
-  const active = drafts.filter(
-    (draft) =>
-      draft.status !== "discarded" &&
-      draft.status !== "launched",
+  const { active, ready, review, launched, discarded } = useMemo(
+    () => classifyInboxDrafts(drafts), [drafts],
   );
-
-  const ready = active.filter(
-    (draft) => draft.status === "ready",
+  const filteredDrafts = useMemo(
+    () => inboxViewDrafts({ active, ready, review, launched, discarded }, view),
+    [active, ready, review, launched, discarded, view],
   );
-
-  const review = active.filter(
-    (draft) => draft.status === "review",
+  const renderedDrafts = useMemo(
+    () => filteredDrafts.slice(0, progressiveCount(filteredDrafts.length, visibleLimit)),
+    [filteredDrafts, visibleLimit],
   );
-
-  const launched = drafts.filter(
-    (draft) => draft.status === "launched",
-  );
+  const knownCustomerNames = useMemo(() => customers.map((customer) => customer.name), [customers]);
 
   const processText = async () => {
+    // Lock synchronously: the native haptic awaits before React can disable the button.
+    if (importLock.current) return;
     const raw = text.trim();
 
     if (!raw) {
@@ -109,6 +121,7 @@ export default function DeliveryInboxPage() {
       return;
     }
 
+    importLock.current = true;
     setProcessing(true);
 
     try {
@@ -120,9 +133,7 @@ export default function DeliveryInboxPage() {
 
       const parsed = parseIfoodOrdersText(raw, {
         knownNeighborhoods: neighborhoods,
-        knownCustomerNames: customers.map(
-          (customer) => customer.name,
-        ),
+        knownCustomerNames,
       });
 
       if (!parsed.length) {
@@ -143,19 +154,7 @@ export default function DeliveryInboxPage() {
         ),
       );
 
-      const existingKeys = new Set(
-        drafts.map(
-          (draft) =>
-            `${draft.parsed.ifoodId}|${draft.parsed.orderId}|${draft.rawText}`,
-        ),
-      );
-
-      const unique = incoming.filter(
-        (draft) =>
-          !existingKeys.has(
-            `${draft.parsed.ifoodId}|${draft.parsed.orderId}|${draft.rawText}`,
-          ),
-      );
+      const { unique, skipped } = dedupeInboxImport(incoming, drafts);
 
       if (!unique.length) {
         toast.warning(
@@ -184,12 +183,11 @@ export default function DeliveryInboxPage() {
             : "rascunhos criados"
         }.`,
         {
-          description: needsReview
-            ? `${needsReview} precisam de revisão antes do lançamento.`
-            : "Todos estão prontos para lançar.",
+          description: `${needsReview ? `${needsReview} precisam de revisão. ` : "Todos prontos para lançar. "}${skipped ? `${skipped} repetido(s) ignorado(s).` : ""}`,
         },
       );
     } finally {
+      importLock.current = false;
       setProcessing(false);
     }
   };
@@ -222,6 +220,7 @@ export default function DeliveryInboxPage() {
   };
 
   const launch = (draft: DeliveryInboxDraft) => {
+    if (draft.status === 'launching' || draft.status === 'launched' || draft.status === 'discarded') return;
     if (draft.duplicateDeliveryId) {
       toast.warning("Possível duplicado bloqueado.", {
         description: draft.duplicateReason,
@@ -316,7 +315,7 @@ export default function DeliveryInboxPage() {
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-center">
             <p className="text-sm font-black">
-              {active.length}
+              {channel==='site' ? sitePendingCount : active.length}
             </p>
             <p className="text-[8px] font-bold uppercase text-zinc-500">
               pendentes
@@ -326,6 +325,11 @@ export default function DeliveryInboxPage() {
       </header>
 
       <div className="mx-auto max-w-2xl space-y-4 p-3.5">
+        <nav aria-label="Fontes da Caixa de Entrada" className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={()=>setChannel('site')} aria-pressed={channel==='site'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='site'?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}>Site · automático</button>
+          <button type="button" onClick={()=>setChannel('manual')} aria-pressed={channel==='manual'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='manual'?'border-violet-500/40 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}>iFood / WhatsApp / Texto</button>
+        </nav>
+        {channel==='site'?<SiteInboxPanel focusedId={focusedSiteOrder}/>:<div className="space-y-4">
         <section className="overflow-hidden rounded-[24px] border border-violet-500/20 bg-gradient-to-br from-violet-500/[.10] via-zinc-900/70 to-zinc-950 p-4">
           <div className="flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-violet-500/10 text-violet-300">
@@ -396,23 +400,41 @@ export default function DeliveryInboxPage() {
           />
         </section>
 
-        {active.length === 0 ? (
+        <nav aria-label="Filtrar rascunhos da Caixa de Entrada" className="grid grid-cols-3 gap-2">
+          {([
+            ['todos', 'Pendentes', active.length],
+            ['revisar', 'Revisar', review.length],
+            ['prontos', 'Prontos', ready.length],
+          ] as const).map(([key, label, count]) => (
+            <button key={key} type="button" aria-pressed={view === key}
+              onClick={() => setView(key)}
+              className={`min-h-11 rounded-xl border px-2 text-[11px] font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${view === key ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-zinc-800 bg-zinc-900/40 text-zinc-400'}`}>
+              {label} <span className="opacity-70">{count}</span>
+            </button>
+          ))}
+        </nav>
+
+        {filteredDrafts.length === 0 ? (
           <section className="rounded-[24px] border border-dashed border-zinc-800 bg-zinc-900/25 p-8 text-center">
             <Inbox
               className="mx-auto text-zinc-700"
               size={28}
             />
             <h3 className="mt-3 text-sm font-black">
-              Caixa limpa
+              {active.length === 0 ? 'Caixa limpa' : 'Nada nesta seleção'}
             </h3>
             <p className="mt-1 text-[10px] text-zinc-600">
-              Os próximos textos analisados aparecem aqui
-              como rascunhos.
+              {active.length === 0
+                ? 'Os próximos textos analisados aparecem aqui como rascunhos.'
+                : 'Os outros rascunhos continuam disponíveis na aba Pendentes.'}
             </p>
           </section>
         ) : (
           <section className="space-y-2.5">
-            {active.map((draft) => (
+            <p role="status" className="px-1 text-[10px] text-zinc-500">
+              Exibindo {renderedDrafts.length} de {filteredDrafts.length} rascunhos nesta seleção
+            </p>
+            {renderedDrafts.map((draft) => (
               <DraftCard
                 key={draft.id}
                 draft={draft}
@@ -420,24 +442,23 @@ export default function DeliveryInboxPage() {
                 onDiscard={() => discard(draft.id)}
               />
             ))}
+            {filteredDrafts.length > renderedDrafts.length && (
+              <button type="button" className="flex min-h-11 w-full items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/[.06] px-4 text-xs font-bold text-violet-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400"
+                onClick={() => setVisibleLimit((current) => nextProgressiveCount(filteredDrafts.length, current))}>
+                Mostrar mais {Math.min(OPERATION_FIRST_BATCH, filteredDrafts.length - renderedDrafts.length)} de {filteredDrafts.length}
+              </button>
+            )}
           </section>
         )}
 
-        {drafts.some(
-          (draft) => draft.status === "discarded",
-        ) && (
+        {discarded.length > 0 && (
           <details className="rounded-2xl border border-zinc-900 bg-zinc-900/25 p-3">
             <summary className="cursor-pointer text-[10px] font-black text-zinc-600">
               Descartados hoje
             </summary>
 
             <div className="mt-2 space-y-2">
-              {drafts
-                .filter(
-                  (draft) =>
-                    draft.status === "discarded",
-                )
-                .map((draft) => (
+              {discarded.map((draft) => (
                   <button
                     key={draft.id}
                     onClick={() => restore(draft.id)}
@@ -454,6 +475,7 @@ export default function DeliveryInboxPage() {
             </div>
           </details>
         )}
+        </div>}
       </div>
     </main>
   );
@@ -529,7 +551,9 @@ function DraftCard({
               {draft.confidence}% leitura
             </span>
 
-            {duplicate ? (
+            {draft.status === 'launching' ? (
+              <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[8px] font-black text-violet-300">Aguardando retorno</span>
+            ) : duplicate ? (
               <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[8px] font-black text-red-400">
                 Possível duplicado
               </span>
@@ -619,11 +643,11 @@ function DraftCard({
 
       <button
         onClick={onLaunch}
-        disabled={duplicate}
+        disabled={duplicate || draft.status === 'launching'}
         className="mt-3 flex h-10 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-[10px] font-black text-zinc-300 disabled:opacity-35 active:scale-[.99]"
       >
         <span>
-          {needsReview
+          {draft.status === 'launching' ? 'Aguardando retorno' : needsReview
             ? "Abrir e revisar"
             : "Lançar entrega"}
         </span>

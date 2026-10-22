@@ -6,9 +6,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Bike, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, Search, User, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp } from '@/lib/reports/time';
+import { OPERATION_BATCH, OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { deliveryCustomerCharge, deliveryEconomicValue } from '@/lib/delivery-finance';
+import { routeOutstandingPayment } from '@/lib/operation/routeCollection';
 import {
   dateKey,
   operationalDateFromKey,
@@ -57,6 +59,8 @@ export default function RoutesPage() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('todas');
   const [query, setQuery] = useState('');
+  const [visibleLimit, setVisibleLimit] = useState(OPERATION_FIRST_BATCH);
+  useEffect(() => { setVisibleLimit(OPERATION_FIRST_BATCH); }, [selectedDate, filter, query]);
 
   const deliveriesByRoute = useMemo(() => {
     const map = new Map<string, typeof deliveries>();
@@ -79,18 +83,19 @@ export default function RoutesPage() {
 
   const searchTerm = useMemo(() => query.trim().toLocaleLowerCase('pt-BR'), [query]);
 
-  const rows = useMemo(() => dayRoutes.map(route => {
+  const searchedDayRoutes = useMemo(() => dayRoutes.filter(route =>
+    !searchTerm || `${route.name} ${route.motoboy_name}`.toLocaleLowerCase('pt-BR').includes(searchTerm)
+  ), [dayRoutes, searchTerm]);
+
+  // R49: somente classificar/ordenar o universo completo aqui. A quantidade de
+  // paradas e os valores financeiros são calculados APÓS a janela de 40 cards;
+  // filtros, totais e a ordem continuam abrangendo todas as rotas.
+  const rows = useMemo(() => searchedDayRoutes.map(route => {
     const linked = deliveriesByRoute.get(route.id) || [];
-    const completed = linked.filter(delivery => delivery.completed).length;
-    const stops = groupDeliveriesByStop(linked).length;
-    const amount = linked.reduce(
-      (total, delivery) => total + deliveryEconomicValue(delivery),
-      0,
-    );
-    const customerCharge = linked.reduce(
-      (total, delivery) => total + deliveryCustomerCharge(delivery),
-      0,
-    );
+    let completed = 0;
+    for (const delivery of linked) {
+      if (delivery.completed) completed++;
+    }
     const startedAt = canonicalRouteStartedAt(route);
     const ready =
       route.status === 'aberta' &&
@@ -105,35 +110,45 @@ export default function RoutesPage() {
           : startedAt
             ? 'na-rua'
             : 'montando';
-    return { route, linked, completed, stops, amount, customerCharge, state };
+    const sortedAt = new Date(canonicalRouteDate(route) || '').getTime();
+    return { route, linked, completed, state, sortedAt };
   }).filter(({ route, state }) => {
-    return (filter === 'todas' || state === filter) && (!searchTerm || `${route.name} ${route.motoboy_name}`.toLocaleLowerCase('pt-BR').includes(searchTerm));
+    return filter === 'todas' || state === filter;
   }).sort((a, b) => {
-    const aDate = canonicalRouteDate(a.route);
-    const bDate = canonicalRouteDate(b.route);
+    if (!Number.isFinite(a.sortedAt)) return Number.isFinite(b.sortedAt) ? 1 : 0;
+    if (!Number.isFinite(b.sortedAt)) return -1;
+    return a.sortedAt - b.sortedAt;
+  }), [searchedDayRoutes, deliveriesByRoute, filter]);
 
-    return (
-      (aDate ? new Date(aDate).getTime() : Number.POSITIVE_INFINITY) -
-      (bDate ? new Date(bDate).getTime() : Number.POSITIVE_INFINITY)
-    );
-  }), [dayRoutes, deliveriesByRoute, filter, searchTerm]);
+  const renderedRows = useMemo(() => rows.slice(0, progressiveCount(rows.length, visibleLimit)).map(row => {
+    const linked = row.linked;
+    let amount = 0;
+    let customerCharge = 0;
+    let pendingCharge = 0;
+    let pendingPayments = 0;
+    for (const delivery of linked) {
+      amount += deliveryEconomicValue(delivery);
+      customerCharge += deliveryCustomerCharge(delivery);
+      const outstanding = routeOutstandingPayment(delivery);
+      if (outstanding.pending) { pendingCharge += outstanding.amount; pendingPayments++; }
+    }
+    const stops = groupDeliveriesByStop(linked).length;
+    return { ...row, stops, amount, customerCharge, pendingCharge, pendingPayments };
+  }), [rows, visibleLimit]);
 
-  const counts = useMemo(() => ({
-    montando: dayRoutes.filter(
-      route => route.status === 'aberta' && !canonicalRouteStartedAt(route),
-    ).length,
-    rua: dayRoutes.filter((route) => {
-      if (route.status !== 'aberta' || !canonicalRouteStartedAt(route)) return false;
+  const counts = useMemo(() => {
+    // O contador percorre rotas uma vez; as paradas são consultadas no índice da R40.
+    const result = {montando: 0, rua: 0, prontas: 0, finalizadas: 0};
+    for (const route of dayRoutes) {
+      if (route.status === 'fechada') { result.finalizadas++; continue; }
+      if (route.status !== 'aberta') continue;
+      if (!canonicalRouteStartedAt(route)) { result.montando++; continue; }
       const linked = deliveriesByRoute.get(route.id) || [];
-      return linked.length === 0 || linked.some((delivery) => !delivery.completed);
-    }).length,
-    prontas: dayRoutes.filter((route) => {
-      if (route.status !== 'aberta' || !canonicalRouteStartedAt(route)) return false;
-      const linked = deliveriesByRoute.get(route.id) || [];
-      return linked.length > 0 && linked.every((delivery) => delivery.completed);
-    }).length,
-    finalizadas: dayRoutes.filter(route => route.status === 'fechada').length,
-  }), [dayRoutes, deliveriesByRoute]);
+      if (linked.length > 0 && linked.every(delivery => delivery.completed)) result.prontas++;
+      else result.rua++;
+    }
+    return result;
+  }, [dayRoutes, deliveriesByRoute]);
 
   const calendarDays = useMemo(() => {
     const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
@@ -181,7 +196,7 @@ export default function RoutesPage() {
     <div className="dfl-filter-row">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
 
     <div className="flex flex-col gap-3">
-      {rows.map(({ route, linked, completed, stops, amount, customerCharge, state }) => {
+      {renderedRows.map(({ route, linked, completed, stops, amount, customerCharge, pendingCharge, pendingPayments, state }) => {
         const progress = linked.length ? Math.round((completed / linked.length) * 100) : 0;
         const pending = Math.max(0, linked.length - completed);
         const stateLabel =
@@ -197,7 +212,7 @@ export default function RoutesPage() {
           <button
             key={route.id}
             onClick={() => router.push(`/rotas/details?id=${route.id}&date=${encodeURIComponent(selectedDate)}`)}
-            className={`rounded-[26px] border p-4 text-left active:scale-[0.99] ${
+            className={`w-full rounded-[20px] border text-left transition-colors hover:border-zinc-600 active:bg-zinc-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${state === 'finalizadas' ? 'p-3' : 'p-3.5'} ${
               state === 'na-rua'
                 ? 'border-sky-500/20 bg-sky-500/[.035]'
                 : state === 'prontas'
@@ -208,7 +223,7 @@ export default function RoutesPage() {
             }`}
           >
             <div className="flex items-start gap-3">
-              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                 state === 'na-rua'
                   ? 'bg-sky-500/15 text-sky-400'
                   : state === 'finalizadas'
@@ -233,35 +248,34 @@ export default function RoutesPage() {
                     {stateLabel}
                   </span>
                 </div>
-                <p className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
+                <p className="mt-1 flex items-center gap-1 text-[11px] text-zinc-500">
                   <User size={12}/>
-                  {route.motoboy_name}
+                  {route.motoboy_name || 'Sem motoboy'}
+                  {state === 'finalizadas' && <span className="ml-1 text-zinc-600">· {completed}/{linked.length} pedidos · {stops} paradas</span>}
                 </p>
               </div>
 
               <ChevronRight size={17} className="mt-1 shrink-0 text-zinc-700"/>
             </div>
 
-            <div className="mt-4">
+            {state !== 'finalizadas' && <div className="mt-3">
               <div className="flex items-center justify-between text-[10px] font-bold">
-                <span className="text-zinc-500">{completed}/{linked.length} pedidos · {stops} parada{stops === 1 ? "" : "s"}</span>
+                <span className="text-zinc-500">{stops} parada{stops === 1 ? "" : "s"} · {completed}/{linked.length} pedidos</span>
                 <span className={pending ? 'text-amber-400' : 'text-emerald-400'}>
                   {pending
                     ? `${pending} pendente${pending === 1 ? '' : 's'}`
-                    : state === 'finalizadas'
-                      ? 'Finalizada'
-                      : 'Pronta para finalizar'}
+                    : linked.length > 0 ? 'Pronta para finalizar' : 'Sem pedidos'}
                 </span>
               </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+              <div role="progressbar" aria-label={`Entregas concluídas da rota ${route.name}`} aria-valuemin={0} aria-valuemax={linked.length || 1} aria-valuenow={completed} className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
                 <div
-                  className={`h-full rounded-full ${state === 'finalizadas' ? 'bg-emerald-500' : 'bg-sky-500'}`}
+                  className={`h-full rounded-full ${pending ? 'bg-sky-500' : 'bg-emerald-500'}`}
                   style={{ width: `${progress}%` }}
                 />
               </div>
-            </div>
+            </div>}
 
-            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-zinc-800/70 pt-3">
+            <div className={`${state === 'finalizadas' ? 'mt-2' : 'mt-3'} grid grid-cols-2 gap-2 border-t border-zinc-800/70 pt-2.5`}>
               <div>
                 <p className="text-[9px] font-black uppercase tracking-wide text-zinc-600">Valor dos pedidos</p>
                 <p className="mt-1 text-sm font-black text-emerald-400">
@@ -272,6 +286,11 @@ export default function RoutesPage() {
                     Cliente: R$ {customerCharge.toLocaleString('pt-BR',{minimumFractionDigits:2})}
                   </p>
                 )}
+                <p className={`mt-1 text-[10px] font-bold ${pendingPayments ? 'text-amber-300' : 'text-emerald-500/80'}`}>
+                  {pendingPayments
+                    ? `A receber: R$ ${pendingCharge.toLocaleString('pt-BR',{minimumFractionDigits:2})} · ${pendingPayments} pedido${pendingPayments === 1 ? '' : 's'}`
+                    : linked.length > 0 ? 'Pagamentos registrados' : 'Sem pedidos'}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-[9px] font-black uppercase tracking-wide text-zinc-600">Criada</p>
@@ -294,6 +313,11 @@ export default function RoutesPage() {
         );
       })}
 
+      {rows.length > renderedRows.length && (
+        <button type="button" onClick={() => setVisibleLimit(current => nextProgressiveCount(rows.length, current))} className="flex min-h-12 w-full items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-xs font-black text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+          Mostrar mais {Math.min(OPERATION_BATCH, rows.length - renderedRows.length)} rotas · {renderedRows.length} de {rows.length}
+        </button>
+      )}
       {rows.length === 0 && (
         <div className="dfl-empty">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-900 text-zinc-700">

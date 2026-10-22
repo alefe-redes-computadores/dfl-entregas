@@ -134,17 +134,21 @@ export function validateSchedule(day: DaySchedule): string | null {
   return null;
 }
 
+/** Data legada malformada nunca pode fechar ou quebrar a operação. */
 export function isPausedOn(
   pauses: StorePause[] | undefined,
   key: string,
 ) {
-  return Boolean(
-    pauses?.some(
-      (pause) =>
-        key >= pause.start_date.slice(0, 10) &&
-        key <= pause.end_date.slice(0, 10),
-    ),
-  );
+  if (!validOperationalDateKey(key) || !Array.isArray(pauses)) return false;
+  return pauses.some((pause) => {
+    const start = typeof pause?.start_date === 'string' ? pause.start_date.slice(0, 10) : '';
+    // Uma pausa de um dia pode vir de versões antigas sem end_date.
+    const end = typeof pause?.end_date === 'string' && pause.end_date
+      ? pause.end_date.slice(0, 10)
+      : start;
+    return validOperationalDateKey(start) && validOperationalDateKey(end) &&
+      end >= start && key >= start && key <= end;
+  });
 }
 
 function weekdayFromKey(key: string) {

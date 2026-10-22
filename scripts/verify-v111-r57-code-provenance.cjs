@@ -1,0 +1,47 @@
+#!/usr/bin/env node
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const ts=require('typescript');
+let checks=0;
+const check=(v,why)=>{assert.ok(v,`R57: ${why}`);checks++};
+const read=(f)=>{const s=fs.readFileSync(f,'utf8');const tree=ts.createSourceFile(f,s,ts.ScriptTarget.Latest,true,f.endsWith('.tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);check(tree.parseDiagnostics.length===0,`parse ${f}`);return s};
+const details=read('app/entregas/details/page.tsx');
+const editing=read('app/entregas/editar/page.tsx');
+const departure=read('components/routes/RouteDepartureChecklist.tsx');
+const accordion=read('components/home/RouteAccordion.tsx');
+const helper=read('lib/ifood-confirmations.ts');
+const portal=read('app/confirmar/page.tsx');
+const oldTest=read('scripts/test-v111-r50-confirmation-index.cjs');
+const legacy=read('scripts/verify-v25-1-ifood-clientes-balco.cjs'.replace('balco.cjs','balcao.cjs'));
+const pre=read('scripts/pre-apk.cjs');
+check(details.includes('orderConfirmationCode(delivery.confirmation_code)'), 'detail code comes from delivery');
+check(!details.includes('customer?.last_confirmation_code'), 'detail cannot copy customer code');
+check(details.includes('Código deste pedido'), 'detail UI names order code');
+check(details.includes('Não informado — solicite ao cliente'), 'detail UI shows missing code');
+check(details.includes('await executeCompletion(savedConfirmationCode)'), 'completion uses strict code');
+check(details.includes('code=${encodeURIComponent('), 'portal link keeps code parameter');
+check(editing.includes('setConfirmationCode(delivery.confirmation_code'), 'editing still loads order code');
+check(!editing.includes('setConfirmationCode(c.last_confirmation_code'), 'selecting customer does not seed code');
+for(const [s,name] of [[departure,'departure modal'],[accordion,'route card']]) {
+ check(s.includes('orderConfirmationCode(delivery.confirmation_code)'), `${name} tests order code`);
+ check(!s.includes('!customer?.last_confirmation_code'), `${name} never treats historical code as present`);
+}
+check(helper.includes('orderConfirmationCode(delivery.confirmation_code)'), 'central helper validates length strictly');
+check(!helper.includes('deliveryCode || customerCode'), 'no fallback in central helper');
+check(!helper.includes("codeSource = deliveryCode"), 'source cannot become customer');
+check(portal.includes('submittingRef.current = true') && portal.includes('submittingRef.current = false'), 'portal uses synchronous action lock');
+check(portal.includes('disabled={isSubmitting}'), 'portal shows busy state');
+check(portal.includes("(currentPending.status || 'pending') !== 'pending'"), 'stale resolved item cannot be resubmitted');
+check(portal.includes('try { await Haptics.impact'), 'native haptics nonblocking');
+check(portal.includes('finally { endSubmit(); }'), 'busy locks freed after failure');
+check(oldTest.includes("codeSource,'none'"), 'R50 test upgraded, not removed');
+check(legacy.includes('código específico do pedido'), 'V25 legacy test upgraded, not removed');
+const suites=[...pre.matchAll(/^  '(scripts\/[^']+\.cjs)'/gm)].map(m=>m[1]);
+check(suites.length>=196, `at least 196 suites; got ${suites.length}`);
+check(new Set(suites).size===suites.length,'no repeated suites');
+for(const s of suites)check(fs.existsSync(s),`suite exists: ${s}`);
+check(suites.includes('scripts/verify-v111-r57-code-provenance.cjs'),'R57 structural in PRE-APK');
+check(suites.includes('scripts/test-v111-r57-code-provenance.cjs'),'R57 behavior in PRE-APK');
+check(fs.readFileSync('security/firestore.v111-r23-owner-only.rules','utf8').includes('if superadmin();'), 'production Rules owner-only');
+console.log(`R57 AUTHORITY: ${checks} checks approved; ${suites.length} suites`);

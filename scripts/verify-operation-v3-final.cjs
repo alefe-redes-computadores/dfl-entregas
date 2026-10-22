@@ -14,14 +14,14 @@ const files={
 };
 const checks=[
  ['identidade exige nome exato e endereço igual sem conflito',files.identity.includes('exactName &&')&&files.identity.includes('sameAddress &&')&&files.identity.includes('!phoneConflict')],
- ['UI usa evidência canônica',files.nova.includes('customerIdentityEvidence(customer, customerName')],
+ ['UI usa evidência canônica',(files.nova.includes('customerIdentityEvidence(customer, customerName') || files.nova.includes('customerIdentityEvidence(customer, activeCustomerName'))],
  ['mesmo endereço/nome diferente é revisão',files.nova.includes("kind: 'same_address'")],
  ['parser aceita iFood sem palavra ID',files.parser.includes('ifood(?:\\s+id)?')],
  ['pedido curto limitado ao dia',files.inbox.includes('já lançado hoje')],
  ['rota ativa persistida com armazenamento tolerante a falhas',files.route.includes('rememberOpenRouteId(route.id)')&&files.routeUiStorage.includes('dfl-active-operational-route-v1')],
  ['nova entrega recupera rota ativa',files.nova.includes('readActiveOperationalRouteId()')],
  ['seleção manual persiste rota com proteção',files.nova.includes('rememberActiveOperationalRouteId(r.id)')],
- ['acerto agrupa paradas dentro de cada rota',files.analytics.includes('dayRoutes.flatMap(route=>')&&files.analytics.includes("delivery.route_id===route.id")],
+ ['acerto agrupa paradas dentro de cada rota',files.analytics.includes('dayRoutes.flatMap(route=>')&&files.analytics.includes('groupDeliveriesByStop(completedByRoute.get(route.id)||[])')&&files.analytics.includes('completedByRoute.get(delivery.route_id)')],
  ['taxa usa parada física',files.analytics.includes('calculateMotoboyFee(motoboy.payment_rule,physicalDeliveryCount)')],
  ['acerto carrega saldo anterior',files.acerto.includes('priorSettlement')],
  ['saldo anterior entra na matemática',files.analytics.includes('retainedCash+priorStoreCredit-liquidFee-priorMotoboyCredit')],

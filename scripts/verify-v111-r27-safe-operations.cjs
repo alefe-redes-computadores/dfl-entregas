@@ -1,0 +1,57 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const ts=require('typescript');
+const read=p=>fs.readFileSync(p,'utf8');
+for(const file of ['lib/access/staffOperationPolicy.ts','lib/access/staffOperationsClient.ts','app/api/access/operations/route.ts','app/mais/acessos/solicitacoes/page.tsx','components/access/StaffPortal.tsx','app/mais/acessos/page.tsx']){
+  const result=ts.transpileModule(read(file),{fileName:file,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}});
+  const errors=(result.diagnostics||[]).filter(x=>x.category===ts.DiagnosticCategory.Error);
+  assert.equal(errors.length,0,`Erro sintaxe ${file}: ${errors.map(x=>ts.flattenDiagnosticMessageText(x.messageText,' ')).join(';')}`);
+}
+const output=ts.transpileModule(read('lib/access/staffOperationPolicy.ts'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
+const m={exports:{}};
+new Function('module','exports',output)(m,m.exports);
+const p=m.exports;
+const base={uid:'moto-00000001',status:'active',role:'motoboy',permissions:['deliveries_read','deliveries_complete'],linkedMotoboyId:'motoboy1'};
+const buy={uid:'comp-00000001',status:'active',role:'compras',permissions:['stock_read','purchases_write']};
+const ok=(bool,desc)=>{assert.ok(bool,desc);console.log('R27 OK:',desc);};
+ok(p.maySubmitStaffOperation(base,base.uid,'delivery_confirmation'),'Motoboy correto pode pedir revisão da própria entrega');
+ok(!p.maySubmitStaffOperation({...base,status:'suspended'},base.uid,'delivery_confirmation'),'Suspenso bloqueado');
+ok(!p.maySubmitStaffOperation({...base,uid:'uid-alheio'},base.uid,'delivery_confirmation'),'UID diferente bloqueado');
+ok(!p.maySubmitStaffOperation({...base,linkedMotoboyId:''},base.uid,'delivery_confirmation'),'Motoboy sem vínculo bloqueado');
+ok(!p.maySubmitStaffOperation({...base,permissions:['deliveries_read']},base.uid,'delivery_confirmation'),'Escrita sem permissão bloqueada');
+ok(!p.maySubmitStaffOperation(base,base.uid,'purchase_intent'),'Motoboy não escreve compra');
+ok(p.maySubmitStaffOperation(buy,buy.uid,'purchase_intent'),'Compras pode pedir lançamento, sem efeito no estoque');
+ok(!p.maySubmitStaffOperation(buy,buy.uid,'delivery_confirmation'),'Compras não confirma entrega');
+const pending={route_id:'route_1',completed:false,fulfillment_mode:'delivery'};
+const route={status:'aberta',motoboy_id:'motoboy1',started_at:'2026-10-20T18:00:00'};
+ok(p.deliveryEligibleForRequest(pending,route,'motoboy1','route_1'),'Entrega própria em rota iniciada aceita');
+ok(!p.deliveryEligibleForRequest({...pending,completed:true},route,'motoboy1','route_1'),'Não confirmar baixa repetida');
+ok(!p.deliveryEligibleForRequest(pending,{...route,motoboy_id:'outro'},'motoboy1','route_1'),'Outra rota bloqueada');
+ok(!p.deliveryEligibleForRequest(pending,{...route,status:'fechada'},'motoboy1','route_1'),'Rota fechada bloqueada');
+ok(!p.deliveryEligibleForRequest({...pending,source_system:'dfl_site',site_order_status:'cancelado'},route,'motoboy1','route_1'),'Site cancelado bloqueado');
+ok(!p.deliveryEligibleForRequest({...pending,source_system:'dfl_site',site_order_status:'pendente'},route,'motoboy1','route_1'),'Site pendente bloqueado');
+ok(!p.deliveryEligibleForRequest({...pending,fulfillment_mode:'pickup'},route,'motoboy1','route_1'),'Retirada não é entrega');
+const valid={kind:'purchase_intent',targetId:'product_A',requestId:'req_abcdefghi',quantity:0.3};
+ok(p.parseStaffOperation(valid)?.quantity===0.3,'Aceita decimal 0.3');
+ok(!p.parseStaffOperation({...valid,quantity:-1}),'Quantidade negativa bloqueada');
+ok(!p.parseStaffOperation({...valid,quantity:10000.1}),'Quantidade excessiva bloqueada');
+ok(!p.parseStaffOperation({...valid,quantity:0.12345}),'Precisão excessiva bloqueada');
+ok(!p.parseStaffOperation({...valid,quantity:'0.3'}),'Coerção de quantidade bloqueada');
+ok(!p.parseStaffOperation({...valid,kind:'delivery_confirmation'}),'Campo compra não usado na entrega');
+ok(p.sameRequest({actorUid:buy.uid,kind:valid.kind,targetId:valid.targetId,quantity:0.3,note:''},valid,buy.uid),'Idempotência positiva');
+ok(!p.sameRequest({actorUid:buy.uid,kind:valid.kind,targetId:valid.targetId,quantity:0.6,note:''},valid,buy.uid),'Reuso de ID divergente bloqueado');
+const api=read('app/api/access/operations/route.ts');
+for(const token of ["verifyIdToken(header.slice(7),true)","process.env.DFL_STAFF_OPERATION_REQUESTS_ENABLED !== 'true'",'adminDb.runTransaction','maySubmitStaffOperation(account,uid,input.kind)','staff_workspaces','deliveryEligibleForRequest','tx.create(requests','effect:\'none_owner_review_required\'','staff_access_audit',"'staff_operation_requests'"]){
+  ok(api.includes(token),`Contrato API: ${token}`);
+}
+ok(!/tx\.update\(adminDb\.collection\('(deliveries|routes|customers|stock_products|stock_supplies|stock_movements)'/.test(api),'API não altera entidades canônicas');
+const portal=read('components/access/StaffPortal.tsx');
+ok(portal.includes('submitStaffOperation') && portal.includes('Solicitar conferência'),'Portal mostra pedido, não baixa');
+const screen=read('app/mais/acessos/solicitacoes/page.tsx');
+ok(screen.includes('reviewStaffOperation') && screen.includes('não') && screen.includes('Compras'),'Admin recebe fila de revisão sem efeitos');
+const pre=read('scripts/pre-apk.cjs');
+ok(pre.includes("'scripts/verify-v111-r27-safe-operations.cjs'"),'R27 presente em PRE-APK');
+const rules=read('security/firestore.v111-r26-candidate.rules');
+ok(!rules.includes('match /staff_operation_requests'),'Pedidos não liberados por Rules staff');
+console.log('R27: SEGURANÇA + CONTRATOS + COMPORTAMENTO — OK (sem ativar funcionário).');

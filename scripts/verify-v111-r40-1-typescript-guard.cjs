@@ -1,0 +1,23 @@
+#!/usr/bin/env node
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const ts = require('typescript');
+const src = fs.readFileSync('app/rotas/page.tsx', 'utf8');
+const file = ts.createSourceFile('app/rotas/page.tsx', src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+assert.equal(file.parseDiagnostics.length, 0, 'Rotas possui erros de sintaxe TSX');
+const guard = "{state !== 'finalizadas' && <div className=\"mt-3\">";
+const beginning = src.indexOf(guard);
+assert.notEqual(beginning, -1, 'Bloco de progresso de rotas abertas não encontrado');
+const ending = src.indexOf('\n            </div>}', beginning);
+assert.ok(ending > beginning, 'Fechamento do bloco de progresso ausente');
+const branch = src.slice(beginning, ending);
+assert.ok(!branch.includes("state === 'finalizadas'"), 'TS2367: tipo já excluiu rotas finalizadas neste ramo');
+assert.ok(branch.includes('pending') && branch.includes('linked.length'), 'Pendência e total dos pedidos devem continuar visíveis');
+assert.ok(branch.includes("pending ? 'bg-sky-500' : 'bg-emerald-500'"), 'Cor da barra deve depender de pendência real');
+assert.ok(src.includes("state === 'finalizadas' && <span"), 'Rotas finalizadas mantêm resumo compacto');
+const pre = fs.readFileSync('scripts/pre-apk.cjs','utf8');
+const suites = [...pre.matchAll(/^  '(scripts\/[^']+)',?$/gm)].map(match => match[1]);
+assert.ok(suites.length >= 162 && new Set(suites).size === suites.length, 'R40.1 preserva >=162 suítes únicas');
+assert.ok(suites.includes('scripts/verify-v111-r40-1-typescript-guard.cjs'), 'Guard R40.1 deve estar no PRE-APK');
+console.log('R40.1: 8 garantias de TSX, acessibilidade operacional e regressão OK');

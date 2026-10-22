@@ -107,7 +107,9 @@ export async function POST(req: NextRequest) {
         !['motoboy','compras','operacao','personalizado'].includes(draft.role) ||
         !lower(draft.email)) return reply(req,{ok:false,error:'Rascunho incompleto ou suspenso.'},409);
     const user = await adminAuth.getUser(targetUid);
-    if (user.disabled || !user.email || !user.emailVerified || lower(user.email) !== lower(draft.email)) {
+    if (user.disabled || !user.email || !user.emailVerified ||
+        !user.providerData.some(provider => provider.providerId === 'google.com') ||
+        lower(user.email) !== lower(draft.email)) {
       return reply(req,{ok:false,error:'UID, e-mail verificado ou estado da conta não correspondem ao cadastro.'},409);
     }
     const verified = {uid:user.uid,displayName:draft.name, emailMasked:safeEmail(user.email), emailVerified:true};

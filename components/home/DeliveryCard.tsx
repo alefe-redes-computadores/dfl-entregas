@@ -25,6 +25,7 @@ import { isDeliveryExpanded } from '@/lib/delivery-expansion-index';
 import { pendingOperationalStopDeliveries } from '@/lib/delivery-stop-pending';
 import { deliveryPaymentStateLabel, deriveDeliveryPaymentState, deliveryCustomerCharge, deliveryEconomicValue } from '@/lib/delivery-finance';
 import { summarizeStopFinance } from '@/lib/delivery-stop-finance';
+import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { ownerContextLabel } from '@/lib/owner-order-context';
 
 interface DeliveryCardProps {
@@ -64,11 +65,25 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const groupedPending = pendingOperationalStopDeliveries(groupedDeliveries).length;
   // O estado visual representa a parada física inteira, não só o pedido representante.
   const stopCompleted = isGroupedStop ? groupedPending === 0 : delivery.completed;
-  const groupedToCollect = groupedDeliveries.filter(item => deriveDeliveryPaymentState(item) === 'collect_on_delivery');
-  const groupedPixPending = groupedDeliveries.filter(item => deriveDeliveryPaymentState(item) === 'pending');
+  const groupedPaymentRows = useMemo(() => {
+    const toCollect: Delivery[] = [];
+    const pixPending: Delivery[] = [];
+    for (const item of groupedDeliveries) {
+      const state = deriveDeliveryPaymentState(item);
+      if (state === 'collect_on_delivery') toCollect.push(item);
+      else if (state === 'pending') pixPending.push(item);
+    }
+    return {toCollect, pixPending};
+  }, [stopDeliveries, delivery]);
+  const groupedToCollect = groupedPaymentRows.toCollect;
+  const groupedPixPending = groupedPaymentRows.pixPending;
   const groupedCollectValue = groupedFinance.collectTotal;
-  const groupedCodes = Array.from(new Set(groupedDeliveries.map((item) => item.confirmation_code?.replace(/\D/g, '').slice(0, 4)).filter((code): code is string => Boolean(code))));
-  const commonConfirmationCode = groupedCodes.length === 1 ? groupedCodes[0] : customer?.last_confirmation_code || '';
+  const groupedCodes = groupedDeliveries.map((item) => orderConfirmationCode(item.confirmation_code));
+  // O atalho coletivo só existe se TODOS os pedidos são iFood e possuem o MESMO
+  // código válido. Um pedido sem código não pode herdar o do vizinho.
+  const commonConfirmationCode = groupedDeliveries.length > 0 &&
+    groupedDeliveries.every((item) => item.origin === 'ifood' && orderConfirmationCode(item.confirmation_code) === groupedCodes[0])
+    ? groupedCodes[0] : '';
 
   // V42: expansão é apenas estado transitório de conferência.
   // Ao entrar/recarregar a tela, o padrão volta a ser compacto.
@@ -219,8 +234,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const handleTouchStartLongPress = (text: string, openPortal = false) => {
     longPressTimer.current = setTimeout(() => {
       if (!openPortal || !delivery.completed) return;
-      const code = (delivery.confirmation_code || customer?.last_confirmation_code || '').replace(/\D/g, '').slice(0, 4);
-      const orderId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
+      const code = orderConfirmationCode(delivery.confirmation_code);
+      const rawId = (delivery.ifood_id || '').replace(/\D/g, '');
+      const orderId = rawId.length === 8 ? rawId : '';
       if (code.length !== 4 || orderId.length !== 8) return;
       void navigator.clipboard.writeText(code).catch(() => undefined);
       router.replace(`/confirmar?orderId=${encodeURIComponent(orderId)}&code=${encodeURIComponent(code)}&returnTo=${encodeURIComponent(confirmationReturn)}`);
@@ -241,7 +257,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     return itemIsIfood && !skipsCode;
   };
   const storedConfirmationCode = (item: Delivery) => (
-    item.confirmation_code || getCustomerById(item.customer_id)?.last_confirmation_code || ''
+    item.confirmation_code || ''
   ).replace(/\D/g, '').slice(0, 4);
   const groupedCodeDeliveries = pendingGroupedDeliveries.filter(requiresConfirmationCode);
   const groupedCodeMode = pendingGroupedDeliveries.length > 1;
@@ -257,7 +273,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     copyBusyRef.current = true;
     setCopyBusy(true);
     try {
-      const copied = await copyDeliveryToClipboard(delivery, customer?.name, customer?.last_confirmation_code, groupedDeliveries, typeof delivery.order_index === 'number' ? delivery.order_index + 1 : undefined);
+      const copied = await copyDeliveryToClipboard(delivery, customer?.name, isIfood ? delivery.confirmation_code : customer?.last_confirmation_code, groupedDeliveries, typeof delivery.order_index === 'number' ? delivery.order_index + 1 : undefined);
       if (copied) toast.success('Entrega copiada!');
       else toast.error('Não foi possível copiar a entrega.', { description: 'Tente novamente. Nenhum pedido foi alterado.' });
     } finally {
@@ -792,14 +808,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       ID: {delivery.ifood_id} <Copy size={9} className="text-sky-400"/>
                     </button>
                   )}
-                  {!isGroupedStop && isIfood && (delivery.confirmation_code || customer?.last_confirmation_code) && (
+                  {!isGroupedStop && isIfood && orderConfirmationCode(delivery.confirmation_code) && (
                     <button
-                      onClick={() => triggerCopyAndRedirect(delivery.confirmation_code || customer?.last_confirmation_code || '')}
-                      onTouchStart={() => handleTouchStartLongPress(delivery.confirmation_code || customer?.last_confirmation_code || '')}
+                      onClick={() => triggerCopyAndRedirect(orderConfirmationCode(delivery.confirmation_code))}
+                      onTouchStart={() => handleTouchStartLongPress(delivery.confirmation_code || '')}
                       onTouchEnd={handleTouchEndLongPress}
                       className="bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 active:scale-95 text-amber-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0 flex items-center gap-1 transition-all"
                     >
-                      Cód: {delivery.confirmation_code || customer?.last_confirmation_code} <Copy size={9} />
+                      Cód: {orderConfirmationCode(delivery.confirmation_code)} <Copy size={9} />
                     </button>
                   )}
                 </div>
@@ -818,7 +834,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       {groupedDeliveries.map((item, index) => {
                         const itemCustomer = getCustomerById(item.customer_id);
                         const charge = deliveryCustomerCharge(item);
-                        const itemCode = item.confirmation_code?.replace(/\D/g, '').slice(0, 4);
+                        const itemCode = orderConfirmationCode(item.confirmation_code);
                         const itemPayment = deriveDeliveryPaymentState(item);
                         const paymentLabel = itemPayment === 'paid' ? 'Pago' : itemPayment === 'pending' ? 'Pix pendente' : item.payment_method === 'dinheiro' ? (item.change_for ? `Cobrar dinheiro · troco p/ ${isPrivacyMode ? 'R$ •••' : `R$ ${item.change_for.toFixed(2).replace('.', ',')}`}` : 'Cobrar dinheiro') : 'Cobrar cartão';
                         return (
@@ -831,7 +847,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                               <div className="flex items-center gap-1.5">
                                 <span className="font-mono text-[10px] font-black text-zinc-200">#{item.order_id || '—'}</span>
                                 {item.ifood_id && <span className="truncate font-mono text-[9px] text-zinc-500">ID {item.ifood_id}</span>}
-                                {itemCode && groupedCodes.length > 1 && <span className="font-mono text-[9px] text-amber-400">Cód {itemCode}</span>}
+                                {itemCode && <span className="font-mono text-[9px] text-amber-400">Cód {itemCode}</span>}
                               </div>
                               <p className="mt-0.5 truncate text-[9px] font-bold text-zinc-500">
                                 {paymentLabel}

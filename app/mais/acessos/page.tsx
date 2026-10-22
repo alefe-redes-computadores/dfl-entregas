@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Bike, Check, ChevronDown, Clock3, LockKeyhole, Plus, Save,
+  ArrowLeft, Bike, Check, ChevronDown, Clock3, LockKeyhole, ClipboardList, Plus, Save,
   Search, Shield, ShieldCheck, ShieldOff, ShoppingBasket, SlidersHorizontal,
   UsersRound, X,
 } from 'lucide-react';
@@ -15,6 +15,13 @@ import {
   type AccessPermission, type StaffAccessDraft, type StaffRole,
 } from '@/lib/access/roles';
 import { loadStaffDrafts, saveStaffDraft } from '@/lib/access/staffRepository';
+import { StaffNavRow } from '@/components/access/StaffPremium';
+import { StaffConfirmDialog } from '@/components/access/StaffConfirmDialog';
+import { StaffChoicePicker } from '@/components/access/StaffChoicePicker';
+import { StaffPermissionPreview } from '@/components/access/StaffPermissionPreview';
+import { requiresMotoboyBinding } from '@/lib/access/staffInvitePolicy';
+import { reviewStaffInvitation } from '@/lib/access/staffInvitationReview';
+import { staffTouch } from '@/lib/access/staffTouch';
 
 const GROUPS = ['Geral', 'Logistica', 'Loja', 'Gestao'] as const;
 const roleIcons = { motoboy: Bike, compras: ShoppingBasket, operacao: UsersRound, personalizado: SlidersHorizontal };
@@ -45,6 +52,7 @@ export default function StaffAccessPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm());
   const [expanded, setExpanded] = useState<string[]>(['Logistica']);
+  const [pendingStatus, setPendingStatus] = useState<StaffAccessDraft|null>(null);
 
   const refresh = useCallback(async () => {
     if (!owner) return;
@@ -64,18 +72,21 @@ export default function StaffAccessPage() {
     return <div className="dfl-page p-5"><div className="rounded-3xl border border-red-500/20 bg-red-500/5 p-6 text-center"><LockKeyhole className="mx-auto mb-3 text-red-400"/><h1 className="text-lg font-black">Acesso restrito</h1><p className="mt-2 text-sm text-zinc-400">Somente o superadministrador pode abrir esta área.</p></div></div>;
   }
 
-  const startNew = () => { setEditingId(null); setForm(emptyForm()); setEditing(true); };
+  const startNew = () => { staffTouch(); setEditingId(null); setForm(emptyForm()); setEditing(true); };
   const startEdit = (item: StaffAccessDraft) => {
+    staffTouch();
     setEditingId(item.id);
     setForm({ name: item.name, email: item.email, role: item.role, permissions: sanitizePermissions(item.permissions), linkedMotoboyId: item.linkedMotoboyId || '', linkedMemberId: item.linkedMemberId || '' });
     setEditing(true);
   };
   const chooseRole = (role: StaffRole) => {
+    staffTouch();
     setForm((prev) => ({ ...prev, role, permissions: role === 'personalizado' ? prev.permissions : permissionsForRole(role),
-      linkedMotoboyId: role === 'motoboy' ? prev.linkedMotoboyId : '',
+      linkedMotoboyId: role === 'motoboy' || role === 'personalizado' ? prev.linkedMotoboyId : '',
     }));
   };
   const togglePermission = (permission: AccessPermission) => {
+    staffTouch();
     if (permission === 'staff_admin') return;
     setForm((prev) => ({ ...prev, role: 'personalizado', permissions: prev.permissions.includes(permission)
       ? prev.permissions.filter((p) => p !== permission)
@@ -127,9 +138,13 @@ export default function StaffAccessPage() {
       <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.18em] text-emerald-400">Administração</p><h1 className="font-heading text-xl font-black text-zinc-50">Equipe e permissões</h1></div>
     </div>
 
-    <button type="button" onClick={()=>router.push('/mais/acessos/homologacao')} className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-sky-500/20 bg-sky-500/[.055] px-4 text-left"><span className="text-sm font-black text-sky-300">Homologar vínculo Google e prévia de dados</span><ShieldCheck size={19} className="text-sky-400"/></button>
-
-    <button type="button" onClick={()=>router.push('/mais/acessos/seguranca')} className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-emerald-500/20 bg-emerald-500/[.055] px-4 text-left"><span className="text-sm font-black text-emerald-300">Auditar segurança dos acessos</span><ShieldCheck size={19} className="text-emerald-400"/></button>
+    <section className="space-y-2">
+      <div className="px-1"><h2 className="text-xs font-black uppercase tracking-wide text-zinc-300">Central de equipe</h2><p className="mt-1 text-[11px] text-zinc-500">Segurança, identidade e operação em um só lugar.</p></div>
+      <StaffNavRow tone="green" icon={ShieldCheck} label="Homologar Google e prévia de dados" detail="Verificar UID e conferir projeções antes do login" onClick={()=>router.push('/mais/acessos/homologacao')}/>
+      <StaffNavRow tone="sky" icon={ClipboardList} label="Solicitações da equipe" detail="Revisar entregas e compras sem execução silenciosa" onClick={()=>router.push('/mais/acessos/solicitacoes')}/>
+      <StaffNavRow tone="amber" icon={Shield} label="Prontidão da equipe" detail="Auditoria sob demanda, sem alterações" onClick={()=>router.push('/mais/acessos/prontidao')}/>
+      <StaffNavRow tone="neutral" icon={LockKeyhole} label="Segurança e revogação" detail="Conferir vínculos e suspender contas" onClick={()=>router.push('/mais/acessos/seguranca')}/>
+    </section>
 
     <section className="relative overflow-hidden rounded-[26px] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[.09] via-zinc-900/85 to-zinc-950 p-4">
       <div className="flex items-start gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-400"><ShieldCheck size={22}/></span><div><p className="text-base font-black text-zinc-50">Seu controle, suas regras.</p><p className="mt-1 text-xs leading-relaxed text-zinc-400">Prepare quem pode acessar logística, estoque e compras. O acesso real só será liberado depois de concluir a proteção das consultas e das regras do Firebase.</p></div></div>
@@ -147,7 +162,7 @@ export default function StaffAccessPage() {
       <div className="relative"><Search size={16} className="absolute left-4 top-3.5 text-zinc-500"/><input value={search} onChange={(event)=>setSearch(event.target.value)} placeholder="Buscar por nome, e-mail ou perfil" className={`${token} pl-11`}/></div>
       {loading && <p className="py-7 text-center text-xs text-zinc-500">Consultando seus cadastros…</p>}
       {!loading && !filtered.length && <div className="rounded-3xl border border-dashed border-zinc-800 p-7 text-center"><UsersRound className="mx-auto text-zinc-600" size={26}/><p className="mt-3 text-sm font-black text-zinc-300">{items.length ? 'Nenhum resultado neste filtro.' : 'Nenhum funcionário preparado.'}</p><p className="mt-1 text-xs text-zinc-500">Você pode configurar tudo antes de convidar a equipe.</p></div>}
-      <div className="space-y-2">{!loading && filtered.map((item) => {const Icon=roleIcons[item.role];return <article key={item.id} className="rounded-[21px] border border-zinc-800 bg-zinc-900/45 p-3.5"><div className="flex items-start gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-zinc-800/65 text-zinc-300"><Icon size={20}/></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{item.name}</p><p className="mt-0.5 truncate text-[11px] text-zinc-500">{item.email || 'E-mail ainda não definido'}</p><div className="mt-2 flex flex-wrap gap-1.5"><span className="rounded-lg bg-zinc-800 px-2 py-1 text-[10px] font-bold text-zinc-300">{roleLabel(item.role)}</span><span className="rounded-lg bg-amber-500/10 px-2 py-1 text-[10px] font-bold text-amber-400">{item.status === 'suspenso'?'Suspenso':'Não ativado'}</span><span className="rounded-lg bg-zinc-800/60 px-2 py-1 text-[10px] text-zinc-400">{item.permissions.length} permissões</span></div></div></div><div className="mt-3 flex gap-2"><button type="button" onClick={()=>startEdit(item)} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 text-xs font-bold text-zinc-200"><SlidersHorizontal size={14}/> Editar</button><button type="button" disabled={saving} onClick={()=>void changeStatus(item)} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-xs font-bold text-zinc-400 disabled:opacity-50">{item.status === 'suspenso'?<Shield size={14}/>:<ShieldOff size={14}/>} {item.status === 'suspenso'?'Retomar':'Suspender'}</button></div></article>;})}</div>
+      <div className="space-y-2">{!loading && filtered.map((item) => {const Icon=roleIcons[item.role];return <article key={item.id} className="rounded-[21px] border border-zinc-800 bg-zinc-900/45 p-3.5"><div className="flex items-start gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-zinc-800/65 text-zinc-300"><Icon size={20}/></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{item.name}</p><p className="mt-0.5 truncate text-[11px] text-zinc-500">{item.email || 'E-mail ainda não definido'}</p><div className="mt-2 flex flex-wrap gap-1.5"><span className="rounded-lg bg-zinc-800 px-2 py-1 text-[10px] font-bold text-zinc-300">{roleLabel(item.role)}</span><span className="rounded-lg bg-amber-500/10 px-2 py-1 text-[10px] font-bold text-amber-400">{item.status === 'suspenso'?'Suspenso':'Não ativado'}</span><span className="rounded-lg bg-zinc-800/60 px-2 py-1 text-[10px] text-zinc-400">{item.permissions.length} permissões</span></div></div></div><div className="mt-3 flex gap-2"><button type="button" onClick={()=>startEdit(item)} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 text-xs font-bold text-zinc-200"><SlidersHorizontal size={14}/> Editar</button><button type="button" disabled={saving} onClick={()=>{staffTouch();setPendingStatus(item)}} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-xs font-bold text-zinc-400 disabled:opacity-50">{item.status === 'suspenso'?<Shield size={14}/>:<ShieldOff size={14}/>} {item.status === 'suspenso'?'Retomar':'Suspender'}</button></div></article>;})}</div>
     </>}
 
     {editing && <form onSubmit={(event)=>void submit(event)} className="space-y-4 rounded-[26px] border border-zinc-800 bg-zinc-900/35 p-4">
@@ -155,12 +170,22 @@ export default function StaffAccessPage() {
       <label className="block space-y-1.5"><span className="text-xs font-bold text-zinc-300">Nome do funcionário</span><input required maxLength={120} value={form.name} onChange={(event)=>setForm((v)=>({...v,name:event.target.value}))} placeholder="Nome completo" className={token}/></label>
       <label className="block space-y-1.5"><span className="text-xs font-bold text-zinc-300">E-mail Google (para vínculo futuro)</span><input type="email" maxLength={160} value={form.email} onChange={(event)=>setForm((v)=>({...v,email:event.target.value}))} placeholder="pessoa@gmail.com" className={token}/></label>
       <div><p className="mb-2 text-xs font-bold text-zinc-300">Perfil inicial</p><div className="grid grid-cols-2 gap-2">{STAFF_ROLES.map((role)=>{const Icon=roleIcons[role.id];const selected=form.role===role.id;return <button key={role.id} type="button" onClick={()=>chooseRole(role.id)} className={`min-h-[85px] rounded-2xl border p-3 text-left transition ${selected?'border-emerald-500/55 bg-emerald-500/[.08] text-emerald-300':'border-zinc-800 bg-zinc-950/45 text-zinc-400'}`}><Icon size={18}/><p className="mt-1.5 text-xs font-black">{role.label}</p><p className="mt-0.5 text-[10px] leading-snug opacity-75">{role.subtitle}</p></button>})}</div></div>
-      {form.role==='motoboy' && <label className="block space-y-1.5"><span className="text-xs font-bold text-zinc-300">Vincular cadastro de motoboy</span><div className="relative"><select value={form.linkedMotoboyId} onChange={(event)=>setForm((v)=>({...v,linkedMotoboyId:event.target.value}))} className={`${token} appearance-none pr-11`}><option value="">Selecionar depois</option>{motoboys.map((m)=><option key={m.id} value={m.id}>{m.name}{m.active?'':' (fora da escala)'}</option>)}</select><ChevronDown className="pointer-events-none absolute right-4 top-4 text-zinc-400" size={17}/></div><p className="text-[10px] text-zinc-500">O vínculo não autoriza acesso às rotas até a ativação segura.</p></label>}
-      <label className="block space-y-1.5"><span className="text-xs font-bold text-zinc-300">Vincular integrante da loja (opcional)</span><div className="relative"><select value={form.linkedMemberId} onChange={(event)=>setForm((v)=>({...v,linkedMemberId:event.target.value}))} className={`${token} appearance-none pr-11`}><option value="">Sem vínculo</option>{teamMembers.map((m)=><option key={m.id} value={m.id}>{m.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-4 top-4 text-zinc-400" size={17}/></div></label>
+      {requiresMotoboyBinding(form.role,form.permissions) && <div className="space-y-1.5"><StaffChoicePicker label="Vincular cadastro de motoboy" value={form.linkedMotoboyId} placeholder="Selecionar depois" options={[{value:'',label:'Selecionar depois'},...motoboys.map(m=>({value:m.id,label:m.name,description:m.active?'Em escala':'Fora da escala'}))]} onChange={value=>setForm(v=>({...v,linkedMotoboyId:value}))}/><p className="text-[10px] text-zinc-500">Obrigatório para convite com logística individual. O vínculo não ativa acesso nem libera rotas.</p></div>}
+      <StaffChoicePicker label="Vincular integrante da loja (opcional)" value={form.linkedMemberId} placeholder="Sem vínculo" options={[{value:'',label:'Sem vínculo'},...teamMembers.map(m=>({value:m.id,label:m.name}))]} onChange={value=>setForm(v=>({...v,linkedMemberId:value}))}/>
       <div className="flex items-center justify-between gap-2"><div><p className="text-sm font-black">Permissões por função</p><p className="text-[11px] text-zinc-500">Alterações ativam o perfil Personalizado.</p></div><span className="rounded-lg border border-zinc-800 px-2 py-1 text-[10px] text-zinc-400">{form.permissions.length} marcadas</span></div>
       <div className="space-y-2">{GROUPS.map((group)=>{const entries=ACCESS_AREAS.filter((item)=>item.group===group && item.id!=='staff_admin');const isOpen=expanded.includes(group);return <div key={group} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/55"><button type="button" onClick={()=>setExpanded((groups)=>isOpen?groups.filter((x)=>x!==group):[...groups,group])} className="flex w-full items-center justify-between px-3.5 py-3 text-left"><span className="text-xs font-black text-zinc-200">{group} <span className="ml-1 text-[10px] font-normal text-zinc-500">{entries.filter((e)=>form.permissions.includes(e.id)).length}/{entries.length}</span></span><ChevronDown size={16} className={`text-zinc-500 transition ${isOpen?'rotate-180':''}`}/></button>{isOpen && <div className="space-y-1 border-t border-zinc-800 px-2.5 py-2">{entries.map((item)=>{const checked=form.permissions.includes(item.id);return <button type="button" key={item.id} onClick={()=>togglePermission(item.id)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left active:bg-zinc-900"><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border ${checked?'border-emerald-400 bg-emerald-500 text-zinc-950':'border-zinc-700 bg-zinc-900'}`}>{checked&&<Check size={14}/>}</span><span className="min-w-0"><span className="block text-xs font-bold text-zinc-200">{item.label}</span><span className="block text-[10px] text-zinc-500">{item.description}</span></span></button>})}</div>}</div>})}</div>
+      <StaffPermissionPreview role={form.role} permissions={form.permissions} linkedMotoboyId={form.linkedMotoboyId}/>
+      {(() => {
+        const review = reviewStaffInvitation({...form, activation:'not_enabled', status:'rascunho'});
+        return <section aria-label="Conferência antes da homologação" className={`rounded-2xl border p-3.5 ${review.readyForHomologation ? 'border-emerald-500/25 bg-emerald-500/[.04]' : 'border-amber-500/25 bg-amber-500/[.045]'}`}>
+          <p className={`text-xs font-black ${review.readyForHomologation?'text-emerald-300':'text-amber-300'}`}>{review.readyForHomologation?'Pronto para solicitar homologação':'Antes de homologar este convite'}</p>
+          {review.readyForHomologation ? <p className="mt-1 text-[11px] text-zinc-400">Cadastro preparado para conferir a identidade Google. Ainda sem login ou autorização.</p>
+          : <ul className="mt-2 space-y-1">{review.issues.map(issue=><li key={issue} className="text-[11px] leading-relaxed text-zinc-400">• {issue}</li>)}</ul>}
+        </section>;
+      })()}
       <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-[11px] leading-relaxed text-amber-200/90"><Clock3 className="mr-2 inline-block" size={14}/> Apenas preparação: salvar não ativa login e não altera as regras publicadas.</div>
       <div className="flex gap-2"><button type="button" disabled={saving} onClick={()=>setEditing(false)} className="h-12 flex-1 rounded-2xl border border-zinc-800 text-xs font-black text-zinc-400">Cancelar</button><button type="submit" disabled={saving} className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-xs font-black text-zinc-950 disabled:opacity-50"><Save size={17}/>{saving?'Salvando…':'Salvar rascunho'}</button></div>
     </form>}
+    {pendingStatus&&<StaffConfirmDialog title={pendingStatus.status==='suspenso'?'Retornar ao rascunho?':'Suspender rascunho?'} description={pendingStatus.status==='suspenso'?'A conta voltará apenas ao estado de preparação. Isso NÃO libera login.':'O cadastro será marcado como suspenso. O login já permanece bloqueado nas regras de produção.'} detail={`${pendingStatus.name} · ${roleLabel(pendingStatus.role)}`} tone={pendingStatus.status==='suspenso'?'safe':'caution'} requirePhrase={pendingStatus.status==='suspenso'?undefined:'SUSPENDER'} confirmLabel={pendingStatus.status==='suspenso'?'Retornar a rascunho':'Suspender'} busy={saving} onCancel={()=>setPendingStatus(null)} onConfirm={()=>{const item=pendingStatus;setPendingStatus(null);if(item)void changeStatus(item)}}/>}
   </div>;
 }

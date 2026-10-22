@@ -81,6 +81,9 @@ export default function RelatoriosPage() {
   );
 
   const intelligence = useMemo(() => {
+    // Painel financeiro/qualidade usa somente o modelo. Evita calcular
+    // memória de clientes e sequências de rotas fora de Geral/Operação.
+    if (activeTab !== 'geral' && activeTab !== 'operacao') return null;
     const window =
       periodKey === 'all'
         ? ({ mode: 'all' } as const)
@@ -101,6 +104,7 @@ export default function RelatoriosPage() {
       window,
     });
   }, [
+    activeTab,
     customers,
     deliveries,
     stockSupplies,
@@ -114,7 +118,7 @@ export default function RelatoriosPage() {
   const currentPeriodLabel =
     PERIODS.find((period) => period.value === periodKey)?.label ?? 'Período';
 
-  const topHour = [...model.hours].sort((a, b) => b.count - a.count)[0];
+  const topHour = model.hours.reduce<(typeof model.hours)[number] | undefined>((best, hour) => !best || hour.count > best.count ? hour : best, undefined);
   const topNeighborhood = model.neighborhoods[0];
   const topMotoboy = model.motoboys[0];
 
@@ -219,7 +223,7 @@ export default function RelatoriosPage() {
           </div>
         )}
 
-        {activeTab === 'geral' && (
+        {activeTab === 'geral' && intelligence && (
           <>
             <ReportIntelligencePanel
               snapshot={intelligence}
@@ -545,7 +549,7 @@ export default function RelatoriosPage() {
           </>
         )}
 
-        {activeTab === 'operacao' && (
+        {activeTab === 'operacao' && intelligence && (
           <>
             <ReportChartCard
               title="Bairros com cobertura cadastrada"

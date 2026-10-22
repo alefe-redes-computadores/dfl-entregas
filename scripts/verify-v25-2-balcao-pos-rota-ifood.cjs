@@ -25,15 +25,16 @@ ok(store.includes('Encerrar a rota não significa que os pedidos já foram confi
   'fechamento mantém separação entrega concluída x confirmação externa');
 ok(store.includes("id: `ifood-route-${delivery.id}`"),
   'pendência pós-rota possui identidade idempotente por entrega');
-ok(store.includes(".filter((delivery) => delivery.origin === 'ifood')"),
-  'fila pós-rota nasce somente de pedidos iFood');
+ok(store.includes(".filter((delivery) => delivery.origin === 'ifood' && !isCancelledSiteDelivery(delivery))"),
+  'fila pós-rota nasce somente de pedidos iFood ativos, excluindo cancelados');
 ok(store.includes("status: 'pending'") && store.includes('addIfoodPendingConfirmations(confirmationItems)'),
   'fechamento prepara fila externa');
 ok(store.includes("existing.status === 'resolved'") &&
    store.includes("? 'resolved'"),
   'pendência resolvida não ressuscita ao reconciliar a fila');
-ok(store.includes('delivery.confirmation_code || customer?.last_confirmation_code'),
-  'código salvo é carregado como dado, não como confirmação externa');
+ok(store.includes('orderConfirmationCode(delivery.confirmation_code)') &&
+   !store.slice(store.indexOf('      closeRoute: async'), store.indexOf('      reopenRoute: async')).includes('customer?.last_confirmation_code'),
+  'fila pós-rota usa código do pedido, nunca histórico de outro pedido');
 ok(store.includes('notifyIfoodRoutePending('),
   'rota fechada pode notificar confirmações externas pendentes');
 

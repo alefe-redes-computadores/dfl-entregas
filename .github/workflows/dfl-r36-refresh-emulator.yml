@@ -1,0 +1,32 @@
+name: DFL R36 - Transacoes isoladas de projecoes
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  refresh-emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Dependencias do projeto
+        run: npm ci
+      - name: Firebase CLI temporario, sem alterar lockfile
+        run: npm install --no-save --package-lock=false firebase-tools@14
+      - name: Contratos estaticos e TypeScript
+        run: |
+          node scripts/verify-v111-r36-refresh-atomicity.cjs
+          node node_modules/typescript/bin/tsc --noEmit
+      - name: Transacoes com Firebase Emulator - apenas projeto demo
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8089
+          GCLOUD_PROJECT: demo-dfl-entregas-r36
+        run: npx firebase emulators:exec --only firestore --project demo-dfl-entregas-r36 --config firebase.r36-emulator.json 'node scripts/test-v111-r36-refresh-emulator.cjs'

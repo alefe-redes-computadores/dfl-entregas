@@ -74,7 +74,11 @@ assert.match(movement,/if \(result\.alreadyExisted\) return/,'movimento existent
 assert.match(count,/planStockCount\(/,'contagem usa planejador canônico');
 const countUI=fs.readFileSync('app/estoque/contagem/page.tsx','utf8');
 const movementUI=fs.readFileSync('app/estoque/movimentar/page.tsx','utf8');
-assert.match(countUI,/expected_quantity:baseline\[p\.id\]/,'snapshot preservado na sessão de contagem');
+assert.match(countUI,/expected_quantity:draft\.expectedQuantity/,'snapshot transacional vem do revisor de contagem');
+const draftReview=fs.readFileSync('lib/operation/stockCountDraft.ts','utf8');
+assert.match(draftReview,/expectedQuantity = touched \? reference : current/,'contagem editada preserva o saldo de referencia original');
+assert.match(draftReview,/conflict: touched && \(!validReference \|\| current !== reference\)/,'conflito remoto bloqueia sobrescrita');
+assert.match(countUI,/if\(latest\.conflicts\.length\)/,'conflito impede a gravacao');
 assert.match(countUI,/const products=useMemo\(/,'lista da contagem memorizada');
 assert.match(countUI,/JSON\.stringify\(\{values,baseline\}\)/,'snapshot sobrevive a reinício');
 assert.match(movementUI,/expected_balance: product\.current_quantity/,'movimentação manual envia saldo exibido');

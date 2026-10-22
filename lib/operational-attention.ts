@@ -1,6 +1,7 @@
 import type { Delivery } from '@/types';
 import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
-import { isCancelledSiteDelivery, isSiteOrderAwaitingConfirmation, isSiteOrderReleasedToLogistics } from '@/lib/integration/site-order';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { siteInboxState } from '@/lib/operation/siteInboxPolicy';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 
 /** Projeção exclusivamente local: não cria consultas ou listeners. */
@@ -35,8 +36,9 @@ export function operationalAttentionTasks(orders: readonly Delivery[]): Attentio
     const amount = Number.isFinite(rawAmount) ? Math.max(0, rawAmount) : 0;
     const add = (kind: AttentionKind) => tasks.push({ key: `${delivery.id}:${kind}`, deliveryId: delivery.id, kind, customer, orderRef, address, amount });
     if (delivery.source_system === 'dfl_site') {
-      if (isSiteOrderAwaitingConfirmation(delivery)) add('site_confirmation');
-      else if (isDeliveryFulfillment(delivery) && isSiteOrderReleasedToLogistics(delivery) && !delivery.route_id) add('site_dispatch');
+      const siteState = siteInboxState(delivery);
+      if (siteState === 'confirmar') add('site_confirmation');
+      else if (siteState === 'pronto') add('site_dispatch');
     }
     const payment = deriveDeliveryPaymentState(delivery);
     if (payment === 'pending' && delivery.payment_method === 'pix') add('pix_pending');

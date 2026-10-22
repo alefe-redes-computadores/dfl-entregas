@@ -17,7 +17,7 @@ const hub = read('components/store/SiteAdminHub.tsx');
 check('resume nativo sinaliza atualização operacional', runtime.includes("window.dispatchEvent(new Event('dfl:app-foreground'))"));
 check('header usa o mesmo cooldown no PWA e no APK', header.includes("window.addEventListener('dfl:app-foreground', refreshOnForeground)") && header.includes('120_000'));
 check('listener de resume possui limpeza', header.includes("window.removeEventListener('dfl:app-foreground', refreshOnForeground)"));
-check('notificação abre pedidos pendentes do Site', notifications.includes("href: '/loja?site=pending'"));
+check('notificação abre pedido na Caixa do Site', notifications.includes("href: `/loja/caixa-de-entrada?aba=site&pedido=${encodeURIComponent(deliveryId)}`"));
 check('query antiga e inerte foi removida', !notifications.includes("href: '/loja?tab=site'"));
 check('ficha sempre libera botão do Admin', /finally\s*\{\s*setOpeningAdmin\(false\)/.test(details));
 check('página Admin sempre libera botão', /finally\s*\{\s*setOpeningAdmin\(false\)/.test(adminPage));

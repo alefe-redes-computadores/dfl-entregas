@@ -1,21 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bike, GlassWater, PackageSearch, Play, Store } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, NotificationType } from '@capacitor/haptics';
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
-import { dateKey } from '@/lib/operational-time';
+import { dateKey, operationalDaySchedule } from '@/lib/operational-time';
+import { firstValidTimestamp } from '@/lib/reports/time';
+import { buildOperationalReadiness } from '@/lib/operational-readiness';
 import { stockLevel } from '@/lib/stock';
 import { buildBeverageStockSuggestions } from '@/lib/stock-beverage-reconciliation';
-
-function parseDateKey(value?: string) {
-  if (!value) return null;
-  const key = value.slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : null;
-}
 
 export function ShiftBriefing() {
   const router = useRouter();
@@ -26,6 +22,8 @@ export function ShiftBriefing() {
   const deliveries = useAppStore((state) => state.deliveries);
   const products = useAppStore((state) => state.stockProducts);
   const movements = useAppStore((state) => state.stockMovements);
+  const customers = useAppStore((state) => state.customers);
+  const routes = useAppStore((state) => state.routes);
 
   const today = dateKey(new Date());
   const selectedKey = dateKey(selectedDate);
@@ -34,9 +32,11 @@ export function ShiftBriefing() {
 
   const [seen, setSeen] = useState(true);
   const [busy, setBusy] = useState(false);
+  const openLock = useRef(false);
 
   useEffect(() => {
-    setSeen(localStorage.getItem(storageKey) === '1');
+    try { setSeen(localStorage.getItem(storageKey) === '1'); }
+    catch { setSeen(false); } // Storage desabilitado não impede abrir a loja.
   }, [storageKey]);
 
   const activeMotoboys = useMemo(
@@ -52,29 +52,37 @@ export function ShiftBriefing() {
     [products],
   );
 
-  const isScheduledToday = useMemo(() => {
-    const index = new Date().getDay();
-    const day = settings.schedule?.[index];
-    return Boolean(day?.active && (day.shifts?.length ?? 0) > 0);
-  }, [settings.schedule]);
+  // Mesma agenda canônica usada na operação: inclui exceções e pausas.
+  const activeDay = useMemo(
+    () => operationalDaySchedule(today, settings.schedule, settings.pauses, settings.holidaysOverrides),
+    [today, settings.schedule, settings.pauses, settings.holidaysOverrides],
+  );
+  const isScheduledToday = Boolean(activeDay?.active && activeDay.shifts?.length);
+  const pausedToday = !activeDay;
 
-  const pausedToday = useMemo(() => {
-    return (settings.pauses || []).some((pause) => {
-      const start = parseDateKey(String((pause as { start_date?: string; startDate?: string }).start_date ?? (pause as { start_date?: string; startDate?: string }).startDate ?? ''));
-      const end = parseDateKey(String((pause as { end_date?: string; endDate?: string }).end_date ?? (pause as { end_date?: string; endDate?: string }).endDate ?? ''));
-      if (!start) return false;
-      return today >= start && today <= (end || start);
+  // Somente dados locais do dia; nunca varrer Firestore ou bloquear a abertura.
+  const addressReview = useMemo(() => {
+    const dayRouteIds = new Set(routes.filter(route => {
+      const timestamp = firstValidTimestamp(route.created_at, route.started_at, route.departure_time);
+      return timestamp && dateKey(timestamp) === today;
+    }).map(route => route.id));
+    const todays = deliveries.filter(delivery => {
+      if (delivery.route_id && dayRouteIds.has(delivery.route_id)) return true;
+      const timestamp = firstValidTimestamp(delivery.created_at, delivery.createdAt);
+      return Boolean(timestamp && dateKey(timestamp) === today);
     });
-  }, [settings.pauses, today]);
+    return buildOperationalReadiness({ deliveries: todays, routes, customers }).missingAddress.length;
+  }, [customers, deliveries, routes, today]);
 
   if (seen || settings.isOpen || selectedKey !== today || !isScheduledToday || pausedToday) return null;
 
   const start = async () => {
-    if (busy) return;
+    if (openLock.current) return;
+    openLock.current = true;
     setBusy(true);
     try {
       await updateStoreSettings({ isOpen: true });
-      localStorage.setItem(storageKey, '1');
+      try { localStorage.setItem(storageKey, '1'); } catch { /* Sem storage: abertura ainda foi salva. */ }
       setSeen(true);
       if (Capacitor.isNativePlatform()) {
         try { await Haptics.notification({ type: NotificationType.Success }); } catch {}
@@ -87,6 +95,7 @@ export function ShiftBriefing() {
     } catch {
       toast.error('Não foi possível abrir a operação.');
     } finally {
+      openLock.current = false;
       setBusy(false);
     }
   };
@@ -119,6 +128,10 @@ export function ShiftBriefing() {
           <PackageSearch size={15} className="shrink-0 text-amber-400" />
           <span className="text-[9px] font-black text-zinc-400">{stockAttention ? stockAttention + ' saldo' + (stockAttention === 1 ? '' : 's') + ' em atenção' : 'Saldos sem alerta'}</span>
         </div>
+        {addressReview > 0 && <button type="button" onClick={() => router.push(`/entregas?date=${encodeURIComponent(today)}`)} className="col-span-2 flex min-h-11 items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.07] px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
+          <PackageSearch size={15} className="shrink-0 text-amber-300" />
+          <span className="text-[10px] font-bold text-amber-200">{addressReview} entrega{addressReview === 1 ? '' : 's'} de hoje sem endereço · conferir antes da saída</span>
+        </button>}
       </div>
     </section>
   );

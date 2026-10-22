@@ -63,21 +63,25 @@ export default function HomePage() {
     const datesWithOperation = new Set<string>();
     const allRouteIds = new Set<string>();
     const baseRoutesDoDia: Route[] = [];
+    // Guarda timestamps por objeto: IDs legados duplicados não colidem.
+    const routeTimes = new Map<Route, number>();
 
     for (const route of routes) {
       allRouteIds.add(route.id);
 
-      const key = operationalKey(
+      const routeTimestamp = firstValidTimestamp(
         route.created_at,
         route.started_at,
         route.departure_time,
       );
+      const key = routeTimestamp ? saoPauloDateKey(routeTimestamp) : null;
 
       if (key) {
         datesWithOperation.add(key);
 
         if (key === selectedDateKey) {
           baseRoutesDoDia.push(route);
+          routeTimes.set(route, routeTimestamp!.getTime());
         }
       }
     }
@@ -106,28 +110,17 @@ export default function HomePage() {
         )
       : [...baseRoutesDoDia];
 
-    routesDoDia.sort((a, b) => {
-      const aDate = firstValidTimestamp(
-        a.created_at,
-        a.started_at,
-        a.departure_time,
-      );
-
-      const bDate = firstValidTimestamp(
-        b.created_at,
-        b.started_at,
-        b.departure_time,
-      );
-
-      return (
-        (aDate?.getTime() ?? Number.MAX_SAFE_INTEGER) -
-        (bDate?.getTime() ?? Number.MAX_SAFE_INTEGER)
-      );
-    });
+    // Já calculamos as datas durante o recorte do dia; não repetir
+    // parseTimestamp em cada comparação da ordenação.
+    routesDoDia.sort((a, b) =>
+      (routeTimes.get(a) ?? Number.MAX_SAFE_INTEGER) -
+      (routeTimes.get(b) ?? Number.MAX_SAFE_INTEGER)
+    );
 
     const routeIdsDoDia = new Set(
       routesDoDia.map((route) => route.id),
     );
+    const deliveriesCreatedOnDay = new Set(ordersDoDia);
 
     const deliveriesDoDia = deliveries.filter(
       (delivery) => {
@@ -145,18 +138,13 @@ export default function HomePage() {
 
         if (globalMotoboy) return false;
 
-        const deliveryKey = operationalKey(
-          delivery.created_at,
-          delivery.createdAt,
-        );
-
         const hasValidRoute = Boolean(
           delivery.route_id &&
             allRouteIds.has(delivery.route_id),
         );
 
         return (
-          deliveryKey === selectedDateKey &&
+          deliveriesCreatedOnDay.has(delivery) &&
           !hasValidRoute
         );
       },
@@ -169,21 +157,8 @@ export default function HomePage() {
         (!isFutureScheduledDelivery(delivery) ||
           (!delivery.route_id && isSiteOrderAwaitingHomeReview(delivery))),
     );
-    const awaitingConfirmationDeliveries = operationalDeliveriesDoDia.filter((delivery) => !delivery.route_id && isSiteOrderAwaitingHomeReview(delivery));
-    const awaitingRouteDeliveries = operationalDeliveriesDoDia.filter((delivery) => !delivery.route_id && !isSiteOrderAwaitingHomeReview(delivery));
-    const orphanedDeliveries = operationalDeliveriesDoDia.filter(
-      (delivery) => Boolean(delivery.route_id) && !allRouteIds.has(delivery.route_id),
-    );
-
-    if (awaitingConfirmationDeliveries.length > 0 && !globalMotoboy) {
-      routesDoDia.push({ id: 'rota-site-aguardando-confirmacao', name: 'Site · aguardando confirmação', status: 'aberta', motoboy_name: 'Aguardando loja', departure_time: selectedDate.toISOString(), change_money: 0, drinks_summary: 'Pedido recebido do Site, ainda Pendente no fluxo comercial' });
-    }
-    if (awaitingRouteDeliveries.length > 0 && !globalMotoboy) {
-      routesDoDia.push({ id: 'rota-aguardando-vinculo', name: 'Pedidos sem rota', status: 'aberta', motoboy_name: 'Vincule antes de iniciar', departure_time: selectedDate.toISOString(), change_money: 0, drinks_summary: 'Pedidos recebidos e ainda não vinculados a uma rota' });
-    }
-    if (orphanedDeliveries.length > 0 && !globalMotoboy) {
-      routesDoDia.push({ id: 'rota-resgate-recuperada', name: 'Rota Geral de Recuperação', status: 'aberta', motoboy_name: 'Sistema', departure_time: selectedDate.toISOString(), change_money: 0, drinks_summary: 'Referência de rota inválida — corrigir vínculo' });
-    }
+    // R66: pedidos sem rota sao pendencias da Caixa, NAO rotas virtuais.
+    // Ligacoes quebradas tambem sao diagnosticadas separadamente na Home.
 
     const deliveriesByRoute = new Map<string, typeof deliveriesDoDia>();
 

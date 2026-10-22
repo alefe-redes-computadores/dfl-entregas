@@ -175,7 +175,18 @@ async function run(req: NextRequest) {
   const statusRecoveryCheckpointOk =
     statusRecoveryCheckpoint === null || statusRecoveryCheckpoint.ok;
 
+  // A API pode executar sem exceção e ainda ter eventos aguardando relay.
+  // Essa condição tem o mesmo peso que uma falha explícita da fila.
   const relayDeliveryOk = relayStageSucceeded(relay);
+  const statusRecoveryNeedsReview = Boolean(
+    mode === 'auto' && schedule?.statusRecoveryReplay && (
+      !reconciliation?.ok ||
+      reconciliation.value.ok !== true ||
+      statusRecoveryReplayRead >= 40 ||
+      (statusRecoveryEventIds.length > 0 && !statusRecoveryRelayOk) ||
+      (statusRecoveryCheckpoint !== null && !statusRecoveryCheckpoint.ok)
+    ),
+  );
   const reportsCheckpointOk = reportsCheckpoint === null || reportsCheckpoint.ok;
   const ok =
     scheduleOk &&
@@ -209,7 +220,7 @@ async function run(req: NextRequest) {
       statusRecoveryCheckpoint,
       reportsCheckpoint,
       reportsNeedsReview: Boolean(mode === 'auto' && schedule?.reports && !reportsCheckpoint?.ok),
-      statusRecoveryNeedsReview: Boolean(schedule?.statusRecoveryReplay && reconciliation?.ok && statusRecoveryReplayRead >= 40),
+      statusRecoveryNeedsReview,
       relay,
     },
     { status: ok ? 200 : resourceExhausted ? 429 : 207 },

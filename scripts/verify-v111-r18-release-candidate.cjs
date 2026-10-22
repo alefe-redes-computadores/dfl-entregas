@@ -63,7 +63,7 @@ check('ordenamento canônico exclusivo do agrupador', !view.includes('(a.order_i
 check('primeira tela limita montagem a oito paradas',view.includes('useState(8)') && view.includes('physicalStops.slice(0, visibleStops)'));
 check('mais paradas disponíveis sem limite artificial',view.includes('setVisibleStops((count) => Math.min(totalStops, count + 8))'));
 check('sequência pode ser recolhida novamente',view.includes('setVisibleStops(8)'));
-check('mudança de rota reinicia paginação',view.includes('useEffect(() => setVisibleStops(8), [id])'));
+check('mudança de rota reinicia paginação',view.includes('useEffect(() => setVisibleStops(8), [id])') || view.includes("useEffect(() => setVisibleStops(route?.status === 'fechada' ? 0 : 8), [id, route?.status])"));
 check('histórico de encerramento não foi removido',view.includes("action('close')") && view.includes("action('reopen')"));
 check('rota só inicia após checklist',view.includes('<RouteDepartureChecklist'));
 check('cancelamento excluído da sequência ativa',view.includes('!isCancelledSiteDelivery(item)'));

@@ -9,6 +9,7 @@ const finance=read('lib/delivery-finance.ts');
 const parser=read('lib/ifood-order-parser.ts');
 const inbox=read('lib/delivery-inbox.ts');
 const nova=read('app/entregas/nova/page.tsx');
+const multi=read('lib/operation/multiOrderDraft.ts');
 const edit=read('app/entregas/editar/page.tsx');
 const card=read('components/home/DeliveryCard.tsx');
 const cash=read('lib/route-cash-flow.ts');
@@ -32,7 +33,7 @@ ok('telefone internacional +55 tratado',parser.includes("digits.startsWith('55')
 ok('Caixa preserva estado pago',inbox.includes("parsed.isPaid ? ' · pago' : ''"));
 ok('Caixa -> Nova transporta parsed estruturado',nova.includes('inboxParsedRef.current = draft.parsed')&&nova.includes('? [inboxParsedRef.current]'));
 ok('multi-order persiste stop_group_id',nova.includes('stop_group_id:stopGroupId')||nova.includes('stop_group_id: stopGroupId'));
-ok('multi-order valida ID/código',nova.includes("replace(/\\D/g,'').length!==8")||nova.includes("replace(/\\D/g, '').length !== 8"));
+ok('multi-order valida ID/código',nova.includes("firstMultiOrderIssue(drafts)")&&multi.includes("/^\\d{8}$/")&&multi.includes("/^\\d{4}$/"));
 
 console.log('\n--- IDENTIDADE / DUPLICIDADE ---');
 ok('Caixa possui deduplicação local',inbox.includes('duplicate')||inbox.includes('duplic'));

@@ -35,6 +35,11 @@ service cloud.firestore {
                   || (get(accountRef(uid)).data.keys().hasAll(['linkedMotoboyId'])
                       && get(accountRef(uid)).data.linkedMotoboyId is string
                       && get(accountRef(uid)).data.linkedMotoboyId.size() > 0))))
+        && (get(accountRef(uid)).data.role != 'personalizado'
+            || ((area != 'routes' && area != 'deliveries')
+                || (get(accountRef(uid)).data.keys().hasAll(['linkedMotoboyId'])
+                    && get(accountRef(uid)).data.linkedMotoboyId is string
+                    && get(accountRef(uid)).data.linkedMotoboyId.size() > 0)))
         && (get(accountRef(uid)).data.role != 'compras'
             || (area != 'routes' && area != 'deliveries'));
     }

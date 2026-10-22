@@ -73,12 +73,14 @@ export async function drainReverseIntegrationOutbox() {
   for (const item of claimed) {
     try {
       const response = await sendOne(item.event, config);
-      await markReverseOutboxSent(item.refId);
+      const settled = await markReverseOutboxSent(item.refId, item);
+      if (settled === false) throw new Error('Lease expirada: outra execução assumiu o evento.');
       results.push({ eventId: item.event.event_id, ok: true, status: response.status });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha desconhecida no relay reverso.';
       await markReverseOutboxFailed({
         refId: item.refId,
+        workerId: item.workerId,
         attempts: item.attempts,
         error: message,
         maxAttempts: config.maxAttempts,
@@ -179,7 +181,8 @@ export async function drainReverseIntegrationEventIds(
 
     try {
       const response = await sendOne(item.event, config);
-      await markReverseOutboxSent(item.refId);
+      const settled = await markReverseOutboxSent(item.refId, item);
+      if (settled === false) throw new Error('Lease expirada: outra execução assumiu o evento.');
 
       results.push({
         eventId,
@@ -199,6 +202,7 @@ export async function drainReverseIntegrationEventIds(
 
       await markReverseOutboxFailed({
         refId: item.refId,
+        workerId: item.workerId,
         attempts: item.attempts,
         error: message,
         maxAttempts: config.maxAttempts,

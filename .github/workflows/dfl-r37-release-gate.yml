@@ -1,0 +1,53 @@
+name: DFL V111 R37 — Gate tecnico (manual, projeto DEMO)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dfl-r37-release-gate
+  cancel-in-progress: false
+jobs:
+  gated-validation:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout somente leitura
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Java 21 para Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Instalar dependencias com lockfile
+        run: npm ci --ignore-scripts
+      - name: Gate R37 e inventario estatico
+        run: |
+          node scripts/verify-v111-r37-release-gate.cjs
+          node scripts/audit-v111-r37-staff.cjs --out=r37-inventario.txt
+      - name: TypeScript
+        run: node node_modules/typescript/bin/tsc --noEmit
+      - name: Todas as suites PRE-APK, sem reduzir cobertura
+        run: node scripts/pre-apk.cjs
+      - name: Firebase Emulator isolado R36/R37
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8089
+          GCLOUD_PROJECT: demo-dfl-entregas-r36
+        run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-dfl-entregas-r36 --config firebase.r36-emulator.json 'node scripts/test-v111-r36-refresh-emulator.cjs'
+      - name: Diff limpo da Action
+        run: git diff --check
+      - name: Arquivar log local da Action (NAO aprova producao)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dfl-r37-static-inventory
+          path: r37-inventario.txt
+          if-no-files-found: ignore
+          retention-days: 7

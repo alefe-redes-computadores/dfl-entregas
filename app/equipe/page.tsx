@@ -86,10 +86,14 @@ export default function TeamPage() {
       );
   }, [motoboys, query]);
 
-  const inactiveMotoboyCount =
-    filteredMotoboys.filter(
-      (motoboy) => !motoboy.active,
-    ).length;
+  const inactiveMotoboyCount = useMemo(
+    () => filteredMotoboys.reduce((count, motoboy) => count + (motoboy.active ? 0 : 1), 0),
+    [filteredMotoboys],
+  );
+  const activePeople = useMemo(() => ({
+    members: members.reduce((n, person) => n + (person.active ? 1 : 0), 0),
+    couriers: motoboys.reduce((n, person) => n + (person.active ? 1 : 0), 0),
+  }), [members, motoboys]);
 
   const displayedMotoboys =
     filteredMotoboys.filter(
@@ -179,22 +183,15 @@ export default function TeamPage() {
 
       <div className="grid grid-cols-3 gap-1.5">
         <Metric
-          value={members.filter((member) => member.active).length}
+          value={activePeople.members}
           label="Internos ativos"
         />
         <Metric
-          value={motoboys.filter((motoboy) => motoboy.active).length}
+          value={activePeople.couriers}
           label="Entregadores"
         />
         <Metric
-          value={
-            members.filter(
-              (member) => member.active,
-            ).length +
-            motoboys.filter(
-              (motoboy) => motoboy.active,
-            ).length
-          }
+          value={activePeople.members + activePeople.couriers}
           label="Na operação"
         />
       </div>

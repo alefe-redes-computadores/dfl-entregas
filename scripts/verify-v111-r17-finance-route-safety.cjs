@@ -55,6 +55,7 @@ const attention=transpile('lib/operational-attention.ts',{
     isSiteOrderReleasedToLogistics:()=>false,
   },
   '@/lib/delivery-mode':{isDeliveryFulfillment:()=>true},
+  '@/lib/operation/siteInboxPolicy':{siteInboxState:()=>null},
 });
 const tasks=attention.operationalAttentionTasks(entries);
 check('fila não volta a cobrar pedido quitado',!tasks.some(task=>task.deliveryId==='paid'||task.deliveryId==='past'));

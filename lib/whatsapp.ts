@@ -8,6 +8,7 @@ import { deliveryStopKey, stopNumberMap, groupDeliveriesByStop } from '@/lib/rou
 import { routeCashFlow } from '@/lib/route-cash-flow';
 import { buildRouteChangePlan } from '@/lib/route-change-plan';
 import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
+import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -70,7 +71,9 @@ export async function copyDeliveryToClipboard(
     const isIfood = delivery.origin === 'ifood';
     const valueStr = formatMoney(deliveryCharge(delivery));
     const isUrgent = delivery.is_urgent;
-    const currentCode = delivery.confirmation_code || savedCustomerCode;
+    // `savedCustomerCode` é mantido na assinatura por compatibilidade dos chamadores,
+    // mas nunca confirma um pedido diferente do histórico do cliente.
+    const currentCode = orderConfirmationCode(delivery.confirmation_code);
     const clientPhone = formatOperationalPhone(delivery.phone);
 
     parts.push(`📦 *ENTREGA${stopPosition && stopPosition > 0 ? ` ${getNumberEmoji(stopPosition)}` : ''} · ${deliveryOrigin(delivery)}*`);
@@ -91,7 +94,7 @@ export async function copyDeliveryToClipboard(
         const itemReference = item.origin === 'ifood' && item.ifood_id
           ? `ID *${item.ifood_id}*`
           : item.order_id ? `pedido *#${item.order_id}*` : 'sem identificador';
-        const itemCode = item.confirmation_code?.replace(/\D/g, '').slice(0, 4);
+        const itemCode = orderConfirmationCode(item.confirmation_code);
         const payment = deliveryPaid(item)
           ? 'Pago ✅'
           : `Cobrar R$ ${formatMoney(deliveryCharge(item))} · ${(item.payment_method||'dinheiro').replace(/_/g,' ')}`;
@@ -287,7 +290,14 @@ export async function generateRouteMessages(
     const msg2: string[] = [];
 
     const totalDeliveries = deliveries.length;
-    const totalStops = new Set(deliveries.map((delivery) => deliveryGroupKey(delivery))).size;
+    const deliveriesByStop = new Map<string, Delivery[]>();
+    for (const delivery of deliveries) {
+      const key = deliveryGroupKey(delivery);
+      const grouped = deliveriesByStop.get(key);
+      if (grouped) grouped.push(delivery);
+      else deliveriesByStop.set(key, [delivery]);
+    }
+    const totalStops = deliveriesByStop.size;
     const physicalStopNumbers = stopNumberMap(deliveries);
     const drinksSummary: Record<string, { qty: number; name: string }> = {};
     const stopsNeedingCode: { num: number; neighborhood: string; street: string; client: string }[] = [];
@@ -400,11 +410,13 @@ export async function generateRouteMessages(
         msg1.push(`📦 *${stopGroup.deliveries.length} pedidos nesta parada* · ${paymentSummary}`);
       }
 
-      const codes = Array.from(new Set(ifoodOrders.map((item) => item.confirmation_code || customer?.last_confirmation_code || '').map((value) => value.replace(/\D/g, '').slice(0, 4)).filter(Boolean)));
-      if (ifoodOrders.length > 0 && stopGroup.deliveries.length === 1) {
-        if (codes.length === 1) msg1.push(`🔑 *Código iFood:* *${codes[0]}* ✅`);
+      const codes = ifoodOrders.map((item) => orderConfirmationCode(item.confirmation_code));
+      const missingIfoodCode = codes.some((code) => !code);
+      if (ifoodOrders.length === 1 && stopGroup.deliveries.length === 1) {
+        if (codes[0]) msg1.push(`🔑 *Código iFood:* *${codes[0]}* ✅`);
         else { stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly, client: firstName(clientName) }); msg1.push(`🚨 *PEGAR CÓDIGO COM O CLIENTE!*`); }
-      } else if (ifoodOrders.length > 1 && codes.length === 0) {
+      } else if (missingIfoodCode) {
+        // Mesmo que outro pedido da mesma parada tenha código válido.
         stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly, client: firstName(clientName) });
       }
 
@@ -415,7 +427,7 @@ export async function generateRouteMessages(
         const reference = item.origin === 'ifood' && item.ifood_id
           ? `ID *${item.ifood_id}*`
           : item.order_id ? `pedido *#${item.order_id}*` : 'sem identificador';
-        const specificCode = (item.confirmation_code || '').replace(/\D/g, '').slice(0, 4);
+        const specificCode = orderConfirmationCode(item.confirmation_code);
         let paymentText = '';
         if (deliveryPaid(item)) paymentText = 'Pago ✅';
         else if (item.payment_method === 'pix') paymentText=`PIX pendente · R$ ${valueStr}`;
@@ -493,9 +505,8 @@ export async function generateRouteMessages(
       summarySeenGroups.add(groupKey);
 
       const num = physicalStopNumbers.get(groupKey) || summarySeenGroups.size;
-      const groupedDeliveries = deliveries.filter(
-        (candidate) => deliveryGroupKey(candidate) === groupKey,
-      );
+      // Índice montado uma vez; preserva ordem e pedidos cancelados do resumo.
+      const groupedDeliveries = deliveriesByStop.get(groupKey) || [];
       const customer = getCustomerById(delivery.customer_id);
       const addressParts = routeAddressParts(
         delivery.address_string,
@@ -515,8 +526,7 @@ export async function generateRouteMessages(
       const zapWarning = clientPhone ? ` · 📲 contato` : '';
       const needsCode = groupedDeliveries.some((candidate) => {
         if (candidate.origin !== 'ifood') return false;
-        const candidateCustomer = getCustomerById(candidate.customer_id);
-        return !(candidate.confirmation_code || candidateCustomer?.last_confirmation_code);
+        return !orderConfirmationCode(candidate.confirmation_code);
       });
       const needsCashChange = groupedDeliveries.some((candidate) =>
         !deliveryPaid(candidate) &&
@@ -531,7 +541,7 @@ export async function generateRouteMessages(
           const candidateCustomer=getCustomerById(candidate.customer_id);
           const candidateName=candidateCustomer?.name||candidate.customer_name||'Cliente';
           const reference=candidate.origin==='ifood'&&candidate.ifood_id?`ID *${candidate.ifood_id}*`:candidate.order_id?`pedido *#${candidate.order_id}*`:'sem identificador';
-          const code=(candidate.confirmation_code||candidateCustomer?.last_confirmation_code||'').replace(/\D/g,'').slice(0,4);
+          const code=orderConfirmationCode(candidate.confirmation_code);
           const codeInfo=candidate.origin==='ifood'?(code?` · 🔑 *${code}*`:' · 🔑 *pedir código*'):'';
           const candidateDrinks=candidate.drinks?.trim()?` · 🥤 *${candidate.drinks.trim()}*`:'';
           const amount=deliveryCharge(candidate);

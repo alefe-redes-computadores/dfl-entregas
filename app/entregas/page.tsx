@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
-import { deliveryCustomerCharge, deliveryIfoodSubsidy } from '@/lib/delivery-finance';
+import { deliveryCustomerCharge, deliveryPaymentStateLabel, deriveDeliveryPaymentState, deliveryIfoodSubsidy } from '@/lib/delivery-finance';
 import { fulfillmentLabel, getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
 import {
   dateKey,
@@ -33,6 +33,7 @@ import {
   shiftOperationalDateKey,
 } from '@/lib/operational-time';
 import type { FulfillmentMode } from '@/types';
+import { OPERATION_BATCH, OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 
 type StatusFilter = 'todas' | 'pendentes' | 'concluidas' | 'incompletas' | 'canceladas';
 type OriginFilter = 'todas' | 'ifood' | 'loja';
@@ -111,6 +112,8 @@ export default function DeliveriesPage() {
   const [origin, setOrigin] = useState<OriginFilter>('todas');
   const [fulfillment, setFulfillment] = useState<FulfillmentFilter>('todas');
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(OPERATION_FIRST_BATCH);
+  useEffect(() => { setVisibleLimit(OPERATION_FIRST_BATCH); }, [selectedDate, status, origin, fulfillment, query]);
 
   const dayDeliveries = useMemo(
     () =>
@@ -130,6 +133,16 @@ export default function DeliveriesPage() {
   const rows = useMemo(
     () =>
       dayDeliveries
+        // Filtrar critérios baratos antes de criar texto de busca, resolver cliente e rota.
+        // Os casos "incompletas" ainda usam a validação completa abaixo.
+        .filter((delivery) => {
+          if (origin !== 'todas' && delivery.origin !== origin) return false;
+          if (fulfillment !== 'todas' && getFulfillmentMode(delivery) !== fulfillment) return false;
+          if (status === 'concluidas') return delivery.completed === true;
+          if (status === 'pendentes') return !delivery.completed && !isCancelledSiteDelivery(delivery);
+          if (status === 'canceladas') return isCancelledSiteDelivery(delivery);
+          return true;
+        })
         .map((delivery) => {
           const route = routeById.get(delivery.route_id || '');
           const customer = customerById.get(delivery.customer_id || '');
@@ -142,7 +155,7 @@ export default function DeliveriesPage() {
               (delivery.origin === 'ifood' && !delivery.order_id)
             );
 
-          const haystack = normalize(
+          const haystack = normalizedQuery ? normalize(
             [
               customer?.name,
               delivery.customer_name,
@@ -156,9 +169,9 @@ export default function DeliveriesPage() {
               route?.motoboy_name,
               fulfillmentLabel(delivery),
             ].join(' '),
-          );
+          ) : '';
 
-          return { delivery, route, customer, incomplete, haystack, mode, logistics };
+          return { delivery, route, customer, incomplete, haystack, mode, logistics, sortAt: new Date(deliveryDate(delivery)).getTime() };
         })
         .filter(({ delivery, incomplete, haystack, mode }) => {
           const matchesStatus =
@@ -176,29 +189,27 @@ export default function DeliveriesPage() {
         })
         .sort(
           (a, b) =>
-            new Date(deliveryDate(a.delivery)).getTime() - new Date(deliveryDate(b.delivery)).getTime(),
+            a.sortAt - b.sortAt,
         ),
     [customerById, dayDeliveries, fulfillment, origin, normalizedQuery, routeById, status],
   );
 
-  const totals = useMemo(() => {
-    const attention = dayDeliveries.filter((delivery) => {
-      if (isCancelledSiteDelivery(delivery)) return false;
-      const route = routeById.get(delivery.route_id || '');
-      const logistics = isDeliveryFulfillment(delivery);
-      return (
-        (logistics && (!delivery.route_id || !route || !delivery.address_string)) ||
-        (delivery.origin === 'ifood' && !delivery.order_id)
-      );
-    }).length;
+  const renderedRows = useMemo(() => rows.slice(0, progressiveCount(rows.length, visibleLimit)), [rows, visibleLimit]);
 
-    return {
-      all: dayDeliveries.length,
-      pending: dayDeliveries.filter((item) => !item.completed && !isCancelledSiteDelivery(item)).length,
-      completed: dayDeliveries.filter((item) => item.completed).length,
-      attention,
-      cancelled: dayDeliveries.filter(isCancelledSiteDelivery).length,
-    };
+  const totals = useMemo(() => {
+    // Uma passagem por entrega; não recalcular classificação quatro vezes a cada atualização.
+    const result = {all: dayDeliveries.length, pending: 0, completed: 0, attention: 0, cancelled: 0};
+    for (const delivery of dayDeliveries) {
+      const cancelled = isCancelledSiteDelivery(delivery);
+      if (cancelled) result.cancelled++;
+      if (delivery.completed) result.completed++;
+      if (!delivery.completed && !cancelled) result.pending++;
+      if (cancelled) continue;
+      const route = routeById.get(delivery.route_id || '');
+      if ((isDeliveryFulfillment(delivery) && (!delivery.route_id || !route || !delivery.address_string)) ||
+          (delivery.origin === 'ifood' && !delivery.order_id)) result.attention++;
+    }
+    return result;
   }, [dayDeliveries, routeById]);
 
   const calendarDays = useMemo(() => {
@@ -463,15 +474,17 @@ export default function DeliveriesPage() {
       </section>
 
       <div className="flex flex-col gap-3">
-        {rows.map(({ delivery, route, customer, incomplete, mode, logistics }) => {
+        {renderedRows.map(({ delivery, route, customer, incomplete, mode, logistics }) => {
           const meta = fulfillmentMeta(mode);
           const ModeIcon = meta.Icon;
+          const operationalCharge = isCancelledSiteDelivery(delivery) ? 0 : deliveryCustomerCharge(delivery);
+          const paymentState = deriveDeliveryPaymentState(delivery);
 
           return (
             <button
               key={delivery.id}
               onClick={() => router.push(`/entregas/details?id=${delivery.id}&date=${encodeURIComponent(selectedDate)}`)}
-              className={`w-full rounded-[20px] border p-3.5 text-left active:scale-[0.99] ${
+              className={`w-full rounded-[18px] border p-3 text-left transition-colors hover:border-zinc-700 active:bg-zinc-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${
                 isCancelledSiteDelivery(delivery)
                   ? 'border-zinc-700/50 bg-zinc-900/25 opacity-70'
                   : incomplete
@@ -483,7 +496,7 @@ export default function DeliveriesPage() {
             >
               <div className="flex items-start gap-3">
                 <div
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                     delivery.origin === 'ifood'
                       ? 'bg-red-500/10 text-red-400'
                       : 'bg-emerald-500/10 text-emerald-400'
@@ -543,23 +556,36 @@ export default function DeliveriesPage() {
 
                     <span
                       className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                        delivery.completed
-                          ? 'bg-emerald-500/10 text-emerald-400'
-                          : 'bg-amber-500/10 text-amber-400'
+                        isCancelledSiteDelivery(delivery)
+                          ? 'bg-zinc-800 text-zinc-400'
+                          : delivery.completed
+                            ? 'bg-emerald-500/10 text-emerald-400'
+                            : 'bg-amber-500/10 text-amber-400'
                       }`}
                     >
                       {isCancelledSiteDelivery(delivery) ? 'Cancelado' : delivery.completed ? 'Concluído' : 'Pendente'}
                     </span>
+                    {!isCancelledSiteDelivery(delivery) && (
+                      <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                        paymentState === 'paid'
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : 'bg-amber-500/10 text-amber-300'
+                      }`}>
+                        {deliveryPaymentStateLabel(delivery)}
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 <div className="shrink-0 text-right">
-                  <p className="text-sm font-black text-emerald-400">
-                    R${' '}
-                    {(isCancelledSiteDelivery(delivery) ? 0 : deliveryCustomerCharge(delivery)).toLocaleString('pt-BR', {
-                      minimumFractionDigits: 2,
-                    })}
+                  <p className={`text-sm font-black ${isCancelledSiteDelivery(delivery) ? 'text-zinc-600' : paymentState === 'paid' ? 'text-emerald-400' : 'text-amber-300'}`}>
+                    {isCancelledSiteDelivery(delivery)
+                      ? 'Cancelado'
+                      : `R$ ${operationalCharge.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                   </p>
+                  {!isCancelledSiteDelivery(delivery) && <p className={`mt-0.5 text-[9px] font-bold ${paymentState === 'paid' ? 'text-emerald-500/80' : 'text-amber-400/80'}`}>
+                    {paymentState === 'paid' ? 'Recebido' : 'A receber'}
+                  </p>}
                   <ChevronRight size={16} className="ml-auto mt-3 text-zinc-600" />
                 </div>
               </div>
@@ -567,6 +593,11 @@ export default function DeliveriesPage() {
           );
         })}
 
+        {rows.length > renderedRows.length && (
+          <button type="button" onClick={() => setVisibleLimit(current => nextProgressiveCount(rows.length, current))} className="flex min-h-12 w-full items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-xs font-black text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
+            Mostrar mais {Math.min(OPERATION_BATCH, rows.length - renderedRows.length)} pedidos · {renderedRows.length} de {rows.length}
+          </button>
+        )}
         {rows.length === 0 && (
           <div className="dfl-empty">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-900 text-zinc-700">

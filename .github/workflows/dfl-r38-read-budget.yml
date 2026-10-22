@@ -1,0 +1,46 @@
+name: DFL V111 R38 — Budget e Emulator (manual DEMO)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dfl-r38-read-budget
+  cancel-in-progress: false
+jobs:
+  validation:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout read-only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Dependencias
+        run: npm ci --ignore-scripts
+      - name: Contratos R38 e R37
+        run: |
+          node scripts/verify-v111-r38-read-budget.cjs
+          node scripts/test-v111-r38-readiness-load.cjs
+          node scripts/verify-v111-r37-release-gate.cjs
+      - name: TypeScript
+        run: node node_modules/typescript/bin/tsc --noEmit
+      - name: PRE-APK integral (>=157)
+        run: node scripts/pre-apk.cjs
+      - name: Firebase Emulator isolado (sem producao)
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8089
+          GCLOUD_PROJECT: demo-dfl-entregas-r36
+        run: npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-dfl-entregas-r36 --config firebase.r36-emulator.json 'node scripts/test-v111-r36-refresh-emulator.cjs'
+      - name: Integridade
+        run: git diff --check

@@ -1,0 +1,22 @@
+#!/usr/bin/env node
+'use strict';
+const fs=require('node:fs');const assert=require('node:assert/strict');const ts=require('typescript');let n=0;
+const check=(name,ok)=>{assert.ok(ok,`R65 ${name}`);n++};
+const files=['lib/operational-time.ts','lib/operational-readiness.ts','lib/integration/worker-health.ts','lib/integration/drain-outcome.ts','components/home/ShiftBriefing.tsx','scripts/pre-apk.cjs'];
+const src=Object.fromEntries(files.map(name=>{const body=fs.readFileSync(name,'utf8');const ast=ts.createSourceFile(name,body,ts.ScriptTarget.Latest,true,name.endsWith('.tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);check('sintaxe '+name,ast.parseDiagnostics.length===0);return [name,body]}));
+const shift=src['components/home/ShiftBriefing.tsx'];
+for(const phrase of ['operationalDaySchedule(today, settings.schedule, settings.pauses, settings.holidaysOverrides)','const openLock = useRef(false)','if (openLock.current) return','openLock.current = true','openLock.current = false','localStorage.setItem(storageKey', 'catch { /* Sem storage:', 'buildOperationalReadiness({ deliveries: todays, routes, customers })',"/estoque?review=beverages",'Conferência de abertura'])check('abertura: '+phrase,shift.includes(phrase));
+check('sem weekday de fuso local',!shift.includes('new Date().getDay()'));
+check('sem estado seen dependente de storage disponível',shift.includes('catch { setSeen(false)'));
+const time=src['lib/operational-time.ts'];
+for(const phrase of ['export function isPausedOn(','Array.isArray(pauses)','pause?.start_date','end >= start','operationalDaySchedule(','isWithinSchedule('])check('agenda: '+phrase,time.includes(phrase));
+const readiness=src['lib/operational-readiness.ts'];
+for(const phrase of ['!isCancelledSiteDelivery(d)','isDeliveryFulfillment(d)','!isFutureScheduledDelivery(d)','deliveryLocationReadiness'])check('pré-abertura: '+phrase,readiness.includes(phrase));
+const worker=src['lib/integration/worker-health.ts'];
+for(const phrase of ['Number.isSafeInteger(batchLimit)','Number.isSafeInteger(read)','ids.length > read','read >= batchLimit','targetedRelay !== null && relayStageSucceeded(targetedRelay)'])check('checkpoint: '+phrase,worker.includes(phrase));
+const pre=src['scripts/pre-apk.cjs'];const suites=[...pre.matchAll(/^  '(scripts\/[^']+\.cjs)'/gm)].map(x=>x[1]);
+check('ao menos 212 suítes preservadas',suites.length>=212);check('sem duplicatas',new Set(suites).size===suites.length);
+for(const name of suites)check('suíte existente '+name,fs.existsSync(name));
+for(const name of ['scripts/verify-v111-r65-opening-integrity.cjs','scripts/test-v111-r65-opening-resilience.cjs','scripts/verify-v111-r64-claim-atomicity.cjs'])check('suíte preservada '+name,suites.includes(name));
+check('owner-only preservado',fs.readFileSync('security/firestore.v111-r23-owner-only.rules','utf8').includes('if superadmin();'));
+console.log(`R65 OPENING INTEGRITY: ${n} checks OK; ${suites.length} suites registered`);

@@ -1,5 +1,8 @@
 import type { Customer, Delivery, Route } from '@/types';
 import { deliveryPoint } from '@/lib/route-intelligence';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { isFutureScheduledDelivery } from '@/lib/scheduled-delivery';
 
 export type DeliveryLocationReadiness='located'|'address-only'|'missing-address';
 
@@ -12,7 +15,7 @@ export function deliveryLocationReadiness(delivery:Delivery,customer?:Customer):
 export function buildOperationalReadiness(input:{deliveries:Delivery[];routes:Route[];customers:Customer[]}){
   const customerMap=new Map(input.customers.map(c=>[c.id,c]));
   const routeMap=new Map(input.routes.map(r=>[r.id,r]));
-  const pending=input.deliveries.filter(d=>!d.completed);
+  const pending=input.deliveries.filter(d=>!d.completed && !isCancelledSiteDelivery(d) && isDeliveryFulfillment(d) && !isFutureScheduledDelivery(d));
   const missingAddress=pending.filter(d=>deliveryLocationReadiness(d,customerMap.get(d.customer_id))==='missing-address');
   const unconfirmedLocation=pending.filter(d=>{
     if(deliveryLocationReadiness(d,customerMap.get(d.customer_id))!=='address-only')return false;

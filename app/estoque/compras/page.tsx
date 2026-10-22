@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -18,6 +19,7 @@ import {
   ShoppingBasket,
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
+import { claimSubmission, releaseSubmission } from '@/lib/operation/submissionGate';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
@@ -166,6 +168,8 @@ export default function ShoppingList() {
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState('');
   const [showOnlySelected, setShowOnlySelected] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(35);
+  useEffect(() => setVisibleLimit(35), [query, showAll, showOnlySelected]);
 
   const [selected, setSelected] = useState<
     Record<string, boolean>
@@ -197,6 +201,7 @@ export default function ShoppingList() {
   );
 
   const [busy, setBusy] = useState(false);
+  const purchaseSubmitLock = useRef(false);
   const initializedSuggestions = useRef(new Set<string>());
 
   /*
@@ -244,18 +249,20 @@ export default function ShoppingList() {
   ).filter((product) => !showOnlySelected || selected[product.id]),
   [showAll, products, suggested, query, showOnlySelected, selected]);
 
-  const selectedProducts = products.filter((product) => selected[product.id]);
-  const purchaseUnitFor = (product: StockProduct) =>
-    commercialPurchasePlan(product, 1, 0, presentationIds[product.id]).presentation?.purchase_unit || product.unit;
-  const invalidSelected = invalidStockPurchaseSelections(
+  const renderedProducts = useMemo(() => displayed.slice(0, visibleLimit), [displayed, visibleLimit]);
+  const selectedProducts = useMemo(() => products.filter((product) => selected[product.id]), [products, selected]);
+  const purchaseUnitFor = useCallback((product: StockProduct) =>
+    commercialPurchasePlan(product, 1, 0, presentationIds[product.id]).presentation?.purchase_unit || product.unit,
+  [presentationIds]);
+  const invalidSelected = useMemo(() => invalidStockPurchaseSelections(
     products, selected, quantities, purchaseUnitFor,
-  );
-  const chosen = selectedProducts.filter((product) =>
+  ), [products, selected, quantities, purchaseUnitFor]);
+  const chosen = useMemo(() => selectedProducts.filter((product) =>
     validateStockPurchaseQuantity(quantities[product.id], purchaseUnitFor(product)).valid,
-  );
+  ), [selectedProducts, quantities, purchaseUnitFor]);
 
   const create = async () => {
-    if (busy) return;
+    if (busy || purchaseSubmitLock.current) return;
     if (invalidSelected.length) {
       toast.error(`Revise a quantidade de ${invalidSelected[0].name}. Nenhum item será omitido silenciosamente.`);
       return;
@@ -264,6 +271,8 @@ export default function ShoppingList() {
       toast.error('Selecione ao menos um produto com quantidade válida.');
       return;
     }
+    // O ref fecha a janela entre dois toques antes de o React aplicar setBusy.
+    if (!claimSubmission(purchaseSubmitLock)) return;
     setBusy(true);
 
     try {
@@ -319,6 +328,7 @@ export default function ShoppingList() {
         `/abastecimentos/detalhes?id=${supply.id}`,
       );
     } catch {
+      releaseSubmission(purchaseSubmitLock);
       toast.error(
         'Não foi possível criar a compra.',
       );
@@ -326,9 +336,9 @@ export default function ShoppingList() {
     }
   };
 
-  const visibleIds = new Set(displayed.map((item) => item.id));
-  const hiddenSelectedCount = selectedProducts.filter((item) => !visibleIds.has(item.id)).length;
-  const selectableDisplayed = displayed.filter(product => !selected[product.id]);
+  const visibleIds = useMemo(() => new Set(displayed.map((item) => item.id)), [displayed]);
+  const hiddenSelectedCount = useMemo(() => selectedProducts.filter((item) => !visibleIds.has(item.id)).length, [selectedProducts, visibleIds]);
+  const selectableDisplayed = useMemo(() => displayed.filter(product => !selected[product.id]), [displayed, selected]);
   const selectedDisplayedCount = displayed.length - selectableDisplayed.length;
   const toggleVisibleSelection = () => {
     if(busy||!displayed.length)return;
@@ -410,15 +420,16 @@ export default function ShoppingList() {
           {invalidSelected.length} item(ns) selecionado(s) com quantidade inválida ou arredondada para zero. Corrija antes de montar a compra. Primeiro: {invalidSelected[0].name}.
           <button type="button" onClick={()=>{setShowAll(true);setShowOnlySelected(true);setQuery('')}} className="ml-2 underline underline-offset-2">Revisar</button>
         </div>}
-        {!!displayed.length && <div role="group" aria-label="Seleção em lote de produtos" className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800 pt-2">
-          <span role="status" aria-live="polite" className="text-[11px] text-zinc-400">{displayed.length} visíveis · {selectedDisplayedCount} selecionados nesta lista</span>
-          <button type="button" onClick={toggleVisibleSelection} disabled={busy} className="min-h-11 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-[11px] font-bold text-amber-300 disabled:opacity-50">{selectableDisplayed.length ? 'Selecionar visíveis' : 'Desmarcar visíveis'}</button>
+        {!!displayed.length && <div role="group" aria-label="Seleção em lote de todos os produtos do filtro" className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800 pt-2">
+          <span role="status" aria-live="polite" className="text-[11px] text-zinc-400">{displayed.length} no filtro · {selectedDisplayedCount} selecionados no filtro</span>
+          <button type="button" onClick={toggleVisibleSelection} disabled={busy} className="min-h-11 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-[11px] font-bold text-amber-300 disabled:opacity-50">{selectableDisplayed.length ? 'Selecionar no filtro' : 'Desmarcar no filtro'}</button>
         </div>}
+        {displayed.length > renderedProducts.length && <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">A seleção em lote vale para todos os {displayed.length} produtos do filtro — inclusive os que ainda não aparecem na tela. O botão Montar compra considera todos os itens escolhidos.</p>}
         {hiddenSelectedCount > 0 && !showOnlySelected && <button type="button" onClick={()=>{setShowOnlySelected(true);setShowAll(true);setQuery('')}} className="mt-2 flex min-h-11 w-full items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 text-left text-[11px] font-semibold text-amber-200"><span>{hiddenSelectedCount} item(ns) escolhidos fora do filtro</span><span className="font-black">Revisar agora →</span></button>}
       </section>
 
       <div className="space-y-2">
-        {displayed.map((product) => {
+        {renderedProducts.map((product) => {
           const recommendation =
             recommendationMap.get(product.id);
 
@@ -661,6 +672,12 @@ export default function ShoppingList() {
             </article>
           );
         })}
+
+        {displayed.length > renderedProducts.length && (
+          <button type="button" onClick={() => setVisibleLimit(limit => limit + 35)} className="flex min-h-12 w-full items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/[.05] px-4 text-xs font-bold text-amber-300">
+            Mostrar mais {Math.min(35, displayed.length - renderedProducts.length)} de {displayed.length} produtos
+          </button>
+        )}
 
         {!displayed.length && (
           <div className="rounded-2xl border border-dashed border-zinc-700/70 bg-zinc-900/30 px-4 py-12 text-center" role="status">

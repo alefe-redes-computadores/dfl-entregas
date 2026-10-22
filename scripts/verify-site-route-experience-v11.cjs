@@ -24,7 +24,7 @@ const checks = [
   ['card Site possui ícone próprio', files.card.includes('isSiteOrder ? <Globe2')],
   ['histórico comercial tipado', files.types.includes('site_order_timeline?: SiteOrderTimelineEntry[]')],
   ['histórico comercial idempotente', files.persistence.includes('(item) => item.event_id !== event.event_id')],
-  ['fila virtual tem nome curto', files.home.includes("name: 'Pedidos sem rota'")],
+  ['pedidos sem rota nao simulam rota', !files.home.includes("routesDoDia.push({ id: 'rota-aguardando-vinculo'") && fs.readFileSync('components/home/OperationalCommandCenter.tsx','utf8').includes('siteInboxProjection(allDeliveries)')],
   ['apresentação não consulta Firestore', !/firebase\/firestore|getDocs\(|onSnapshot\(/.test(files.presentation)],
 ];
 let failures = 0;

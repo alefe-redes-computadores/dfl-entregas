@@ -26,11 +26,14 @@ type RecoveryIssue = {
   nextAttemptAt: string | null; lastError: string | null;
 };
 
-const dateTime = (value: string) =>
-  new Intl.DateTimeFormat('pt-BR', {
+const dateTime = (value: string) => {
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return 'Data indisponível';
+  return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'medium',
-  }).format(new Date(value));
+  }).format(parsed);
+};
 
 export default function OperationalDiagnosticsPage() {
   const router = useRouter();
@@ -40,6 +43,7 @@ export default function OperationalDiagnosticsPage() {
   const syncError = useAppStore((state) => state.syncError);
   const [syncChecking, setSyncChecking] = useState(false);
   const syncClickLockRef = useRef(false);
+  const recoveryClickLockRef = useRef(false);
   const [entries, setEntries] = useState<SyncDiagnostic[]>([]);
   const [pendingNotifications, setPendingNotifications] = useState<number | null>(null);
   const [pendingPreview, setPendingPreview] = useState<
@@ -48,6 +52,9 @@ export default function OperationalDiagnosticsPage() {
   const [recovery, setRecovery] = useState<{ stats: Record<string, number>; issues: RecoveryIssue[] } | null>(null);
   const [recoveryBusy, setRecoveryBusy] = useState('');
   const isAdmin = user?.email?.trim().toLowerCase() === DIAGNOSTICS_ADMIN_EMAIL;
+
+  // Dados do relay são da sessão que os consultou; trocar o Google limpa a prévia.
+  useEffect(() => { setRecovery(null); }, [user?.uid]);
 
   useEffect(() => {
     if (user && !isAdmin) router.replace('/mais');
@@ -90,10 +97,14 @@ export default function OperationalDiagnosticsPage() {
     ? `${SERVER_ORIGIN}/api/integration/diagnostics`
     : '/api/integration/diagnostics';
 
-  const loadRecovery = async () => {
+  const loadRecovery = async (fromRetry = false) => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
-    setRecoveryBusy('loading');
+    if (recoveryClickLockRef.current && !fromRetry) return;
+    if (!fromRetry) {
+      recoveryClickLockRef.current = true;
+      setRecoveryBusy('loading');
+    }
     try {
       const response = await fetch(recoveryUrl, {
         headers: { authorization: `Bearer ${await currentUser.getIdToken()}` },
@@ -101,17 +112,24 @@ export default function OperationalDiagnosticsPage() {
       });
       const payload = await response.json();
       if (!response.ok || payload.ok !== true) throw new Error(payload.error || 'Falha no diagnostico remoto.');
+      // Another Google account may have signed in before the request finished.
+      if (auth.currentUser?.uid !== currentUser.uid) return;
       setRecovery({ stats: payload.stats || {}, issues: Array.isArray(payload.issues) ? payload.issues : [] });
     } catch (error) {
+      if (auth.currentUser?.uid !== currentUser.uid) return;
       toast.error(error instanceof Error ? error.message : 'Nao foi possivel consultar a recuperacao.');
     } finally {
-      setRecoveryBusy('');
+      if (!fromRetry) {
+        setRecoveryBusy('');
+        recoveryClickLockRef.current = false;
+      }
     }
   };
 
   const retryEvent = async (eventId: string) => {
     const currentUser = auth.currentUser;
-    if (!currentUser || recoveryBusy) return;
+    if (!currentUser || recoveryBusy || recoveryClickLockRef.current) return;
+    recoveryClickLockRef.current = true;
     setRecoveryBusy(eventId);
     toast.loading('Reprocessando somente este evento...', { id: 'recovery-event' });
     try {
@@ -121,15 +139,19 @@ export default function OperationalDiagnosticsPage() {
         body: JSON.stringify({ eventId }), cache: 'no-store', credentials: 'omit',
       });
       const payload = await response.json();
+      if (auth.currentUser?.uid !== currentUser.uid) return;
       if (!response.ok || payload.ok !== true) throw new Error(payload.error || payload.relay?.results?.[0]?.error || 'Evento ainda nao foi enviado.');
       toast.success('Site aceitou o evento. WhatsApp não verificado.', { id: 'recovery-event' });
-      await loadRecovery();
+      await loadRecovery(true);
+      if (auth.currentUser?.uid !== currentUser.uid) return;
       await initData();
-      setEntries(readSyncDiagnostics());
+      if (auth.currentUser?.uid === currentUser.uid) setEntries(readSyncDiagnostics());
     } catch (error) {
+      if (auth.currentUser?.uid !== currentUser.uid) return;
       toast.error('Reprocessamento nao concluido.', { id: 'recovery-event', description: error instanceof Error ? error.message : undefined });
     } finally {
       setRecoveryBusy('');
+      recoveryClickLockRef.current = false;
     }
   };
 
@@ -155,24 +177,27 @@ export default function OperationalDiagnosticsPage() {
     }
     syncClickLockRef.current = true;
     setSyncChecking(true);
+    const before = readSyncDiagnostics()[0]?.id;
     toast.loading('Sincronizando com a nuvem...', { id: 'sync-toast' });
     try {
       await initData();
-      window.setTimeout(() => {
-        const currentState = useAppStore.getState();
-        if (currentState.syncError) {
-          toast.error('Falha na sincronização', { id: 'sync-toast', description: 'Confira sua internet e tente novamente.' });
-        } else {
-          toast.success('Sincronização concluída', { id: 'sync-toast', description: 'Os dados estão atualizados com a nuvem.' });
-        }
-        setEntries(readSyncDiagnostics());
-        setSyncChecking(false);
-        syncClickLockRef.current = false;
-      }, 500);
+      const updated = readSyncDiagnostics();
+      const last = updated[0];
+      setEntries(updated);
+      // initData returns early without running when hydration has not completed.
+      // A skipped run must never be called a successful synchronization.
+      if (!last || last.id === before) {
+        toast.warning('Sincronização não iniciada.', { id: 'sync-toast', description: 'Confira a inicialização da sessão e tente novamente.' });
+      } else if (last.status === 'error' || useAppStore.getState().syncError) {
+        toast.error('Falha na sincronização', { id: 'sync-toast', description: 'Confira sua internet e o diagnóstico local.' });
+      } else {
+        toast.success('Sincronização concluída', { id: 'sync-toast', description: 'Os dados recebidos foram conciliados com a nuvem.' });
+      }
     } catch {
+      toast.error('Não foi possível sincronizar', { id: 'sync-toast' });
+    } finally {
       setSyncChecking(false);
       syncClickLockRef.current = false;
-      toast.error('Não foi possível sincronizar', { id: 'sync-toast' });
     }
   };
 
@@ -218,6 +243,18 @@ export default function OperationalDiagnosticsPage() {
         <p className="mt-2 text-xs text-zinc-400">
           {summary.last ? `${dateTime(summary.last.finishedAt)} · ${summary.last.status === 'success' ? 'concluída' : 'falhou'} · ${(summary.last.durationMs / 1000).toFixed(1)}s` : 'Ainda não registrada nesta versão.'}
         </p>
+        {summary.last?.status === 'success' && <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+          <p className="text-[10px] font-bold text-zinc-300">Maior retorno por coleção na última sincronização</p>
+          <div className="mt-2 space-y-1.5">
+            {Object.entries(summary.last.collections).sort((a,b) => b[1] - a[1]).slice(0, 4).map(([name, count]) => (
+              <div key={name} className="flex items-center justify-between gap-3 text-[10px]">
+                <span className="truncate text-zinc-500">{name.replaceAll('_', ' ')}</span>
+                <strong className="tabular-nums text-zinc-200">{count} documentos</strong>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[9px] leading-relaxed text-zinc-600">Documentos retornados não são uma medição exata de leituras faturadas. Sem consulta extra ao banco.</p>
+        </div>}
         {summary.errors > 0 && <p className="mt-1 text-[10px] text-red-400">{summary.errors} falha(s) no histórico local.</p>}
         {summary.repeatedHighVolume && <p className="mt-2 rounded-xl bg-amber-500/10 p-2 text-[10px] leading-relaxed text-amber-400">Volume alto repetido: duas ou mais sincronizações recentes retornaram pelo menos 300 documentos. Copie o diagnóstico para investigação.</p>}
       </section>

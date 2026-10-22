@@ -7,6 +7,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { LogIn, LockKeyhole, LogOut } from 'lucide-react';
 import { isSuperadminUid } from '@/lib/access/roles';
 import { StaffPortal } from '@/components/access/StaffPortal';
+import { StaffLinkRequest } from '@/components/access/StaffLinkRequest';
 import { isIsolatedStaffOrigin } from '@/lib/access/staffOrigin';
 import { Capacitor } from '@capacitor/core';
 
@@ -101,6 +102,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         <h1 className="font-heading text-2xl font-black">Acesso nao liberado</h1>
         <p className="mt-3 max-w-sm text-sm leading-relaxed text-zinc-400">Esta conta ainda nao tem permissao para consultar dados do DFL Entregas. Solicite liberacao ao administrador.</p>
         <p className="mt-4 text-xs text-amber-300">Os acessos de funcionarios ainda estao em preparacao.</p>
+        {process.env.NEXT_PUBLIC_DFL_STAFF_LINK_REQUEST_ENABLED === 'true' &&
+          typeof window !== 'undefined' && isIsolatedStaffOrigin(window.location.origin) &&
+          !Capacitor.isNativePlatform() && <StaffLinkRequest />}
         <button type="button" onClick={() => void logout()} className="mt-7 flex h-12 items-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900 px-6 text-sm font-bold text-zinc-100"><LogOut size={16}/> Sair da conta</button>
       </div>
     );

@@ -69,7 +69,7 @@ export default function RouteDetailsPage() {
   const [departureChecklistOpen, setDepartureChecklistOpen] = useState(false);
   const [visibleStops, setVisibleStops] = useState(8);
 
-  useEffect(() => setVisibleStops(8), [id]);
+  useEffect(() => setVisibleStops(route?.status === 'fechada' ? 0 : 8), [id, route?.status]);
 
   if (!route) {
     return (
@@ -330,7 +330,7 @@ export default function RouteDetailsPage() {
             </h2>
           </div>
           <span className="text-[10px] font-black text-zinc-600">
-            {deliveries.length} pedido{deliveries.length === 1 ? '' : 's'} · {totalStops} parada{totalStops === 1 ? '' : 's'}
+            {deliveries.length} pedido{deliveries.length === 1 ? '' : 's'} · {totalStops} parada{totalStops === 1 ? '' : 's'}{state === 'finalizada' && visibleStops === 0 ? ' · recolhida' : ''}
           </span>
         </div>
 
@@ -415,7 +415,7 @@ export default function RouteDetailsPage() {
               onClick={() => setVisibleStops((count) => Math.min(totalStops, count + 8))}
               className="min-h-11 w-full rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-xs font-bold text-zinc-200 active:bg-zinc-800"
             >
-              Mostrar mais {Math.min(8, totalStops - visibleStopGroups.length)} paradas
+              {visibleStops === 0 ? `Ver sequência · ${totalStops} parada${totalStops === 1 ? '' : 's'}` : `Mostrar mais ${Math.min(8, totalStops - visibleStopGroups.length)} paradas`}
             </button>
           )}
           {visibleStops > 8 && (

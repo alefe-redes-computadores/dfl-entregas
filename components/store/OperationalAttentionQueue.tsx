@@ -12,7 +12,7 @@ const labels: Record<AttentionKind, string> = {
   pix_pending: 'Pix · verificar pagamento',
   collect: 'Cobrança na entrega',
 };
-const actionLabels: Record<AttentionKind,string> = {site_confirmation:'Abrir caixa de entrada',site_dispatch:'Abrir entregas',pix_pending:'Conferir financeiro',collect:'Conferir cobrança'};
+const actionLabels: Record<AttentionKind,string> = {site_confirmation:'Abrir caixa de entrada',site_dispatch:'Organizar na Caixa',pix_pending:'Conferir financeiro',collect:'Conferir cobrança'};
 const statusStyles: Record<AttentionKind, string> = {
   site_confirmation: 'text-amber-300 bg-amber-400/10',
   site_dispatch: 'text-sky-300 bg-sky-400/10',
@@ -49,8 +49,8 @@ export function OperationalAttentionQueue({orders,selectedDateKey,onFinance}:{or
   if(!tasks.length)return null;
   const entries: {kind:AttentionKind;icon:typeof ShoppingBag}[]=[{kind:'site_confirmation',icon:ShoppingBag},{kind:'site_dispatch',icon:Package},{kind:'pix_pending',icon:AlertCircle},{kind:'collect',icon:CreditCard}];
   const navigate=(kind:AttentionKind)=>{
-    if(kind==='site_confirmation')router.push('/loja/caixa-de-entrada');
-    else if(kind==='site_dispatch')router.push(`/entregas?date=${encodeURIComponent(selectedDateKey)}`);
+    if(kind==='site_confirmation')router.push('/loja/caixa-de-entrada?aba=site');
+    else if(kind==='site_dispatch')router.push('/loja/caixa-de-entrada?aba=site');
     else onFinance();
   };
   return <section className="overflow-hidden rounded-[22px] border border-amber-500/20 bg-gradient-to-br from-amber-500/[.07] to-zinc-900/30" aria-label="Pendências operacionais">

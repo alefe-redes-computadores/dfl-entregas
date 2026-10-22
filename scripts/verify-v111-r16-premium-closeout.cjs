@@ -57,7 +57,7 @@ ok('trava é liberada mesmo com falha no salvamento',picker.includes('} finally 
 ok('cadastro ainda escreve apenas pela ação canônica',picker.includes('await addStockProduct(product)')&&picker.includes('onChange(product.id)'));
 const queue=read('components/store/OperationalAttentionQueue.tsx');
 ok('fila de ações carrega progressivamente',queue.includes('visible.slice(0,additionalLimit)')&&queue.includes('setAdditionalLimit(limit=>limit+20)'));
-ok('fila continua navegável sem autoexecutar ações',queue.includes("router.push('/loja/caixa-de-entrada')")&&queue.includes('onFinance()'));
+ok('fila continua navegável sem autoexecutar ações',queue.includes("router.push('/loja/caixa-de-entrada?aba=site')")&&queue.includes('onFinance()'));
 ok('filtros recolhem a lista para reduzir processamento',queue.includes("setFilter(kind);setShowAll(false)"));
 const money=read('lib/operational-attention.ts');
 ok('fila não exibe infinito em valor inválido',money.includes('Number.isFinite(rawAmount)'));

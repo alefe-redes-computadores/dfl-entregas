@@ -395,3 +395,35 @@ export function markInboxDraft(
     ),
   });
 }
+
+
+/** Não descarta dois pedidos de texto livre apenas pelo mesmo cliente/endereço. */
+export function dedupeInboxImport(
+  incoming: DeliveryInboxDraft[], existing: DeliveryInboxDraft[],
+): { unique: DeliveryInboxDraft[]; skipped: number } {
+  const strongKey = (draft: DeliveryInboxDraft) => {
+    const ifoodId = (draft.parsed.ifoodId || '').replace(/\D/g, '');
+    if (ifoodId) return `ifood:${ifoodId}`;
+    const order = (draft.parsed.orderId || '').trim().toLocaleLowerCase('pt-BR');
+    return order ? `order:${order}` : null;
+  };
+  const seen = new Set(existing.map(strongKey).filter((key): key is string => Boolean(key)));
+  const textKeys = new Set(existing.filter(draft => !strongKey(draft))
+    .map(draft => `${draft.rawText}|${normalizeInboxText(draft.parsed.customerName)}|${normalizeInboxText(draft.parsed.address)}`));
+  const unique: DeliveryInboxDraft[] = [];
+  let skipped = 0;
+  for (const draft of incoming) {
+    const key = strongKey(draft);
+    if (key) {
+      if (seen.has(key)) { skipped += 1; continue; }
+      seen.add(key);
+    } else {
+      // Só usa texto + identidade fraca para impedir reimportação de outro lote,
+      // nunca para colapsar dois pedidos legítimos dentro do MESMO lote.
+      const weak = `${draft.rawText}|${normalizeInboxText(draft.parsed.customerName)}|${normalizeInboxText(draft.parsed.address)}`;
+      if (textKeys.has(weak)) { skipped += 1; continue; }
+    }
+    unique.push(draft);
+  }
+  return { unique, skipped };
+}

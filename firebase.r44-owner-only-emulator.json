@@ -1,0 +1,4 @@
+{
+  "firestore": {"rules": "security/firestore.v111-r23-owner-only.rules"},
+  "emulators": {"firestore": {"host": "127.0.0.1", "port": 8094}, "ui": {"enabled": false}, "singleProjectMode": true}
+}

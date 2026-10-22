@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bike, BriefcaseBusiness, ChevronLeft, Ellipsis, Package,
@@ -33,10 +33,11 @@ export default function NewExpensePage(){
   const [motoboyId,setMotoboyId]=useState('');
   const [observation,setObservation]=useState('');
   const [saving,setSaving]=useState(false);
+  const saveInFlight=useRef(false);
   const activeMotoboys=useMemo(()=>motoboys.filter(m=>m.active).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')),[motoboys]);
   const needsMotoboy=type==='motoboy'||type==='frete';
 
-  const save=async()=>{if(saving)return;const numeric=Number(amount.replace(/\./g,'').replace(',','.'));if(!description.trim())return void toast.error('Informe a descrição da despesa.');if(!Number.isFinite(numeric)||numeric<=0)return void toast.error('Informe um valor válido.');if(!occurredAt)return void toast.error('Informe a data da despesa.');const m=motoboys.find(x=>x.id===motoboyId);const now=new Date().toISOString();setSaving(true);try{await add({id:`expense-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,occurred_at:new Date(occurredAt).toISOString(),type,description:description.trim(),amount:numeric,motoboy_id:m?.id,motoboy_name:m?.name,source_kind:'manual',observation:observation.trim()||undefined,created_at:now,updated_at:now});toast.success('Despesa registrada.');router.replace('/despesas')}catch(error){toast.error('Não foi possível salvar a despesa.',{description:error instanceof Error?error.message:undefined})}finally{setSaving(false)}};
+  const save=async()=>{if(saveInFlight.current)return;const numeric=Number(amount.replace(/\./g,'').replace(',','.'));if(!description.trim())return void toast.error('Informe a descrição da despesa.');if(!Number.isFinite(numeric)||numeric<=0)return void toast.error('Informe um valor válido.');if(!occurredAt)return void toast.error('Informe a data da despesa.');const m=motoboys.find(x=>x.id===motoboyId);const now=new Date().toISOString();saveInFlight.current=true;setSaving(true);let committed=false;try{await add({id:`expense-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,occurred_at:new Date(occurredAt).toISOString(),type,description:description.trim(),amount:numeric,motoboy_id:m?.id,motoboy_name:m?.name,source_kind:'manual',observation:observation.trim()||undefined,created_at:now,updated_at:now});committed=true;toast.success('Despesa registrada.');router.replace('/despesas')}catch(error){toast.error('Não foi possível salvar a despesa.',{description:error instanceof Error?error.message:undefined})}finally{if(!committed){saveInFlight.current=false;setSaving(false)}}};
 
   return <div className="dfl-page">
     <header className="flex items-center gap-3"><button onClick={()=>router.replace('/despesas')} className="dfl-icon-button"><ChevronLeft size={20}/></button><div><p className="text-[10px] font-black uppercase tracking-[.18em] text-rose-400">Novo lançamento</p><h1 className="font-heading text-xl font-black text-zinc-100">Nova despesa</h1></div></header>

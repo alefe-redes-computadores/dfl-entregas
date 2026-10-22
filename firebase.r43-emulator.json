@@ -1,0 +1,4 @@
+{
+  "firestore": {"rules": "security/firestore.v111-r26-candidate.rules"},
+  "emulators": {"firestore": {"host": "127.0.0.1", "port": 8093}, "ui": {"enabled": false}, "singleProjectMode": true}
+}

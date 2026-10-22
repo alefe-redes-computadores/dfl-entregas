@@ -21,8 +21,8 @@ ok(address.includes('bias: `proximity:${PATOS_CENTER.longitude}'), 'ranking por 
 ok(address.includes('canonicalizeOperationalAddress('), 'resultado selecionado passa pela autoridade canônica');
 ok(canonical.includes(".replace(/,?\\s*Brasil\\b/gi, ' ')")&&canonical.includes(".replace(/,?\\s*Brazil\\b/gi, ' ')"), 'Brasil/Brazil continuam removidos');
 ok(canonical.includes('const POSTAL ='), 'CEP continua tratado como domínio independente');
-ok(nova.includes('onChange={(e) => setPhone(formatPhoneInput(e.target.value))}'), 'telefone permanece editável');
-ok(nova.includes('onChange={setStreetAddress}'), 'endereço manual permanece editável');
+ok((nova.includes('onChange={(e) => setPhone(formatPhoneInput(e.target.value))}') || (nova.includes('onChange={(e) => setActivePhone(formatPhoneInput(e.target.value))}') && nova.includes('setActivePhone = (next: string)'))), 'telefone permanece editável');
+ok((nova.includes('onChange={setStreetAddress}') || (nova.includes('onChange={setActiveAddress}') && nova.includes('setActiveAddress = (next: string)'))), 'endereço manual permanece editável');
 ok(nova.includes("canonicalizeOperationalAddress(streetAddress)"), 'salvamento mantém canonicalização final');
 
 console.log('V25.4 CLIENTES + ENDEREÇOS: CONTRATOS OK');

@@ -1,7 +1,7 @@
 // app/clientes/duplicados/page.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
@@ -27,6 +27,8 @@ export default function CustomerDuplicatesPage() {
   const deliveries = useAppStore((state) => state.deliveries);
   const mergeCustomers = useAppStore((state) => state.mergeCustomers);
   const [busy, setBusy] = useState<string | null>(null);
+  const mergeInFlight = useRef(false);
+  const [visibleCount, setVisibleCount] = useState(30);
   const [pendingMerge, setPendingMerge] = useState<{
     source: Customer;
     target: Customer;
@@ -47,8 +49,8 @@ export default function CustomerDuplicatesPage() {
   };
 
   const confirmMerge = async () => {
-    if (!pendingMerge) return;
-
+    if (!pendingMerge || mergeInFlight.current) return;
+    mergeInFlight.current = true;
     const { source, target, key } = pendingMerge;
     setBusy(key);
 
@@ -64,6 +66,7 @@ export default function CustomerDuplicatesPage() {
           error instanceof Error ? error.message : 'Tente novamente.',
       });
     } finally {
+      mergeInFlight.current = false;
       setBusy(null);
     }
   };
@@ -111,7 +114,7 @@ export default function CustomerDuplicatesPage() {
       </div>
 
       <div className="space-y-3">
-        {candidates.map((candidate) => {
+        {candidates.slice(0, visibleCount).map((candidate) => {
           const key = `${candidate.left.id}:${candidate.right.id}`;
           return (
             <section
@@ -185,6 +188,11 @@ export default function CustomerDuplicatesPage() {
           );
         })}
 
+        {candidates.length > visibleCount && (
+          <button type="button" onClick={() => setVisibleCount((count) => count + 30)} className="w-full rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs font-bold text-amber-300">
+            Mostrar mais 30 pares · {candidates.length - visibleCount} restantes
+          </button>
+        )}
         {!candidates.length && (
           <div className="rounded-[26px] border border-dashed border-zinc-800 py-16 text-center">
             <ShieldCheck className="mx-auto text-emerald-500" size={30} />

@@ -15,6 +15,10 @@ import { extractLatLngFromMapsUrl } from '@/lib/maps';
 import { useAppStore } from '@/store/useAppStore';
 import { buildPendingMotoboySettlements } from '@/lib/motoboy-settlement-tasks';
 import { isSiteOrderAwaitingConfirmation } from '@/lib/integration/site-order';
+import { siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { Inbox } from 'lucide-react';
 
 type ActionRow = {
   key: string;
@@ -45,7 +49,7 @@ export function OperationalCommandCenter({
   const operationalExpenses = useAppStore((state) => state.operationalExpenses);
 
   const openRoutes = routes.filter((route) => route.status === 'aberta');
-  const pending = deliveries.filter((delivery) => !delivery.completed);
+  const pending = deliveries.filter((delivery) => !delivery.completed && !isCancelledSiteDelivery(delivery) && isDeliveryFulfillment(delivery));
 
   // Backlog comercial global: não depende do dia nem da rota.
   // A regra canônica também exige pedido operacionalmente não concluído:
@@ -58,6 +62,11 @@ export function OperationalCommandCenter({
       return (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
     }), [allDeliveries]);
 
+  const siteInbox = useMemo(() => siteInboxProjection(allDeliveries), [allDeliveries]);
+  const allRoutes = useAppStore(state => state.routes);
+  const allRouteIds = useMemo(() => new Set(allRoutes.map(route => route.id)), [allRoutes]);
+  const corruptLinks = pending.filter(item => item.route_id && !allRouteIds.has(item.route_id));
+
   const oldestPendingSiteOrder = pendingSiteOrders[0];
   const oldestPendingSiteOrderLabel =
     oldestPendingSiteOrder?.external_order_id?.trim() ||
@@ -67,7 +76,7 @@ export function OperationalCommandCenter({
     oldestPendingSiteOrder?.customer_name?.trim() || '';
 
   const noAddress = pending.filter(
-    (delivery) => !delivery.address_string?.trim(),
+    (delivery) => !delivery.address_string?.trim() && (!delivery.source_system || delivery.route_id),
   );
 
   const addressOnly = pending.filter(
@@ -120,27 +129,24 @@ export function OperationalCommandCenter({
 
   const rows = [
     {
-      key: 'site-order-pending',
-      label:
-        pendingSiteOrders.length === 1
-          ? 'Confirmar pedido do Site'
-          : 'Confirmar pedidos do Site',
-      description:
-        pendingSiteOrders.length === 1
-          ? [
-              oldestPendingSiteOrderLabel
-                ? `Pedido #${oldestPendingSiteOrderLabel}`
-                : 'Pedido recebido pelo Site',
-              oldestPendingSiteCustomer || '',
-            ]
-              .filter(Boolean)
-              .join(' · ')
-          : `${pendingSiteOrders.length} pedidos continuam Pendentes no fluxo comercial`,
-      count: pendingSiteOrders.length,
-      href: '/loja?site=pending',
+      key: 'site-inbox',
+      label: 'Pedidos do Site aguardando organização',
+      description: `${siteInbox.ready} prontos para rota · ${siteInbox.commercial} confirmar no Site · ${siteInbox.scheduled} agendados · ${siteInbox.review} revisar`,
+      count: siteInbox.total,
+      href: '/loja/caixa-de-entrada?aba=site',
+      icon: Inbox,
+      tone: 'amber',
+      priority: 115,
+    },
+    {
+      key: 'broken-route-link',
+      label: 'Corrigir vínculo de rota',
+      description: 'Pedido vinculado a uma rota que não existe mais. Revisar no cadastro da entrega.',
+      count: corruptLinks.length,
+      href: '/entregas',
       icon: ShieldAlert,
       tone: 'red',
-      priority: 110,
+      priority: 112,
     },
     {
       key: 'address',

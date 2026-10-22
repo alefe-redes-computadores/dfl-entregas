@@ -1,0 +1,38 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const ts = require('typescript');
+let checks = 0;
+const read = (name) => fs.readFileSync(name,'utf8');
+const check = (label, fn) => { fn(); checks++; console.log('✓',label); };
+const worker = read('lib/integration/worker-health.ts');
+const api = read('app/api/integration/worker/route.ts');
+const watcher = read('components/SiteOrderNotificationWatcher.tsx');
+const pre = read('scripts/pre-apk.cjs');
+check('relay exige resultado de negócio positivo',()=>assert.match(worker,/stage\.value\.ok === true/));
+check('relay confere falhas explícitas',()=>assert.match(worker,/stage\.value\.failed/));
+check('relay confere pendências não resolvidas',()=>assert.match(worker,/stage\.value\.unsettled/));
+check('relay recusa contadores inválidos',()=>assert.match(worker,/Number\.isFinite\(stage\.value\.unsettled/));
+check('checkpoint exige aceite do relay',()=>assert.match(worker,/targetedRelay !== null && relayStageSucceeded\(targetedRelay\)/));
+check('worker avalia relay pelo helper central',()=>assert.match(api,/relayStageSucceeded\(relay\)/));
+check('worker mantém 207 em falhas não relacionadas a quota',()=>assert.match(api,/status: ok \? 200 : resourceExhausted \? 429 : 207/));
+check('worker alerta recuperação incompleta',()=>assert.match(api,/statusRecoveryNeedsReview,/));
+check('worker revisa erro em reconciliação',()=>assert.match(api,/!reconciliation\?\.ok/));
+check('worker revisa atraso do relay',()=>assert.match(api,/statusRecoveryEventIds\.length > 0 && !statusRecoveryRelayOk/));
+check('worker revisa checkpoint com falha',()=>assert.match(api,/statusRecoveryCheckpoint !== null && !statusRecoveryCheckpoint\.ok/));
+check('watcher consulta badge sem nova leitura Firestore',()=>assert.match(watcher,/readUnreadSiteOrderIds\(\)\.includes\(id\)/));
+check('watcher mantém badge antes do push',()=>assert.match(watcher,/markUnreadSiteOrders\(\[id\]\);if\(alreadyUnread\)continue/));
+check('watcher mantém filtro estreito e sem polling',()=>{assert.match(watcher,/where\('updated_at','>',mountedAt\)/);assert.doesNotMatch(watcher,/setInterval/);});
+check('watcher mantém identificação por pedido',()=>assert.match(watcher,/const delivery=change\.doc\.data\(\) as Delivery,id=delivery\.id\|\|change\.doc\.id/));
+check('watcher mantém proteção de fonte e status',()=>assert.match(watcher,/delivery\.source_system!=='dfl_site'/));
+check('watcher não altera gravação de entregas',()=>assert.doesNotMatch(watcher,/setDoc|updateDoc|deleteDoc/));
+check('180-190 verificadores anteriores preservados',()=>assert.match(pre,/verify-v111-r54-operational-integrity\.cjs/));
+check('R55 estrutural registrado',()=>assert.match(pre,/verify-v111-r55-site-reliability\.cjs/));
+check('R55 comportamental registrado',()=>assert.match(pre,/test-v111-r55-reliability\.cjs/));
+const registered=[...pre.matchAll(/^  '(scripts\/[^']+\.cjs)',?$/gm)].map(x=>x[1]);
+check('PRE-APK preserva pelo menos 192 suítes R55',()=>assert.ok(registered.length>=192));
+check('PRE-APK não duplica suítes',()=>assert.equal(new Set(registered).size,registered.length));
+for (const file of ['lib/integration/worker-health.ts','app/api/integration/worker/route.ts','components/SiteOrderNotificationWatcher.tsx']) {
+  const ast = ts.createSourceFile(file,read(file),ts.ScriptTarget.Latest,true,file.endsWith('tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);
+  check('TypeScript parseável '+file,()=>assert.equal(ast.parseDiagnostics.length,0));
+}
+console.log(`R55 SITE RELIABILITY: ${checks} verificações aprovadas.`);

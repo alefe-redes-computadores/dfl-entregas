@@ -13,7 +13,7 @@ ok(settle.includes('Gorjeta')&&settle.includes('Serviço extra')&&settle.include
 ok(settle.includes('data.totalAdditions')&&settle.includes('settlement_adjustments:adjustments'),'acréscimos chegam à prévia e registro');
 ok(!notify.includes("'Fim do expediente',\n        'Horário programado encerrado"),'fim do expediente não dispara cegamente por horário');
 ok(notify.includes('notifyShiftFinished')&&notify.includes('/motoboys/acerto?id=')&&route.includes('previousOpenRoutes'),'última rota finaliza expediente e abre acerto');
-ok(notify.includes("href: '/loja?site=pending'"),'pedido Site abre Loja/Pedidos do Site');
+ok(notify.includes("href: `/loja/caixa-de-entrada?aba=site&pedido=${encodeURIComponent(deliveryId)}`"),'pedido Site abre Caixa e pedido especifico');
 ok(layout.includes('closeButton')&&layout.includes('visibleToasts={2}'),'toasts compactos e fecháveis');
 ok(stock.includes('StockCatalogHealth'),'cadastros inconsistentes ganham ação de correção');
 console.log('V16 MACROCIRURGIA: contratos completos OK');

@@ -1,0 +1,35 @@
+'use strict';
+const fs=require('fs'),assert=require('node:assert/strict'),ts=require('typescript');
+let n=0;const ok=(msg,fn)=>{fn();n++;};
+const source=fs.readFileSync('lib/integration/server/reverseOutboxRepository.ts','utf8');
+const relay=fs.readFileSync('lib/integration/server/reverseRelay.ts','utf8');
+const pre=fs.readFileSync('scripts/pre-apk.cjs','utf8');
+for (const [path,src] of [['lib/integration/server/reverseOutboxRepository.ts',source],['lib/integration/server/reverseRelay.ts',relay]]){
+ ok('Parse TypeScript '+path,()=>assert.equal(ts.createSourceFile(path,src,ts.ScriptTarget.Latest,true).parseDiagnostics.length,0));
+}
+ok('Claim batch carrega identidade',()=>assert.match(source,/workerId: input\.workerId, event: eventFrom\(data\), attempts/));
+ok('Claim por ID carrega identidade',()=>assert.match(source,/workerId: input\.workerId,\s*event: eventFrom\(data\)/));
+ok('Finalização usa transação',()=>assert.match(source,/export async function markReverseOutboxSent[\s\S]*?adminDb\.runTransaction/));
+ok('Falha usa transação',()=>assert.match(source,/export async function markReverseOutboxFailed[\s\S]*?adminDb\.runTransaction/));
+ok('Guard exige processing',()=>assert.match(source,/data\.status === 'processing'/));
+ok('Guard exige mesmo worker',()=>assert.match(source,/data\.locked_by === lease\.workerId/));
+ok('Guard exige contador de tentativas',()=>assert.match(source,/Number\(data\.attempts\) === lease\.attempts/));
+ok('Finalização sem lease não grava',()=>assert.match(source,/!current\.exists \|\| !isCurrentLease\(current\.data\(\)!, lease\)\) return false/));
+ok('Falha sem lease não grava',()=>assert.match(source,/!current\.exists \|\| !isCurrentLease\(current\.data\(\)!, input\)\) return false/));
+ok('Relay entrega o lease ao finalizar',()=>assert.match(relay,/markReverseOutboxSent\(item\.refId, item\)/));
+ok('Relay entrega workerId ao falhar',()=>assert.match(relay,/workerId: item\.workerId/));
+ok('Relay não considera lease roubado sucesso',()=>assert.match(relay,/if \(settled === false\) throw new Error/));
+ok('Relay preserva evento idempotente',()=>assert.match(relay,/event\.event_id/));
+ok('Não cria timer de busca no worker',()=>assert.doesNotMatch(source,/setInterval|onSnapshot/));
+const oldTests=pre.match(/^\s+'scripts\/[^']+\.cjs',?$/gm)||[];
+ok('PRE-APK inclui pelo menos 194 suítes',()=>assert.ok(oldTests.length>=194, `foram encontradas ${oldTests.length} suites`));
+ok('PRE-APK sem duplicatas',()=>assert.equal(oldTests.length,new Set(oldTests.map(x=>x.trim())).size));
+ok('PRE-APK preserva R55',()=>assert.match(pre,/verify-v111-r55-site-reliability\.cjs/));
+ok('Novo teste estrutural registrado',()=>assert.match(pre,/verify-v111-r56-reverse-lease\.cjs/));
+ok('Novo teste comportamental registrado',()=>assert.match(pre,/test-v111-r56-reverse-lease\.cjs/));
+const diagnostic=fs.readFileSync('app/mais/diagnostico/page.tsx','utf8');
+ok('Troca de conta limpa recuperação anterior',()=>assert.match(diagnostic,/useEffect\(\(\) => \{ setRecovery\(null\); \}, \[user\?\.uid\]\)/));
+ok('Resposta de reprocessamento confere identidade',()=>assert.match(diagnostic,/const payload = await response\.json\(\);\s*if \(auth\.currentUser\?\.uid !== currentUser\.uid\) return;/));
+ok('Diagnóstico não muda estado de conta trocada',()=>assert.match(diagnostic,/if \(auth\.currentUser\?\.uid === currentUser\.uid\) setEntries\(readSyncDiagnostics\(\)\)/));
+ok('Diagnóstico TSX parseável',()=>assert.equal(ts.createSourceFile('app/mais/diagnostico/page.tsx',diagnostic,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX).parseDiagnostics.length,0));
+console.log('R56 LEASE STRUCTURE: '+n+' verificações aprovadas');

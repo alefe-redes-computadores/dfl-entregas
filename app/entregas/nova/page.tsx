@@ -10,6 +10,7 @@ import {
 import { toast } from '@/lib/operational-toast';
 import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { paymentStateForInput } from '@/lib/delivery-finance';
+import { firstMultiOrderIssue } from '@/lib/operation/multiOrderDraft';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
@@ -29,7 +30,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
 import { hasOwnerIdentity, ownerContextFlags, type OwnerOrderContext } from '@/lib/owner-order-context';
 
-type ExtraIfoodOrderDraft = { id:string; orderId:string; ifoodId:string; confirmationCode:string; customerName:string; customerCharge:string; subsidy:string; paymentMethod:Delivery['payment_method']; isPaid:boolean; changeFor:string; address:string; phone:string; mapsLink:string; };
+type ExtraIfoodOrderDraft = { id:string; orderId:string; ifoodId:string; confirmationCode:string; customerName:string; customerCharge:string; subsidy:string; paymentMethod:Delivery['payment_method']; isPaid:boolean; changeFor:string; address:string; phone:string; mapsLink:string; drinks:string; observation:string; notifyWhatsapp:boolean; };
 
 export default function NovaEntregaPage() {
   const router = useRouter();
@@ -115,7 +116,6 @@ const [routeId, setRouteId] = useState('');
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
   const [excludeCustomerMetrics, setExcludeCustomerMetrics] = useState(false);
   const [ownerOrderContext, setOwnerOrderContext] = useState<OwnerOrderContext | ''>('');
-  const ownerIdentityDetected = useMemo(() => hasOwnerIdentity({ name: customerName, phone }), [customerName, phone]);
 
   const [streetAddress, setStreetAddress] = useState('');
   const [mapsLink, setMapsLink] = useState('');
@@ -126,13 +126,50 @@ const [routeId, setRouteId] = useState('');
   const [changeFor, setChangeFor] = useState('');
   const [ifoodSubsidy, setIfoodSubsidy] = useState('');
   const [hasIfoodSubsidy, setHasIfoodSubsidy] = useState(false);
-  const [extraIfoodOrders, setExtraIfoodOrders] = useState<ExtraIfoodOrderDraft[]>([]);
-  const [multiOrderReviewOpen, setMultiOrderReviewOpen] = useState(false);
   const [fulfillmentOptionsOpen, setFulfillmentOptionsOpen] = useState(false);
   const [isUrgent, setIsUrgent] = useState(false);
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [extraIfoodOrders, setExtraIfoodOrders] = useState<ExtraIfoodOrderDraft[]>([]);
+  const [activeDraftId, setActiveDraftId] = useState('primary');
+  const activeExtra = origin === 'ifood' ? extraIfoodOrders.find((draft) => draft.id === activeDraftId) : undefined;
+  const updateActiveExtra = (patch: Partial<ExtraIfoodOrderDraft>) =>
+    setExtraIfoodOrders((current) => current.map((draft) => draft.id === activeDraftId ? {...draft, ...patch} : draft));
+  const activeOrderId = activeExtra?.orderId ?? orderId;
+  const activeIfoodId = activeExtra?.ifoodId ?? ifoodId;
+  const activeConfirmationCode = activeExtra?.confirmationCode ?? confirmationCode;
+  const activeCustomerName = activeExtra?.customerName ?? customerName;
+  const activePhone = activeExtra?.phone ?? phone;
+  const activeAddress = activeExtra?.address ?? streetAddress;
+  const activeMapsLink = activeExtra?.mapsLink ?? mapsLink;
+  const activeValue = activeExtra?.customerCharge ?? value;
+  const activeSubsidy = activeExtra?.subsidy ?? ifoodSubsidy;
+  const activeHasSubsidy = activeExtra ? Boolean(activeExtra.subsidy) : hasIfoodSubsidy;
+  const activePaymentMethod = activeExtra?.paymentMethod ?? paymentMethod;
+  const activeIsPaid = activeExtra?.isPaid ?? isPaid;
+  const activeChangeFor = activeExtra?.changeFor ?? changeFor;
+  const activeDrinks = activeExtra?.drinks ?? drinks;
+  const activeObservation = activeExtra?.observation ?? observation;
+  const activeNotifyWhatsapp = activeExtra?.notifyWhatsapp ?? notifyWhatsapp;
+  const setActiveOrderId = (next: string) => activeExtra ? updateActiveExtra({orderId:next}) : setOrderId(next);
+  const setActiveIfoodId = (next: string) => activeExtra ? updateActiveExtra({ifoodId:next}) : setIfoodId(next);
+  const setActiveConfirmationCode = (next: string) => activeExtra ? updateActiveExtra({confirmationCode:next}) : setConfirmationCode(next);
+  const setActiveCustomerName = (next: string) => activeExtra ? updateActiveExtra({customerName:next}) : setCustomerName(next);
+  const setActivePhone = (next: string) => activeExtra ? updateActiveExtra({phone:next}) : setPhone(next);
+  const setActiveAddress = (next: string) => activeExtra ? updateActiveExtra({address:next}) : setStreetAddress(next);
+  const setActiveMapsLink = (next: string) => activeExtra ? updateActiveExtra({mapsLink:next}) : setMapsLink(next);
+  const setActiveValue = (next: string) => activeExtra ? updateActiveExtra({customerCharge:next}) : setValue(next);
+  const setActiveSubsidy = (next: string) => activeExtra ? updateActiveExtra({subsidy:next}) : setIfoodSubsidy(next);
+  const setActivePaymentMethod = (next: Delivery['payment_method']) => activeExtra ? updateActiveExtra({paymentMethod:next}) : setPaymentMethod(next);
+  const setActiveIsPaid = (next: boolean) => activeExtra ? updateActiveExtra({isPaid:next}) : setIsPaid(next);
+  const setActiveChangeFor = (next: string) => activeExtra ? updateActiveExtra({changeFor:next}) : setChangeFor(next);
+  const setActiveDrinks = (next: string) => activeExtra ? updateActiveExtra({drinks:next}) : setDrinks(next);
+  const setActiveObservation = (next: string) => activeExtra ? updateActiveExtra({observation:next}) : setObservation(next);
+  const setActiveNotifyWhatsapp = (next: boolean) => activeExtra ? updateActiveExtra({notifyWhatsapp:next}) : setNotifyWhatsapp(next);
+  const ownerIdentityDetected = useMemo(() => hasOwnerIdentity({name: activeCustomerName, phone: activePhone}), [activeCustomerName, activePhone]);
+  const ownerIdentityAmongDrafts = useMemo(() => ownerIdentityDetected || hasOwnerIdentity({name: customerName, phone}) || extraIfoodOrders.some((draft) => hasOwnerIdentity({name: draft.customerName, phone: draft.phone})), [ownerIdentityDetected, customerName, phone, extraIfoodOrders]);
+
   const sameStopSeeded = useRef(false);
   const inboxSeeded = useRef(false);
   const sameStopSource = useMemo(
@@ -141,16 +178,16 @@ const [routeId, setRouteId] = useState('');
   );
   const customerIdentity = useMemo(() => {
     const normalizeIdentity = (value?: string | null) => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g, ' ').trim();
-    const query = normalizeIdentity(customerName);
+    const query = normalizeIdentity(activeCustomerName);
     if (!query) return null;
-    const identityDetails = { address: streetAddress || undefined, phone: phone || undefined };
-    const reusable = customers.map((customer) => ({ customer, evidence: customerIdentityEvidence(customer, customerName, identityDetails) })).filter((item) => item.evidence.reusable).sort((a,b) => b.evidence.score - a.evidence.score);
+    const identityDetails = { address: activeAddress || undefined, phone: activePhone || undefined };
+    const reusable = customers.map((customer) => ({ customer, evidence: customerIdentityEvidence(customer, activeCustomerName, identityDetails) })).filter((item) => item.evidence.reusable).sort((a,b) => b.evidence.score - a.evidence.score);
     if (reusable.length === 1) return { kind: 'existing' as const, customer: reusable[0].customer, count: 1 };
     if (reusable.length > 1) return { kind: 'multiple' as const, count: reusable.length };
-    const sameAddressCandidates = customers.filter((customer) => Boolean(streetAddress && customer.address && sameCustomerAddress(customer.address, streetAddress)));
+    const sameAddressCandidates = customers.filter((customer) => Boolean(activeAddress && customer.address && sameCustomerAddress(customer.address, activeAddress)));
     if (sameAddressCandidates.length) return { kind: 'same_address' as const, count: sameAddressCandidates.length };
     return { kind: 'new' as const, count: 0 };
-  }, [customerName, customers, phone, selectedCustomerId, streetAddress]);
+  }, [activeCustomerName, customers, activePhone, selectedCustomerId, activeAddress]);
 
   useEffect(() => {
     if (!inboxDraftId || !inboxDay || inboxSeeded.current) return;
@@ -281,6 +318,7 @@ const [routeId, setRouteId] = useState('');
   };
 
   const handleExecuteMagicParse = async () => {
+    setActiveDraftId('primary');
     if (!magicText.trim()) { toast.error('Cole o texto do pedido antes de processar.'); return; }
     if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
     const parsedOrders = inboxParsedRef.current
@@ -319,7 +357,7 @@ const [routeId, setRouteId] = useState('');
     if(parsed.drinks.length){setDrinks(parsed.drinks.join(', '));identified.push('Bebidas')}
     if(parsed.observations.length){setObservation(current=>{const incoming=parsed.observations.join(' - ');return current&&!current.includes(incoming)?`${current} - ${incoming}`:current||incoming});identified.push('Obs')}
     const routeResolution=resolveParsedRoute(parsed.routeNumber,parsed.motoboyHint);if(routeResolution.routeId&&!routeSelectionTouched.current){setRouteId(routeResolution.routeId);identified.push(`Rota ${routeResolution.candidates[0].name}`)}
-    if(parsedOrders.length>1){setExtraIfoodOrders(parsedOrders.slice(1).map((item,index)=>({id:`extra-${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,orderId:item.orderId,ifoodId:item.ifoodId,confirmationCode:item.confirmationCode||parsed.confirmationCode,customerName:item.customerName||parsed.customerName,customerCharge:item.customerCharge||item.value||charge,subsidy:item.subsidy,paymentMethod:item.paymentMethod||'dinheiro',isPaid:item.isPaid,changeFor:item.changeFor?formatCurrencyInput(item.changeFor.replace(/\D/g,'')):'',address:item.address||parsed.address,phone:item.phone||'',mapsLink:item.mapsLink||''})));setMultiOrderReviewOpen(true);identified.push(`${parsedOrders.length} pedidos reconhecidos`)}else setExtraIfoodOrders([]);
+    if(parsedOrders.length>1){setExtraIfoodOrders(parsedOrders.slice(1).map((item,index)=>({id:`extra-${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,orderId:item.orderId,ifoodId:item.ifoodId,confirmationCode:item.confirmationCode,customerName:item.customerName||parsed.customerName,customerCharge:item.customerCharge||item.value||'',subsidy:item.subsidy,paymentMethod:item.paymentMethod||'dinheiro',isPaid:item.isPaid,changeFor:item.changeFor?formatCurrencyInput(item.changeFor.replace(/\D/g,'')):'',address:item.address||parsed.address,phone:item.phone||'',mapsLink:item.mapsLink||'',drinks:item.drinks.join(', '),observation:item.observations.join(' - '),notifyWhatsapp:false})));identified.push(`${parsedOrders.length} pedidos reconhecidos`)}else setExtraIfoodOrders([]);
     if(!identified.length){toast.error('Nenhum dado reconhecido no texto.');return}
     if(Capacitor.isNativePlatform())void Haptics.impact({style:ImpactStyle.Heavy}).catch(()=>undefined);
     const parseQuality=assessIfoodParseQuality(parsedOrders);
@@ -354,8 +392,8 @@ const [routeId, setRouteId] = useState('');
   };
 
   const addressAudit = useMemo(() => {
-    const coords = extractCoordinatesFromUrl(mapsLink);
-    if (coords || (mapsLink && mapsLink.includes('http'))) {
+    const coords = extractCoordinatesFromUrl(activeMapsLink);
+    if (coords || (activeMapsLink && activeMapsLink.includes('http'))) {
       return {
         status: 'precise' as const,
         title: 'Link do Maps vinculado',
@@ -363,18 +401,18 @@ const [routeId, setRouteId] = useState('');
       };
     }
     const liveAddressQuality = auditOperationalAddress(
-      streetAddress,
+      activeAddress,
       { knownNeighborhoods },
     );
     const hasNumber = !liveAddressQuality.issues.includes('missing-house-number');
-    if (streetAddress.trim().length > 3 && hasNumber && !liveAddressQuality.needsReview) {
+    if (activeAddress.trim().length > 3 && hasNumber && !liveAddressQuality.needsReview) {
       return {
         status: 'good' as const,
         title: 'Rua e número informados',
         desc: 'Confira o bairro ou vincule um link do Maps quando houver dúvida.'
       };
     }
-    if (streetAddress.trim().length > 0 && !hasNumber) {
+    if (activeAddress.trim().length > 0 && !hasNumber) {
       return {
         status: 'warning' as const,
         title: 'Atenção: Sem Número!',
@@ -382,16 +420,16 @@ const [routeId, setRouteId] = useState('');
       };
     }
     return null;
-  }, [streetAddress, mapsLink, knownNeighborhoods]);
+  }, [activeAddress, activeMapsLink, knownNeighborhoods]);
 
   const handleCustomerSelect = (c: Customer) => {
-    setSelectedCustomerId(c.id);
-    setCustomerName(c.name);
-    if (c.address) setStreetAddress(c.address);
-    if (c.phone) setPhone(formatPhoneInput(c.phone));
-    if (c.observation) setObservation(c.observation);
-    if (c.maps_link) setMapsLink(c.maps_link);
-    if (c.last_confirmation_code && !confirmationCode) setConfirmationCode(c.last_confirmation_code);
+    if (!activeExtra) setSelectedCustomerId(c.id);
+    setActiveCustomerName(c.name);
+    if (c.address) setActiveAddress(c.address);
+    if (c.phone) setActivePhone(formatPhoneInput(c.phone));
+    if (c.observation) setActiveObservation(c.observation);
+    if (c.maps_link) setActiveMapsLink(c.maps_link);
+    // A confirmação pertence ao pedido, nunca deve vir automaticamente de outro pedido.
     toast.success('Cliente carregado.');
   };
 
@@ -402,12 +440,24 @@ const [routeId, setRouteId] = useState('');
     if(isSyncing){toast.info('Aguarde a atualização dos clientes terminar.',{description:'Isso evita criar um cadastro duplicado enquanto a base ainda está carregando.'});return}
     if(!value||(fulfillmentMode==='delivery'&&(!routeId||!streetAddress))){toast.error(fulfillmentMode==='delivery'?'Preencha os campos obrigatórios (Rota, Valor e Rua)':'Informe o valor do pedido');return}
     if(fulfillmentMode==='delivery'&&!openRoutes.some(route=>route.id===routeId)){toast.error('Selecione uma rota aberta da operação de hoje.');return}
-    const drafts=origin==='ifood'?[{id:'primary',orderId,ifoodId,confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:'',paymentMethod,isPaid,changeFor,address:streetAddress,phone,mapsLink},...extraIfoodOrders]:[];
-    if(origin==='ifood'){
-      const invalid=drafts.find(d=>!d.orderId.trim()||(d.ifoodId&&d.ifoodId.replace(/\D/g,'').length!==8)||(d.confirmationCode&&d.confirmationCode.replace(/\D/g,'').length!==4));
-      if(invalid){toast.error('Revise os identificadores iFood.',{description:'Cada pedido precisa de número; ID deve ter 8 dígitos e código deve ter 4 quando informados.'});return}
+    const drafts=origin==='ifood'?[{id:'primary',orderId,ifoodId,confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:'',paymentMethod,isPaid,changeFor,address:streetAddress,phone,mapsLink,drinks,observation,notifyWhatsapp},...extraIfoodOrders]:[];
+    if (origin === 'ifood') {
+      const issue = firstMultiOrderIssue(drafts);
+      if (issue) {
+        setActiveDraftId(issue.id);
+        const messages = {
+          order_required: 'Informe o número deste pedido.',
+          duplicate_order: 'Número repetido: cada pedido precisa de um número diferente.',
+          duplicate_ifood_id: 'ID iFood repetido entre os pedidos.',
+          invalid_ifood_id: 'O ID iFood deve ter exatamente oito dígitos.',
+          invalid_confirmation: 'O código de confirmação precisa ter quatro dígitos.',
+          charge_required: 'Informe o valor individual deste pedido.',
+        } as const;
+        toast.error(messages[issue.kind], {description:'Aba selecionada para revisão. Nenhum pedido foi salvo.'});
+        return;
+      }
     }
-    if(ownerIdentityDetected&&!ownerOrderContext){toast.error('Classifique este pedido no seu nome.',{description:'Informe se é teste, pedido real provisório ou retirada real na loja.'});return}
+    if(ownerIdentityAmongDrafts&&!ownerOrderContext){toast.error('Classifique este pedido no seu nome.',{description:'Informe se é teste, pedido real provisório ou retirada real na loja.'});return}
     setIsSaving(true);
     try{
       const normalizedAddress=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(streetAddress):{address:'',neighborhood:undefined,phone:undefined,observations:[] as string[]};
@@ -452,9 +502,9 @@ const [routeId, setRouteId] = useState('');
       if(origin==='ifood'){
         const deliveriesToCreate:Delivery[]=[];
         const stopGroups=new Map<string,string>();
-        for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));const draftNormalized=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(draft.address||streetAddress):{address:'',phone:undefined};const draftAddress=draftNormalized.address||cleanStreet;const draftPhone=normalizeBrazilPhone(draft.phone)||draftNormalized.phone||'';const draftMaps=(draft.mapsLink||'').trim()||(index===0?resolvedMapsLink:'');const addressKey=canonicalizeOperationalAddress(draftAddress).address.toLocaleLowerCase('pt-BR');let draftStopGroupId=stopGroupId;if(fulfillmentMode==='delivery'&&drafts.length>1){const sameAddressCount=drafts.filter(item=>sameCustomerAddress(item.address||streetAddress,draftAddress)).length;if(sameAddressCount>1){draftStopGroupId=stopGroups.get(addressKey)||`stop-${Date.now()}-${stopGroups.size}-${Math.random().toString(36).slice(2,7)}`;stopGroups.set(addressKey,draftStopGroupId)}else if(!stopSource){draftStopGroupId=undefined}}let customerId='';if(draftName){customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?draftAddress:undefined,phone:draftPhone||undefined,mapsLink:fulfillmentMode==='delivery'?draftMaps:undefined,confirmationCode:draft.confirmationCode||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:undefined})}
-          deliveriesToCreate.push({id:index===0?Date.now().toString():`${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:draftStopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:draft.paymentMethod,payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid),change_for:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?draftAddress:'',maps_link:fulfillmentMode==='delivery'?draftMaps:'',phone:draftPhone||undefined,notify_whatsapp:index===0?notifyWhatsapp:false,observation:cleanObservation||undefined,drinks:index===0?drinks:'',createdAt:now,created_at:now,updated_at:now});
-          if(ownerOrderContext) Object.assign(deliveriesToCreate[deliveriesToCreate.length-1],ownerContextFlags(ownerOrderContext));
+        for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));const draftNormalized=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(draft.address||streetAddress):{address:'',phone:undefined};const draftAddress=draftNormalized.address||cleanStreet;const draftPhone=normalizeBrazilPhone(draft.phone)||draftNormalized.phone||'';const draftMaps=(draft.mapsLink||'').trim()||(index===0?resolvedMapsLink:'');const addressKey=canonicalizeOperationalAddress(draftAddress).address.toLocaleLowerCase('pt-BR');let draftStopGroupId=stopSource&&sameCustomerAddress(stopSource.address_string,draftAddress)?stopGroupId:undefined;if(fulfillmentMode==='delivery'&&drafts.length>1){const sameAddressCount=drafts.filter(item=>sameCustomerAddress(item.address||streetAddress,draftAddress)).length;if(sameAddressCount>1){draftStopGroupId=stopGroups.get(addressKey)||draftStopGroupId||`stop-${Date.now()}-${stopGroups.size}-${Math.random().toString(36).slice(2,7)}`;stopGroups.set(addressKey,draftStopGroupId)}}let customerId='';if(draftName){customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?draftAddress:undefined,phone:draftPhone||undefined,mapsLink:fulfillmentMode==='delivery'?draftMaps:undefined,confirmationCode:draft.confirmationCode||undefined,observation:draft.observation.trim()||cleanObservation||undefined,origin,preferredCustomerId:index===0?selectedCustomerId||undefined:undefined})}
+          deliveriesToCreate.push({id:index===0?Date.now().toString():`${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:draftStopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:draft.paymentMethod,payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid),change_for:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?draftAddress:'',maps_link:fulfillmentMode==='delivery'?draftMaps:'',phone:draftPhone||undefined,notify_whatsapp:draft.notifyWhatsapp,observation:(index===0?cleanObservation:draft.observation.trim()||cleanObservation)||undefined,drinks:draft.drinks,createdAt:now,created_at:now,updated_at:now});
+          if(ownerOrderContext && hasOwnerIdentity({name:draftName,phone:draftPhone})) Object.assign(deliveriesToCreate[deliveriesToCreate.length-1],ownerContextFlags(ownerOrderContext));
         }
         await addDeliveries(deliveriesToCreate);toast.success(drafts.length>1?`${drafts.length} pedidos cadastrados nos endereços conferidos.`:'Entrega cadastrada com sucesso!');
       }else{
@@ -696,6 +746,23 @@ const [routeId, setRouteId] = useState('');
 
           </>
         )}
+        {origin === 'ifood' && extraIfoodOrders.length > 0 && (
+          <section className="rounded-[22px] border border-violet-500/25 bg-violet-500/[.055] p-3" aria-label="Pedidos na mesma parada">
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-violet-300">Mesma parada · {extraIfoodOrders.length + 1} pedidos</p><p className="mt-1 text-[10px] text-zinc-400">Toque no número para editar cada pedido. Salve todos no final.</p></div>
+              <UsersRound size={16} className="shrink-0 text-violet-300" />
+            </div>
+            <div role="tablist" aria-label="Alternar pedido da parada" className="flex gap-2 overflow-x-auto pb-1">
+              {([{id:'primary',orderId}, ...extraIfoodOrders] as Array<{id:string;orderId:string}>).map((draft, index) => (
+                <button type="button" key={draft.id} role="tab" aria-selected={activeDraftId === draft.id}
+                  onClick={() => setActiveDraftId(draft.id)}
+                  className={`min-h-10 shrink-0 rounded-xl border px-3 text-xs font-black transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400 ${activeDraftId === draft.id ? 'border-violet-400/60 bg-violet-400/15 text-violet-200' : 'border-zinc-800 bg-zinc-950/60 text-zinc-400'}`}>
+                  #{draft.orderId || `Pedido ${index + 1}`}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
         {/* IDENTIFICADORES DO IFOOD */}
         {origin === 'ifood' && (
           <section className="rounded-[24px] border border-red-500/15 bg-red-500/[.035] p-4 animate-in fade-in"><div className="mb-3"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">04 · Identificadores iFood</p><p className="mt-1 text-[11px] text-zinc-600">Número do pedido, ID e código de confirmação.</p></div><div className="grid grid-cols-2 gap-3">
@@ -706,8 +773,8 @@ const [routeId, setRouteId] = useState('');
                 inputMode="numeric"
                 placeholder="Ex: 5463"
                 maxLength={5}
-                value={orderId}
-                onChange={(e) => setOrderId(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                value={activeOrderId}
+                onChange={(e) => setActiveOrderId(e.target.value.replace(/\D/g, '').slice(0, 5))}
                 className="h-12 rounded-xl border-2 border-emerald-500/50 bg-zinc-900/80 px-3 text-base font-bold text-zinc-50 focus:border-emerald-500 focus:outline-none"
                 required
               />
@@ -722,9 +789,9 @@ const [routeId, setRouteId] = useState('');
                 inputMode="numeric"
                 placeholder="Ex: 60873228"
                 maxLength={8}
-                value={ifoodId}
-                onChange={(e) => setIfoodId(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 focus:outline-none ${ifoodId.length > 0 && ifoodId.length < 8 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`}
+                value={activeIfoodId}
+                onChange={(e) => setActiveIfoodId(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 focus:outline-none ${activeIfoodId.length > 0 && activeIfoodId.length < 8 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`}
               />
             </div>
             <div className="col-span-2 flex flex-col gap-1.5 relative">
@@ -737,17 +804,21 @@ const [routeId, setRouteId] = useState('');
                 inputMode="numeric"
                 placeholder="Ex: 1234"
                 maxLength={4}
-                value={confirmationCode}
-                onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 font-mono font-bold tracking-widest focus:outline-none ${confirmationCode.length > 0 && confirmationCode.length < 4 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`}
+                value={activeConfirmationCode}
+                onChange={(e) => setActiveConfirmationCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                className={`h-12 rounded-xl border bg-zinc-900/50 px-3 text-sm text-zinc-100 font-mono font-bold tracking-widest focus:outline-none ${activeConfirmationCode.length > 0 && activeConfirmationCode.length < 4 ? 'border-amber-500' : 'border-zinc-800 focus:border-emerald-500'}`}
               />
             </div>
           </div>
           <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-3">
             <div><p className="text-[11px] font-black text-zinc-200">Mais pedidos neste endereço?</p><p className="mt-0.5 text-[10px] text-zinc-600">Uma parada física; clientes, IDs e códigos ficam separados.</p></div>
-            <button type="button" onClick={()=>{setExtraIfoodOrders(current=>[...current,{id:`manual-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,orderId:'',ifoodId:'',confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:'',paymentMethod,isPaid,changeFor,address:streetAddress,phone,mapsLink}]);setMultiOrderReviewOpen(true)}} className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/10 px-3 text-[10px] font-black text-red-400"><Plus size={13}/>Adicionar</button>
+            <button type="button" onClick={() => {
+              const id=`manual-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+              setExtraIfoodOrders(current => [...current, {id,orderId:'',ifoodId:'',confirmationCode:'',customerName:activeCustomerName,customerCharge:'',subsidy:'',paymentMethod:activePaymentMethod,isPaid:false,changeFor:'',address:activeAddress,phone:activePhone,mapsLink:activeMapsLink,drinks:'',observation:activeObservation,notifyWhatsapp:false}]);
+              setActiveDraftId(id);
+            }} className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 text-[10px] font-black text-violet-300"><Plus size={13}/> Adicionar</button>
           </div>
-          {extraIfoodOrders.length>0&&(<button type="button" onClick={()=>setMultiOrderReviewOpen(true)} className="mt-2 flex h-11 w-full items-center justify-between rounded-xl border border-violet-500/20 bg-violet-500/[.06] px-3"><span className="flex items-center gap-2 text-[11px] font-black text-violet-300"><UsersRound size={14}/>{extraIfoodOrders.length+1} pedidos na mesma parada</span><span className="text-[10px] font-bold text-zinc-500">Revisar</span></button>)}
+          {activeExtra && <button type="button" onClick={() => {setExtraIfoodOrders(current => current.filter(draft => draft.id !== activeDraftId));setActiveDraftId('primary');}} className="mt-3 flex min-h-10 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/[.06] px-3 text-[11px] font-bold text-red-300"><Trash2 size={14}/> Remover somente este pedido</button>}
           </section>
         )}
 
@@ -755,10 +826,10 @@ const [routeId, setRouteId] = useState('');
         <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">05 · Cliente</p><p className="mt-1 text-sm font-black text-zinc-200">Contato e identificação</p></div>
           <CustomerAutocomplete
-            value={customerName}
+            value={activeCustomerName}
             onChange={(nextName) => {
-              setCustomerName(nextName);
-              setSelectedCustomerId('');
+              setActiveCustomerName(nextName);
+              if (!activeExtra) setSelectedCustomerId('');
             }}
             onSelect={handleCustomerSelect}
             customers={customers}
@@ -781,8 +852,8 @@ const [routeId, setRouteId] = useState('');
                 type="text"
                 inputMode="tel"
                 placeholder="WhatsApp: (34) 99999-9999"
-                value={phone}
-                onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
+                value={activePhone}
+                onChange={(e) => setActivePhone(formatPhoneInput(e.target.value))}
                 className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
               />
             </div>
@@ -791,10 +862,10 @@ const [routeId, setRouteId] = useState('');
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setNotifyWhatsapp(!notifyWhatsapp);
+                setActiveNotifyWhatsapp(!activeNotifyWhatsapp);
               }}
               className={`flex items-center gap-1.5 h-12 px-4 rounded-xl border text-xs font-bold transition-all active:scale-95 shrink-0 ${
-                notifyWhatsapp
+                activeNotifyWhatsapp
                   ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-sm'
                   : 'bg-zinc-900 border-zinc-800 text-zinc-400'
               }`}
@@ -813,9 +884,9 @@ const [routeId, setRouteId] = useState('');
             <p className="mt-1 text-sm font-black text-zinc-200">Endereço da entrega</p>
           </div>
           <AddressAutocomplete
-            value={streetAddress}
-            onChange={setStreetAddress}
-            onMapsLinkDetected={setMapsLink}
+            value={activeAddress}
+            onChange={setActiveAddress}
+            onMapsLinkDetected={setActiveMapsLink}
             placeholder="Ex: Rua Zeca Mota, 123 — Alvorada"
             label="Endereço da Entrega*"
             localityHint="Patos de Minas · MG"
@@ -852,8 +923,8 @@ const [routeId, setRouteId] = useState('');
             <input
               type="text"
               placeholder="Cole o link do Maps ou coordenadas @lat,lng"
-              value={mapsLink}
-              onChange={(e) => setMapsLink(e.target.value)}
+              value={activeMapsLink}
+              onChange={(e) => setActiveMapsLink(e.target.value)}
               className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
             />
           </div>
@@ -869,13 +940,13 @@ const [routeId, setRouteId] = useState('');
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-zinc-300">{origin==='ifood'&&hasIfoodSubsidy?'Cliente paga (R$)*':'Valor (R$)*'}</label>
+              <label className="text-xs font-bold text-zinc-300">{origin==='ifood'&&activeHasSubsidy?'Cliente paga (R$)*':'Valor (R$)*'}</label>
               <input
                 type="text"
                 inputMode="numeric"
                 placeholder="0,00"
-                value={value}
-                onChange={(e) => setValue(formatCurrencyInput(e.target.value))}
+                value={activeValue}
+                onChange={(e) => setActiveValue(formatCurrencyInput(e.target.value))}
                 className="h-14 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xl font-bold text-zinc-50 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
                 required
               />
@@ -886,14 +957,14 @@ const [routeId, setRouteId] = useState('');
               <input
                 type="text"
                 placeholder="Ex: 1 Coca 2L"
-                value={drinks}
-                onChange={(e) => setDrinks(e.target.value)}
+                value={activeDrinks}
+                onChange={(e) => setActiveDrinks(e.target.value)}
                 className="h-14 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
               />
             </div>
           </div>
 
-          {origin==='ifood'&&(<div className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3"><button type="button" onClick={()=>{setHasIfoodSubsidy(v=>!v);if(hasIfoodSubsidy)setIfoodSubsidy('')}} className="flex w-full items-center justify-between gap-3 text-left"><span className="flex items-center gap-2"><TicketPercent size={15} className={hasIfoodSubsidy?'text-emerald-400':'text-zinc-600'}/><span><strong className="block text-[11px] text-zinc-300">Cupom / subsídio do iFood</strong><span className="text-[9px] text-zinc-600">O motoboy cobra somente o valor do cliente.</span></span></span><span className={`rounded-full px-2 py-1 text-[9px] font-black ${hasIfoodSubsidy?'bg-emerald-500/10 text-emerald-400':'bg-zinc-800 text-zinc-500'}`}>{hasIfoodSubsidy?'Ativo':'Adicionar'}</span></button>{hasIfoodSubsidy&&(
+          {origin==='ifood'&&(<div className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3"><button type="button" onClick={()=>{activeExtra ? updateActiveExtra({subsidy:activeHasSubsidy?'':'0,00'}) : (setHasIfoodSubsidy(v=>!v), activeHasSubsidy && setIfoodSubsidy(''))}} className="flex w-full items-center justify-between gap-3 text-left"><span className="flex items-center gap-2"><TicketPercent size={15} className={activeHasSubsidy?'text-emerald-400':'text-zinc-600'}/><span><strong className="block text-[11px] text-zinc-300">Cupom / subsídio do iFood</strong><span className="text-[9px] text-zinc-600">O motoboy cobra somente o valor do cliente.</span></span></span><span className={`rounded-full px-2 py-1 text-[9px] font-black ${activeHasSubsidy?'bg-emerald-500/10 text-emerald-400':'bg-zinc-800 text-zinc-500'}`}>{activeHasSubsidy?'Ativo':'Adicionar'}</span></button>{activeHasSubsidy&&(
             <div className="mt-3 grid grid-cols-2 items-stretch gap-2">
               <label className="flex min-w-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900/45 p-2.5">
                 <span className="text-[9px] font-black uppercase tracking-wide text-zinc-500">
@@ -903,8 +974,8 @@ const [routeId, setRouteId] = useState('');
                   type="text"
                   inputMode="numeric"
                   placeholder="R$ 0,00"
-                  value={ifoodSubsidy}
-                  onChange={e=>setIfoodSubsidy(formatCurrencyInput(e.target.value))}
+                  value={activeSubsidy}
+                  onChange={e=>setActiveSubsidy(formatCurrencyInput(e.target.value))}
                   className="mt-1 h-10 w-full min-w-0 rounded-lg border border-zinc-800 bg-zinc-950/55 px-3 text-base font-black text-zinc-100 outline-none focus:border-emerald-500"
                 />
               </label>
@@ -914,55 +985,55 @@ const [routeId, setRouteId] = useState('');
                   Total do pedido
                 </p>
                 <p className="mt-1 truncate text-base font-black text-zinc-100">
-                  R$ {(parseMoney(value)+parseMoney(ifoodSubsidy)).toLocaleString('pt-BR',{minimumFractionDigits:2})}
+                  R$ {(parseMoney(activeValue)+parseMoney(activeSubsidy)).toLocaleString('pt-BR',{minimumFractionDigits:2})}
                 </p>
                 <p className="mt-0.5 truncate text-[8px] font-bold text-zinc-600">
-                  Cliente {parseMoney(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+                  Cliente {parseMoney(activeValue).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
                 </p>
               </div>
             </div>
           )}</div>)}
 
-          <div className={`flex flex-col gap-2 transition-all duration-300 ${isPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+          <div className={`flex flex-col gap-2 transition-all duration-300 ${activeIsPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
             <label className="text-xs font-semibold text-zinc-400">Forma de Pagamento</label>
             <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={() => { setPaymentMethod('dinheiro'); setIsPaid(false); }} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${paymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
+              <button type="button" onClick={() => { setActivePaymentMethod('dinheiro'); setActiveIsPaid(false); }} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${activePaymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
                 <Banknote size={20} />
                 <span className="text-xs font-bold">Dinheiro</span>
               </button>
-              <button type="button" onClick={() => setPaymentMethod('pix')} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${paymentMethod === 'pix' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
+              <button type="button" onClick={() => setActivePaymentMethod('pix')} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${activePaymentMethod === 'pix' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
                 <QrCode size={20} />
                 <span className="text-xs font-bold">Pix</span>
               </button>
-              <button type="button" onClick={() => { setPaymentMethod('cartao'); setIsPaid(false); }} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${(paymentMethod as string) === 'cartao' ? 'border-sky-500 bg-sky-500/10 text-sky-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
+              <button type="button" onClick={() => { setActivePaymentMethod('cartao'); setActiveIsPaid(false); }} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${(activePaymentMethod as string) === 'cartao' ? 'border-sky-500 bg-sky-500/10 text-sky-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
                 <CreditCard size={20} />
                 <span className="text-xs font-bold">Cartão</span>
               </button>
             </div>
           </div>
 
-          {paymentMethod === 'pix' && (
+          {activePaymentMethod === 'pix' && (
             <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800">
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-zinc-200">Pago antecipado?</span>
                 <span className="text-[10px] text-zinc-500">Marque quando o Pix já foi recebido</span>
               </div>
-              <button type="button" onClick={() => setIsPaid(!isPaid)} className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${isPaid ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
-                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${isPaid ? 'translate-x-6' : 'translate-x-1'}`} />
+              <button type="button" onClick={() => setActiveIsPaid(!activeIsPaid)} className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 ${activeIsPaid ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${activeIsPaid ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
           )}
 
-          {paymentMethod === 'dinheiro' && !isPaid && (
+          {activePaymentMethod === 'dinheiro' && !activeIsPaid && (
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-zinc-400">Troco para (R$)</label>
-              <input type="text" inputMode="numeric" placeholder="Ex: 50,00" value={changeFor} onChange={(e) => setChangeFor(formatCurrencyInput(e.target.value))} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
+              <input type="text" inputMode="numeric" placeholder="Ex: 50,00" value={activeChangeFor} onChange={(e) => setActiveChangeFor(formatCurrencyInput(e.target.value))} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
             </div>
           )}
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-400">Observação / Portão / Complemento</label>
-            <input type="text" placeholder="Ex: Ap. 11B, Portão preto..." value={observation} onChange={(e) => setObservation(e.target.value)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
+            <input type="text" placeholder="Ex: Ap. 11B, Portão preto..." value={activeObservation} onChange={(e) => setActiveObservation(e.target.value)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
           </div>
 
           <div className={`flex items-center justify-between p-3.5 rounded-xl transition-all border ${isUrgent ? 'bg-red-500/10 border-red-500/30' : 'bg-zinc-900/50 border-zinc-800'}`}>
@@ -979,7 +1050,7 @@ const [routeId, setRouteId] = useState('');
         </section>
 
 
-        {ownerIdentityDetected && <section className="rounded-[24px] border border-sky-500/25 bg-sky-500/[.055] p-4"><p className="text-[10px] font-black uppercase tracking-[.16em] text-sky-400">Identidade da loja detectada</p><p className="mt-1 text-sm font-black text-zinc-100">Como este lançamento deve contar?</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Isso separa testes de vendas reais sem apagar faturamento legítimo.</p><div className="mt-3 grid gap-2">{([['owner_test','DEV / teste','Sai dos relatórios, ranking e fidelidade.'],['owner_provisional','Pedido real provisório','Conta na venda e operação; não vira pedido do Álefe.'],['store_pickup','Retirada real na loja','Conta normalmente; vincule ao cliente verdadeiro.']] as const).map(([context,label,description])=><button key={context} type="button" onClick={()=>setOwnerOrderContext(context)} className={`rounded-2xl border p-3 text-left ${ownerOrderContext===context?'border-sky-400/50 bg-sky-500/10':'border-zinc-800 bg-zinc-950/40'}`}><b className="block text-xs text-zinc-100">{label}</b><span className="mt-1 block text-[10px] text-zinc-500">{description}</span></button>)}</div></section>}
+        {ownerIdentityAmongDrafts && <section className="rounded-[24px] border border-sky-500/25 bg-sky-500/[.055] p-4"><p className="text-[10px] font-black uppercase tracking-[.16em] text-sky-400">Identidade da loja detectada</p><p className="mt-1 text-sm font-black text-zinc-100">Como este lançamento deve contar?</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Isso separa testes de vendas reais sem apagar faturamento legítimo.</p><div className="mt-3 grid gap-2">{([['owner_test','DEV / teste','Sai dos relatórios, ranking e fidelidade.'],['owner_provisional','Pedido real provisório','Conta na venda e operação; não vira pedido do Álefe.'],['store_pickup','Retirada real na loja','Conta normalmente; vincule ao cliente verdadeiro.']] as const).map(([context,label,description])=><button key={context} type="button" onClick={()=>setOwnerOrderContext(context)} className={`rounded-2xl border p-3 text-left ${ownerOrderContext===context?'border-sky-400/50 bg-sky-500/10':'border-zinc-800 bg-zinc-950/40'}`}><b className="block text-xs text-zinc-100">{label}</b><span className="mt-1 block text-[10px] text-zinc-500">{description}</span></button>)}</div></section>}
 
         <button type="button" onClick={() => setExcludeCustomerMetrics(v => !v)} className={`flex w-full items-start gap-3 rounded-2xl border p-3.5 text-left ${excludeCustomerMetrics ? 'border-violet-500/30 bg-violet-500/[.08]' : 'border-zinc-800 bg-zinc-900/45'}`}>
           <span className="mt-0.5">{excludeCustomerMetrics ? <CheckCircle2 size={16} className="text-violet-400"/> : <span className="block h-4 w-4 rounded border border-zinc-700"/>}</span>
@@ -987,14 +1058,9 @@ const [routeId, setRouteId] = useState('');
         </button>
 
         <button type="submit" disabled={isSaving} className="mt-2 h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-amber-500/20 transition-all">
-          {isSaving ? 'Salvando...' : 'Salvar Entrega'}
+          {isSaving ? 'Salvando...' : extraIfoodOrders.length ? `Salvar ${extraIfoodOrders.length + 1} pedidos` : 'Salvar entrega'}
         </button>
       </form>
-      {multiOrderReviewOpen&&(<div className="fixed inset-0 z-[140] flex items-end bg-black/80 p-2 backdrop-blur-sm min-[380px]:p-3 sm:items-center sm:justify-center" onClick={()=>setMultiOrderReviewOpen(false)}><section className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-[24px] border border-zinc-800 bg-zinc-950 p-4 min-[380px]:rounded-[28px] min-[380px]:p-5" onClick={e=>e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">Mesma parada</p><h2 className="mt-1 text-lg font-black text-zinc-100">Revisar pedidos importados</h2><p className="mt-1 text-[11px] text-zinc-500">Os pedidos compartilham esta parada. Confira os campos incompletos antes de salvar.</p></div><button type="button" onClick={()=>setMultiOrderReviewOpen(false)} className="h-9 shrink-0 rounded-xl border border-zinc-800 px-3 text-[10px] font-black text-zinc-400">Fechar</button></div><button type="button" onClick={()=>setExtraIfoodOrders(c=>c.map(x=>({...x,customerName:x.customerName||customerName,confirmationCode:x.confirmationCode||confirmationCode})))} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/[.07] text-[10px] font-black text-violet-300"><UsersRound size={14}/> Usar cliente principal nos pedidos</button><p className="mt-1 text-[9px] leading-relaxed text-zinc-600">Copia cliente e código. Número, ID e valores continuam individuais.</p><div className="mt-3 space-y-3">{extraIfoodOrders.map((draft,index)=><article key={draft.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3"><div className="mb-3 flex items-center justify-between"><p className="text-[10px] font-black uppercase text-zinc-500">Pedido {index+2}</p><button type="button" onClick={()=>setExtraIfoodOrders(c=>c.filter(x=>x.id!==draft.id))} className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-400"><Trash2 size={13}/></button></div><div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2"><input value={draft.customerName} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,customerName:e.target.value}:x))} placeholder="Cliente deste pedido" className="h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-xs text-zinc-100 min-[380px]:col-span-2"/><input value={draft.orderId} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,orderId:e.target.value.replace(/\D/g,'')}:x))} placeholder="Nº pedido" inputMode="numeric" className="h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-xs text-zinc-100"/><input value={draft.ifoodId} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,ifoodId:e.target.value.replace(/\D/g,'').slice(0,8)}:x))} placeholder="ID 8 dígitos" inputMode="numeric" className="h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-xs text-zinc-100"/><input value={draft.customerCharge} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,customerCharge:formatCurrencyInput(e.target.value)}:x))} placeholder="Cliente paga" inputMode="numeric" className="h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-xs text-zinc-100"/><input value={draft.subsidy} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,subsidy:formatCurrencyInput(e.target.value)}:x))} placeholder="Cupom / subsídio" inputMode="numeric" className="h-11 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-xs text-zinc-100 min-[380px]:col-span-2"/>
-<div className="grid grid-cols-3 gap-2 min-[380px]:col-span-2">{(['dinheiro','pix','cartao'] as const).map(method=><button key={method} type="button" onClick={()=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,paymentMethod:method,isPaid:method==='pix'?x.isPaid:false,changeFor:method==='dinheiro'?x.changeFor:''}:x))} className={`h-9 rounded-lg border text-[9px] font-black uppercase ${draft.paymentMethod===method?'border-violet-500/40 bg-violet-500/10 text-violet-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{method==='cartao'?'Cartão':method}</button>)}</div>
-{draft.paymentMethod==='pix'&&<button type="button" onClick={()=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,isPaid:!x.isPaid}:x))} className={`h-10 rounded-xl border text-[10px] font-black min-[380px]:col-span-2 ${draft.isPaid?'border-emerald-500/30 bg-emerald-500/10 text-emerald-400':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{draft.isPaid?'Pago no app ✓':'Pix ainda pendente'}</button>}
-{draft.paymentMethod==='dinheiro'&&!draft.isPaid&&<input value={draft.changeFor} onChange={e=>setExtraIfoodOrders(c=>c.map(x=>x.id===draft.id?{...x,changeFor:formatCurrencyInput(e.target.value)}:x))} placeholder="Troco para quanto?" inputMode="numeric" className="h-11 rounded-xl border border-amber-500/20 bg-amber-500/[.04] px-3 text-xs text-amber-200 min-[380px]:col-span-2"/>}</div></article>)}</div>
-<button type="button" onClick={()=>setExtraIfoodOrders(c=>[...c,{id:`manual-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,orderId:'',ifoodId:'',confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:'',paymentMethod,isPaid,changeFor,address:streetAddress,phone,mapsLink}])} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-violet-500/30 bg-violet-500/[.05] text-[11px] font-black text-violet-300"><Plus size={14}/>Outro pedido neste endereço</button></section></div>)}
     </div>
   );
 }

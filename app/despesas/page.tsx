@@ -143,17 +143,19 @@ export default function ExpensesPage() {
   const [pendingDelete, setPendingDelete] = useState<OperationalExpense | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const monthly = useMemo(
-    () =>
-      expenses.filter(
-        (item) => monthKey(new Date(item.occurred_at)) === monthKey(month),
-      ),
-    [expenses, month],
-  );
+  const monthly = useMemo(() => {
+    const selectedMonth = monthKey(month);
+    return expenses.filter((item) => monthKey(new Date(item.occurred_at)) === selectedMonth);
+  }, [expenses, month]);
 
   const filtered = useMemo(() => {
     const term = query.trim().toLocaleLowerCase('pt-BR');
 
+    const sortedByDate = new WeakMap<OperationalExpense, number>();
+    const timestamp = (item: OperationalExpense) => {
+      if (!sortedByDate.has(item)) sortedByDate.set(item, new Date(item.occurred_at).getTime());
+      return sortedByDate.get(item) || 0;
+    };
     return monthly
       .filter((item) => type === 'todas' || item.type === type)
       .filter(
@@ -175,11 +177,7 @@ export default function ExpensesPage() {
           .toLocaleLowerCase('pt-BR')
           .includes(term);
       })
-      .sort(
-        (a, b) =>
-          new Date(b.occurred_at).getTime() -
-          new Date(a.occurred_at).getTime(),
-      );
+      .sort((a, b) => timestamp(b) - timestamp(a));
   }, [monthly, motoboyFilter, query, source, type]);
 
   const grouped = useMemo(

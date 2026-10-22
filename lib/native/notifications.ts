@@ -25,6 +25,26 @@ const lastSent = new Map<string, number>();
 const notificationsInFlight = new Set<string>();
 const stockProductsInFlight = new Set<string>();
 
+/** R52: Android agenda e cancela em operações assíncronas. Sem uma fila,
+ * um agendamento antigo pode concluir DEPOIS de uma configuração mais nova.
+ * Separação por owner evita bloquear alertas imediatos de outras categorias.
+ */
+type ScheduleOwner = 'shift' | 'route-reminder';
+const scheduleTails = new Map<ScheduleOwner, Promise<void>>();
+const scheduleGenerations = new Map<ScheduleOwner, number>();
+
+function queueOwnerSchedule(owner: ScheduleOwner, task: () => Promise<void>): Promise<void> {
+  const generation = (scheduleGenerations.get(owner) || 0) + 1;
+  scheduleGenerations.set(owner, generation);
+  const previous = scheduleTails.get(owner) || Promise.resolve();
+  const current = previous.catch(() => undefined).then(async () => {
+    if (scheduleGenerations.get(owner) !== generation) return;
+    await task();
+  });
+  scheduleTails.set(owner, current.catch(() => undefined));
+  return current;
+}
+
 type NotificationOwner =
   | 'immediate'
   | 'shift'
@@ -329,6 +349,7 @@ function shiftCloseAt(key: string, start: string, end: string) {
 
 export async function syncShiftNotifications(settings: ScheduleSettings) {
   if (!isNative()) return;
+  return queueOwnerSchedule('shift', async () => {
 
   await cancelOwner('shift');
   const preferences = resolveNotificationPreferences(
@@ -459,6 +480,7 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
   } catch (error) {
     console.error('[NOTIFICATIONS] Falha ao agendar expediente:', error);
   }
+  });
 }
 
 export async function syncOpenRouteReminderNotifications(
@@ -466,6 +488,7 @@ export async function syncOpenRouteReminderNotifications(
   settings: ScheduleSettings,
 ) {
   if (!isNative()) return;
+  return queueOwnerSchedule('route-reminder', async () => {
 
   await cancelOwner('route-reminder');
   if (
@@ -528,6 +551,7 @@ export async function syncOpenRouteReminderNotifications(
   } catch (error) {
     console.error('[NOTIFICATIONS] Falha no lembrete de rota:', error);
   }
+  });
 }
 
 export const notifyNewSiteOrder = (
@@ -539,12 +563,12 @@ export const notifyNewSiteOrder = (
     `site-order:${deliveryId}`,
     'Novo pedido do site',
     customerName?.trim()
-      ? `${customerName.trim()} enviou um novo pedido. Confira e confirme antes de lançar na operação.`
-      : 'Chegou um novo pedido pelo site. Confira e confirme antes de lançar na operação.',
+      ? `${customerName.trim()} enviou um pedido. Confira na Caixa de Entrada e organize a rota após a aprovação.`
+      : 'Chegou um pedido do Site. Confira na Caixa de Entrada.',
     {
       cooldownMs: 30 * 60_000,
       extra: {
-        href: '/loja?site=pending',
+        href: `/loja/caixa-de-entrada?aba=site&pedido=${encodeURIComponent(deliveryId)}`,
       },
       preferences,
       preferenceKey: 'siteOrderNew',
