@@ -10,5 +10,5 @@ assert(shop.includes('normalizeTypedPurchaseQuantity'), 'Unidade comercial norma
 assert(picker.includes('rankStockProducts(products, query)'), 'Busca unificada com estoque');
 assert(picker.includes('preferredRank'), 'Histórico por fornecedor preservado');
 assert(search.includes('normalizeStockSearch'), 'Busca sem acentos preservada');
-for(const key of ['Zerados','Reposições sugeridas','Compras abertas']) assert(stock.includes(key),`Painel: ${key}`);
+for(const key of ['Zerados','Comprar','compras abertas']) assert(stock.includes(key),`Painel: ${key}`);
 console.log('V89.3: 12 contratos de UX/compra/integração aprovados');

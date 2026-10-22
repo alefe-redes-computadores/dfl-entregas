@@ -180,20 +180,12 @@ export default function DeliveriesPage() {
 
           return { delivery, route, customer, incomplete, haystack, mode, logistics, sortAt: new Date(deliveryDate(delivery)).getTime() };
         })
-        .filter(({ delivery, incomplete, haystack, mode }) => {
-          const matchesStatus =
-            status === 'todas' ||
-            (status === 'pendentes' && !delivery.completed && !isCancelledSiteDelivery(delivery)) ||
-            (status === 'concluidas' && delivery.completed) ||
-            (status === 'incompletas' && incomplete && !isCancelledSiteDelivery(delivery)) ||
-            (status === 'canceladas' && isCancelledSiteDelivery(delivery));
-
-          const matchesOrigin = origin === 'todas' || delivery.origin === origin;
-          const matchesFulfillment = fulfillment === 'todas' || mode === fulfillment;
-          const matchesQuery = !normalizedQuery || haystack.includes(normalizedQuery);
-
-          return matchesStatus && matchesOrigin && matchesFulfillment && matchesQuery;
-        })
+        // Origem, modalidade e estado já foram resolvidos antes do map.
+        // Aqui resta somente o critério que depende dos dados enriquecidos.
+        .filter(({ incomplete, haystack }) =>
+          (status !== 'incompletas' || incomplete) &&
+          (!normalizedQuery || haystack.includes(normalizedQuery)),
+        )
         .sort(
           (a, b) =>
             a.sortAt - b.sortAt,

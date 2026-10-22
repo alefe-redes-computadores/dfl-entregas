@@ -34,7 +34,7 @@ ok(
   'conclusão de rota é alcançável e checkpoint vazio não é gravado',
 );
 ok(
-  watcher.includes("where('updated_at','>',mountedAt)") &&
+  watcher.includes("where('updated_at', '>', mountedAt)") &&
     !watcher.includes('setInterval') &&
     notifications.includes('notificationsInFlight.has(key)') &&
     notifications.includes('persistentLastSent(key)'),

@@ -36,6 +36,7 @@ import {
 } from '@/lib/stock-shopping';
 import { humanPurchasePlan } from '@/lib/stock-commercial-display-v2';
 import { invalidStockPurchaseSelections, validateStockPurchaseQuantity } from '@/lib/stock-purchase-draft';
+import { compactStockPurchaseDraft, parseStockPurchaseDraft, STOCK_PURCHASE_DRAFT_KEY } from '@/lib/stock-purchase-session';
 import { guardedStockRecommendation } from '@/lib/stock-recommendation-guard';
 import { formatCommercialPlan, isDiscretePurchaseUnit,
   normalizeTypedPurchaseQuantity,
@@ -203,6 +204,45 @@ export default function ShoppingList() {
   const [busy, setBusy] = useState(false);
   const purchaseSubmitLock = useRef(false);
   const initializedSuggestions = useRef(new Set<string>());
+  const draftRestored = useRef(false);
+
+  useEffect(() => {
+    if (draftRestored.current || !products.length) return;
+    draftRestored.current = true;
+    const stored = parseStockPurchaseDraft(localStorage.getItem(STOCK_PURCHASE_DRAFT_KEY));
+    if (!stored) return;
+    const restored = compactStockPurchaseDraft(stored, new Set(products.map((item) => item.id)));
+    if (!Object.keys(restored.selected).length) return;
+    // A recuperação é autoridade nesta sessão: não reative automaticamente
+    // uma sugestão que o operador já havia desmarcado antes de sair.
+    products.forEach((item) => initializedSuggestions.current.add(item.id));
+    setSelected(restored.selected);
+    setQuantities(restored.quantities);
+    setPresentationIds(restored.presentationIds);
+    setShowAll(true);
+    toast.info('Compra em andamento recuperada.', {
+      description: 'Itens, quantidades e embalagens foram preservados.',
+    });
+  }, [products]);
+
+  useEffect(() => {
+    if (!draftRestored.current || busy) return;
+    const timer = window.setTimeout(() => {
+      const hasSelection = Object.values(selected).some(Boolean);
+      if (!hasSelection) {
+        localStorage.removeItem(STOCK_PURCHASE_DRAFT_KEY);
+        return;
+      }
+      localStorage.setItem(STOCK_PURCHASE_DRAFT_KEY, JSON.stringify({
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        selected,
+        quantities,
+        presentationIds,
+      }));
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [busy, presentationIds, quantities, selected]);
 
   /*
    * O store hidrata depois da primeira renderização em alguns aparelhos.
@@ -321,6 +361,8 @@ export default function ShoppingList() {
       };
 
       await addStockSupply(supply);
+
+      localStorage.removeItem(STOCK_PURCHASE_DRAFT_KEY);
 
       toast.success('Compra montada.');
 
@@ -688,6 +730,7 @@ export default function ShoppingList() {
 
       <a href="#dfl-purchase-review" className="mb-2 mt-5 flex min-h-10 items-center justify-center rounded-xl border border-zinc-800 text-[11px] font-bold text-zinc-400">Voltar à busca e revisão</a>
       <button
+        type="button"
         onClick={create}
         disabled={busy || !selectedProducts.length}
         className="sticky bottom-[calc(var(--dfl-safe-bottom)+12px)] z-20 mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-amber-300/40 bg-amber-500 font-black text-zinc-950 shadow-[0_8px_35px_rgba(0,0,0,.45)] disabled:opacity-40"

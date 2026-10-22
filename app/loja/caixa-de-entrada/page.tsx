@@ -125,9 +125,7 @@ export default function DeliveryInboxPage() {
 
     try {
       if (Capacitor.isNativePlatform()) {
-        await Haptics.impact({
-          style: ImpactStyle.Medium,
-        });
+        void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
       }
 
       const parsedBase = parseIfoodOrdersText(raw, {
@@ -169,9 +167,7 @@ export default function DeliveryInboxPage() {
       setText("");
 
       if (Capacitor.isNativePlatform()) {
-        await Haptics.impact({
-          style: ImpactStyle.Heavy,
-        });
+        void Haptics.impact({ style: ImpactStyle.Heavy }).catch(() => undefined);
       }
 
       const needsReview = unique.filter(
@@ -206,9 +202,7 @@ export default function DeliveryInboxPage() {
       setText(value);
 
       if (Capacitor.isNativePlatform()) {
-        await Haptics.impact({
-          style: ImpactStyle.Light,
-        });
+        void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined);
       }
 
       toast.success(

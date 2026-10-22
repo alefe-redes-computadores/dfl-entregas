@@ -19,11 +19,11 @@ check('worker alerta recuperação incompleta',()=>assert.match(api,/statusRecov
 check('worker revisa erro em reconciliação',()=>assert.match(api,/!reconciliation\?\.ok/));
 check('worker revisa atraso do relay',()=>assert.match(api,/statusRecoveryEventIds\.length > 0 && !statusRecoveryRelayOk/));
 check('worker revisa checkpoint com falha',()=>assert.match(api,/statusRecoveryCheckpoint !== null && !statusRecoveryCheckpoint\.ok/));
-check('watcher consulta badge sem nova leitura Firestore',()=>assert.match(watcher,/readUnreadSiteOrderIds\(\)\.includes\(id\)/));
-check('watcher mantém badge antes do push',()=>assert.match(watcher,/markUnreadSiteOrders\(\[id\]\);if\(alreadyUnread\)continue/));
-check('watcher mantém filtro estreito e sem polling',()=>{assert.match(watcher,/where\('updated_at','>',mountedAt\)/);assert.doesNotMatch(watcher,/setInterval/);});
-check('watcher mantém identificação por pedido',()=>assert.match(watcher,/const delivery=change\.doc\.data\(\) as Delivery,id=delivery\.id\|\|change\.doc\.id/));
-check('watcher mantém proteção de fonte e status',()=>assert.match(watcher,/delivery\.source_system!=='dfl_site'/));
+check('watcher consulta badge uma vez por lote sem nova leitura Firestore',()=>assert.match(watcher,/new Set\(readUnreadSiteOrderIds\(\)\)/));
+check('watcher mantém badge agrupado antes do push',()=>{assert.match(watcher,/markUnreadSiteOrders\(newUnreadIds\)/);assert.ok(watcher.indexOf('markUnreadSiteOrders(newUnreadIds)')<watcher.indexOf('void notifyNewSiteOrder('));});
+check('watcher mantém filtro estreito e sem polling',()=>{assert.match(watcher,/where\('updated_at', '>', mountedAt\)/);assert.doesNotMatch(watcher,/setInterval/);});
+check('watcher mantém identificação por pedido',()=>{assert.match(watcher,/const delivery = change\.doc\.data\(\) as Delivery/);assert.match(watcher,/const id = delivery\.id \|\| change\.doc\.id/);});
+check('watcher mantém proteção de fonte e status',()=>assert.match(watcher,/delivery\.source_system !== 'dfl_site'/));
 check('watcher não altera gravação de entregas',()=>assert.doesNotMatch(watcher,/setDoc|updateDoc|deleteDoc/));
 check('180-190 verificadores anteriores preservados',()=>assert.match(pre,/verify-v111-r54-operational-integrity\.cjs/));
 check('R55 estrutural registrado',()=>assert.match(pre,/verify-v111-r55-site-reliability\.cjs/));
