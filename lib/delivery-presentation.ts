@@ -1,9 +1,10 @@
 import type { Delivery } from '@/types';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 
-export type DeliveryChannel = 'ifood' | 'site' | 'store';
+export type DeliveryChannel = 'ifood' | 'food99' | 'site' | 'store';
 export function deliveryChannel(delivery: Pick<Delivery, 'origin' | 'source_system'>): DeliveryChannel {
   if (delivery.source_system === 'dfl_site') return 'site';
+  if (delivery.origin === 'food99') return 'food99';
   if (delivery.origin === 'ifood' || !delivery.origin) return 'ifood';
   return 'store';
 }
@@ -16,7 +17,7 @@ export function deliveryOrderNumber(delivery: Pick<Delivery, 'source_system' | '
   }
   return delivery.order_id?.trim() || externalId;
 }
-export function deliveryChannelLabel(delivery: Pick<Delivery, 'origin' | 'source_system'>) { const channel = deliveryChannel(delivery); return channel === 'site' ? 'Pedido do Site' : channel === 'ifood' ? 'Pedido iFood' : 'Pedido da loja'; }
+export function deliveryChannelLabel(delivery: Pick<Delivery, 'origin' | 'source_system'>) { const channel = deliveryChannel(delivery); return channel === 'site' ? 'Pedido do Site' : channel === 'ifood' ? 'Pedido iFood' : channel === 'food99' ? 'Pedido 99Food' : 'Pedido da loja'; }
 export function formatBrazilianPhone(value?: string) { let digits = String(value || '').replace(/\D/g, ''); if (digits.startsWith('55') && digits.length > 11) digits = digits.slice(2); if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`; if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`; return value?.trim() || ''; }
 export function operationalAddressLabel(value?: string, neighborhood?: string) {
   return canonicalizeOperationalAddress(value, neighborhood).address || String(value || '').trim();

@@ -16,6 +16,7 @@ import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomple
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrdersText } from '@/lib/ifood-order-parser';
+import { normalizeFood99Order } from '@/lib/food99-order';
 import { assessIfoodParseQuality, buildIfoodParseGuide, buildIfoodRecognitionSummary } from '@/lib/ifood-parser-quality';
 import { loadInboxDay, markInboxDraft } from '@/lib/delivery-inbox';
 import { geocodeAddress } from '@/lib/store-geocoding';
@@ -134,6 +135,8 @@ const [routeId, setRouteId] = useState('');
   const [extraIfoodOrders, setExtraIfoodOrders] = useState<ExtraIfoodOrderDraft[]>([]);
   const [activeDraftId, setActiveDraftId] = useState('primary');
   const activeExtra = origin === 'ifood' ? extraIfoodOrders.find((draft) => draft.id === activeDraftId) : undefined;
+  const isMarketplace = origin === 'ifood' || origin === 'food99';
+  const isFood99 = origin === 'food99';
   const updateActiveExtra = (patch: Partial<ExtraIfoodOrderDraft>) =>
     setExtraIfoodOrders((current) => current.map((draft) => draft.id === activeDraftId ? {...draft, ...patch} : draft));
   const activeOrderId = activeExtra?.orderId ?? orderId;
@@ -205,7 +208,21 @@ const [routeId, setRouteId] = useState('');
     setMagicText(draft.rawText);
     setIsParserOpen(true);    inboxParsedRef.current = draft.parsed;
 
-    setOrigin(draft.source === 'ifood' ? 'ifood' : 'loja');
+    const draftOrigin: OrderOrigin = draft.source === 'ifood' ? 'ifood' : draft.source === 'food99' ? 'food99' : 'loja';
+    setOrigin(draftOrigin);
+    if (draftOrigin === 'food99') {
+      setFulfillmentMode('external_delivery');
+      setOrderId(draft.parsed.orderId);
+      setCustomerName(draft.parsed.customerName);
+      setPhone(formatPhoneInput(draft.parsed.phone));
+      setStreetAddress(draft.parsed.address);
+      setMapsLink(draft.parsed.mapsLink);
+      setValue(formatCurrencyInput((draft.parsed.customerCharge || draft.parsed.value).replace(/\D/g, '')));
+      if (draft.parsed.paymentMethod) setPaymentMethod(draft.parsed.paymentMethod);
+      setIsPaid(draft.parsed.isPaid);
+      setDrinks(draft.parsed.drinks.join(', '));
+      setObservation(draft.parsed.observations.join(' - '));
+    }
 
     toast.info('Rascunho carregado da Caixa de Entrada', {
       description:
@@ -321,12 +338,13 @@ const [routeId, setRouteId] = useState('');
     setActiveDraftId('primary');
     if (!magicText.trim()) { toast.error('Cole o texto do pedido antes de processar.'); return; }
     if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
-    const parsedOrders = inboxParsedRef.current
+    const parsedOrdersBase = inboxParsedRef.current
       ? [inboxParsedRef.current]
       : parseIfoodOrdersText(magicText,{
       knownNeighborhoods,
       knownCustomerNames:customers.map(customer=>customer.name),
     });
+    const parsedOrders = isFood99 ? parsedOrdersBase.map((item)=>normalizeFood99Order(magicText,item)) : parsedOrdersBase;
     inboxParsedRef.current = null; const parsed=parsedOrders[0]; const identified:string[]=[];
     if(parsed.orderId){setOrderId(parsed.orderId);identified.push(`Nº #${parsed.orderId}`)}
     if(parsed.ifoodId){setIfoodId(parsed.ifoodId);identified.push(`ID ${parsed.ifoodId}`)}
@@ -360,7 +378,9 @@ const [routeId, setRouteId] = useState('');
     if(parsedOrders.length>1){setExtraIfoodOrders(parsedOrders.slice(1).map((item,index)=>({id:`extra-${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,orderId:item.orderId,ifoodId:item.ifoodId,confirmationCode:item.confirmationCode,customerName:item.customerName||parsed.customerName,customerCharge:item.customerCharge||item.value||'',subsidy:item.subsidy,paymentMethod:item.paymentMethod||'dinheiro',isPaid:item.isPaid,changeFor:item.changeFor?formatCurrencyInput(item.changeFor.replace(/\D/g,'')):'',address:item.address||parsed.address,phone:item.phone||'',mapsLink:item.mapsLink||'',drinks:item.drinks.join(', '),observation:item.observations.join(' - '),notifyWhatsapp:false})));identified.push(`${parsedOrders.length} pedidos reconhecidos`)}else setExtraIfoodOrders([]);
     if(!identified.length){toast.error('Nenhum dado reconhecido no texto.');return}
     if(Capacitor.isNativePlatform())void Haptics.impact({style:ImpactStyle.Heavy}).catch(()=>undefined);
-    const parseQuality=assessIfoodParseQuality(parsedOrders);
+    const parseQuality=isFood99
+      ? (()=>{const issues=parsedOrders.map((item,index)=>({index,fields:[!/^\d{6}$/.test(item.orderId)?'pedido 99Food':'',!item.customerName?'cliente':''].filter(Boolean)})).filter(item=>item.fields.length>0);return {complete:parsedOrders.length-issues.length,review:issues.length,issues};})()
+      : assessIfoodParseQuality(parsedOrders);
     const qualitySummary=parseQuality.review>0
       ? `${parseQuality.complete} prontos · ${parseQuality.review} para revisar`
       : `${parseQuality.complete} ${parseQuality.complete===1?'pedido reconhecido':'pedidos reconhecidos'} · tudo certo`;
@@ -439,6 +459,7 @@ const [routeId, setRouteId] = useState('');
     e.preventDefault();
     if(isSyncing){toast.info('Aguarde a atualização dos clientes terminar.',{description:'Isso evita criar um cadastro duplicado enquanto a base ainda está carregando.'});return}
     if(!value||(fulfillmentMode==='delivery'&&(!routeId||!streetAddress))){toast.error(fulfillmentMode==='delivery'?'Preencha os campos obrigatórios (Rota, Valor e Rua)':'Informe o valor do pedido');return}
+    if(origin==='food99'&&!/^\d{6}$/.test(orderId)){toast.error('Informe o número de 6 dígitos do pedido 99Food.');return}
     if(fulfillmentMode==='delivery'&&!openRoutes.some(route=>route.id===routeId)){toast.error('Selecione uma rota aberta da operação de hoje.');return}
     const drafts=origin==='ifood'?[{id:'primary',orderId,ifoodId,confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:'',paymentMethod,isPaid,changeFor,address:streetAddress,phone,mapsLink,drinks,observation,notifyWhatsapp},...extraIfoodOrders]:[];
     if (origin === 'ifood') {
@@ -508,8 +529,9 @@ const [routeId, setRouteId] = useState('');
         }
         await addDeliveries(deliveriesToCreate);toast.success(drafts.length>1?`${drafts.length} pedidos cadastrados nos endereços conferidos.`:'Entrega cadastrada com sucesso!');
       }else{
-        let customerId='';if(customerName.trim())customerId=await findOrCreateCustomer(customerName,{address:fulfillmentMode==='delivery'?cleanStreet:undefined,phone:rawPhone||undefined,mapsLink:fulfillmentMode==='delivery'?resolvedMapsLink:undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});
-        const cleanValue=parseMoney(value);await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,stop_group_id:stopGroupId,origin,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue,customer_charge:cleanValue,is_paid:isPaid,is_urgent:isUrgent,payment_method:paymentMethod,payment_state:paymentStateForInput(paymentMethod,isPaid),change_for:changeFor?parseMoney(changeFor):undefined,address_string:fulfillmentMode==='delivery'?cleanStreet:'',maps_link:fulfillmentMode==='delivery'?resolvedMapsLink:'',phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success(stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+        const customerAddress=fulfillmentMode==='delivery'?cleanStreet:streetAddress.trim();
+        let customerId='';if(customerName.trim())customerId=await findOrCreateCustomer(customerName,{address:customerAddress||undefined,phone:rawPhone||undefined,mapsLink:mapsLink.trim()||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});
+        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:origin==='food99'?'food99':'dfl',stop_group_id:stopGroupId,origin,order_id:origin==='food99'?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:paymentMethod,payment_state:paymentStateForInput(paymentMethod,isPaid),change_for:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success(origin==='food99'?'Pedido 99Food cadastrado sem criar rota DFL.':stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
       }
       if (inboxDraftId && inboxDay) {
         markInboxDraft(inboxDay, inboxDraftId, 'launched');
@@ -555,17 +577,17 @@ const [routeId, setRouteId] = useState('');
       {/* MODALIDADE OPERACIONAL — compacta */}
       <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/40 p-3">
         <div className="flex items-center justify-between gap-3">
-          <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">01 · Modalidade</p><p className="mt-1 text-sm font-black text-zinc-200">{fulfillmentMode==='delivery'?'Entrega':fulfillmentMode==='pickup'?'Retirada na loja':'Balcão / presencial'}</p></div>
-          <button type="button" onClick={()=>setFulfillmentOptionsOpen(v=>!v)} className="flex h-10 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-[11px] font-black text-zinc-400">Alterar <ChevronDown size={14} className={fulfillmentOptionsOpen?'rotate-180':''}/></button>
+          <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">01 · Modalidade</p><p className="mt-1 text-sm font-black text-zinc-200">{fulfillmentMode==='delivery'?'Entrega':fulfillmentMode==='external_delivery'?'Entrega pela plataforma':fulfillmentMode==='pickup'?'Retirada na loja':'Balcão / presencial'}</p>{isFood99&&<p className="mt-1 text-[10px] text-amber-300">A 99 entrega: não cria rota nem acerto de motoboy.</p>}</div>
+          {!isFood99&&<button type="button" onClick={()=>setFulfillmentOptionsOpen(v=>!v)} className="flex h-10 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-[11px] font-black text-zinc-400">Alterar <ChevronDown size={14} className={fulfillmentOptionsOpen?'rotate-180':''}/></button>}
         </div>
         {fulfillmentOptionsOpen&&(<div className="mt-3 grid grid-cols-3 gap-2">{([['delivery','Entrega',Bike],['pickup','Retirada',ShoppingBag],['counter','Balcão',Store]] as const).map(([mode,label,Icon])=><button key={mode} type="button" onClick={()=>{setFulfillmentMode(mode);setFulfillmentOptionsOpen(false);setIsRouteDropdownOpen(false)}} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl border px-2 text-[10px] font-black ${fulfillmentMode===mode?'border-amber-500/45 bg-amber-500/10 text-amber-400':'border-zinc-800 bg-zinc-950/30 text-zinc-500'}`}><Icon size={16}/>{label}</button>)}</div>)}
       </section>
 
-      {/* SELETOR DE ORIGEM (iFood vs Loja Própria) */}
+      {/* SELETOR DE ORIGEM COMERCIAL */}
       <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/40 p-3"><div className="mb-3 px-1"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">02 · Origem</p><p className="mt-1 text-sm font-black text-zinc-200">De onde veio o pedido?</p></div><div className="flex gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/45 p-1">
         <button
           type="button"
-          onClick={() => setOrigin('ifood')}
+          onClick={() => { setOrigin('ifood'); if (fulfillmentMode === 'external_delivery') setFulfillmentMode('delivery'); }}
           className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
           <Smartphone size={18} /> iFood
@@ -573,7 +595,22 @@ const [routeId, setRouteId] = useState('');
         <button
           type="button"
           onClick={() => {
+            setOrigin('food99');
+            setFulfillmentMode('external_delivery');
+            setRouteId('');
+            setIfoodId('');
+            setConfirmationCode('');
+            setExtraIfoodOrders([]);
+          }}
+          className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'food99' ? 'bg-amber-400 text-zinc-950 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
+        >
+          <ShoppingBag size={18} /> 99Food
+        </button>
+        <button
+          type="button"
+          onClick={() => {
             setOrigin('loja');
+            if (fulfillmentMode === 'external_delivery') setFulfillmentMode('delivery');
             setOrderId('');
             setIfoodId('');
             setConfirmationCode('');
@@ -586,21 +623,21 @@ const [routeId, setRouteId] = useState('');
       </div></section>
 
       {/* CAIXA DE TEXTO DO PARSER (APENAS QUANDO FOR IFOOD) */}
-      {origin === 'ifood' && !isParserOpen && (
+      {isMarketplace && !isParserOpen && (
         <button
           type="button"
           onClick={() => setIsParserOpen(true)}
           className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/5 text-xs font-bold text-red-400 active:scale-[0.98]"
         >
-          <Sparkles size={15} /> Colar outro pedido do iFood
+          <Sparkles size={15} /> Colar outro pedido do {isFood99 ? '99Food' : 'iFood'}
         </button>
       )}
 
-      {origin === 'ifood' && isParserOpen && (
+      {isMarketplace && isParserOpen && (
         <div className="flex flex-col gap-3 rounded-[26px] border border-red-500/20 bg-gradient-to-b from-red-500/10 to-zinc-900/40 p-4 animate-in fade-in">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">
-              <Sparkles size={14} className="text-amber-400" /> Leitor inteligente do iFood
+              <Sparkles size={14} className="text-amber-400" /> Leitor inteligente do {isFood99 ? '99Food' : 'iFood'}
             </span>
             <button
               type="button"
@@ -822,6 +859,17 @@ const [routeId, setRouteId] = useState('');
           </section>
         )}
 
+        {origin === 'food99' && (
+          <section className="rounded-[24px] border border-amber-400/25 bg-amber-400/[.055] p-4 animate-in fade-in">
+            <div className="mb-3"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-300">04 · Identificador 99Food</p><p className="mt-1 text-[11px] text-zinc-500">Somente o número comercial de seis dígitos. Não existe código iFood.</p></div>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-bold text-amber-200">Nº do pedido*</span>
+              <input type="text" inputMode="numeric" placeholder="Ex: 123456" maxLength={6} value={orderId} onChange={(event)=>setOrderId(event.target.value.replace(/\D/g,'').slice(0,6))} className={`h-12 rounded-xl border-2 bg-zinc-900/80 px-3 text-base font-black tracking-wider text-zinc-50 outline-none ${orderId.length===6?'border-emerald-500/50':'border-amber-400/45 focus:border-amber-300'}`} required />
+            </label>
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/15 bg-zinc-950/40 p-3 text-[10px] leading-relaxed text-zinc-400"><ShoppingBag size={15} className="mt-0.5 shrink-0 text-amber-300"/><span>Venda e cliente entram nos relatórios. Logística, parada e produtividade ficam atribuídas à <strong className="text-amber-200">99Food</strong>, não ao motoboy DFL.</span></div>
+          </section>
+        )}
+
         {/* CLIENTE E WHATSAPP */}
         <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">05 · Cliente</p><p className="mt-1 text-sm font-black text-zinc-200">Contato e identificação</p></div>
@@ -940,7 +988,7 @@ const [routeId, setRouteId] = useState('');
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-zinc-300">{origin==='ifood'&&activeHasSubsidy?'Cliente paga (R$)*':'Valor (R$)*'}</label>
+              <label className="text-xs font-bold text-zinc-300">{isMarketplace&&activeHasSubsidy?'Cliente paga (R$)*':'Valor (R$)*'}</label>
               <input
                 type="text"
                 inputMode="numeric"
@@ -964,11 +1012,11 @@ const [routeId, setRouteId] = useState('');
             </div>
           </div>
 
-          {origin==='ifood'&&(<div className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3"><button type="button" onClick={()=>{activeExtra ? updateActiveExtra({subsidy:activeHasSubsidy?'':'0,00'}) : (setHasIfoodSubsidy(v=>!v), activeHasSubsidy && setIfoodSubsidy(''))}} className="flex w-full items-center justify-between gap-3 text-left"><span className="flex items-center gap-2"><TicketPercent size={15} className={activeHasSubsidy?'text-emerald-400':'text-zinc-600'}/><span><strong className="block text-[11px] text-zinc-300">Cupom / subsídio do iFood</strong><span className="text-[9px] text-zinc-600">O motoboy cobra somente o valor do cliente.</span></span></span><span className={`rounded-full px-2 py-1 text-[9px] font-black ${activeHasSubsidy?'bg-emerald-500/10 text-emerald-400':'bg-zinc-800 text-zinc-500'}`}>{activeHasSubsidy?'Ativo':'Adicionar'}</span></button>{activeHasSubsidy&&(
+          {isMarketplace&&(<div className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3"><button type="button" onClick={()=>{activeExtra ? updateActiveExtra({subsidy:activeHasSubsidy?'':'0,00'}) : (setHasIfoodSubsidy(v=>!v), activeHasSubsidy && setIfoodSubsidy(''))}} className="flex w-full items-center justify-between gap-3 text-left"><span className="flex items-center gap-2"><TicketPercent size={15} className={activeHasSubsidy?'text-emerald-400':'text-zinc-600'}/><span><strong className="block text-[11px] text-zinc-300">Cupom / subsídio do {isFood99?'99Food':'iFood'}</strong><span className="text-[9px] text-zinc-600">Registra o valor coberto pela plataforma sem alterar a cobrança do cliente.</span></span></span><span className={`rounded-full px-2 py-1 text-[9px] font-black ${activeHasSubsidy?'bg-emerald-500/10 text-emerald-400':'bg-zinc-800 text-zinc-500'}`}>{activeHasSubsidy?'Ativo':'Adicionar'}</span></button>{activeHasSubsidy&&(
             <div className="mt-3 grid grid-cols-2 items-stretch gap-2">
               <label className="flex min-w-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900/45 p-2.5">
                 <span className="text-[9px] font-black uppercase tracking-wide text-zinc-500">
-                  iFood cobre
+                  {isFood99?'99Food':'iFood'} cobre
                 </span>
                 <input
                   type="text"

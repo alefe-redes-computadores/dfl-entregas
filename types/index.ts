@@ -5,9 +5,10 @@ export type DeliveryPaymentState =
   | 'collect_on_delivery'
   | 'pending';
 export type RouteStatus = 'aberta' | 'fechada';
-export type OrderOrigin = 'ifood' | 'loja';
+export type OrderOrigin = 'ifood' | 'food99' | 'loja';
 export type IntegrationSourceSystem = 'dfl_site' | 'dfl_entregas';
-export type FulfillmentMode = 'delivery' | 'pickup' | 'counter';
+export type FulfillmentMode = 'delivery' | 'external_delivery' | 'pickup' | 'counter';
+export type LogisticsProvider = 'dfl' | 'ifood' | 'food99' | 'customer';
 export type PaymentRuleType = 'fixed' | 'per_delivery' | 'fixed_plus_variable';
 export type MotoboyType = 'fixo' | 'avulso';
 export type FuelType = 'gasolina_comum' | 'gasolina_aditivada' | 'etanol' | 'diesel' | 'outro';
@@ -324,6 +325,8 @@ export interface Delivery {
   id: string;
   route_id: string;
   fulfillment_mode?: FulfillmentMode; // legado sem campo = delivery
+  /** Responsável físico pela entrega. Ausente em registros legados = DFL. */
+  logistics_provider?: LogisticsProvider;
   /** Prontidão real da retirada; não equivale à conclusão. */
   pickup_ready_at?: string | null;
   stop_group_id?: string;

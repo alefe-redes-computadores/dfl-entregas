@@ -3,6 +3,7 @@ import type { Delivery, FulfillmentMode } from '@/types';
 
 export const FULFILLMENT_LABELS: Record<FulfillmentMode, string> = {
   delivery: 'Entrega',
+  external_delivery: 'Entrega pela plataforma',
   pickup: 'Retirada',
   counter: 'Balcão / Presencial',
 };
@@ -19,6 +20,12 @@ export function isDeliveryFulfillment(
   return getFulfillmentMode(delivery) === 'delivery';
 }
 
+export function isExternalDeliveryFulfillment(
+  delivery: Pick<Delivery, 'fulfillment_mode'>,
+): boolean {
+  return getFulfillmentMode(delivery) === 'external_delivery';
+}
+
 export function fulfillmentLabel(
   delivery: Pick<Delivery, 'fulfillment_mode'>,
 ): string {
@@ -32,6 +39,7 @@ export function fulfillmentOperationalLabel(
 
   if (mode === 'pickup') return 'Retirada na loja';
   if (mode === 'counter') return 'Atendimento presencial / balcão';
+  if (mode === 'external_delivery') return 'Entrega realizada pela plataforma';
 
   return 'Entrega em rota';
 }

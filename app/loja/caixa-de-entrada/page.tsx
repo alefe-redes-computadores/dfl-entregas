@@ -26,6 +26,7 @@ import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 import { useAppStore } from "@/store/useAppStore";
 import { parseIfoodOrdersText } from "@/lib/ifood-order-parser";
+import { isFood99Text, normalizeFood99Order } from '@/lib/food99-order';
 import { knownOperationalNeighborhoods } from "@/lib/address-quality";
 import { dateKey } from "@/lib/operational-time";
 import {
@@ -40,6 +41,7 @@ import {
 
 const sourceMeta = {
   ifood: { label: "iFood", icon: ShoppingBag },
+  food99: { label: "99Food", icon: ShoppingBag },
   whatsapp: { label: "WhatsApp", icon: MessageCircle },
   texto: { label: "Texto", icon: FileText },
 };
@@ -128,10 +130,13 @@ export default function DeliveryInboxPage() {
         });
       }
 
-      const parsed = parseIfoodOrdersText(raw, {
+      const parsedBase = parseIfoodOrdersText(raw, {
         knownNeighborhoods: neighborhoods,
         knownCustomerNames,
       });
+      const parsed = isFood99Text(raw)
+        ? parsedBase.map((order) => normalizeFood99Order(raw, order))
+        : parsedBase;
 
       if (!parsed.length) {
         toast.error("Não consegui separar nenhum pedido.", {
@@ -320,7 +325,7 @@ export default function DeliveryInboxPage() {
       <div className="mx-auto max-w-2xl space-y-4 p-3.5">
         <nav aria-label="Fontes da Caixa de Entrada" className="grid grid-cols-2 gap-2">
           <button type="button" onClick={()=>setChannel('site')} aria-pressed={channel==='site'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='site'?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}>Site · automático</button>
-          <button type="button" onClick={()=>setChannel('manual')} aria-pressed={channel==='manual'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='manual'?'border-violet-500/40 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}>iFood / WhatsApp / Texto</button>
+          <button type="button" onClick={()=>setChannel('manual')} aria-pressed={channel==='manual'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='manual'?'border-violet-500/40 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}>iFood / 99Food / Texto</button>
         </nav>
         {channel==='site'?<SiteInboxPanel focusedId={focusedSiteOrder}/>:<div className="space-y-4">
         <section className="overflow-hidden rounded-[24px] border border-violet-500/20 bg-gradient-to-br from-violet-500/[.10] via-zinc-900/70 to-zinc-950 p-4">
@@ -334,7 +339,7 @@ export default function DeliveryInboxPage() {
                 Jogue os pedidos aqui
               </h2>
               <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
-                iFood, WhatsApp ou texto livre. Nada vira
+                iFood, 99Food, WhatsApp ou texto livre. Nada vira
                 entrega, cliente ou financeiro até você
                 confirmar o lançamento.
               </p>

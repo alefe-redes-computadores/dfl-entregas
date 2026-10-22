@@ -36,7 +36,7 @@ import type { FulfillmentMode } from '@/types';
 import { OPERATION_BATCH, OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 
 type StatusFilter = 'todas' | 'pendentes' | 'concluidas' | 'incompletas' | 'canceladas';
-type OriginFilter = 'todas' | 'ifood' | 'loja';
+type OriginFilter = 'todas' | 'ifood' | 'food99' | 'loja';
 type FulfillmentFilter = 'todas' | FulfillmentMode;
 
 const normalize = (value: unknown) =>
@@ -46,6 +46,13 @@ const normalize = (value: unknown) =>
     .toLowerCase();
 
 const fulfillmentMeta = (mode: FulfillmentMode) => {
+  if (mode === 'external_delivery') {
+    return {
+      Icon: ShoppingBag,
+      badge: 'border-amber-400/25 bg-amber-400/10 text-amber-300',
+      compact: 'Plataforma',
+    };
+  }
   if (mode === 'pickup') {
     return {
       Icon: ShoppingBag,
@@ -446,9 +453,9 @@ export default function DeliveriesPage() {
             <p className="mb-2 mt-3 text-[8px] font-black uppercase tracking-wider text-zinc-600">
               Origem
             </p>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-4 gap-1.5">
               {(
-                ['todas', 'ifood', 'loja'] as OriginFilter[]
+                ['todas', 'ifood', 'food99', 'loja'] as OriginFilter[]
               ).map((value) => (
                 <button
                   key={value}
@@ -465,6 +472,8 @@ export default function DeliveriesPage() {
                     ? 'Todas'
                     : value === 'ifood'
                       ? 'iFood'
+                      : value === 'food99'
+                        ? '99Food'
                       : 'Loja'}
                 </button>
               ))}
@@ -499,10 +508,12 @@ export default function DeliveriesPage() {
                   className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                     delivery.origin === 'ifood'
                       ? 'bg-red-500/10 text-red-400'
+                      : delivery.origin === 'food99'
+                        ? 'bg-amber-400/10 text-amber-300'
                       : 'bg-emerald-500/10 text-emerald-400'
                   }`}
                 >
-                  {delivery.origin === 'ifood' ? <Smartphone size={19} /> : <Store size={19} />}
+                  {delivery.origin === 'ifood' ? <Smartphone size={19} /> : delivery.origin === 'food99' ? <ShoppingBag size={19} /> : <Store size={19} />}
                 </div>
 
                 <div className="min-w-0 flex-1">

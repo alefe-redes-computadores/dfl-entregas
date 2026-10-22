@@ -60,6 +60,8 @@ export function deliveryFact(delivery: Delivery): CanonicalAnalyticsFact {
       externalOrderId,
       externalOrderSource: externalOrderId ? 'dfl_site' : null,
       fulfillmentMode: delivery.fulfillment_mode || null,
+      logisticsProvider: delivery.logistics_provider || 'dfl',
+      origin: delivery.origin || null,
       value:
         delivery.source_system === 'dfl_site'
           ? null

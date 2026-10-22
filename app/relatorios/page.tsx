@@ -6,6 +6,7 @@ import {
   Activity,
   Banknote,
   BarChart3,
+  Bike,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
@@ -328,7 +329,7 @@ export default function RelatoriosPage() {
                 accentColor="emerald"
               />
               <SummaryCard
-                title="Subsídio iFood"
+                title="Subsídios de plataforma"
                 value={money(model.metrics.totalIfoodSubsidy)}
                 subtitle="Parcela econômica registrada como subsídio"
                 icon={<Store size={20} />}
@@ -351,7 +352,7 @@ export default function RelatoriosPage() {
 
             <ReportChartCard
               title="Valor econômico diário"
-              description="Soma o valor econômico dos pedidos. Cobrança do cliente e subsídio iFood permanecem conceitos separados."
+              description="Soma o valor econômico dos pedidos. Cobrança do cliente e subsídios das plataformas permanecem conceitos separados."
               icon={<Banknote size={18} />}
               data={model.dailyRevenue}
               chartType="line"
@@ -421,6 +422,17 @@ export default function RelatoriosPage() {
                   subtitle: 'Pedidos que compõem esta origem no período.',
                 })
               }
+            />
+
+            <ReportChartCard
+              title="Responsável pela entrega"
+              description="Separa a logística feita pela DFL, pela 99Food e as retiradas ou atendimentos no balcão."
+              icon={<Bike size={18} />}
+              data={model.logisticsProviders}
+              dataKey="count"
+              valueLabel="Pedidos"
+              onExplore={() => setDrilldown({kind:'logistics',title:'Responsável pela entrega'})}
+              onSelectBucket={(bucket) => setDrilldown({kind:'logistics',key:bucket.key,title:bucket.label,subtitle:'Pedidos atendidos por este responsável logístico.'})}
             />
 
             <section className="mt-2 border-t border-zinc-800/70 pt-5">

@@ -122,7 +122,7 @@ function DeliveryDetailsContent() {
   const mode = getFulfillmentMode(delivery);
   const logistics = isDeliveryFulfillment(delivery);
   const modeLabel = fulfillmentLabel(delivery);
-  const ModeIcon = mode === 'pickup' ? ShoppingBag : mode === 'counter' ? Store : Bike;
+  const ModeIcon = mode === 'pickup' || mode === 'external_delivery' ? ShoppingBag : mode === 'counter' ? Store : Bike;
 
   const mapsUrl = logistics ? operationalMapsUrl(delivery) : '';
 
@@ -268,7 +268,9 @@ function DeliveryDetailsContent() {
       setIsIfoodModalOpen(false);
       setInputCode('');
       toast.success(
-        mode === 'pickup'
+        mode === 'external_delivery'
+          ? 'Pedido 99Food concluído.'
+          : mode === 'pickup'
           ? 'Retirada concluída.'
           : mode === 'counter'
             ? 'Pedido de balcão concluído.'
@@ -396,12 +398,14 @@ function DeliveryDetailsContent() {
               className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
                 channel === 'ifood'
                   ? 'bg-red-500/15 text-red-400'
+                  : channel === 'food99'
+                    ? 'bg-amber-400/15 text-amber-300'
                   : channel === 'site'
                     ? 'bg-sky-500/15 text-sky-400'
                   : 'bg-emerald-500/15 text-emerald-400'
               }`}
             >
-              {channel === 'ifood' ? <Smartphone /> : channel === 'site' ? <Globe2 /> : <Store />}
+              {channel === 'ifood' ? <Smartphone /> : channel === 'food99' ? <ShoppingBag /> : channel === 'site' ? <Globe2 /> : <Store />}
             </div>
 
             <div className="min-w-0">
@@ -620,6 +624,8 @@ function DeliveryDetailsContent() {
               ? 'Desfazer baixa'
               : mode === 'pickup'
                 ? 'Concluir retirada'
+                : mode === 'external_delivery'
+                  ? 'Marcar pedido 99Food como concluído'
                 : mode === 'counter'
                   ? 'Concluir pedido'
                   : 'Concluir entrega'}

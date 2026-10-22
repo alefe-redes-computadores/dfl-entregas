@@ -537,14 +537,19 @@ const [routeId, setRouteId] = useState('');
         return;
       }
     }
+    if (origin === 'food99' && !/^\d{6}$/.test(orderId)) {
+      toast.error('O pedido 99Food precisa ter seis dígitos.');
+      return;
+    }
 
     setIsSaving(true);
     try {
       const customerCharge = parseFloat(value.replace(/\./g, '').replace(',', '.'));
-      const subsidy = origin === 'ifood' && hasIfoodSubsidy && ifoodSubsidy ? parseFloat(ifoodSubsidy.replace(/\./g, '').replace(',', '.')) : 0;
+      const subsidy = (origin === 'ifood' || origin === 'food99') && hasIfoodSubsidy && ifoodSubsidy ? parseFloat(ifoodSubsidy.replace(/\./g, '').replace(',', '.')) : 0;
       const cleanValue = Math.max(0, customerCharge) + Math.max(0, subsidy);
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
       const cleanStreet = fulfillmentMode === 'delivery' ? normalizeAddressText(streetAddress) : '';
+      const customerAddress = fulfillmentMode === 'delivery' ? cleanStreet : streetAddress.trim();
       const rawPhone = normalizeBrazilPhone(phone);
 
       let resolvedMapsLink = mapsLink.trim();
@@ -569,9 +574,9 @@ const [routeId, setRouteId] = useState('');
       let customerId: string | undefined = linkedCustomerId;
       if (customerName.trim()) {
         customerId = await findOrCreateCustomer(customerName, {
-          address: fulfillmentMode === 'delivery' ? cleanStreet : undefined,
+          address: customerAddress || undefined,
           phone: rawPhone || undefined,
-          mapsLink: fulfillmentMode === 'delivery' ? resolvedMapsLink : undefined,
+          mapsLink: mapsLink.trim() || resolvedMapsLink || undefined,
           confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
           observation,
           origin,
@@ -582,8 +587,9 @@ const [routeId, setRouteId] = useState('');
       await updateDelivery(deliveryId, {
         route_id: fulfillmentMode === 'delivery' ? routeId : '',
         fulfillment_mode: fulfillmentMode,
+        logistics_provider: origin === 'food99' ? 'food99' : 'dfl',
         origin,
-        order_id: origin === 'ifood' ? (orderId || undefined) : undefined,
+        order_id: origin === 'ifood' || origin === 'food99' ? (orderId || undefined) : undefined,
         ifood_id: origin === 'ifood' ? (ifoodId || undefined) : undefined,
         confirmation_code: origin === 'ifood' ? (confirmationCode || undefined) : undefined,
         // Nunca apaga um vínculo existente só porque o nome não foi resolvido.
@@ -597,8 +603,8 @@ const [routeId, setRouteId] = useState('');
         payment_method: paymentMethod,
         payment_state: paymentStateForInput(paymentMethod, isPaid),
         change_for: cleanChangeFor,
-        address_string: fulfillmentMode === 'delivery' ? cleanStreet : '',
-        maps_link: fulfillmentMode === 'delivery' ? resolvedMapsLink : '',
+        address_string: customerAddress,
+        maps_link: mapsLink.trim() || resolvedMapsLink,
         phone: rawPhone || undefined,
         notify_whatsapp: notifyWhatsapp,
         observation,
@@ -684,6 +690,7 @@ const [routeId, setRouteId] = useState('');
         >
           Voltar à ficha
         </button>
+        <button type="button" onClick={()=>{setOrigin('food99');setFulfillmentMode('external_delivery');setRouteId('');setIfoodId('');setConfirmationCode('');}} className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'food99' ? 'bg-amber-400 text-zinc-950 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}><ShoppingBag size={18}/>99Food</button>
       </section>
     );
   }
@@ -748,7 +755,7 @@ const [routeId, setRouteId] = useState('');
       <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/40 p-3"><div className="mb-3 px-1"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">02 · Origem</p><p className="mt-1 text-sm font-black text-zinc-200">Canal do pedido</p></div><div className="flex gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/45 p-1">
         <button
           type="button"
-          onClick={() => setOrigin('ifood')}
+          onClick={() => { setOrigin('ifood'); if (fulfillmentMode === 'external_delivery') setFulfillmentMode('delivery'); }}
           className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
           <Smartphone size={18} /> iFood
@@ -757,6 +764,7 @@ const [routeId, setRouteId] = useState('');
           type="button"
           onClick={() => {
             setOrigin('loja');
+            if (fulfillmentMode === 'external_delivery') setFulfillmentMode('delivery');
             setOrderId('');
             setIfoodId('');
             setConfirmationCode('');
@@ -979,6 +987,13 @@ const [routeId, setRouteId] = useState('');
               />
             </div>
           </div></section>
+        )}
+        {origin === 'food99' && (
+          <section className="rounded-[24px] border border-amber-400/25 bg-amber-400/[.055] p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-300">04 · Pedido 99Food</p>
+            <p className="mb-3 mt-1 text-[11px] text-zinc-500">Entrega externa: não participa de rota ou acerto DFL.</p>
+            <input type="text" inputMode="numeric" maxLength={6} value={orderId} onChange={event=>setOrderId(event.target.value.replace(/\D/g,'').slice(0,6))} placeholder="Número de 6 dígitos" className="h-12 w-full rounded-xl border-2 border-amber-400/40 bg-zinc-900/80 px-3 font-black tracking-wider text-zinc-50 outline-none focus:border-amber-300" />
+          </section>
         )}
 
         {/* CLIENTE E WHATSAPP */}

@@ -17,7 +17,7 @@ export function OriginChart({ data }: OriginChartProps) {
   if (!mounted || data.length === 0) return null;
 
   const formattedData = data.map(item => ({
-    name: item.origin === 'ifood' ? 'iFood' : 'Loja Própria',
+    name: item.origin === 'ifood' ? 'iFood' : item.origin === 'food99' ? '99Food' : 'Loja Própria',
     entregas: item.count,
     faturamento: item.total
   }));

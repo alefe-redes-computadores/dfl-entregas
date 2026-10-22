@@ -54,6 +54,7 @@ function money(value: unknown): number {
 function normalizeOrigin(delivery: Delivery): ReportDelivery['originLabel'] {
   const raw = (delivery as Delivery & { origin?: string }).origin;
   if (raw === 'ifood') return 'iFood';
+  if (raw === 'food99') return '99Food';
   if (raw === 'loja') return 'Loja';
   return 'Origem não registrada';
 }
@@ -68,6 +69,18 @@ function normalizePayment(delivery: Delivery): string {
     cartao_debito: 'Cartão de débito',
   };
   return raw ? (map[raw] ?? raw) : 'Não informado';
+}
+
+function normalizeLogisticsProvider(delivery: Delivery): string {
+  const mode = delivery.fulfillment_mode || 'delivery';
+  if (mode === 'external_delivery') {
+    if (delivery.logistics_provider === 'food99' || delivery.origin === 'food99') return '99Food';
+    if (delivery.logistics_provider === 'ifood') return 'iFood';
+    return 'Plataforma externa';
+  }
+  if (mode === 'pickup') return 'Retirada pelo cliente';
+  if (mode === 'counter') return 'Balcão / presencial';
+  return 'DFL Entregas';
 }
 
 function normalizeNeighborhood(customer: Customer | null): string | null {
@@ -598,6 +611,9 @@ export function buildReportModel(input: {
   const origins = aggregate(current, (delivery) => delivery.originLabel).sort(
     (a, b) => b.count - a.count,
   );
+  const logisticsProviders = aggregate(current, normalizeLogisticsProvider).sort(
+    (a, b) => b.count - a.count,
+  );
   const hours = aggregate(
     current,
     (delivery) =>
@@ -607,7 +623,11 @@ export function buildReportModel(input: {
 
   const weekdays = buildWeekdays(current, period);
 
-  const logisticsCurrent = current.filter((delivery) => isDeliveryFulfillment(delivery));
+  // Compatibilidade nominal: este conjunto alimenta os recortes comerciais
+  // de clientes. A logística DFL possui um recorte próprio logo abaixo.
+  const logisticsCurrent = current;
+  const dflLogisticsCurrent = current.filter((delivery) => isDeliveryFulfillment(delivery));
+  const dflLogisticsPrevious = previous.filter((delivery) => isDeliveryFulfillment(delivery));
 
   // O conjunto `normalized` já remove perfis internos antes de qualquer
   // agregação. Estes aliases deixam explícito que os recortes abaixo usam
@@ -617,7 +637,7 @@ export function buildReportModel(input: {
       delivery.exclude_customer_metrics !== true &&
       !isInternalOperationalCustomer(delivery.customer),
   );
-  const motoboyOperationalCurrent = logisticsCurrent;
+  const motoboyOperationalCurrent = dflLogisticsCurrent;
 
   const neighborhoods = aggregate(
     customerOperationalCurrent,
@@ -653,7 +673,9 @@ export function buildReportModel(input: {
     deliveries: current,
     previousDeliveries: previous,
     metrics: {
-      totalDeliveries: current.length,
+      // Entrega significa logística executada pela DFL. Pedidos entregues pela
+      // plataforma continuam em receita/origem/clientes, mas não inflam motoboy.
+      totalDeliveries: dflLogisticsCurrent.length,
       totalRevenue: Number(currentRevenue.toFixed(2)),
       totalCustomerCharge: Number(currentCustomerCharge.toFixed(2)),
       totalIfoodSubsidy: Number(currentIfoodSubsidy.toFixed(2)),
@@ -664,7 +686,7 @@ export function buildReportModel(input: {
       deliveryVariation:
         period.key === 'all'
           ? null
-          : variation(current.length, previous.length),
+          : variation(dflLogisticsCurrent.length, dflLogisticsPrevious.length),
       revenueVariation:
         period.key === 'all'
           ? null
@@ -677,6 +699,7 @@ export function buildReportModel(input: {
     dailyRevenue: daily,
     payments,
     origins,
+    logisticsProviders,
     hours,
     weekdays,
     neighborhoods,

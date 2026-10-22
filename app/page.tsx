@@ -220,6 +220,9 @@ export default function HomePage() {
         (order) =>
           getFulfillmentMode(order) === 'counter',
       ).length;
+    const platformCount = storeOrdersDoDia.filter(
+      (order) => getFulfillmentMode(order) === 'external_delivery',
+    ).length;
 
     const faturamentoTotal = ordersDoDia.reduce(
       (acc, order) => acc + (isCancelledSiteDelivery(order) ? 0 : deliveryEconomicValue(order)),
@@ -280,6 +283,7 @@ export default function HomePage() {
       storeOrdersDoDia,
       pickupCount,
       counterCount,
+      platformCount,
       faturamentoTotal,
       openRoutes,
       closedRoutes,
@@ -306,6 +310,7 @@ export default function HomePage() {
     storeOrdersDoDia,
     pickupCount,
     counterCount,
+    platformCount,
     faturamentoTotal,
     openRoutes,
     closedRoutes,
@@ -469,6 +474,7 @@ export default function HomePage() {
             <div className="flex items-center gap-2 text-[10px] font-black">
               {pickupCount > 0 && <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-violet-400">{pickupCount} retirada{pickupCount === 1 ? '' : 's'}</span>}
               {counterCount > 0 && <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-amber-400">{counterCount} balcão</span>}
+              {platformCount > 0 && <span className="rounded-full border border-yellow-400/20 bg-yellow-400/10 px-2.5 py-1 text-yellow-300">{platformCount} pela plataforma</span>}
             </div>
           </div>
 
@@ -476,7 +482,8 @@ export default function HomePage() {
             {storeOrdersDoDia.map((order) => {
               const mode = getFulfillmentMode(order);
               const isPickup = mode === 'pickup';
-              const ModeIcon = isPickup ? ShoppingBag : Store;
+              const isPlatform = mode === 'external_delivery';
+              const ModeIcon = isPickup || isPlatform ? ShoppingBag : Store;
               return (
                 <button
                   type="button"
@@ -484,14 +491,14 @@ export default function HomePage() {
                   onClick={() => router.push(`/entregas/details?id=${order.id}&date=${encodeURIComponent(selectedDateKey)}`)}
                   className="flex w-full items-center gap-3 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-3.5 text-left transition-all active:scale-[0.99]"
                 >
-                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isPlatform?'bg-yellow-400/10 text-yellow-300':isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
                     <ModeIcon size={19} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-black text-zinc-100">{order.customer_name || `Pedido #${order.order_id || 'sem número'}`}</p>
-                      <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase ${isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                        {isPickup ? 'Retirada' : 'Balcão'}
+                      <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase ${isPlatform?'bg-yellow-400/10 text-yellow-300':isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                        {isPlatform ? 'Entrega 99Food' : isPickup ? 'Retirada' : 'Balcão'}
                       </span>
                     </div>
                     <p className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-500">

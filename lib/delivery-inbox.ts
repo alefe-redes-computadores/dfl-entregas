@@ -2,7 +2,7 @@ import type { Delivery } from '@/types';
 import type { ParsedIfoodOrder } from '@/lib/ifood-order-parser';
 import { assessIfoodParseQuality } from '@/lib/ifood-parser-quality';
 
-export type DeliveryInboxSource = 'ifood' | 'whatsapp' | 'texto';
+export type DeliveryInboxSource = 'ifood' | 'food99' | 'whatsapp' | 'texto';
 export type DeliveryInboxStatus =
   | 'review'
   | 'ready'
@@ -74,6 +74,7 @@ export function inferInboxSource(
   raw: string,
   parsed: ParsedIfoodOrder,
 ): DeliveryInboxSource {
+  if (/\b(?:99\s*food|food\s*99)\b/i.test(raw)) return 'food99';
   if (parsed.ifoodId || parsed.orderId || /\bifood\b/i.test(raw)) return 'ifood';
 
   if (
@@ -123,9 +124,21 @@ function confidenceFor(parsed: ParsedIfoodOrder) {
   return Math.max(20, Math.min(100, score));
 }
 
+function missingFieldsFor(source: DeliveryInboxSource, parsed: ParsedIfoodOrder) {
+  const fields: string[] = [];
+  if (!parsed.orderId) fields.push(source === 'food99' ? 'pedido 99Food' : 'pedido');
+  if (source === 'ifood' && !parsed.ifoodId) fields.push('ID iFood');
+  if (!parsed.customerName) fields.push('cliente');
+  // A entrega pela 99 não precisa de endereço para uma rota DFL, mas o
+  // endereço copiado continua sendo preservado quando existir.
+  if (source !== 'food99' && !parsed.address && !parsed.mapsLink) fields.push('endereço');
+  return fields;
+}
+
 export function findInboxDuplicate(
   parsed: ParsedIfoodOrder,
   deliveries: Delivery[],
+  source: DeliveryInboxSource = parsed.ifoodId ? 'ifood' : 'texto',
 ) {
   const ifoodId = parsed.ifoodId.replace(/\D/g, '');
   const orderId = parsed.orderId.replace(/\D/g, '');
@@ -146,7 +159,8 @@ export function findInboxDuplicate(
     if (
       orderId &&
       existingOrder === orderId &&
-      delivery.origin === 'ifood'
+      (source === 'ifood' || source === 'food99') &&
+      delivery.origin === source
     ) {
       const incomingDay = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
       const existingDate = delivery.created_at || delivery.createdAt || delivery.updated_at || '';
@@ -225,9 +239,9 @@ export function createInboxDraft(
   deliveries: Delivery[],
   index: number,
 ): DeliveryInboxDraft {
-  const quality = assessIfoodParseQuality([parsed]);
-  const duplicate = findInboxDuplicate(parsed, deliveries);
-  const missingFields = quality.issues[0]?.fields || [];
+  const source = inferInboxSource(raw, parsed);
+  const duplicate = findInboxDuplicate(parsed, deliveries, source);
+  const missingFields = missingFieldsFor(source, parsed);
   const now = new Date().toISOString();
 
   return {
@@ -237,7 +251,7 @@ export function createInboxDraft(
     dayKey,
     createdAt: now,
     updatedAt: now,
-    source: inferInboxSource(raw, parsed),
+    source,
     status:
       duplicate || missingFields.length > 0
         ? 'review'

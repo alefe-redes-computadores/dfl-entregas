@@ -52,6 +52,13 @@ function deliveryMatches(
       return delivery.paymentLabel === selection.key;
     case 'origin':
       return delivery.originLabel === selection.key;
+    case 'logistics': {
+      const mode = delivery.fulfillment_mode || 'delivery';
+      const provider = mode === 'external_delivery'
+        ? (delivery.logistics_provider === 'food99' || delivery.origin === 'food99' ? '99Food' : delivery.logistics_provider === 'ifood' ? 'iFood' : 'Plataforma externa')
+        : mode === 'pickup' ? 'Retirada pelo cliente' : mode === 'counter' ? 'Balcão / presencial' : 'DFL Entregas';
+      return provider === selection.key;
+    }
     case 'hour':
       return String(delivery.reportHour) === selection.key;
     case 'weekday':
@@ -79,6 +86,8 @@ function bucketSource(
       return model.payments;
     case 'origin':
       return model.origins;
+    case 'logistics':
+      return model.logisticsProviders;
     case 'hour':
       return model.hours;
     case 'weekday':
