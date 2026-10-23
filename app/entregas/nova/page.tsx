@@ -113,6 +113,10 @@ const [routeId, setRouteId] = useState('');
 
   const [customerName, setCustomerName] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const typedCustomerBeforeSelection = useRef('');
+  const previousCustomerDraft = useRef<{name:string;phone:string;address:string;mapsLink:string;observation:string}|null>(null);
+  const [selectedCustomerLabel, setSelectedCustomerLabel] = useState('');
+  const [sameStopIdentityMode, setSameStopIdentityMode] = useState<'new' | 'same'>('new');
   const [phone, setPhone] = useState('');
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
   const [excludeCustomerMetrics, setExcludeCustomerMetrics] = useState(false);
@@ -233,19 +237,21 @@ const [routeId, setRouteId] = useState('');
   useEffect(() => {
     if (!sameStopSource || sameStopSeeded.current) return;
     sameStopSeeded.current = true;
-    setOrigin('ifood');
+    setOrigin(sameStopSource.origin === 'loja' ? 'loja' : 'ifood');
     setFulfillmentMode(sameStopSource.fulfillment_mode || 'delivery');
     setRouteId(sameStopSource.route_id || '');
     routeSelectionTouched.current = true;
     setStreetAddress(sameStopSource.address_string || '');
     setMapsLink(sameStopSource.maps_link || '');
-    setCustomerName(sameStopSource.customer_name || '');
-    setSelectedCustomerId(sameStopSource.customer_id || '');
-    setPhone(formatPhoneInput(sameStopSource.phone || ''));
-    setObservation(sameStopSource.observation || '');
+    // Endereço e rota podem ser reaproveitados; identidade não é inferida.
+    setCustomerName('');
+    setSelectedCustomerId('');
+    setPhone('');
+    setObservation('');
+    setSameStopIdentityMode('new');
     setIsParserOpen(false);
     toast.info('Nova entrega na mesma parada', {
-      description: 'Endereço e rota foram reaproveitados. Preencha os dados deste pedido iFood.',
+      description: 'Rota e endereço prontos. Escolha se é o mesmo cliente ou outra pessoa.',
     });
   }, [sameStopSource]);
 
@@ -442,7 +448,13 @@ const [routeId, setRouteId] = useState('');
     return null;
   }, [activeAddress, activeMapsLink, knownNeighborhoods]);
 
-  const handleCustomerSelect = (c: Customer) => {
+  const handleCustomerSelect = (c: Customer, typedQuery?: string) => {
+    previousCustomerDraft.current = {
+      name: typedQuery || typedCustomerBeforeSelection.current || activeCustomerName,
+      phone: activePhone, address: activeAddress, mapsLink: activeMapsLink,
+      observation: activeObservation,
+    };
+    setSelectedCustomerLabel(c.name);
     if (!activeExtra) setSelectedCustomerId(c.id);
     setActiveCustomerName(c.name);
     if (c.address) setActiveAddress(c.address);
@@ -563,6 +575,28 @@ const [routeId, setRouteId] = useState('');
         </div>
       </header>
 
+      {sameStopSource && (
+        <section aria-label="Segundo pedido na mesma parada" className="rounded-[24px] border border-violet-500/35 bg-violet-500/[.07] p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-violet-500/20 text-violet-300"><UsersRound size={20}/></span>
+            <div className="min-w-0"><p className="text-xs font-black uppercase tracking-wide text-violet-300">Mais um pedido · mesma parada</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-300">Rota e endereço foram mantidos. O cliente não é copiado automaticamente, para evitar duplicação ou associação incorreta.</p></div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => {
+              setSameStopIdentityMode('same');
+              setCustomerName(sameStopSource.customer_name || '');
+              setSelectedCustomerId(sameStopSource.customer_id || '');
+              setPhone(formatPhoneInput(sameStopSource.phone || ''));
+            }} className={`min-h-12 rounded-xl border px-2 text-[11px] font-black ${sameStopIdentityMode === 'same' ? 'border-violet-400/60 bg-violet-500/20 text-violet-200' : 'border-zinc-700 bg-zinc-950/50 text-zinc-300'}`}><UsersRound size={15} className="mx-auto mb-1"/>Mesmo cliente</button>
+            <button type="button" onClick={() => {
+              setSameStopIdentityMode('new');
+              setCustomerName(''); setSelectedCustomerId(''); setPhone('');
+            }} className={`min-h-12 rounded-xl border px-2 text-[11px] font-black ${sameStopIdentityMode === 'new' ? 'border-emerald-500/45 bg-emerald-500/10 text-emerald-300' : 'border-zinc-700 bg-zinc-950/50 text-zinc-300'}`}><Plus size={15} className="mx-auto mb-1"/>Outro cliente</button>
+          </div>
+          <p className="mt-2 text-[10px] text-zinc-500">Pedido novo: valor, forma de pagamento, código e bebidas são preenchidos individualmente.</p>
+        </section>
+      )}
       {historicalContext && (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[.07] px-4 py-3">
           <p className="text-xs font-black text-amber-300">Criação na operação de hoje</p>
@@ -588,9 +622,9 @@ const [routeId, setRouteId] = useState('');
         <button
           type="button"
           onClick={() => { setOrigin('ifood'); if (fulfillmentMode === 'external_delivery') setFulfillmentMode('delivery'); }}
-          className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
+          className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl px-1 text-[11px] min-[390px]:text-xs font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
-          <Smartphone size={18} /> iFood
+          <Smartphone size={16} className="shrink-0" /> iFood
         </button>
         <button
           type="button"
@@ -602,9 +636,9 @@ const [routeId, setRouteId] = useState('');
             setConfirmationCode('');
             setExtraIfoodOrders([]);
           }}
-          className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'food99' ? 'bg-amber-400 text-zinc-950 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
+          className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl px-1 text-[11px] min-[390px]:text-xs font-bold transition-all ${origin === 'food99' ? 'bg-amber-400 text-zinc-950 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
-          <ShoppingBag size={18} /> 99Food
+          <ShoppingBag size={16} className="shrink-0" /> 99Food
         </button>
         <button
           type="button"
@@ -616,9 +650,9 @@ const [routeId, setRouteId] = useState('');
             setConfirmationCode('');
             setMagicText('');
           }}
-          className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'loja' ? 'bg-emerald-500 text-zinc-950 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
+          className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl px-1 text-[11px] min-[390px]:text-xs font-bold transition-all ${origin === 'loja' ? 'bg-emerald-500 text-zinc-950 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
-          <Store size={18} /> Loja Própria
+          <Store size={16} className="shrink-0" /> Loja
         </button>
       </div></section>
 
@@ -876,12 +910,31 @@ const [routeId, setRouteId] = useState('');
           <CustomerAutocomplete
             value={activeCustomerName}
             onChange={(nextName) => {
+              typedCustomerBeforeSelection.current = nextName;
+              if (!activeExtra && selectedCustomerId) {
+                setSelectedCustomerId('');
+                setSelectedCustomerLabel('');
+              }
               setActiveCustomerName(nextName);
-              if (!activeExtra) setSelectedCustomerId('');
             }}
             onSelect={handleCustomerSelect}
             customers={customers}
           />
+          {selectedCustomerLabel && !activeExtra && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 py-2">
+              <div className="min-w-0"><p className="truncate text-[11px] font-bold text-amber-200">Selecionado: {selectedCustomerLabel}</p><p className="text-[10px] text-zinc-400">Confira a identidade; bairro igual não significa mesmo cliente.</p></div>
+              <button type="button" className="min-h-10 shrink-0 rounded-lg border border-zinc-600 px-3 text-[11px] font-bold text-zinc-100" onClick={() => {
+                const before = previousCustomerDraft.current;
+                setSelectedCustomerId(''); setSelectedCustomerLabel('');
+                setCustomerName(before?.name || '');
+                setPhone(before?.phone || '');
+                setStreetAddress(before?.address || '');
+                setMapsLink(before?.mapsLink || '');
+                setObservation(before?.observation || '');
+                toast.info('Seleção desfeita. Continue com o nome digitado.');
+              }}>Desfazer escolha</button>
+            </div>
+          )}
           {customerIdentity && (
             <div className={`rounded-xl border px-3 py-2 text-[10px] font-bold ${customerIdentity.kind === 'existing' ? 'border-emerald-500/25 bg-emerald-500/[.07] text-emerald-300' : customerIdentity.kind === 'multiple' || customerIdentity.kind === 'same_address' ? 'border-amber-500/25 bg-amber-500/[.07] text-amber-300' : 'border-violet-500/25 bg-violet-500/[.07] text-violet-300'}`}>
               {customerIdentity.kind === 'existing'

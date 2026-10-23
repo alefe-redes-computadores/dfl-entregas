@@ -22,7 +22,7 @@ import {
 interface CustomerAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
-  onSelect?: (customer: Customer) => void;
+  onSelect?: (customer: Customer, typedQuery?: string) => void;
   customers: Customer[];
 }
 
@@ -133,8 +133,9 @@ export function CustomerAutocomplete({
   }, []);
 
   function handleSelect(customer: Customer) {
+    const typedQuery = value;
     onChange(customer.name);
-    onSelect?.(customer);
+    onSelect?.(customer, typedQuery);
     setShowSuggestions(false);
   }
 

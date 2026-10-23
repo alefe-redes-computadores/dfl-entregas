@@ -4,6 +4,7 @@ import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 
 import { useEffect, useMemo, useState } from 'react';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
+import { isSyntheticOperationalRoute } from '@/lib/operational-time';
 import { TrendingUp, Package, Eye, EyeOff, Filter, Users, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
@@ -67,6 +68,9 @@ export default function HomePage() {
     const routeTimes = new Map<Route, number>();
 
     for (const route of routes) {
+      // Rotas virtuais de recuperação não são uma operação real na Home.
+      // Pedidos órfãos permanecem no store e na Caixa para correção de vínculo.
+      if (isSyntheticOperationalRoute(route.id)) continue;
       allRouteIds.add(route.id);
 
       const routeTimestamp = firstValidTimestamp(

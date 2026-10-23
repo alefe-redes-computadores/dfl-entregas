@@ -100,6 +100,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const [isSwiping, setIsSwiping] = useState(false);
   const reorderBusyRef = useRef(false);
   const [reorderBusy, setReorderBusy] = useState(false);
+  const [moveSheetOpen, setMoveSheetOpen] = useState(false);
   // Alça dedicada: não disputa o gesto horizontal de concluir/expandir.
   const reorderGesture = useRef<null | {
     pointerId: number;
@@ -257,13 +258,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     return itemIsIfood && !skipsCode;
   };
   const storedConfirmationCode = (item: Delivery) => orderConfirmationCode(item.confirmation_code);
-  const groupedCodeDeliveries = pendingGroupedDeliveries.filter(requiresConfirmationCode);
+  // Todo pedido iFood de uma parada física pode ter código próprio,
+  // independentemente de Pix/cartão/dinheiro. Não herdar código do vizinho.
+  const groupedCodeDeliveries = pendingGroupedDeliveries.filter((item) =>
+    item.origin === 'ifood' || !item.origin);
   const groupedCodeMode = pendingGroupedDeliveries.length > 1;
+  const [skippedCodeIds, setSkippedCodeIds] = useState<string[]>([]);
 
   const closeConfirmationModal = () => {
     setIsIfoodModalOpen(false);
     setInputCode('');
     setGroupedCodeDrafts({});
+    setSkippedCodeIds([]);
   };
 
   const copyStop = async () => {
@@ -441,7 +447,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         return;
       }
 
-      const codeDeliveries = pendingGroupedDeliveries.filter(requiresConfirmationCode);
+      const codeDeliveries = groupedCodeDeliveries;
       const needsGroupedCodeModal = pendingGroupedDeliveries.length > 1 && codeDeliveries.length > 0;
       const needsSingleCodeModal = codeDeliveries.length === 1 && !storedConfirmationCode(codeDeliveries[0]);
       if (needsGroupedCodeModal || needsSingleCodeModal) {
@@ -449,6 +455,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           codeDeliveries.map((item) => [item.id, storedConfirmationCode(item)]),
         );
         setGroupedCodeDrafts(initialDrafts);
+        setSkippedCodeIds([]);
         setInputCode(codeDeliveries.length === 1 ? initialDrafts[codeDeliveries[0].id] || '' : '');
         setIsIfoodModalOpen(true);
         return;
@@ -472,17 +479,43 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     (item) => item.order_locked === true && item.order_source !== 'smart',
   );
   const smartLocked = orderLocked && !manualLocked;
-  const canReorder =
+  const canManageStop =
     !isRecoveryRoute &&
     !isAwaitingRoute &&
     route.id !== 'rota-site-aguardando-confirmacao' &&
-    route.status === 'aberta' &&
-    !delivery.completed &&
-    position !== undefined &&
-    pendingCount > 1 && !completionBusy;
+    route.status === 'aberta' && !delivery.completed;
+  const canReorder = canManageStop && position !== undefined && pendingCount > 1 && !completionBusy;
+
+  const toggleStopLock = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (reorderBusyRef.current) return;
+    reorderBusyRef.current = true;
+    setReorderBusy(true);
+    try {
+      const nextLocked = !orderLocked;
+      const changedAt = new Date().toISOString();
+      for (const item of groupedDeliveries) {
+        await updateDelivery(item.id, {
+          order_locked: nextLocked,
+          order_source: 'manual',
+          order_updated_at: changedAt,
+        });
+      }
+      toast.success(nextLocked ? 'Parada fixada nesta posição.' : 'Parada destravada.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível alterar a trava.');
+    } finally {
+      reorderBusyRef.current = false;
+      setReorderBusy(false);
+    }
+  };
 
   const moveStop = async (targetIndex: number) => {
     if (!canReorder || reorderBusyRef.current) return;
+    if (orderLocked) {
+      toast.info('Destrave esta parada antes de mudar sua posição.');
+      return;
+    }
     const currentIndex = Math.max(0, (position || 1) - 1);
     const boundedTarget = Math.max(0, Math.min(targetIndex, pendingCount - 1));
     if (boundedTarget === currentIndex) {
@@ -983,10 +1016,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         )}
                       </div>
 
-                      {!isExpanded && canReorder && (
-                        <div className="flex min-w-0 items-center justify-end gap-1.5" aria-label="Reordenar parada">
-                          <button type="button" disabled={reorderBusy} onClick={async(e)=>{e.stopPropagation();if(reorderBusyRef.current)return;reorderBusyRef.current=true;setReorderBusy(true);try{const nextLocked=!orderLocked;const changedAt=new Date().toISOString();for(const item of groupedDeliveries)await updateDelivery(item.id,{order_locked:nextLocked,order_source:'manual',order_updated_at:changedAt});toast.success(nextLocked?'Parada travada na sequência.':'Parada destravada.')}catch{toast.error('Não foi possível alterar a trava.')}finally{reorderBusyRef.current=false;setReorderBusy(false)}}} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black disabled:opacity-40 ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Inteligente':'Fixar'}</button>
-                          <button
+                      {!isExpanded && canManageStop && (
+                        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5" aria-label="Reordenar parada">
+                          <button type="button" disabled={reorderBusy} onClick={(e)=>void toggleStopLock(e)} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black disabled:opacity-40 ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Inteligente':'Fixar'}</button>
+                          <button type="button" data-no-card-swipe="true" onClick={(event) => {event.stopPropagation();setMoveSheetOpen(true);}} className="flex h-9 items-center gap-1 rounded-xl border border-sky-500/25 bg-sky-500/[.08] px-2 text-[10px] font-bold text-sky-200"><ArrowUp size={13}/><ArrowDown size={13}/>Mover</button>
+                          {canReorder && <button
                             type="button"
                             data-no-card-swipe="true"
                             disabled={reorderBusy}
@@ -997,14 +1031,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             onLostPointerCapture={clearReorderGesture}
                             onClick={(event) => event.stopPropagation()}
                             style={{ touchAction: 'none' }}
-                            className={`flex h-9 min-w-9 items-center justify-center gap-1 rounded-xl border px-2 text-[10px] font-black active:scale-95 ${dropTargetPosition !== null ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-200' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}
+                            className={`hidden h-9 min-w-9 items-center justify-center gap-1 rounded-xl border px-2 text-[10px] font-black active:scale-95 ${dropTargetPosition !== null ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-200' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}
                             aria-label={dropTargetPosition === null ? 'Segure e arraste para reposicionar a parada' : `Solte para mover até a parada ${dropTargetPosition}`}
                             title="Arrastar parada"
                           >
                             <GripVertical size={16}/>
                             {dropTargetPosition !== null && <span aria-live="polite">{dropTargetPosition}</span>}
-                          </button>
-                          <div className="flex items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
+                          </button>}
+                          {canReorder && <div className="hidden items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 sm:flex">
                             <button
                               type="button"
                               onClick={async (e) => {
@@ -1030,7 +1064,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             >
                               <ArrowDown size={13} />
                             </button>
-                          </div>
+                          </div>}
 
                         </div>
                       )}
@@ -1049,7 +1083,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/45 p-3" aria-label="Resumo da parada">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Detalhes da parada</span>
-                    <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${stopCompleted ? 'bg-emerald-500/10 text-emerald-300' : 'bg-sky-500/10 text-sky-300'}`}>{stopCompleted ? 'Concluída' : isGroupedStop ? `${groupedPending} pedidos pendentes` : 'Pendente'}</span>
+                    <div className="flex items-center gap-2">
+                      {canManageStop && <button type="button" onClick={(event)=>void toggleStopLock(event)} disabled={reorderBusy} className={`rounded-lg border px-2 py-1 text-[10px] font-black ${orderLocked ? 'border-amber-500/35 bg-amber-500/10 text-amber-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}>{orderLocked ? 'Destravar' : 'Fixar'}</button>}
+                      <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${stopCompleted ? 'bg-emerald-500/10 text-emerald-300' : 'bg-sky-500/10 text-sky-300'}`}>{stopCompleted ? 'Concluída' : isGroupedStop ? `${groupedPending} pedidos pendentes` : 'Pendente'}</span>
+                    </div>
                   </div>
                   <p className="mt-2 text-xs font-semibold leading-relaxed text-zinc-200">{shortAddress || 'Endereço não informado'}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
@@ -1232,6 +1269,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         </div>
       )}
 
+      {moveSheetOpen && (
+        <div className="fixed inset-0 z-[125] flex items-end justify-center bg-black/75" onClick={() => setMoveSheetOpen(false)}>
+          <div className="w-full max-w-lg rounded-t-[24px] border border-zinc-700 bg-[#171717] p-4 pb-[max(18px,env(safe-area-inset-bottom))] shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-black text-zinc-100">Mover / Fixar parada</p><p className="text-[11px] text-zinc-400">{position || 1}ª posição · {groupedDeliveries.length} pedido(s)</p></div><button type="button" className="rounded-xl border border-zinc-700 p-2 text-zinc-300" onClick={() => setMoveSheetOpen(false)}><X size={18}/></button></div>
+            <button type="button" className="mb-3 w-full rounded-xl border border-amber-500/25 bg-amber-500/[.06] p-3 text-left text-xs font-bold text-amber-200" disabled={reorderBusy} onClick={(event) => {void toggleStopLock(event);}}>{orderLocked ? 'Destravar esta posição' : 'Fixar esta posição'}</button>
+            <div className="grid grid-cols-3 gap-2">
+              {([['Primeira',0],['Subir',Math.max(0,(position || 1)-2)],['Descer',position || 1]] as const).map(([label,target]) => <button key={label} type="button" disabled={!canReorder || reorderBusy || orderLocked} onClick={() => {void moveStop(target).then(() => setMoveSheetOpen(false));}} className="min-h-12 rounded-xl border border-zinc-700 bg-zinc-900 px-2 text-[11px] font-bold text-zinc-100 disabled:opacity-30">{label}</button>)}
+            </div>
+            <p className="mt-3 text-[10px] text-zinc-500">Paradas fixadas permanecem na posição. Destrave para movê-las.</p>
+          </div>
+        </div>
+      )}
       {/* Código iFood — captura operacional compacta */}
       {isIfoodModalOpen && (
         <div
@@ -1284,17 +1333,26 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       <span className="truncate text-[11px] font-black text-zinc-200">{index + 1}. {itemName}</span>
                       {item.order_id && <span className="shrink-0 text-[9px] font-bold text-zinc-600">#{item.order_id}</span>}
                     </span>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-zinc-500">Código individual (opcional)</span>
+                      <button type="button" disabled={completionBusy} className={`rounded-lg border px-2 py-1.5 text-[10px] font-bold ${skippedCodeIds.includes(item.id) ? 'border-amber-500/35 text-amber-200' : 'border-zinc-700 text-zinc-300'}`} onClick={() => {
+                        setSkippedCodeIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]);
+                        setGroupedCodeDrafts((current) => ({...current, [item.id]: ''}));
+                        if (!groupedCodeMode) setInputCode('');
+                      }}>{skippedCodeIds.includes(item.id) ? 'Pulado ✓' : 'Pular este'}</button>
+                    </div>
                     <input
                       type="text"
                       inputMode="numeric"
                       maxLength={4}
                       autoFocus={index === 0}
-                      disabled={completionBusy}
+                      disabled={completionBusy || skippedCodeIds.includes(item.id)}
                       aria-label={`Código de confirmação de ${itemName}`}
                       placeholder="0000"
                       value={value}
                       onChange={(event) => {
                         const nextCode = event.target.value.replace(/\D/g, '').slice(0, 4);
+                        setSkippedCodeIds((current) => current.filter((id) => id !== item.id));
                         if (groupedCodeMode) {
                           setGroupedCodeDrafts((current) => ({ ...current, [item.id]: nextCode }));
                         } else {
@@ -1304,7 +1362,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       }}
                       onKeyDown={(event) => {
                         const drafts = groupedCodeMode ? groupedCodeDrafts : { [item.id]: inputCode };
-                        const allValid = groupedCodeDeliveries.every((codeItem) => (drafts[codeItem.id] || '').length === 4);
+                        const allValid = groupedCodeDeliveries.every((codeItem) => skippedCodeIds.includes(codeItem.id) || (drafts[codeItem.id] || '').length === 4);
                         if (event.key === 'Enter' && allValid) void executeCompletion(drafts);
                       }}
                       className="h-11 w-full rounded-lg border border-red-500/30 bg-zinc-950 px-4 text-center font-mono text-lg font-black tracking-[0.32em] text-zinc-50 outline-none focus:border-red-400 disabled:opacity-60"
@@ -1320,12 +1378,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
             <button
               type="button"
-              disabled={groupedCodeDeliveries.some((item) => (groupedCodeMode ? groupedCodeDrafts[item.id] : inputCode).length !== 4) || completionBusy}
+              disabled={groupedCodeDeliveries.some((item) => !skippedCodeIds.includes(item.id) && (groupedCodeMode ? groupedCodeDrafts[item.id] : inputCode).length !== 4) || completionBusy}
               onClick={async () => {
                 const drafts = groupedCodeMode
                   ? groupedCodeDrafts
                   : { [groupedCodeDeliveries[0]?.id || delivery.id]: inputCode };
-                if (groupedCodeDeliveries.some((item) => (drafts[item.id] || '').length !== 4)) return;
+                if (groupedCodeDeliveries.some((item) => !skippedCodeIds.includes(item.id) && (drafts[item.id] || '').length !== 4)) return;
                 await executeCompletion(drafts);
               }}
               className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-35"

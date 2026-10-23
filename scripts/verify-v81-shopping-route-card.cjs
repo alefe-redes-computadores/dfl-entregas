@@ -5,7 +5,7 @@ ok(card.includes('map: HTMLImageElement | null = null')&&card.includes('if (mapU
 ok(!card.includes("params.append('path'")&&card.includes('coordinates('),'mapa real só com coordenadas e sem rota reta inventada');
 ok(card.includes('groupDeliveriesByStop'),'marcadores representam paradas físicas');
 ok(route.includes('buildRouteShareCard')&&route.includes('Share.share')&&route.includes('Filesystem.writeFile'),'APK compartilha imagem e mensagem');
-ok(route.includes('if (routeCardBusy || routeCardLock.current) return')&&route.includes('disabled={routeCardBusy}'),'geração bloqueia toque duplo');
+ok(route.includes('if (routeCardBusy || routeCardLock.current) return')&&route.includes('disabled={routeCopyBusy || routeCardBusy}'),'geração bloqueia toque duplo');
 ok(shopping.includes('Conferência da compra')&&shopping.includes('onlyPending')&&shopping.includes('Buscar item'),'compra presencial tem busca e filtro');
 ok(shopping.includes('localStorage.setItem(storageKey')&&shopping.includes('Progresso salvo neste aparelho')&&shopping.includes('hydratedKey !== hydrationKey')&&shopping.includes('reconcileShoppingDraft'),'checklist permanece offline');
 ok(shopping.includes('missingPrices')&&shopping.includes('count !== items.length')&&shopping.includes('finishInFlight.current'),'finalização exige todos os itens e preços');

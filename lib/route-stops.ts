@@ -110,7 +110,42 @@ export function groupDeliveriesByStop(
   // entra no topo pelo índice automático definido no store; depois disso, uma
   // decisão manual precisa continuar valendo. Repartir os grupos novamente
   // entre urgente/normal aqui fazia a UI desfazer a ordem recém-salva.
-  return [...groups.values()];
+  // Uma parada totalmente concluída vai abaixo das pendentes, mesmo que
+  // antes fosse urgente e estivesse fixada. Nunca mexer na ordem relativa
+  // das paradas que ainda possuem pelo menos um pedido pendente.
+  return [...groups.values()].sort((a, b) =>
+    Number(a.pending.length === 0) - Number(b.pending.length === 0));
+}
+
+/**
+ * Preserva o índice das paradas fixadas na sequência real. Reordenação manual,
+ * organizador e desfazer compartilham este contrato. Uma parada multipedido é
+ * atômica, ainda que apenas uma de suas entregas esteja fixada.
+ */
+export function keepPinnedStopPositions(pending: Delivery[], wantedIds: string[]): string[] {
+  const original = groupDeliveriesByStop(pending);
+  if (!original.some((group) => group.locked)) return wantedIds;
+  const byId = new Map(pending.map((delivery) => [delivery.id, delivery] as const));
+  const keyToGroup = new Map(original.map((group) => [group.key, group] as const));
+  const visited = new Set<string>();
+  const requestedFree: typeof original = [];
+  for (const id of wantedIds) {
+    const delivery = byId.get(id);
+    if (!delivery) continue;
+    const key = deliveryStopKey(delivery);
+    if (visited.has(key)) continue;
+    visited.add(key);
+    const group = keyToGroup.get(key);
+    if (group && !group.locked) requestedFree.push(group);
+  }
+  for (const group of original) {
+    if (!group.locked && !visited.has(group.key)) requestedFree.push(group);
+  }
+  let cursor = 0;
+  return original.flatMap((group) =>
+    (group.locked ? group : requestedFree[cursor++] || group)
+      .deliveries.map((delivery) => delivery.id),
+  );
 }
 
 export function expandStopOrder(

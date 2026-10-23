@@ -233,8 +233,15 @@ export function customerIdentityEvidence(
   const storedAddress = customer.address?.trim() || '';
   const wantedAddress = details?.address?.trim() || '';
 
+  // Nome parecido + bairro coincidente não prova identidade. O endereço
+  // informado precisa conter rua E número reais para reutilização automática.
+  // Endereço incompleto continua útil na entrega, mas não identifica cliente.
+  const hasCompleteStreet = (value: string) =>
+    /\b(?:rua|r\.|avenida|av\.|travessa|alameda|praca|praça|rodovia|estrada)\b/i.test(value) &&
+    Boolean(extractHouseNumber(value));
   const sameAddress =
     Boolean(storedAddress && wantedAddress) &&
+    hasCompleteStreet(storedAddress) && hasCompleteStreet(wantedAddress) &&
     sameCustomerAddress(storedAddress, wantedAddress);
 
   const storedNumber = extractHouseNumber(storedAddress);
@@ -316,8 +323,9 @@ export function customerIdentityEvidence(
    * - nome igual permite enriquecer um cadastro realmente
    *   incompleto, desde que não exista identidade contraditória.
    */
-  const compatibleName =
-    exactName || similarity >= 0.72;
+  // Maria e Maria R. são pessoas distintas até prova forte deliberada.
+  // Similaridade serve para sugestão, jamais para vínculo automático.
+  const compatibleName = exactName;
 
   /*
    * O telefone confirmado pode unir uma variação pequena de nome, mas

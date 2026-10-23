@@ -79,10 +79,14 @@ async function run() {
   const pending = withRouteOrderWriteLock('route-a',() => new Promise(resolve => {release=resolve}));
   const other = await withRouteOrderWriteLock('route-b',async () => 'independente');
   ok(other === 'independente','outra rota não bloqueada');
-  await assert.rejects(()=>withRouteOrderWriteLock('route-a',async()=> 'erro'), /ainda está sendo salva/);
-  ok(true,'mesma rota bloqueia gravação concorrente');
+  let completedQueued = false;
+  const queued = withRouteOrderWriteLock('route-a',async()=> 'segundo salvo');
+  queued.then(() => { completedQueued = true; });
+  await Promise.resolve();
+  ok(!completedQueued,'mesma rota serializa gravação concorrente');
   release('salvou');
   ok(await pending === 'salvou','primeira gravação conclui');
+  ok(await queued === 'segundo salvo','gravação na fila conclui depois');
   ok(await withRouteOrderWriteLock('route-a',async()=>42) === 42, 'lock liberado após sucesso');
   await assert.rejects(()=>withRouteOrderWriteLock('route-a',async()=>{throw new Error('offline')}), /offline/);
   ok(true, 'falha remota propagada');

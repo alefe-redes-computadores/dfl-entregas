@@ -70,6 +70,14 @@ export function OperationalCommandCenter({
       !extractLatLngFromMapsUrl(delivery.maps_link),
   );
 
+  // Quando há mais de um caso, abrimos o primeiro pedido concreto; após
+  // sua correção, os demais continuam na fila, sem ação fantasma.
+  const deliveryActionHref = (item?: Delivery) =>
+    item?.id ? `/entregas/editar?id=${encodeURIComponent(item.id)}` : '/entregas';
+  const firstMissingIfoodCode = pending.find((item) =>
+    item.origin === 'ifood' && Boolean(item.route_id) &&
+    !String(item.confirmation_code || '').replace(/\D/g, '').match(/^\d{4}$/));
+
   const openRouteIds = new Set(openRoutes.map((route) => route.id));
   const routeCodes = useMemo(
     () => routeIfoodCodeProgress(deliveries, openRouteIds),
@@ -117,7 +125,9 @@ export function OperationalCommandCenter({
       label: 'Pedidos do Site',
       description: siteInboxSummary(siteInbox),
       count: siteInbox.total,
-      href: '/loja/caixa-de-entrada?aba=site',
+      href: siteInbox.rows.length === 1
+        ? `/loja/caixa-de-entrada?aba=site&pedido=${encodeURIComponent(siteInbox.rows[0].delivery.id)}`
+        : '/loja/caixa-de-entrada?aba=site',
       icon: Inbox,
       tone: 'amber',
       priority: 115,
@@ -127,7 +137,7 @@ export function OperationalCommandCenter({
       label: 'Corrigir vínculo de rota',
       description: 'Pedido vinculado a uma rota que não existe mais. Revisar no cadastro da entrega.',
       count: corruptLinks.length,
-      href: '/entregas',
+      href: deliveryActionHref(corruptLinks[0]),
       icon: ShieldAlert,
       tone: 'red',
       priority: 112,
@@ -137,7 +147,7 @@ export function OperationalCommandCenter({
       label: 'Completar endereço',
       description: 'Pedido sem endereço operacional',
       count: noAddress.length,
-      href: '/entregas',
+      href: deliveryActionHref(noAddress[0]),
       icon: AlertTriangle,
       tone: 'red',
       priority: 100,
@@ -178,7 +188,7 @@ export function OperationalCommandCenter({
         `${routeCodes.collected} de ${routeCodes.active} coletados · falta registrar durante a rota`,
       count: routeCodes.missing,
       badge: `${routeCodes.collected}/${routeCodes.active}`,
-      href: '/confirmacoes',
+      href: deliveryActionHref(firstMissingIfoodCode),
       icon: ShieldAlert,
       tone: 'sky',
       priority: 80,
@@ -188,7 +198,7 @@ export function OperationalCommandCenter({
       label: 'Revisar localização',
       description: 'Endereço informado; coordenadas precisas ainda não verificadas',
       count: addressOnly.length,
-      href: '/entregas',
+      href: deliveryActionHref(addressOnly[0]),
       icon: MapPin,
       tone: 'sky',
       priority: 40,

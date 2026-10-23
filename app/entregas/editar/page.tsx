@@ -772,7 +772,7 @@ const [routeId, setRouteId] = useState('');
           }}
           className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold transition-all ${origin === 'loja' ? 'bg-emerald-500 text-zinc-950 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
-          <Store size={18} /> Loja Própria
+          <Store size={18} /> Loja
         </button>
       </div></section>
 

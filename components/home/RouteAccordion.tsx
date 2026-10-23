@@ -1345,7 +1345,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <div className="dfl-bottom-sheet safe-bottom relative flex max-h-[88dvh] flex-col overflow-y-auto rounded-t-[30px] p-5 pb-6 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-200" onClick={(event) => event.stopPropagation()}>
              <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-zinc-700" />
              <div className="mb-4 flex items-center justify-between gap-3">
-               <div><h3 className="flex items-center gap-2 font-heading text-lg font-black text-zinc-50"><Copy size={18} className="text-emerald-400"/> {routeCopyBusy ? 'Copiando mensagem…' : 'Copiar para o motoboy'}</h3><p className="mt-1 text-[10px] text-zinc-500">Três ações essenciais, exibidas conforme a rota.</p></div>
+               <div><h3 className="flex items-center gap-2 font-heading text-lg font-black text-zinc-50"><Copy size={18} className="text-emerald-400"/> {routeCopyBusy ? 'Copiando mensagem…' : 'Copiar para o motoboy'}</h3><p className="mt-1 text-[10px] text-zinc-500">R73 · logística, checklist e dinheiro quando houver.</p></div>
                <button aria-label="Fechar" onClick={() => setIsCopyMenuOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-800 text-zinc-400 active:scale-90"><X size={18}/></button>
              </div>
 
@@ -1356,11 +1356,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                </button>
                <button type="button" aria-expanded={checklistOptionsOpen} disabled={routeCopyBusy || routeCardBusy} onClick={() => setChecklistOptionsOpen(open => !open)} className="flex min-h-[70px] items-center gap-3 rounded-2xl border border-zinc-700 bg-zinc-900/75 p-3.5 text-left transition active:scale-[.99] disabled:opacity-50">
                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-500/10 text-sky-300"><ClipboardCheck size={21}/></span>
-                 <span className="min-w-0 flex-1"><b className="block text-sm text-zinc-100">Checklist de saída</b><small className="mt-0.5 block text-[11px] text-zinc-400">Bebidas, cobranças e conferência</small></span><ChevronDown size={17} className={`shrink-0 text-zinc-400 transition-transform ${checklistOptionsOpen ? 'rotate-180' : ''}`}/>
+                 <span className="min-w-0 flex-1"><b className="block text-sm text-zinc-100">Checklist de saída</b><small className="mt-0.5 block text-[11px] text-zinc-400">Toque e escolha: texto ou imagem pronta para compartilhar</small></span><ChevronDown size={17} className={`shrink-0 text-zinc-400 transition-transform ${checklistOptionsOpen ? 'rotate-180' : ''}`}/>
                </button>
-               {checklistOptionsOpen && <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-2">
-                 <button type="button" disabled={routeCopyBusy || routeCardBusy} onClick={() => void handleCopyMessage(2)} className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-zinc-800 px-2 text-xs font-bold text-zinc-200 disabled:opacity-50"><Copy size={16}/>Somente texto</button>
-                 <button type="button" disabled={routeCardBusy} onClick={() => void shareRouteCard('checklist')} className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-sky-500/15 px-2 text-xs font-bold text-sky-200 disabled:opacity-50"><Send size={16}/>Checklist com imagem</button>
+               {checklistOptionsOpen && <div className="grid grid-cols-2 gap-2 rounded-2xl border border-sky-500/20 bg-sky-500/[.035] p-2" role="group" aria-label="Como enviar o checklist?">
+                 <button type="button" disabled={routeCopyBusy || routeCardBusy} onClick={() => void handleCopyMessage(2)} className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border border-zinc-700 bg-zinc-900 px-2 text-[11px] font-bold text-zinc-200 disabled:opacity-50"><Copy size={17}/>Somente texto</button>
+                 <button type="button" disabled={routeCopyBusy || routeCardBusy} onClick={() => void shareRouteCard('checklist')} className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border border-sky-500/25 bg-sky-500/15 px-2 text-[11px] font-bold text-sky-200 disabled:opacity-50"><Send size={17}/>Checklist com imagem</button>
                </div>}
                {hasPhysicalCash && <button type="button" disabled={routeCopyBusy || routeCardBusy} onClick={() => void handleCopyMessage(3)} className="flex min-h-[65px] items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[.05] p-3.5 text-left transition active:scale-[.99] disabled:opacity-50">
                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-300"><Wallet size={20}/></span>

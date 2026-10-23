@@ -44,8 +44,17 @@ const tests=[
 [store.includes('runTransaction(db, async (transaction) =>'),'alocacao transacional'],
 [store.includes('const deliverySnap = await transaction.get(deliveryRef)'),'leitura do pedido na transacao'],
 [store.includes('const routeSnap = await transaction.get(routeRef)'),'leitura da rota na transacao'],
-[store.includes('assertSiteRouteAllocation(remoteDelivery, route'),'verificacao da versao remota dentro da transacao'],
-[store.includes('transaction.update(deliveryRef, { route_id: routeId, updated_at: nowIso })'),'somente atributos logisticos alterados'],
+[store.includes('assertSiteRouteAllocation({') &&
+  store.includes('...remoteDelivery,') &&
+  store.includes('}, route, now.getTime());') &&
+  store.indexOf('const deliverySnap = await transaction.get(deliveryRef)') < store.indexOf('assertSiteRouteAllocation({'),
+  'versao remota lida e revalidada dentro da mesma transacao'],
+[store.includes('const patch: Record<string, unknown> = {};') &&
+  store.includes('transaction.update(deliveryRef, { route_id: routeId, ...patch, updated_at: nowIso })') &&
+  store.includes('site_operational_payment_override = true') &&
+  !store.slice(store.indexOf('const patch: Record<string, unknown> = {};'),
+               store.indexOf('transaction.update(deliveryRef, { route_id: routeId, ...patch')).includes('patch.site_order_status'),
+  'alocacao atomica preserva status comercial e limita ajustes operacionais'],
 [store.includes("if ('newRoute' in target) transaction.set(routeRef"),'nova rota criada atomicamente'],
 [store.includes('deliveryMutationLocks.add(`site-allocate:${deliveryId}`)'),'bloqueio clique duplo'],
 [!store.slice(store.indexOf('allocateSiteDelivery: async'),store.indexOf('updateDelivery: async')).includes('kickSiteRoute('),'alocacao nao dispara site saiu para entrega'],

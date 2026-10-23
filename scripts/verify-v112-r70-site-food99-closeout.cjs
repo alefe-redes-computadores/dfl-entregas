@@ -26,7 +26,9 @@ ok(
 );
 ok(
   store.includes('runTransaction(db') &&
-    store.includes('assertSiteRouteAllocation(remoteDelivery, route') &&
+    store.includes('assertSiteRouteAllocation({') &&
+    store.includes('...remoteDelivery,') &&
+    store.includes('}, route, now.getTime());') &&
     store.includes("transaction.update(deliveryRef, { route_id: routeId"),
   'alocação do Site é revalidada e persistida em transação',
 );

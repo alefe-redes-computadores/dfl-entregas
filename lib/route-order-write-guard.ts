@@ -1,20 +1,24 @@
 import type { Delivery } from '@/types';
 
-/** Uma única gravação de sequência por rota e por sessão. Outras rotas não bloqueiam. */
-const activeWrites = new Set<string>();
+/**
+ * Gravações sequenciais por rota, com falha isolada. A segunda ação aguarda
+ * a primeira e lê o estado mais recente no callback; outras rotas seguem livres.
+ * Não usamos timeout: isso poderia disparar escrita sobreposta após um timeout.
+ */
+const routeWriteTails = new Map<string, Promise<void>>();
 
 export async function withRouteOrderWriteLock<T>(
   routeId: string,
   write: () => Promise<T>,
 ): Promise<T> {
-  if (activeWrites.has(routeId)) {
-    throw new Error('Uma mudança de sequência desta rota ainda está sendo salva.');
-  }
-  activeWrites.add(routeId);
+  const previous = routeWriteTails.get(routeId) || Promise.resolve();
+  const current = previous.catch(() => undefined).then(write);
+  const settled = current.then(() => undefined, () => undefined);
+  routeWriteTails.set(routeId, settled);
   try {
-    return await write();
+    return await current;
   } finally {
-    activeWrites.delete(routeId);
+    if (routeWriteTails.get(routeId) === settled) routeWriteTails.delete(routeId);
   }
 }
 

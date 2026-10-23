@@ -71,7 +71,7 @@ export function ShiftBriefing() {
       const timestamp = firstValidTimestamp(delivery.created_at, delivery.createdAt);
       return Boolean(timestamp && dateKey(timestamp) === today);
     });
-    return buildOperationalReadiness({ deliveries: todays, routes, customers }).missingAddress.length;
+    return buildOperationalReadiness({ deliveries: todays, routes, customers }).missingAddress;
   }, [customers, deliveries, routes, today]);
 
   if (seen || settings.isOpen || selectedKey !== today || !isScheduledToday || pausedToday) return null;
@@ -118,7 +118,7 @@ export function ShiftBriefing() {
           <Play size={14} />{busy ? 'Abrindo...' : 'Abrir'}
         </button>
       </div>
-      {(beverageReview.length > 0 || stockAttention > 0 || addressReview > 0) && <div className="mt-3 grid grid-cols-2 gap-2 border-t border-emerald-500/10 pt-3">
+      {(beverageReview.length > 0 || stockAttention > 0 || addressReview.length > 0) && <div className="mt-3 grid grid-cols-2 gap-2 border-t border-emerald-500/10 pt-3">
         {beverageReview.length > 0 && <button type="button" onClick={() => router.push('/estoque?review=beverages')} className="flex min-h-11 items-center gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[.06] px-3 text-left active:scale-[.98]">
           <GlassWater size={15} className="shrink-0 text-sky-400" />
           <span className="text-[10px] font-black text-zinc-300">{beverageReview.length} bebida{beverageReview.length === 1 ? '' : 's'} para revisar</span>
@@ -127,9 +127,9 @@ export function ShiftBriefing() {
           <PackageSearch size={15} className="shrink-0 text-amber-400" />
           <span className="text-[10px] font-black text-zinc-300">{stockAttention} saldo{stockAttention === 1 ? '' : 's'} para revisar</span>
         </button>}
-        {addressReview > 0 && <button type="button" onClick={() => router.push(`/entregas?date=${encodeURIComponent(today)}`)} className="col-span-2 flex min-h-11 items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.07] px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
+        {addressReview.length > 0 && <button type="button" onClick={() => router.push(addressReview[0]?.id ? `/entregas/editar?id=${encodeURIComponent(addressReview[0].id)}&date=${encodeURIComponent(today)}` : `/entregas?date=${encodeURIComponent(today)}`)} className="col-span-2 flex min-h-11 items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.07] px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
           <PackageSearch size={15} className="shrink-0 text-amber-300" />
-          <span className="text-[10px] font-bold text-amber-200">{addressReview} entrega{addressReview === 1 ? '' : 's'} de hoje sem endereço · conferir antes da saída</span>
+          <span className="text-[10px] font-bold text-amber-200">{addressReview.length} entrega{addressReview.length === 1 ? '' : 's'} de hoje sem endereço · conferir antes da saída</span>
         </button>}
       </div>}
     </section>

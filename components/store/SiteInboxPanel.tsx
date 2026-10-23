@@ -12,7 +12,7 @@ import { OPERATION_FIRST_BATCH, nextProgressiveCount } from '@/lib/operation/pro
 import type { Delivery } from '@/types';
 
 const captions: Record<Extract<SiteInboxState, 'confirmar'|'pronto'|'aguardar_agenda'|'revisar'>,string> = {
-  confirmar:'Aguardando aprovação comercial', pronto:'Pronto para organizar',
+  confirmar:'Aguardando aprovação comercial', pronto:'Aceito · escolher rota',
   aguardar_agenda:'Agendado · ainda não liberado', revisar:'Revisar status do Site',
 };
 const tones = {confirmar:'text-amber-300 border-amber-500/20 bg-amber-500/[.06]', pronto:'text-emerald-300 border-emerald-500/20 bg-emerald-500/[.06]',
@@ -43,6 +43,11 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   const [routeName,setRouteName]=useState('');
   const [motoboyId,setMotoboyId]=useState('');
   const [saving,setSaving]=useState(false);
+  const [reviewOpen,setReviewOpen]=useState(false);
+  const [reviewAddress,setReviewAddress]=useState('');
+  const [reviewPhone,setReviewPhone]=useState('');
+  const [reviewObservation,setReviewObservation]=useState('');
+  const [reviewPayment,setReviewPayment]=useState<Delivery['payment_method']>('dinheiro');
   const lock=useRef(false);
   const today=dateKey(new Date());
   const availableRoutes=useMemo(()=>routes.filter(route =>
@@ -66,6 +71,9 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   const begin=(delivery:Delivery)=>{
     setEditing(current=>current===delivery.id?null:delivery.id);
     setSelection('');setNewMode(false);setRouteName('');setMotoboyId('');
+    setReviewOpen(false);
+    setReviewAddress(delivery.address_string || '');setReviewPhone(delivery.phone || '');
+    setReviewObservation(delivery.observation || '');setReviewPayment(delivery.payment_method || 'dinheiro');
   };
   const submit=async(delivery:Delivery)=>{
     if(lock.current)return;
@@ -73,7 +81,8 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
     if(newMode&&(!routeName.trim()||!motoboyId)){toast.warning('Informe nome da nova rota e motoboy.');return;}
     lock.current=true;setSaving(true);
     try{
-      const routeId=await allocate(delivery.id,newMode?{newRoute:{name:routeName.trim(),motoboyId}}:{routeId:selection});
+      const operational = reviewOpen ? {address_string:reviewAddress,phone:reviewPhone,observation:reviewObservation,payment_method:reviewPayment} : undefined;
+      const routeId=await allocate(delivery.id,newMode?{newRoute:{name:routeName.trim(),motoboyId},operational}:{routeId:selection,operational});
       toast.success('Pedido vinculado à rota.',{description:'A saída para entrega só acontece ao iniciar a rota.'});
       setEditing(null);
       router.push(`/rotas/details?id=${encodeURIComponent(routeId)}&date=${encodeURIComponent(today)}`);
@@ -108,6 +117,15 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
         {state==='pronto'?<button type="button" onClick={()=>begin(delivery)} aria-expanded={expanded} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-xs font-black text-emerald-200"><RouteIcon size={16}/>{expanded?'Fechar escolha de rota':'Escolher rota'}<ChevronDown size={15}/></button>:
         <button type="button" onClick={()=>router.push('/loja?site=pending')} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/50 text-xs font-bold text-zinc-200"><ShoppingBag size={15}/>Conferir no Admin do Site</button>}
         {expanded&&state==='pronto'&&<div className="mt-3 space-y-3 rounded-2xl border border-zinc-700/60 bg-zinc-950/75 p-3">
+          <button type="button" aria-expanded={reviewOpen} onClick={()=>setReviewOpen(v=>!v)} className="w-full rounded-xl border border-sky-500/25 bg-sky-500/[.06] px-3 py-3 text-left text-xs font-bold text-sky-200">{reviewOpen?'Fechar revisão':'Revisar pedido · endereço, contato e cobrança'}</button>
+          {reviewOpen&&<div className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+            <p className="text-[10px] leading-relaxed text-zinc-400">Dados operacionais desta entrega. Valores e status comerciais permanecem sob autoridade do Site.</p>
+            <label className="text-[11px] font-bold text-zinc-300">Endereço<input value={reviewAddress} onChange={event=>setReviewAddress(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs"/></label>
+            <label className="text-[11px] font-bold text-zinc-300">Telefone / WhatsApp<input value={reviewPhone} onChange={event=>setReviewPhone(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs"/></label>
+            <label className="text-[11px] font-bold text-zinc-300">Observação<input value={reviewObservation} onChange={event=>setReviewObservation(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs"/></label>
+            <p className="text-[11px] font-bold text-zinc-300">Cobrança operacional</p>
+            <div className="grid grid-cols-3 gap-2">{([['dinheiro','Dinheiro'],['pix','Pix'],['cartao','Cartão']] as const).map(([method,label])=><button key={method} type="button" onClick={()=>setReviewPayment(method)} className={`min-h-11 rounded-xl border text-[11px] font-bold ${reviewPayment===method?'border-emerald-400/50 bg-emerald-500/10 text-emerald-200':'border-zinc-700 text-zinc-400'}`}>{label}</button>)}</div>
+          </div>}
           <div className="flex gap-2"><button type="button" aria-pressed={!newMode} onClick={()=>setNewMode(false)} className={`min-h-10 flex-1 rounded-xl border text-[11px] font-bold ${!newMode?'border-emerald-500/40 bg-emerald-500/10':'border-zinc-800 text-zinc-400'}`}>Rota existente</button><button type="button" aria-pressed={newMode} onClick={()=>setNewMode(true)} className={`min-h-10 flex-1 rounded-xl border text-[11px] font-bold ${newMode?'border-emerald-500/40 bg-emerald-500/10':'border-zinc-800 text-zinc-400'}`}><Plus size={13} className="inline"/> Nova rota</button></div>
           {!newMode?<div className="max-h-48 space-y-1.5 overflow-y-auto">{availableRoutes.length?availableRoutes.map(route=><button type="button" key={route.id} onClick={()=>setSelection(route.id)} aria-pressed={selection===route.id} className={`flex min-h-11 w-full items-center gap-2 rounded-xl border px-3 text-left text-xs ${selection===route.id?'border-emerald-400 bg-emerald-400/10 text-emerald-200':'border-zinc-800 bg-zinc-900/60 text-zinc-300'}`}><RouteIcon size={14}/><span className="min-w-0 flex-1 truncate">{route.name} · {route.motoboy_name}</span>{selection===route.id&&<CheckCircle2 size={14}/>}</button>):<p className="rounded-xl bg-zinc-900 p-3 text-[11px] text-zinc-400">Nenhuma rota aberta de hoje sem saída. Use Nova rota.</p>}</div>:<div className="space-y-2"><label className="block text-[11px] font-semibold text-zinc-300">Nome da rota<input value={routeName} onChange={event=>setRouteName(event.target.value)} placeholder="Ex.: Centro 2" maxLength={80} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm outline-none focus:border-emerald-500"/></label><p className="text-[11px] font-semibold text-zinc-300">Motoboy responsável</p><div className="grid grid-cols-2 gap-1.5">{activeMotoboys.map(motoboy=><button type="button" key={motoboy.id} onClick={()=>setMotoboyId(motoboy.id)} aria-pressed={motoboyId===motoboy.id} className={`min-h-11 rounded-xl border px-2 text-[11px] font-bold ${motoboyId===motoboy.id?'border-emerald-500/40 bg-emerald-500/10':'border-zinc-800 text-zinc-400'}`}>{motoboy.name}</button>)}</div>{!activeMotoboys.length&&<p className="text-[10px] text-amber-300">Cadastre um motoboy ativo antes de criar uma rota.</p>}</div>}
           <p className="flex items-start gap-2 text-[10px] leading-relaxed text-zinc-400"><ShieldCheck size={15} className="shrink-0 text-emerald-400"/>O Firestore revalida o pedido e a rota antes de salvar. Nenhuma mensagem de saída será enviada apenas pela alocação.</p>

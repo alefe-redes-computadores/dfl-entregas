@@ -16,7 +16,12 @@ ok(site.includes('projection.ready') && site.includes('projection.commercial') &
 ok(site.includes('Pedido #{delivery.external_order_id'), 'Pedido individual continua identificado');
 ok(site.includes('allocate(delivery.id'), 'Alocacao transacional preservada');
 ok(command.includes('siteInboxSummary(siteInbox)'), 'Home resume apenas contagens relevantes');
-ok(command.includes("href: '/loja/caixa-de-entrada?aba=site'"), 'Acesso da Home para a Caixa');
+ok(
+  command.includes('href: siteInbox.rows.length === 1') &&
+  command.includes('`/loja/caixa-de-entrada?aba=site&pedido=${encodeURIComponent(siteInbox.rows[0].delivery.id)}`') &&
+  command.includes(": '/loja/caixa-de-entrada?aba=site'"),
+  'Acesso da Home para a Caixa: pedido especifico e fallback'
+);
 ok(command.includes("key: 'broken-route-link'"), 'Corrompidos mantem acao propria');
 ok(!command.includes('pendingSiteOrders = useMemo('), 'Home nao ordena backlog duplicado');
 ok(shift.includes('stockAttention > 0 && <button') && shift.includes("router.push('/estoque')"), 'Estoque abertura acionavel');

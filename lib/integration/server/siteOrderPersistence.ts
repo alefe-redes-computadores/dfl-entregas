@@ -767,8 +767,12 @@ export async function consumeDflSiteOrderUpdatedPersisted(
           site_order_commercial: commercialSnapshotFromSite(event.payload),
           value: event.payload.total,
           customer_charge: event.payload.total,
-          payment_method: normalizeSitePaymentMethod(event.payload.metodoPagamento),
-          change_for: normalizeSiteChangeFor(event.payload.trocoPara) ?? null,
+          // O valor comercial permanece do Site; o meio de cobrança escolhido
+          // explicitamente pelo operador para esta entrega é preservado.
+          ...((delivery as unknown as Record<string, unknown>).site_operational_payment_override === true
+            ? {}
+            : {payment_method: normalizeSitePaymentMethod(event.payload.metodoPagamento),
+               change_for: normalizeSiteChangeFor(event.payload.trocoPara) ?? null}),
           updated_at: now,
         }),
       );

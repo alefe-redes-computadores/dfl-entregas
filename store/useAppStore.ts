@@ -48,10 +48,10 @@ import {
   normalizeCustomerPhone,
 } from '@/lib/customer-identity';
 import { stockProductCategory, suggestStockCategory } from '@/lib/stock-categories';
-import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop, moveStopToIndex, stopDeliveryIds } from '@/lib/route-stops';
+import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop, keepPinnedStopPositions, moveStopToIndex, stopDeliveryIds } from '@/lib/route-stops';
 import { rollbackRouteOrderFields, withRouteOrderWriteLock } from '@/lib/route-order-write-guard';
 import { validOriginPoint } from '@/lib/store-origin';
-import { deliveryCustomerCharge } from '@/lib/delivery-finance';
+import { deliveryCustomerCharge, paymentStateForInput } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingConfirmation, isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
 import { mergeCloudFirstById, mergeDeliveriesPreservingExpansion } from '@/lib/operation/snapshotMerge';
@@ -231,7 +231,7 @@ interface AppState {
   addDelivery: (delivery: Delivery) => Promise<void>;
   addDeliveries: (deliveries: Delivery[]) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
-  allocateSiteDelivery: (deliveryId: string, target: {routeId: string} | {newRoute: {name: string; motoboyId: string}}) => Promise<string>;
+  allocateSiteDelivery: (deliveryId: string, target: ({routeId: string} | {newRoute: {name: string; motoboyId: string}}) & {operational?: {address_string?:string;phone?:string;observation?:string;payment_method?:Delivery['payment_method']}}) => Promise<string>;
   deleteDelivery: (id: string) => Promise<void>;
   closeRoute: (routeId: string, options?: { effectiveEndTime?: string; autoClosedAt?: string }) => Promise<void>;
   reopenRoute: (routeId: string) => Promise<void>;
@@ -1738,8 +1738,10 @@ export const useAppStore = create<AppState>()(
         const automaticIndex = delivery.is_urgent ? minIndex - 1 : maxIndex + 1;
         const deliveryWithTimestamp = {
           ...delivery,
-          order_index: delivery.order_index ?? automaticIndex,
-          order_source: delivery.order_source || 'smart',
+          // Urgência entra no topo e fica fixada até destravamento explícito.
+          order_index: delivery.is_urgent ? automaticIndex : delivery.order_index ?? automaticIndex,
+          order_locked: delivery.is_urgent ? true : delivery.order_locked,
+          order_source: delivery.is_urgent ? 'manual' : delivery.order_source || 'smart',
           order_updated_at: delivery.order_updated_at || now,
           createdAt: delivery.createdAt || delivery.created_at || now,
           created_at: delivery.created_at || delivery.createdAt || now,
@@ -1751,7 +1753,7 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
           await setDoc(doc(db, 'deliveries', delivery.id), safeData);
-          if (deliveryWithTimestamp.route_id) {
+          if (deliveryWithTimestamp.route_id && !deliveryWithTimestamp.is_urgent) {
             try {
               await autoOrganizeLoadedRouteAfterInsert(deliveryWithTimestamp.route_id, get().deliveries, get().customers, get().storeSettings);
             } catch (organizeError) {
@@ -1780,18 +1782,23 @@ export const useAppStore = create<AppState>()(
         }
         const now = new Date().toISOString();
         const routeTail = new Map<string, number>();
+        const routeHead = new Map<string, number>();
         get().deliveries.filter((item)=>!item.completed && !isCancelledSiteDelivery(item)).forEach((item)=>{
-          const current=routeTail.get(item.route_id) ?? -1;
-          routeTail.set(item.route_id, Math.max(current, item.order_index ?? current));
+          const index = typeof item.order_index === 'number' && Number.isFinite(item.order_index) ? item.order_index : 0;
+          routeTail.set(item.route_id, Math.max(routeTail.get(item.route_id) ?? -1, index));
+          routeHead.set(item.route_id, Math.min(routeHead.get(item.route_id) ?? 0, index));
         });
-        const prepared = items.map((delivery, position) => {
+        const prepared = items.map((delivery) => {
           const tail = routeTail.get(delivery.route_id) ?? -1;
-          const nextIndex = delivery.is_urgent ? -1000000 + position : tail + 1;
-          if (!delivery.is_urgent) routeTail.set(delivery.route_id, nextIndex);
+          const head = routeHead.get(delivery.route_id) ?? 0;
+          const nextIndex = delivery.is_urgent ? head - 1 : tail + 1;
+          if (delivery.is_urgent) routeHead.set(delivery.route_id, nextIndex);
+          else routeTail.set(delivery.route_id, nextIndex);
           return {
             ...delivery,
-            order_index: delivery.order_index ?? nextIndex,
-            order_source: delivery.order_source || 'smart',
+            order_index: delivery.is_urgent ? nextIndex : delivery.order_index ?? nextIndex,
+            order_locked: delivery.is_urgent ? true : delivery.order_locked,
+            order_source: delivery.is_urgent ? 'manual' : delivery.order_source || 'smart',
             order_updated_at: delivery.order_updated_at || now,
             createdAt: delivery.createdAt || delivery.created_at || now,
             created_at: delivery.created_at || delivery.createdAt || now,
@@ -1808,6 +1815,8 @@ export const useAppStore = create<AppState>()(
           await batch.commit();
           const touchedRoutes = Array.from(new Set(prepared.map((delivery) => delivery.route_id).filter(Boolean)));
           for (const touchedRouteId of touchedRoutes) {
+            // Não desfazer, no mesmo cadastro, a prioridade fixada de uma urgência.
+            if (prepared.some((delivery) => delivery.route_id === touchedRouteId && delivery.is_urgent)) continue;
             try {
               await autoOrganizeLoadedRouteAfterInsert(
                 touchedRouteId,
@@ -1865,18 +1874,39 @@ export const useAppStore = create<AppState>()(
               if (!routeSnap.exists()) throw new Error('A rota selecionada não existe mais.');
               route = { ...routeSnap.data(), id: routeSnap.id } as Route;
             }
-            assertSiteRouteAllocation(remoteDelivery, route, now.getTime());
-            // A atribuição é logística. Não muda status comercial, conclusão, pagamento,
-            // histórico, código iFood ou evento de saída.
-            transaction.update(deliveryRef, { route_id: routeId, updated_at: nowIso });
+            // Endereco revisado no mesmo ato de alocacao tambem pode
+            // corrigir pedido recebido sem rua completa, sem criar clone.
+            assertSiteRouteAllocation({
+              ...remoteDelivery,
+              address_string: target.operational?.address_string?.trim() || remoteDelivery.address_string,
+            }, route, now.getTime());
+            // Uma única transação conserva o ID, status e autoridade comercial.
+            // Alterações operacionais explícitas não criam outro pedido.
+            const draft = target.operational;
+            const patch: Record<string, unknown> = {};
+            if (draft) {
+              if (typeof draft.address_string === 'string') {
+                if (!draft.address_string.trim()) throw new Error('Informe o endereço antes da alocação.');
+                patch.address_string = draft.address_string.trim();
+              }
+              if (typeof draft.phone === 'string') patch.phone = draft.phone.trim();
+              if (typeof draft.observation === 'string') patch.observation = draft.observation.trim();
+              if (draft.payment_method !== undefined) {
+                if (!['dinheiro','pix','cartao','cartao_credito','cartao_debito'].includes(draft.payment_method)) throw new Error('Pagamento operacional inválido.');
+                patch.payment_method = draft.payment_method;
+                patch.payment_state = paymentStateForInput(draft.payment_method, Boolean(remoteDelivery.is_paid));
+                patch.site_operational_payment_override = true;
+              }
+            }
+            transaction.update(deliveryRef, { route_id: routeId, ...patch, updated_at: nowIso });
             if ('newRoute' in target) transaction.set(routeRef, sanitizeForFirebase(route));
-            return { remoteDelivery, route };
+            return { remoteDelivery, route, operational: patch };
           });
           set(state => ({
             routes: 'newRoute' in target && !state.routes.some(item => item.id === routeId)
               ? [saved.route, ...state.routes] : state.routes,
             deliveries: state.deliveries.map(item => item.id === deliveryId
-              ? { ...item, route_id: routeId, updated_at: nowIso } : item),
+              ? { ...item, ...saved.operational, route_id: routeId, updated_at: nowIso } as Delivery : item),
           }));
           return routeId;
         } finally {
@@ -1987,6 +2017,18 @@ export const useAppStore = create<AppState>()(
           }
         }
 
+        const urgentPlacementNeeded = Boolean(
+          nextRouteId && !deliveryToUpdate.completed &&
+          (routeChanged || urgencyChanged) &&
+          (updatedData.is_urgent ?? deliveryToUpdate.is_urgent),
+        );
+        const urgentIndices = urgentPlacementNeeded
+          ? state.deliveries
+              .filter((item) => item.id !== id && item.route_id === nextRouteId && !item.completed)
+              .map((item) => item.order_index)
+              .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+          : [];
+        const urgentTopIndex = urgentIndices.length ? Math.min(...urgentIndices) - 1 : -1;
         const dataWithTimestamp: Partial<Delivery> = {
           ...updatedData,
           ...(routeChanged && nextRouteId
@@ -1994,6 +2036,14 @@ export const useAppStore = create<AppState>()(
                 order_index: movedOrderIndex,
                 order_locked: false,
                 order_source: 'smart' as const,
+                order_updated_at: now,
+              }
+            : {}),
+          ...(urgentPlacementNeeded
+            ? {
+                order_index: urgentTopIndex,
+                order_locked: true,
+                order_source: 'manual' as const,
                 order_updated_at: now,
               }
             : {}),
@@ -2538,10 +2588,11 @@ export const useAppStore = create<AppState>()(
           throw new Error('A ordem recebida não corresponde às entregas pendentes da rota.');
         }
 
-        // O pedido do Site e o pedido local compartilham a mesma autoridade de ordem.
-        // Falhar explicitamente evita informar sucesso quando uma parada não mudou.
-        const orderedPending = finalPendingIds.map((id) => pendingById.get(id)!);
-        if (new Set(finalPendingIds).size !== pending.length) {
+        // Fixações são aplicadas na autoridade de escrita, para que arraste,
+        // setas e otimizador não movam a primeira parada travada.
+        const protectedIds = keepPinnedStopPositions(pending, finalPendingIds);
+        const orderedPending = protectedIds.map((id) => pendingById.get(id)!);
+        if (new Set(protectedIds).size !== pending.length) {
           throw new Error('A sequência contém IDs repetidos ou pedidos ausentes.');
         }
         const completedSorted = [...completed].sort((a, b) => {

@@ -8,7 +8,7 @@ export type SiteInboxState = 'confirmar' | 'aguardar_agenda' | 'pronto' | 'revis
 
 // Somente estados comerciais explicitamente aprovados autorizam vinculo logístico.
 // Status novos/desconhecidos permanecem em revisão, nunca autorizam saída automaticamente.
-const RELEASED = new Set(['confirmado', 'confirmada', 'aprovado', 'aprovada', 'aceito', 'aceita', 'em_preparo', 'em_preparacao', 'preparando', 'preparacao', 'pronto', 'pronta', 'preparado', 'preparada']);
+const RELEASED = new Set(['confirmado', 'confirmada', 'aprovado', 'aprovada', 'aceito', 'aceita', 'em_producao', 'em_preparo', 'em_preparacao', 'preparando', 'preparacao', 'pronto', 'pronta', 'preparado', 'preparada']);
 export function siteInboxState(delivery: Delivery, now = Date.now()): SiteInboxState | null {
   if (delivery.source_system !== 'dfl_site') return null;
   if (isCancelledSiteDelivery(delivery)) return 'cancelado';
