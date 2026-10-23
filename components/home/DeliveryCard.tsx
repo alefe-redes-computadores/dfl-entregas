@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, Globe2, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle, GripVertical
+  Smartphone, Store, Globe2, Bike, UtensilsCrossed, Layers3, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle, GripVertical
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import clsx from 'clsx';
@@ -27,6 +27,7 @@ import { deliveryPaymentStateLabel, deriveDeliveryPaymentState, deliveryCustomer
 import { summarizeStopFinance } from '@/lib/delivery-stop-finance';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { ownerContextLabel } from '@/lib/owner-order-context';
+import { deliveryChannel } from '@/lib/delivery-presentation';
 import { verifiedInternalCustomer } from '@/lib/internal-owner-identity';
 
 interface DeliveryCardProps {
@@ -87,13 +88,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     groupedDeliveries.every((item) => item.origin === 'ifood' && orderConfirmationCode(item.confirmation_code) === groupedCodes[0])
     ? groupedCodes[0] : '';
 
-  // V42: expansão é apenas estado transitório de conferência.
-  // Ao entrar/recarregar a tela, o padrão volta a ser compacto.
-  useEffect(() => {
-    if (delivery.is_expanded) toggleDeliveryExpansion(delivery.id, false);
-    // Executa somente na montagem deste card.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // R78: uma parada aberta permanece assim até o operador minimizá-la.
+  // Não redefinir is_expanded quando o cartão remonta ou muda a ordem.
 
   // Movimentar o cartão via ref evita renderizar ~1.000 linhas de JSX a cada pixel.
   const swipeSurfaceRef = useRef<HTMLDivElement | null>(null);
@@ -163,6 +159,17 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const paymentStateLabel = deliveryPaymentStateLabel(delivery);
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const isSiteOrder = delivery.source_system === 'dfl_site';
+  const visualOrigin = deliveryChannel(delivery);
+  const mixedOrigins = isGroupedStop && groupedDeliveries.some(item => deliveryChannel(item) !== visualOrigin);
+  const visualChannels = {
+    ifood: { label: 'IFOOD', icon: UtensilsCrossed, rail: 'bg-red-500', shell: 'border-red-500/30 bg-red-500/10 text-red-400', badge: 'border-red-500/30 bg-red-500/[.10] text-red-300' },
+    food99: { label: '99FOOD', icon: Bike, rail: 'bg-amber-400', shell: 'border-amber-400/30 bg-amber-400/10 text-amber-300', badge: 'border-amber-400/30 bg-amber-400/[.10] text-amber-200' },
+    site: { label: 'SITE', icon: Globe2, rail: 'bg-sky-400', shell: 'border-sky-400/30 bg-sky-400/10 text-sky-300', badge: 'border-sky-400/30 bg-sky-400/[.10] text-sky-200' },
+    store: { label: 'LOJA', icon: Store, rail: 'bg-emerald-400', shell: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300', badge: 'border-emerald-400/30 bg-emerald-400/[.10] text-emerald-200' },
+    mixed: { label: 'MISTO', icon: Layers3, rail: 'bg-violet-400', shell: 'border-violet-400/30 bg-violet-400/10 text-violet-300', badge: 'border-violet-400/30 bg-violet-400/[.10] text-violet-200' },
+  } as const;
+  const channelStyle = mixedOrigins ? visualChannels.mixed : visualChannels[visualOrigin];
+  const ChannelIcon = channelStyle.icon;
   const operationalContextLabel = ownerContextLabel(delivery) || (verifiedInternalCustomer(customer)?'DEV · Interno':null);
   const isDeveloperTest = delivery.developer_test === true || delivery.owner_order_context === 'owner_provisional';
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
@@ -467,12 +474,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         Object.fromEntries(codeDeliveries.map((item) => [item.id, storedConfirmationCode(item)])),
       );
     } else {
-      if (!isExpanded) {
-      getDeliveriesByRoute(route.id)
-        .filter((item) => item.id !== delivery.id && item.is_expanded)
-        .forEach((item) => toggleDeliveryExpansion(item.id, false));
-    }
-    toggleDeliveryExpansion(delivery.id, !isExpanded);
+      // Abrir um cartão não recolhe outros. Somente o próprio operador
+      // escolhe minimizar; pedidos de uma mesma parada continuam agrupados.
+      toggleDeliveryExpansion(delivery.id, !isExpanded);
     }
   }
 
@@ -751,6 +755,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
               : "bg-zinc-900/35 border border-zinc-800/70"
         )}
       >
+        <div aria-hidden="true" className={clsx('pointer-events-none absolute inset-y-1.5 left-0 z-20 w-[3px] rounded-full', channelStyle.rail)} />
         <div className={clsx(
           "absolute inset-0 flex items-center justify-between px-6 transition-colors duration-150",
           isDraggingRight ? "bg-sky-500/40" : isDraggingLeft ? "bg-emerald-500/50" : "bg-zinc-950"
@@ -769,7 +774,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           ref={swipeSurfaceRef}
           onClick={(event) => {
             const target = event.target as HTMLElement;
-            if (isSwiping || suppressCardClick.current || target.closest('button, a, input, textarea, select, [data-no-card-swipe="true"]')) return;
+            if (isExpanded || isSwiping || suppressCardClick.current || target.closest('button, a, input, textarea, select, [data-no-card-swipe="true"]')) return;
             void handleTriggerAction('expand');
           }}
           onTouchStart={handleTouchStart}
@@ -779,11 +784,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           style={{ touchAction: 'pan-y' }}
           className={clsx("relative z-10 flex w-full flex-col bg-zinc-900", !isSwiping && "transition-transform duration-200")}
         >
-          <div className={clsx("flex flex-col", isExpanded ? "p-4" : "px-3 py-2.5")}>
+          <div className={clsx("flex flex-col", isExpanded ? "p-3.5 sm:p-4" : "px-3 py-2.5")}>
             <div className="flex items-start gap-3">
               <div className="relative shrink-0 mt-0.5">
-                <span className={clsx("flex items-center justify-center rounded-xl border", isExpanded ? "h-10 w-10" : "h-9 w-9", isIfood ? "bg-red-500/10 border-red-500/20 text-red-500" : isSiteOrder ? "bg-sky-500/10 border-sky-500/20 text-sky-400" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500")}>
-                  {isIfood ? <Smartphone size={19} /> : isSiteOrder ? <Globe2 size={19} /> : <Store size={19} />}
+                <span className={clsx('flex items-center justify-center rounded-xl border', isExpanded ? 'h-10 w-10' : 'h-9 w-9', channelStyle.shell)}>
+                  <ChannelIcon size={19} aria-hidden="true" />
                 </span>
                 {position !== undefined && (
                   <span className="absolute -left-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 px-1 text-[9px] font-black text-zinc-200 shadow-lg">
@@ -794,17 +799,20 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
               <div className="flex flex-col flex-1 truncate">
                 <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-1.5 truncate max-w-[170px]">
+                  <div className="flex min-w-0 max-w-[190px] flex-col items-start gap-1">
                     <p className="font-heading text-sm font-black tracking-tight text-zinc-50 truncate flex items-center gap-1">
                       {isGroupedStop
                         ? `${groupedDeliveries.length} pedidos nesta parada`
                         : customer?.name || delivery.customer_name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
                       {!isGroupedStop && isVIP && <Crown size={12} className="text-amber-500 shrink-0" />}
                     </p>
+                    <span className={clsx('inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-heading text-[9px] font-black uppercase tracking-[.16em]', channelStyle.badge)}>
+                      <ChannelIcon size={11} aria-hidden="true" />{channelStyle.label}
+                    </span>
                   </div>
-                  <div className="flex flex-col items-end">
-                    <span className="block text-right text-[8px] font-bold uppercase tracking-wide text-zinc-500">{isGroupedStop ? 'Valor dos pedidos' : 'Valor do pedido'}</span>
-                    <p className="text-sm font-black text-zinc-200 tracking-tight shrink-0">
+                  <div className="min-w-0 max-w-[43%] shrink-0 flex flex-col items-end">
+                    <span className="block text-right text-[9px] font-bold uppercase tracking-wide text-zinc-500">{isGroupedStop ? 'Valor dos pedidos' : 'Valor do pedido'}</span>
+                    <p className="max-w-full break-words text-right text-[clamp(0.8rem,3.2vw,1rem)] font-black tabular-nums text-zinc-100 tracking-tight">
                       {isPrivacyMode ? 'R$ •••••' : `R$ ${(isGroupedStop ? groupedTotal : deliveryEconomicValue(delivery)).toFixed(2).replace('.', ',')}`}
                     </p>
                     {(isGroupedStop ? groupedFinance.hasDifferentCustomerCharge : Math.abs(deliveryEconomicValue(delivery) - deliveryCustomerCharge(delivery)) >= 0.005) && (
@@ -815,7 +823,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                 {/* Linha dos Identificadores com Press & Hold */}
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                  {isSiteOrder && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-sky-300">Site</span>}
+                  {!isGroupedStop && visualOrigin === 'food99' && delivery.order_id && <span className="rounded-md border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-300">#{delivery.order_id}</span>}
                   {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
                   {isGroupedStop && !isExpanded && groupedFinance.collectCount > 0 && <span className="rounded-md border border-amber-500/25 bg-amber-500/[.07] px-2 py-0.5 text-[9px] font-bold text-amber-300">{groupedFinance.collectCount} cobrar</span>}
                   {isGroupedStop && !isExpanded && groupedFinance.pendingCount > 0 && <span className="rounded-md border border-violet-500/25 bg-violet-500/[.07] px-2 py-0.5 text-[9px] font-bold text-violet-300">{groupedFinance.pendingCount} Pix/pendência</span>}
@@ -1040,15 +1048,15 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             <GripVertical size={16}/>
                             {dropTargetPosition !== null && <span aria-live="polite">{dropTargetPosition}</span>}
                           </button>}
-                          {canReorder && <div className="hidden items-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 sm:flex">
+                          {canReorder && <div role="group" aria-label="Subir ou descer parada" className="flex shrink-0 items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]">
                             <button
                               type="button"
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 await moveStop(Math.max(0, (position || 1) - 2));
                               }}
-                              className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100 disabled:opacity-30"
-                              disabled={reorderBusy || (position || 1) <= 1}
+                              className="flex h-10 w-10 items-center justify-center text-sky-200 active:bg-sky-500/15 disabled:text-zinc-600 disabled:opacity-40"
+                              disabled={reorderBusy || orderLocked || (position || 1) <= 1}
                               aria-label="Mover uma posição para cima"
                             >
                               <ArrowUp size={13} />
@@ -1060,8 +1068,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                                 e.stopPropagation();
                                 await moveStop(position || 1);
                               }}
-                              className="flex h-9 w-9 items-center justify-center text-zinc-500 active:bg-zinc-800 active:text-zinc-100 disabled:opacity-30"
-                              disabled={reorderBusy || (position || 1) >= pendingCount}
+                              className="flex h-10 w-10 items-center justify-center text-sky-200 active:bg-sky-500/15 disabled:text-zinc-600 disabled:opacity-40"
+                              disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount}
                               aria-label="Mover uma posição para baixo"
                             >
                               <ArrowDown size={13} />
@@ -1083,17 +1091,27 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
             <div className="animate-in slide-in-from-top-2 fade-in duration-200">
               <div className="px-4 pb-3 flex flex-col gap-2.5">
                 <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/45 p-3" aria-label="Resumo da parada">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Detalhes da parada</span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      <button type="button" data-no-card-swipe="true" onClick={(event)=>{event.stopPropagation();toggleDeliveryExpansion(delivery.id,false);}} aria-label="Minimizar esta parada" className="flex min-h-9 items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-[10px] font-black text-zinc-200"><Minimize2 size={13}/>Minimizar</button>
                       {canManageStop && <button type="button" onClick={(event)=>void toggleStopLock(event)} disabled={reorderBusy} className={`rounded-lg border px-2 py-1 text-[10px] font-black ${orderLocked ? 'border-amber-500/35 bg-amber-500/10 text-amber-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}>{orderLocked ? 'Destravar' : 'Fixar'}</button>}
                       <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${stopCompleted ? 'bg-emerald-500/10 text-emerald-300' : 'bg-sky-500/10 text-sky-300'}`}>{stopCompleted ? 'Concluída' : isGroupedStop ? `${groupedPending} pedidos pendentes` : 'Pendente'}</span>
                     </div>
                   </div>
-                  <p className="mt-2 text-xs font-semibold leading-relaxed text-zinc-200">{shortAddress || 'Endereço não informado'}</p>
+                  {canManageStop && <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Organizar parada expandida">
+                    <span className="mr-auto text-[10px] font-semibold text-zinc-400">{orderLocked ? 'Parada fixada · destrave para mover' : canReorder ? `Parada ${position} de ${pendingCount}` : 'Sequência de parada'}</span>
+                    {canReorder && <div className="flex items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]" role="group" aria-label="Mover parada expandida">
+                      <button type="button" data-no-card-swipe="true" aria-label="Subir parada expandida" title="Subir uma parada" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowUp size={15}/></button>
+                      <span className="h-4 w-px bg-sky-500/20"/>
+                      <button type="button" data-no-card-swipe="true" aria-label="Descer parada expandida" title="Descer uma parada" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowDown size={15}/></button>
+                    </div>}
+                    {canReorder && <button type="button" data-no-card-swipe="true" onClick={(event)=>{event.stopPropagation();setMoveSheetOpen(true);}} className="min-h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-bold text-zinc-200">Mover para…</button>}
+                  </div>}
+                  <p className="mt-2 break-words text-xs font-semibold leading-relaxed text-zinc-200">{shortAddress || 'Endereço não informado'}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
                     {!isGroupedStop && position !== undefined && <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">Parada {position}</span>}
-                    <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">{isGroupedStop ? 'Vários pedidos na parada' : isSiteOrder ? 'Pedido do Site' : isIfood ? 'Pedido iFood' : 'Pedido direto'}</span>
+                    <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">{isGroupedStop ? 'Vários pedidos na parada' : visualOrigin === 'site' ? 'Pedido do Site' : visualOrigin === 'ifood' ? 'Pedido iFood' : visualOrigin === 'food99' ? 'Pedido 99Food' : 'Pedido direto'}</span>
                     {!delivery.completed && groupedCodeDeliveries.length > 0 && <span className="rounded-lg bg-amber-500/10 px-2 py-1 font-bold text-amber-300">{groupedCodeDeliveries.length} código{groupedCodeDeliveries.length===1?'':'s'} para conferir</span>}
                     {activePhone && <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-300">Contato disponível</span>}
                   </div>

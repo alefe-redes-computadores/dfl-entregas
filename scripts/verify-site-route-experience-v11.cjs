@@ -21,7 +21,7 @@ const checks = [
   ['maps usa endereço operacional', files.presentation.includes('canonicalizeOperationalAddress')],
   ['número residencial aceita separador visual', files.address.includes('[-,/•]')],
   ['detalhe possui identidade Site', files.details.includes("channel === 'site' ? <Globe2")],
-  ['card Site possui ícone próprio', files.card.includes('isSiteOrder ? <Globe2')],
+  ['card Site possui ícone próprio', files.card.includes("site: { label: 'SITE', icon: Globe2") && files.card.includes('deliveryChannel(delivery)') && files.card.includes('<ChannelIcon size={19}') && files.presentation.includes("if (delivery.source_system === 'dfl_site') return 'site';")],
   ['histórico comercial tipado', files.types.includes('site_order_timeline?: SiteOrderTimelineEntry[]')],
   ['histórico comercial idempotente', files.persistence.includes('(item) => item.event_id !== event.event_id')],
   ['pedidos sem rota nao simulam rota', !files.home.includes("routesDoDia.push({ id: 'rota-aguardando-vinculo'") && fs.readFileSync('components/home/OperationalCommandCenter.tsx','utf8').includes('siteInboxProjection(allDeliveries)')],

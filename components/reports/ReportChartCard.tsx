@@ -61,11 +61,11 @@ export function ReportChartCard({
 
   return (
     <section className="overflow-hidden rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 shadow-sm">
-      <div className="flex items-start justify-between gap-4 px-5 pb-2 pt-5">
+      <div className="flex min-w-0 items-start justify-between gap-3 px-4 pb-2 pt-4 sm:px-5 sm:pt-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-zinc-100">
             <span className="text-emerald-400">{icon}</span>
-            <h2 className="text-base font-black tracking-tight">{title}</h2>
+            <h2 className="min-w-0 break-words text-[15px] font-black tracking-tight sm:text-base">{title}</h2>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-zinc-500">{description}</p>
           {onSelectBucket && chartData.length > 0 && (
@@ -86,11 +86,11 @@ export function ReportChartCard({
       </div>
 
       {chartData.length === 0 ? (
-        <div className="px-5 py-12 text-center text-sm text-zinc-600">
+        <div className="px-4 py-8 text-center text-xs text-zinc-500 sm:px-5">
           Nenhum dado confiável para esta análise.
         </div>
       ) : (
-        <div className="h-[250px] w-full px-2 pb-1">
+        <div className="h-[214px] w-full min-w-0 px-1 pb-1 sm:h-[250px] sm:px-2">
           <ResponsiveContainer width="100%" height="100%">
             {chartType === 'line' ? (
               <LineChart
@@ -175,8 +175,8 @@ export function ReportChartCard({
         onClick={onExplore}
         className="flex w-full items-center justify-between border-t border-zinc-800/70 px-5 py-3 text-left text-xs font-bold text-zinc-400 transition hover:bg-zinc-900 active:bg-zinc-800/70"
       >
-        <span>{footer ?? 'Abrir histórico e registros que formam esta análise'}</span>
-        <ChevronRight size={15} />
+        <span className="min-w-0 flex-1 break-words">{footer ?? 'Abrir histórico e registros que formam esta análise'}</span>
+        <ChevronRight size={15} className="shrink-0" />
       </button>
     </section>
   );

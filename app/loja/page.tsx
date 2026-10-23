@@ -414,6 +414,24 @@ export default function LojaPage() {
             <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.selectedDateRoutes.filter(route => route.status === 'aberta').length} rota(s) aberta(s) · sequência</p>
           </button>
 
+          <div className="col-span-2 mt-1 flex items-center gap-2 px-1" aria-label="Reposição e inventário">
+            <span className="text-[10px] font-black uppercase tracking-[.14em] text-zinc-500">Reposição e inventário</span>
+            <span className="h-px flex-1 bg-zinc-800/70" />
+            <span className="text-[9px] font-semibold text-emerald-400">Acesso rápido</span>
+          </div>
+          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
+              <ChevronRight size={16} className="text-zinc-700" />
+            </div>
+            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Compras</p>
+            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Compras, fornecedores e conferência</p>
+          </button>
+          <button onClick={() => router.push('/estoque')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
+            <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400"><Boxes size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
+            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Estoque</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Saldos, contagens e movimentações</p>
+          </button>
+
           <button type="button" aria-expanded={showManagement} onClick={toggleManagement} className="col-span-2 mt-1 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-3 text-left">
             <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">Gestão da loja · clientes, equipe e recursos</span>
             <span className="h-px min-w-2 flex-1 bg-zinc-800/80" />
@@ -438,19 +456,6 @@ export default function LojaPage() {
             </div>
             <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Clientes</p>
             <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Base, endereços e histórico</p>
-          </button>
-
-          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
-              <ChevronRight size={16} className="text-zinc-700" />
-            </div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Compras</p>
-            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Compras, fornecedores e conferência</p>
-          </button>
-          <button onClick={() => router.push('/estoque')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400"><Boxes size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Estoque</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Saldos, contagens e movimentações</p>
           </button>
 
           <button onClick={() => router.push('/despesas')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
