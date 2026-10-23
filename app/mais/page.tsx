@@ -50,10 +50,10 @@ export default function MaisPage() {
         </div>
 
         <div className="min-w-0 flex-1 text-left">
-          <h2 className="font-heading text-lg font-bold text-zinc-50">
+          <h2 className="break-words font-heading text-lg font-bold text-zinc-50">
             {fullName}
           </h2>
-          <p className="text-sm text-zinc-500">
+          <p className="break-all text-sm text-zinc-500">
             {user?.email || 'Administrador Operacional'}
           </p>
         </div>

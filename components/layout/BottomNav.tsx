@@ -15,7 +15,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
 import { useAppStore } from '@/store/useAppStore';
@@ -39,7 +39,7 @@ export function BottomNav() {
   const [showAddSheet, setShowAddSheet] = useState(false);
   // Backlog persistido nas Deliveries; badge nao depende de memoria de aviso local.
   const deliveries = useAppStore(state => state.deliveries);
-  const siteUnread = siteInboxProjection(deliveries).total;
+  const siteUnread = useMemo(() => siteInboxProjection(deliveries).total, [deliveries]);
 
   const addMode: AddMode =
     (pathname === '/estoque' || pathname.startsWith('/estoque/compras') || pathname.startsWith('/estoque/catalogo'))

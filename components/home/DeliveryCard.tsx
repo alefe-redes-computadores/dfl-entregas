@@ -14,6 +14,7 @@ import { copyDeliveryToClipboard } from '@/lib/whatsapp';
 import { MiniMap } from '@/components/deliveries/MiniMap';
 import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidencePreview';
 import { locationEvidence } from '@/lib/location-evidence';
+import { buildNavigationLinks } from '@/lib/navigation-links';
 import { useAppStore } from '@/store/useAppStore';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { Capacitor } from '@capacitor/core';
@@ -64,6 +65,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const ifoodConfirmationMode = useAppStore((state) => state.motoboys.find(item => item.id === route.motoboy_id)?.ifood_confirmation_mode || 'store');
   const isExpanded = useAppStore((state) => isDeliveryExpanded(state.deliveries, delivery.id));
   const groupedDeliveries = stopDeliveries?.length ? stopDeliveries : [delivery];
+  const navigationLinks = useMemo(() => buildNavigationLinks(delivery.address_string, delivery.maps_link), [delivery.address_string, delivery.maps_link]);
   const isGroupedStop = groupedDeliveries.length > 1;
   const groupedFinance = useMemo(() => summarizeStopFinance(groupedDeliveries), [stopDeliveries, delivery]);
   const groupedTotal = groupedFinance.economicTotal;
@@ -799,14 +801,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 )}
               </div>
 
-              <div className="flex flex-col flex-1 truncate">
+              <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex justify-between items-start">
-                  <div className="flex min-w-0 max-w-[190px] flex-col items-start gap-1">
-                    <p className="font-heading text-sm font-black tracking-tight text-zinc-50 truncate flex items-center gap-1">
+                  <div className="flex min-w-0 max-w-[54%] flex-col items-start gap-1">
+                    <p className="max-w-full break-words font-heading text-[13px] font-black leading-snug tracking-tight text-zinc-50 [overflow-wrap:anywhere]">
                       {isGroupedStop
                         ? `${groupedDeliveries.length} pedidos nesta parada`
                         : customer?.name || delivery.customer_name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
-                      {!isGroupedStop && isVIP && <Crown size={12} className="text-amber-500 shrink-0" />}
+                      {!isGroupedStop && isVIP && <Crown size={12} className="ml-1 inline align-middle text-amber-500" />}
                     </p>
                     <span className={clsx('inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-heading text-[9px] font-black uppercase tracking-[.16em]', channelStyle.badge)}>
                       <ChannelIcon size={11} aria-hidden="true" />{channelStyle.label}
@@ -1110,6 +1112,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       <button type="button" data-no-card-swipe="true" aria-label="Descer parada expandida" title="Descer uma parada" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowDown size={15}/></button>
                     </div>}
                     {canReorder && <button type="button" data-no-card-swipe="true" onClick={(event)=>{event.stopPropagation();setMoveSheetOpen(true);}} className="min-h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-bold text-zinc-200">Mover para…</button>}
+                    {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(0);}} className="min-h-10 rounded-xl border border-emerald-500/25 bg-emerald-500/[.07] px-3 text-[11px] font-black text-emerald-300 disabled:opacity-35">Ir primeiro</button>}
+                    {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(pendingCount-1);}} className="min-h-10 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 text-[11px] font-black text-amber-300 disabled:opacity-35">Deixar por último</button>}
                   </div>}
                   <p className="mt-2 break-words text-xs font-semibold leading-relaxed text-zinc-200">{shortAddress || 'Endereço não informado'}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
@@ -1156,6 +1160,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         address={delivery.address_string}
                         mapsLink={delivery.maps_link}
                       />
+                      {navigationLinks && <div className="mt-2 grid min-w-0 grid-cols-2 gap-2" role="group" aria-label="Navegação para esta parada">
+                        <a href={navigationLinks.maps} target="_blank" rel="noopener noreferrer" className="flex min-h-10 min-w-0 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/[.07] px-2 text-center text-[11px] font-black text-sky-200">Navegar com Maps</a>
+                        <a href={navigationLinks.waze} target="_blank" rel="noopener noreferrer" className="flex min-h-10 min-w-0 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/[.07] px-2 text-center text-[11px] font-black text-violet-200">Navegar com Waze</a>
+                      </div>}
                     </div>
                   )}
                 </div>

@@ -922,6 +922,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         </div>
       )}
 
+      {isOpen && !isCompleted && !isVirtualRoute && totalDeliveries > 0 && pendingDeliveriesCount === 0 && (
+        <div className="mx-3 mb-2 flex min-w-0 items-start gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[.055] px-3 py-2.5 text-[11px] leading-relaxed text-sky-200" role="status" aria-live="polite">
+          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-sky-400" aria-hidden="true" />
+          <span>{storeSettings.autoCloseCompletedRoutes !== false ? 'Todas as entregas concluídas. Aguardando confirmação do fechamento; se necessário, use Finalizar rota.' : 'Todas as entregas concluídas. Fechamento automático desligado: finalize a rota manualmente.'}</span>
+        </div>
+      )}
       {isOpen && !isCompleted && !isVirtualRoute && routePreviewStops.length > 0 && (
         <div className="px-3 pb-3" aria-label="Prévia da sequência da rota">
           <div className={`rounded-2xl border px-3 py-2.5 ${isInProgress?'border-amber-500/25 bg-amber-500/[.04]':'border-zinc-800 bg-zinc-950/40'}`}>

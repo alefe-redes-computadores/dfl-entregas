@@ -41,7 +41,7 @@ export function SummaryCard({
 
   return (
     <div
-      className={`rounded-[22px] border bg-gradient-to-br ${colorClasses[accentColor]} p-4 backdrop-blur-sm animate-fadeInUp`}
+      className={`min-w-0 overflow-hidden rounded-[22px] border bg-gradient-to-br ${colorClasses[accentColor]} p-3.5 sm:p-4 backdrop-blur-sm animate-fadeInUp`}
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-start justify-between gap-3">
@@ -50,7 +50,7 @@ export function SummaryCard({
             {title}
           </div>
           <div
-            className={`mt-2 whitespace-nowrap font-black tracking-tight text-zinc-100 ${
+            className={`mt-2 max-w-full break-words [overflow-wrap:anywhere] font-black leading-tight tabular-nums tracking-tight text-zinc-100 ${
               String(value).length >= 11
                 ? 'text-[clamp(1.15rem,5vw,1.7rem)]'
                 : String(value).length >= 8

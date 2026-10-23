@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { resolveStopLocation } from '@/lib/maps';
+import { locationEvidence } from '@/lib/location-evidence';
 
 interface MiniMapProps {
   address: string;
@@ -11,13 +12,14 @@ interface MiniMapProps {
 export function MiniMap({ address, mapsLink }: MiniMapProps) {
   // Hooks must stay unconditional when the form goes from empty to filled.
   const targetLocation = useMemo(() => {
-    return resolveStopLocation({ address_string: address || '' }, mapsLink);
+    const evidence = locationEvidence(address, mapsLink);
+    return resolveStopLocation({ address_string: address || '' }, evidence.kind === 'coordinate' ? mapsLink : undefined);
   }, [address, mapsLink]);
   if (!address && !mapsLink) return null;
 
   const encodedTarget = encodeURIComponent(targetLocation);
   const embedUrl = `https://maps.google.com/maps?q=${encodedTarget}&t=&z=16&ie=UTF8&iwloc=&output=embed`;
-  const directMapsUrl = mapsLink || `https://www.google.com/maps/search/?api=1&query=${encodedTarget}`;
+  const directMapsUrl = locationEvidence(address, mapsLink).mapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodedTarget}`;
 
   return (
     <div className="relative mt-2 h-28 w-full overflow-hidden rounded-2xl border border-zinc-800/90 bg-zinc-950 shadow-inner">

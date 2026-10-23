@@ -3,6 +3,7 @@ const fs=require('fs');
 
 const tests=[
   'scripts/test-v112-r74-macro.cjs',
+  'scripts/test-v112-r80-global-release.cjs',
   'scripts/test-v112-r79-operational.cjs',
   'scripts/test-v112-r78-r2-global.cjs',
   'scripts/test-v112-r78-route-mobile.cjs',
