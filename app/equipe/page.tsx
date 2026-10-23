@@ -181,6 +181,7 @@ export default function TeamPage() {
         to="/loja"
       />
 
+      <div className="rounded-2xl border border-violet-500/15 bg-violet-500/[.035] px-3 py-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-bold text-zinc-200">Acessos e permissões</p><button type="button" onClick={()=>router.push('/mais/acessos')} className="min-h-9 rounded-xl border border-violet-500/25 bg-violet-500/10 px-3 text-[11px] font-black text-violet-200">Gerenciar acessos</button></div><p className="mt-1 text-[11px] leading-relaxed text-zinc-500">Cadastro de pessoas não concede acesso ao app. Convites e regras de produção continuam em homologação.</p></div>
       <div className="grid grid-cols-3 gap-1.5">
         <Metric
           value={activePeople.members}
@@ -324,10 +325,11 @@ export default function TeamPage() {
                     </span>
                   </div>
                   <p className="mt-0.5 text-[10px] text-zinc-500">
-                    Cadastro, regra de pagamento, histórico e acerto
+                    Cadastro, regra de pagamento e histórico
                   </p>
                 </button>
 
+                <button type="button" onClick={()=>router.push(`/motoboys/acerto?id=${encodeURIComponent(motoboy.id)}`)} className="flex h-9 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/[.07] px-2.5 text-[10px] font-black text-emerald-300" aria-label={`Abrir acerto de ${motoboy.name}`}>Acerto</button>
                 <button
                   type="button"
                   onClick={() => toggleMotoboy(motoboy.id, motoboy.active)}

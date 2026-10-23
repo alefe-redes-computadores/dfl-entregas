@@ -76,16 +76,23 @@ export function OperationalCommandCenter({
     item?.id ? `/entregas/editar?id=${encodeURIComponent(item.id)}` : '/entregas';
   const firstMissingIfoodCode = pending.find((item) =>
     item.origin === 'ifood' && Boolean(item.route_id) &&
+    !routes.some(route => route.id === item.route_id && motoboys.some(motoboy => motoboy.id === route.motoboy_id && motoboy.ifood_confirmation_mode === 'motoboy')) &&
     !String(item.confirmation_code || '').replace(/\D/g, '').match(/^\d{4}$/));
 
   const openRouteIds = new Set(openRoutes.map((route) => route.id));
-  const routeCodes = useMemo(
-    () => routeIfoodCodeProgress(deliveries, openRouteIds),
-    [deliveries, routes],
-  );
+  const routeCodes = useMemo(() => {
+    const original = routeIfoodCodeProgress(deliveries, openRouteIds);
+    const selfConfirmRouteIds = new Set(routes.filter(route =>
+      motoboys.some(motoboy => motoboy.id === route.motoboy_id && motoboy.ifood_confirmation_mode === 'motoboy'))
+      .map(route => route.id));
+    if (!selfConfirmRouteIds.size) return original;
+    return routeIfoodCodeProgress(deliveries.filter(item =>
+      !item.route_id || !selfConfirmRouteIds.has(item.route_id)), openRouteIds);
+  }, [deliveries, routes, motoboys]);
 
+  const selfConfirmPendingRoutes = new Set(routes.filter(route => motoboys.some(motoboy => motoboy.id === route.motoboy_id && motoboy.ifood_confirmation_mode === 'motoboy')).map(route => route.id));
   const externalPending = confirmationBacklog.filter(
-    (item) => (item.status || 'pending') === 'pending',
+    (item) => (item.status || 'pending') === 'pending' && (!item.route_id || !selfConfirmPendingRoutes.has(item.route_id)),
   );
 
   const routeSpecificPending = externalPending.filter((item) => item.route_id);

@@ -23,6 +23,7 @@ import {
 import { useAppStore } from '@/store/useAppStore';
 import { SummaryCard } from '@/components/reports/SummaryCard';
 import { ReportChartCard } from '@/components/reports/ReportChartCard';
+import { OriginChart } from '@/components/reports/Charts/OriginChart';
 import { DataQualityCard } from '@/components/reports/DataQualityCard';
 import { ReportDrilldownSheet } from '@/components/reports/ReportDrilldownSheet';
 import { ReportIntelligencePanel } from '@/components/reports/ReportIntelligencePanel';
@@ -424,6 +425,10 @@ export default function RelatoriosPage() {
               }
             />
 
+            <OriginChart data={model.origins.filter(bucket => ['iFood','99Food','Loja'].includes(bucket.label)).map(bucket => ({
+              origin: bucket.label === '99Food' ? 'food99' : bucket.label === 'iFood' ? 'ifood' : 'loja',
+              count: bucket.count, total: bucket.revenue,
+            }))}/>
             <ReportChartCard
               title="Responsável pela entrega"
               description="Separa a logística feita pela DFL, pela 99Food e as retiradas ou atendimentos no balcão."

@@ -202,6 +202,8 @@ interface AppState {
     routeReminderEnabled?: boolean;
     autoCloseCompletedRoutes?: boolean;
     notificationPreferences?: NotificationPreferences;
+    /** Plataforma entrega ou DFL entrega; ausencia preserva o padrao anterior. */
+    marketplaceDeliveryModes?: { ifood: 'dfl' | 'platform'; food99: 'dfl' | 'platform' };
     purchasePlanningTime?: string;
     stockReviewTime?: string;
     /** Categorias personalizadas do acerto, sincronizadas no documento da loja. */
@@ -2415,8 +2417,10 @@ export const useAppStore = create<AppState>()(
           const current = get();
           const now = new Date().toISOString();
 
+          const motoboyConfirmsIfood = current.motoboys.some((item) =>
+            item.id === routeBeforeClose.motoboy_id && item.ifood_confirmation_mode === 'motoboy');
           const confirmationItems: IfoodPendingConfirmation[] = routeDeliveries
-            .filter((delivery) => delivery.origin === 'ifood' && !isCancelledSiteDelivery(delivery))
+            .filter((delivery) => delivery.origin === 'ifood' && !isCancelledSiteDelivery(delivery) && !motoboyConfirmsIfood)
             .map((delivery) => {
               const customer = current.customers.find(
                 (item) => item.id === delivery.customer_id,
@@ -2455,7 +2459,7 @@ export const useAppStore = create<AppState>()(
             (item) => item.route_id === routeId && item.status === 'pending',
           ).length;
 
-          if (routePendingCount > 0) {
+          if (routePendingCount > 0 && !motoboyConfirmsIfood) {
             void notifyIfoodRoutePending(
               routeId,
               routeBeforeClose.name || 'a rota',

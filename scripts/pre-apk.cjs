@@ -3,6 +3,9 @@ const fs=require('fs');
 
 const tests=[
   'scripts/test-v112-r74-macro.cjs',
+  'scripts/test-v112-r75-macro.cjs',
+  'scripts/test-v112-r75-r3-settlement-ux.cjs',
+  'scripts/verify-v112-r75-r6-regressions.cjs',
   'scripts/verify-v112-r72-final-polish.cjs',
   'scripts/test-v112-r72-final-polish.cjs',
   'scripts/verify-v111-r68-global-ux.cjs',

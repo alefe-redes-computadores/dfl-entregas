@@ -10,7 +10,7 @@ const checks = [
   ['cliente recebe endereço do próprio pedido', "address:fulfillmentMode==='delivery'?draftAddress:undefined"],
   ['entrega recebe endereço do próprio pedido', "address_string:fulfillmentMode==='delivery'?draftAddress:''"],
   ['endereços diferentes não são agrupados à força', 'const shouldGroupStop = Boolean(stopSource);'],
-  ['cadastro espera sincronização inicial', "if(isSyncing){toast.info('Aguarde a atualização dos clientes terminar.'"],
+  ['cliente aguarda somente hidratacao inicial', "if(isSyncing && !hasHydrated){toast.info('Aguarde a atualização dos clientes terminar.'"],
 ];
 
 let failed = false;

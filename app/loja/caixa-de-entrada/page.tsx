@@ -567,7 +567,7 @@ function DraftCard({
 
           <p className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">
             {draft.parsed.address ||
-              "Endereço ainda não identificado"}
+              (draft.source === 'food99' ? 'Entrega pela plataforma · endereço não obrigatório' : 'Endereço ainda não identificado')}
           </p>
 
           {(draft.parsed.orderId ||
@@ -579,7 +579,7 @@ function DraftCard({
               draft.parsed.ifoodId
                 ? " · "
                 : ""}
-              {draft.parsed.ifoodId &&
+              {draft.source === 'ifood' && draft.parsed.ifoodId &&
                 `ID ${draft.parsed.ifoodId}`}
             </p>
           )}

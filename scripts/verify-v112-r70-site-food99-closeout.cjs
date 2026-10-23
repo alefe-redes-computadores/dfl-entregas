@@ -38,7 +38,7 @@ ok(
   'Home não fabrica rota vazia para pedidos do Site',
 );
 ok(
-  create.includes("setFulfillmentMode('external_delivery')") &&
+  create.includes("marketplaceModes?.food99 === 'dfl'") && create.includes("'external_delivery'") &&
     create.includes("fulfillmentMode==='delivery'") &&
     edit.includes("fulfillmentMode === 'delivery'"),
   '99Food não exige nem exibe seleção de rota DFL',

@@ -7,7 +7,7 @@ ok(quality.includes("IfoodGuideState = 'missing' | 'partial' | 'complete'"),'gui
 ok(quality.includes('Faltam ${Math.max(0, 8-idDigits.length)} dígitos'),'ID informa exatamente quantos dígitos faltam');
 ok(quality.includes("key: 'customer'")&&quality.includes("key: 'address'")&&quality.includes("key: 'payment'"),'guia cobre cliente, endereço e pagamento');
 ok(page.includes('Guia de preenchimento')&&page.includes('fica visível com o teclado'),'feedback fica acima do campo e visível com teclado');
-ok(page.includes('Modelo: #1234 12345678'),'modelo de preenchimento aparece antes da digitação');
+ok(page.includes('Modelo iFood: #1234 12345678') && page.includes('Exemplo 99Food: 123456') && page.includes('isFood99 ?'), 'modelo contextual iFood/99Food aparece antes da digitação');
 ok(page.includes("item.state==='partial'")&&page.includes("item.state==='complete'"),'estados possuem semântica visual distinta');
 ok(page.includes('scrollIntoView')&&page.includes("block:'center'"),'foco reposiciona o campo na área visível');
 ok(page.includes('useDeferredValue')&&page.includes('deferredMagicText'),'parser pesado não disputa cada tecla com a interface');

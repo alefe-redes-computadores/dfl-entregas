@@ -106,6 +106,7 @@ export default function ConfirmacoesPage() {
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
+  const motoboys = useAppStore((state) => state.motoboys);
   const ifoodPendingConfirmations = useAppStore(
     (state) => state.ifoodPendingConfirmations,
   );
@@ -170,9 +171,15 @@ export default function ConfirmacoesPage() {
     [deliveries, customers, routes],
   );
 
+  const selfConfirmRouteIds = useMemo(() => new Set(
+    routes.filter((route) => motoboys.some((motoboy) =>
+      motoboy.id === route.motoboy_id && motoboy.ifood_confirmation_mode === 'motoboy'))
+      .map((route) => route.id),
+  ), [routes, motoboys]);
   const allIfood = useMemo(
-    () => deliveries.filter((delivery) => isIfoodOrder(delivery)),
-    [deliveries],
+    () => deliveries.filter((delivery) => isIfoodOrder(delivery) &&
+      (!delivery.route_id || !selfConfirmRouteIds.has(delivery.route_id))),
+    [deliveries, selfConfirmRouteIds],
   );
 
   const selectedIfood = useMemo(

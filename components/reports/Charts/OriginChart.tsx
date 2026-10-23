@@ -17,14 +17,14 @@ export function OriginChart({ data }: OriginChartProps) {
   if (!mounted || data.length === 0) return null;
 
   const formattedData = data.map(item => ({
-    name: item.origin === 'ifood' ? 'iFood' : item.origin === 'food99' ? '99Food' : 'Loja Própria',
+    name: item.origin === 'ifood' ? 'iFood' : item.origin === 'food99' ? '99Food' : 'Loja',
     entregas: item.count,
     faturamento: item.total
   }));
 
   const totalEntregas = formattedData.reduce((acc, curr) => acc + curr.entregas, 0);
-  const ifoodData = formattedData.find(d => d.name === 'iFood');
-  const ifoodPercent = totalEntregas > 0 ? Math.round((ifoodData?.entregas || 0) / totalEntregas * 100) : 0;
+  const leading = [...formattedData].sort((a,b) => b.entregas-a.entregas)[0];
+  const leadingPercent = totalEntregas > 0 ? Math.round(((leading?.entregas || 0) / totalEntregas) * 100) : 0;
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -69,7 +69,7 @@ export function OriginChart({ data }: OriginChartProps) {
       <div className="mt-4 p-4 rounded-2xl bg-zinc-800/40 border border-zinc-700/50 flex items-start gap-3">
         <TrendingUp className="text-sky-400 shrink-0 mt-0.5" size={20} />
         <p className="text-sm text-zinc-300 leading-relaxed">
-          Neste período, <strong className="text-zinc-100">{ifoodPercent > 50 ? 'o iFood' : 'a Loja Própria'}</strong> representou <strong className="text-sky-400">{ifoodPercent > 50 ? ifoodPercent : 100 - ifoodPercent}%</strong> do volume total de pedidos.
+          Neste período, <strong className="text-zinc-100">{leading?.name || 'O canal principal'}</strong> representou <strong className="text-sky-400">{leadingPercent}%</strong> do volume total de pedidos.
         </p>
       </div>
     </>

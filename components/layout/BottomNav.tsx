@@ -8,7 +8,6 @@ import {
   PackagePlus,
   Boxes,
   ShoppingCart,
-  ReceiptText,
   ClipboardList,
   Plus,
   Store,
@@ -84,7 +83,7 @@ export function BottomNav() {
                             },
                           ],
                         }
-                      : pathname === '/' || pathname === '/loja'
+                      : pathname === '/'
                         ? {
                             kind: 'sheet',
                             label: 'Adicionar',
@@ -109,11 +108,16 @@ export function BottomNav() {
                                 icon: PackagePlus,
                                 tone: 'emerald',
                               },
-                              { href: '/estoque/compras', label: 'Montar compra', description: 'Comprar e conferir produtos', icon: ShoppingCart, tone: 'amber' },
-                              { href: '/despesas/novo', label: 'Nova despesa', description: 'Registrar gasto da operação', icon: ReceiptText, tone: 'violet' },
+
                             ],
                           }
-                        : null;
+                        : pathname === '/loja'
+                          ? { kind: 'sheet', label: 'Operação da loja', options: [
+                              { href: '/loja/caixa-de-entrada', label: 'Caixa de entrada', description: 'Conferir pedidos recebidos do Site, iFood e 99Food', icon: ClipboardList, tone: 'sky' },
+                              { href: '/entregas/nova?returnTo=%2Floja', label: 'Novo pedido', description: 'Registrar venda e definir a entrega', icon: PackagePlus, tone: 'emerald' },
+                              { href: '/estoque/compras', label: 'Montar compra', description: 'Conferir e planejar reposição de estoque', icon: ShoppingCart, tone: 'amber' },
+                            ] }
+                          : null;
 
   const handleAdd = () => {
     if (!addMode) return;

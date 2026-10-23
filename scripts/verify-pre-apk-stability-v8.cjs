@@ -31,7 +31,7 @@ ok('ID iFood suporta 4+4',parser.includes('(\\d{4})[\\s.-]?(\\d{4})'));
 ok('CEP é protegido',parser.includes('POSTAL.test(line)'));
 ok('telefone internacional +55 tratado',parser.includes("digits.startsWith('55')"));
 ok('Caixa preserva estado pago',inbox.includes("parsed.isPaid ? ' · pago' : ''"));
-ok('Caixa -> Nova transporta parsed estruturado',nova.includes('inboxParsedRef.current = draft.parsed')&&nova.includes('? [inboxParsedRef.current]'));
+ok('Caixa -> Nova transporta parsed estruturado',nova.includes("const parsed = draft.parsed;") && nova.includes('setIsParserOpen(false);') && nova.includes('inboxParsedRef.current = null;') && nova.includes("setOrderId(parsed.orderId || '');") && nova.includes("setIfoodId(draftOrigin === 'ifood' ?") && nova.includes("setConfirmationCode(draftOrigin === 'ifood' ?") && nova.includes("setCustomerName(parsed.customerName || '');") && nova.includes("setSelectedCustomerId('');") && nova.includes("setPhone(formatPhoneInput(parsed.phone || ''));") && nova.includes("setStreetAddress(parsed.address || '');") && nova.includes('setValue(price ? formatCurrencyInput(') && nova.includes('setIsPaid(Boolean(parsed.isPaid));') && nova.includes("setDrinks((parsed.drinks || []).join(', '));") && nova.includes("setObservation((parsed.observations || []).join(' - '));") && nova.includes('? [inboxParsedRef.current]'));
 ok('multi-order persiste stop_group_id',nova.includes('stop_group_id:stopGroupId')||nova.includes('stop_group_id: stopGroupId'));
 ok('multi-order valida ID/código',nova.includes("firstMultiOrderIssue(drafts)")&&multi.includes("/^\\d{8}$/")&&multi.includes("/^\\d{4}$/"));
 

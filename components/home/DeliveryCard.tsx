@@ -57,6 +57,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
+  const ifoodConfirmationMode = useAppStore((state) => state.motoboys.find(item => item.id === route.motoboy_id)?.ifood_confirmation_mode || 'store');
   const isExpanded = useAppStore((state) => isDeliveryExpanded(state.deliveries, delivery.id));
   const groupedDeliveries = stopDeliveries?.length ? stopDeliveries : [delivery];
   const isGroupedStop = groupedDeliveries.length > 1;
@@ -261,7 +262,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   // Todo pedido iFood de uma parada física pode ter código próprio,
   // independentemente de Pix/cartão/dinheiro. Não herdar código do vizinho.
   const groupedCodeDeliveries = pendingGroupedDeliveries.filter((item) =>
-    item.origin === 'ifood' || !item.origin);
+    (item.origin === 'ifood' || !item.origin) && ifoodConfirmationMode !== 'motoboy');
   const groupedCodeMode = pendingGroupedDeliveries.length > 1;
   const [skippedCodeIds, setSkippedCodeIds] = useState<string[]>([]);
 
@@ -943,8 +944,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         <MapIcon size={17} className="text-emerald-400 relative z-10" />
                       </a>
 
-                      <div className="flex flex-col gap-1 truncate flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap truncate">
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {isGroupedStop ? (
                             <>
                               {groupedToCollect.length > 0 && <span className="inline-flex items-center gap-1 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[10px] font-black text-amber-300"><Banknote size={11}/> {groupedToCollect.length} cobrar · {isPrivacyMode ? 'R$ •••' : `R$ ${groupedCollectValue.toFixed(2).replace('.', ',')}`}</span>}
@@ -987,8 +988,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-1.5 border-t border-zinc-800/40 pt-1.5 min-[390px]:grid-cols-[minmax(0,1fr)_auto] min-[390px]:items-center">
-                      <div className="flex min-w-0 items-center gap-1.5">
+                    <div className="flex flex-col gap-2 border-t border-zinc-800/40 pt-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={async (e) => {
@@ -1017,9 +1018,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       </div>
 
                       {!isExpanded && canManageStop && (
-                        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5" aria-label="Reordenar parada">
+                        <div className="flex w-full flex-wrap items-center justify-start gap-2" aria-label="Reordenar parada">
                           <button type="button" disabled={reorderBusy} onClick={(e)=>void toggleStopLock(e)} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black disabled:opacity-40 ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Inteligente':'Fixar'}</button>
-                          <button type="button" data-no-card-swipe="true" onClick={(event) => {event.stopPropagation();setMoveSheetOpen(true);}} className="flex h-9 items-center gap-1 rounded-xl border border-sky-500/25 bg-sky-500/[.08] px-2 text-[10px] font-bold text-sky-200"><ArrowUp size={13}/><ArrowDown size={13}/>Mover</button>
+                          <button type="button" data-no-card-swipe="true" onClick={(event) => {event.stopPropagation();setMoveSheetOpen(true);}} className="flex h-10 min-w-0 items-center justify-center gap-1 rounded-xl border border-sky-500/25 bg-sky-500/[.08] px-3 text-[11px] font-bold text-sky-200"><ArrowUp size={13}/><ArrowDown size={13}/>Mover</button>
                           {canReorder && <button
                             type="button"
                             data-no-card-swipe="true"

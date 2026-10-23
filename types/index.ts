@@ -463,6 +463,8 @@ export interface Motoboy {
   type?: MotoboyType;
   avatar?: string;
   payment_rule?: MotoboyPaymentRule;
+  /** Responsavel por confirmar no portal: ausente = loja (legado). */
+  ifood_confirmation_mode?: 'store' | 'motoboy';
   createdAt?: string;
   updated_at?: string;
 }

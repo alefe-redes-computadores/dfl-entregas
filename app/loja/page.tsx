@@ -76,6 +76,7 @@ export default function LojaPage() {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showManagement, setShowManagement] = useState(false);
 
   // Expediente Avançado
   const [activeTab, setActiveTab] = useState<'horarios' | 'pausas' | 'feriados'>('horarios');
@@ -305,7 +306,7 @@ export default function LojaPage() {
 
   return (
     <div className="dfl-page dfl-loja-v7 flex flex-col gap-4 pb-32 animate-in fade-in duration-300 relative">
-      <PageHeader title="Minha Loja" subtitle="Operação, logística e gestão em um só lugar" to="/" />
+      <PageHeader title="Minha Loja" subtitle="Pedidos, atendimento e operação" to="/" />
 
       <SiteAdminHub
         selectedDateOrders={dashboardData.selectedDateOrders}
@@ -403,10 +404,14 @@ export default function LojaPage() {
             <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.selectedDateRoutes.filter(route => route.status === 'aberta').length} rota(s) aberta(s) · sequência</p>
           </button>
 
-          <div className="col-span-2 mt-1 flex items-center gap-2 px-1 pt-1">
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">Gestão</span>
-            <span className="h-px flex-1 bg-zinc-800/80" />
-          </div>
+          <div className="col-span-2 flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800/70 bg-zinc-950/35 px-3 py-2.5"><span className="min-w-0 flex-1 text-[11px] font-bold text-zinc-400">Acerto de motoboy</span>{activeMotoboys.slice(0,3).map(item=><button key={item.id} type="button" onClick={()=>router.push(`/motoboys/acerto?id=${encodeURIComponent(item.id)}`)} className="min-h-9 rounded-lg border border-emerald-500/20 bg-emerald-500/[.07] px-3 text-[11px] font-black text-emerald-300">{item.name}</button>)}{activeMotoboys.length>3&&<button type="button" onClick={()=>router.push('/equipe')} className="text-[10px] font-bold text-zinc-400">Ver equipe</button>}</div>
+          <button type="button" aria-expanded={showManagement} onClick={()=>setShowManagement(v=>!v)} className="col-span-2 mt-1 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-3 text-left">
+            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">Gestão · equipe, clientes, estoque e financeiro</span>
+            <span className="h-px min-w-2 flex-1 bg-zinc-800/80" />
+            <ChevronDown size={16} className={`shrink-0 text-zinc-500 transition-transform ${showManagement ? 'rotate-180' : ''}`}/>
+          </button>
+          {showManagement && (<>
+
 
           <button onClick={() => router.push('/equipe')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between">
@@ -448,6 +453,7 @@ export default function LojaPage() {
             <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-400"><ShieldCheck size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
             <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">iFood</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Confirmações pendentes e portal</p>
           </button>
+          </>)}
         </div>
       </section>
       <section className="flex flex-col gap-3">
@@ -718,6 +724,19 @@ export default function LojaPage() {
 
         {isSettingsOpen && (
           <div className="flex flex-col gap-4 rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-4">
+            <section className="rounded-2xl border border-amber-500/20 bg-zinc-950/50 p-3">
+              <p className="text-xs font-black text-zinc-100">Entrega por plataforma</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">Defina se a plataforma entrega o pedido ou se a DFL precisa de endereço e rota. A alteração vale para novos cadastros; históricos não mudam.</p>
+              {(['ifood','food99'] as const).map(source => {
+                const mode = storeSettings.marketplaceDeliveryModes?.[source] || (source === 'food99' ? 'platform' : 'dfl');
+                return <div key={source} className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+                  <p className={`text-xs font-bold ${source === 'food99' ? 'text-amber-300' : 'text-red-300'}`}>{source === 'food99' ? '99Food' : 'iFood'}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {(['platform','dfl'] as const).map(next => <button key={next} type="button" disabled={storeSettingsBusy} aria-pressed={mode===next} onClick={() => void updateStoreSettings({marketplaceDeliveryModes:{ifood:storeSettings.marketplaceDeliveryModes?.ifood || 'dfl',food99:storeSettings.marketplaceDeliveryModes?.food99 || 'platform',[source]:next}}).catch(()=>toast.error('Não foi possível salvar a modalidade.'))} className={`min-h-11 rounded-xl border px-2 text-[11px] font-bold ${mode===next?'border-amber-400/45 bg-amber-400/10 text-amber-200':'border-zinc-700 text-zinc-400'}`}>{next === 'platform' ? 'Plataforma entrega' : 'DFL entrega'}</button>)}
+                  </div>
+                </div>;
+              })}
+            </section>
             <div className="flex flex-col gap-2">
               <AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" />
               <p className="px-1 text-[11px] font-medium text-zinc-400">Origem das rotas. Informe rua e número ou salve um ponto exato no mapa.</p>
