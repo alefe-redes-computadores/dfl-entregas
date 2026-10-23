@@ -77,6 +77,16 @@ export default function LojaPage() {
   const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showManagement, setShowManagement] = useState(false);
+  useEffect(() => {
+    try { setShowManagement(window.sessionStorage.getItem('dfl:loja:gestao') === 'open'); }
+    catch { /* Private browsing must not block Loja. */ }
+  }, []);
+  const toggleManagement = () => setShowManagement(current => {
+    const next = !current;
+    try { window.sessionStorage.setItem('dfl:loja:gestao', next ? 'open' : 'closed'); }
+    catch { /* Layout preference is optional. */ }
+    return next;
+  });
 
   // Expediente Avançado
   const [activeTab, setActiveTab] = useState<'horarios' | 'pausas' | 'feriados'>('horarios');
@@ -404,7 +414,7 @@ export default function LojaPage() {
             <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.selectedDateRoutes.filter(route => route.status === 'aberta').length} rota(s) aberta(s) · sequência</p>
           </button>
 
-          <button type="button" aria-expanded={showManagement} onClick={()=>setShowManagement(v=>!v)} className="col-span-2 mt-1 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-3 text-left">
+          <button type="button" aria-expanded={showManagement} onClick={toggleManagement} className="col-span-2 mt-1 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-3 text-left">
             <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">Gestão da loja · clientes, equipe e recursos</span>
             <span className="h-px min-w-2 flex-1 bg-zinc-800/80" />
             <ChevronDown size={16} className={`shrink-0 text-zinc-500 transition-transform ${showManagement ? 'rotate-180' : ''}`}/>

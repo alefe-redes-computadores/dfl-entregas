@@ -2,7 +2,10 @@ import type { Customer, CustomerPhone, CustomerAddress } from '@/types';
 import { normalizeBrazilPhone } from '@/lib/phone';
 
 const digits = (value?: string) => String(value || '').replace(/\D/g, '');
-const addressKey = (value?: string) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g, ' ').trim();
+const addressKey = (value?: string, neighborhood?: string) =>
+  [value, neighborhood].map(part => String(part || '').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ').trim()).join('|');
 
 // Legacy fields are read as a virtual primary, not migrated via writes on mount.
 export function customerPhones(customer: Pick<Customer, 'phone' | 'phones'>): CustomerPhone[] {
@@ -16,7 +19,7 @@ export function customerAddresses(customer: Pick<Customer, 'address' | 'addresse
   const stored=(customer.addresses||[]).filter(item=>!!item.address.trim());
   const source=stored.length?stored:customer.address?[{id:'legacy-address',address:customer.address,neighborhood:customer.neighborhood,maps_link:customer.maps_link,primary:true,label:'Principal'}]:[];
   const seen=new Set<string>();
-  return source.filter(item=>{const key=addressKey(item.address);if(!key||seen.has(key))return false;seen.add(key);return true;})
+  return source.filter(item=>{const key=addressKey(item.address,item.neighborhood);if(!item.address.trim()||seen.has(key))return false;seen.add(key);return true;})
     .map((item,index)=>({...item,primary:source.some(entry=>entry.primary)?Boolean(item.primary):index===0}));
 }
 export function customerPhoneMatches(customer: Customer, query: string) {
@@ -32,7 +35,7 @@ export function customerContactPayload(phonesInput: CustomerPhone[], addressesIn
   const phones=phoneRows.filter(item=>{if(uniquePhones.has(item.number))return false;uniquePhones.add(item.number);return true;});
   const addressRows=addressesInput.map((item,index)=>({...item,id:item.id||`addr-${index}`,address:item.address.trim()})).filter(item=>!!item.address);
   const uniqueAddresses=new Set<string>();
-  const addresses=addressRows.filter(item=>{const key=addressKey(item.address);if(uniqueAddresses.has(key))return false;uniqueAddresses.add(key);return true;});
+  const addresses=addressRows.filter(item=>{const key=addressKey(item.address,item.neighborhood);if(uniqueAddresses.has(key))return false;uniqueAddresses.add(key);return true;});
   const phonePrimary=phones.find(item=>item.primary)||phones[0];
   const addressPrimary=addresses.find(item=>item.primary)||addresses[0];
   // Exactly one primary in each collection, keeping legacy consumers working.

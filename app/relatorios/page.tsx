@@ -428,13 +428,14 @@ export default function RelatoriosPage() {
               }
             />
 
+            <p className="px-1 text-[11px] leading-relaxed text-zinc-500">99Food entregue pela plataforma entra nas vendas, não na produtividade dos motoboys DFL.</p>
             <OriginChart data={model.origins.filter(bucket => ['iFood','99Food','Loja'].includes(bucket.label)).map(bucket => ({
               origin: bucket.label === '99Food' ? 'food99' : bucket.label === 'iFood' ? 'ifood' : 'loja',
               count: bucket.count, total: bucket.revenue,
             }))}/>
             <ReportChartCard
               title="Responsável pela entrega"
-              description="Separa a logística feita pela DFL, pela 99Food e as retiradas ou atendimentos no balcão."
+              description="Separa quem realizou a entrega: DFL ou plataforma. A venda 99Food continua na origem comercial mesmo sem rota DFL."
               icon={<Bike size={18} />}
               data={model.logisticsProviders}
               dataKey="count"
@@ -531,7 +532,7 @@ export default function RelatoriosPage() {
               valueLabel="Gasto"
               valueFormatter={money}
               onExplore={() => router.push('/abastecimentos')}
-              footer="Abrir histórico e revisar vínculos de veículo"
+              footer="Abrir compras e conferir responsáveis cadastrados"
             />
 
             <section className="rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 p-5">

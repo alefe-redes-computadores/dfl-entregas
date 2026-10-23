@@ -67,8 +67,15 @@ export function OperationalCommandCenter({
     (delivery) =>
       Boolean(delivery.route_id) &&
       Boolean(delivery.address_string?.trim()) &&
+      !/\b\d{1,5}\b/.test(delivery.address_string || '') &&
       !extractLatLngFromMapsUrl(delivery.maps_link),
   );
+
+  // Show exactly who needs action. No vague warning for a complete street
+  // address simply because a GPS link was not supplied.
+  const deliveryHint = (item?: Delivery) => item
+    ? `${item.customer_name?.trim() || 'Cliente sem nome'}${item.order_id ? ` · #${item.order_id}` : ''}`
+    : 'Nenhum pedido selecionado';
 
   // Quando há mais de um caso, abrimos o primeiro pedido concreto; após
   // sua correção, os demais continuam na fila, sem ação fantasma.
@@ -142,7 +149,7 @@ export function OperationalCommandCenter({
     {
       key: 'broken-route-link',
       label: 'Corrigir vínculo de rota',
-      description: 'Pedido vinculado a uma rota que não existe mais. Revisar no cadastro da entrega.',
+      description: `${deliveryHint(corruptLinks[0])} · vínculo de rota inválido`,
       count: corruptLinks.length,
       href: deliveryActionHref(corruptLinks[0]),
       icon: ShieldAlert,
@@ -152,7 +159,7 @@ export function OperationalCommandCenter({
     {
       key: 'address',
       label: 'Completar endereço',
-      description: 'Pedido sem endereço operacional',
+      description: `${deliveryHint(noAddress[0])} · endereço incompleto`,
       count: noAddress.length,
       href: deliveryActionHref(noAddress[0]),
       icon: AlertTriangle,
@@ -202,8 +209,8 @@ export function OperationalCommandCenter({
     },
     {
       key: 'location',
-      label: 'Revisar localização',
-      description: 'Endereço informado; coordenadas precisas ainda não verificadas',
+      label: 'Revisar endereço sem número',
+      description: `${deliveryHint(addressOnly[0])} · falta número e localização válida`,
       count: addressOnly.length,
       href: deliveryActionHref(addressOnly[0]),
       icon: MapPin,
@@ -283,7 +290,7 @@ export function OperationalCommandCenter({
                 <p className="truncate text-[11px] font-black text-zinc-200">
                   {item.label}
                 </p>
-                <p className="mt-0.5 truncate text-[9px] text-zinc-600">
+                <p className="mt-0.5 truncate text-[10px] text-zinc-400">
                   {item.description}
                 </p>
               </div>

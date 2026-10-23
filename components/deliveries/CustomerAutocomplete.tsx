@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -37,6 +38,7 @@ export function CustomerAutocomplete({
     useState(false);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const deferredQuery = useDeferredValue(value);
   const closeSuggestions = () => {
     setShowSuggestions(false);
   };
@@ -46,14 +48,14 @@ export function CustomerAutocomplete({
   };
 
   const suggestions = useMemo(() => {
-    const nameQuery = normalizeCustomerName(value);
-    const phoneQuery = normalizeCustomerPhone(value);
-    const addressQuery = normalizeCustomerAddress(value);
+    const nameQuery = normalizeCustomerName(deferredQuery);
+    const phoneQuery = normalizeCustomerPhone(deferredQuery);
+    const addressQuery = normalizeCustomerAddress(deferredQuery);
 
     if (
-      !nameQuery &&
+      nameQuery.length < 2 &&
       phoneQuery.length < 3 &&
-      !addressQuery
+      addressQuery.length < 2
     ) {
       return [];
     }
@@ -81,7 +83,7 @@ export function CustomerAutocomplete({
 
         if (
           phoneQuery.length >= 3 &&
-          customerPhoneMatches(customer, value)
+          customerPhoneMatches(customer, deferredQuery)
         ) {
           score += 80;
         }
@@ -106,7 +108,7 @@ export function CustomerAutocomplete({
       )
       .slice(0, 6)
       .map((item) => item.customer);
-  }, [customers, value]);
+  }, [customers, deferredQuery]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -167,14 +169,14 @@ export function CustomerAutocomplete({
         />
       </div>
 
-      {showSuggestions && suggestions.length > 0 && (
+      {showSuggestions && deferredQuery === value && suggestions.length > 0 && (
         <div className="absolute top-full z-30 mt-1 max-h-72 w-full divide-y divide-zinc-800/60 overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/95 shadow-2xl backdrop-blur-xl">
           {suggestions.map((customer) => (
             <button
               key={customer.id}
               type="button"
               onClick={() => handleSelect(customer)}
-              className="flex w-full flex-col px-4 py-3 text-left transition-colors active:bg-zinc-800"
+              className="flex w-full flex-col px-4 py-3.5 text-left transition-colors focus-visible:bg-zinc-800 active:bg-zinc-800"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-sm font-bold text-zinc-100">
@@ -184,7 +186,10 @@ export function CustomerAutocomplete({
                 {customerPhones(customer).length>0 && (
                   <span className="flex shrink-0 items-center gap-1 text-[11px] font-semibold text-emerald-400">
                     <Phone size={10} />
-                    {customerPhones(customer)[0].number}{customerPhones(customer).length>1?' · + contatos':''}
+                    {(customerPhones(customer).find(item => {
+                      const queryDigits = value.replace(/\D/g, '');
+                      return queryDigits.length >= 3 && item.number.replace(/\D/g, '').includes(queryDigits);
+                    }) || customerPhones(customer)[0]).number}{customerPhones(customer).length>1?' · + contatos':''}
                   </span>
                 )}
               </div>
@@ -195,7 +200,7 @@ export function CustomerAutocomplete({
                     size={11}
                     className="shrink-0 text-zinc-500"
                   />
-                  {customerAddresses(customer)[0].address}{customerAddresses(customer).length>1?' · + endereços':''}
+                  {(customerAddresses(customer).find(item => normalizeCustomerAddress(item.address).includes(normalizeCustomerAddress(value)) && value.trim().length >= 4) || customerAddresses(customer)[0]).address}{customerAddresses(customer).length>1?' · + endereços':''}
                 </span>
               )}
             </button>
