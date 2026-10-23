@@ -11,6 +11,9 @@ import {
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
+import { CustomerDestinationSheet } from '@/components/customers/CustomerDestinationSheet';
+import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
+import type { CustomerPhone, CustomerAddress } from '@/types';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import { extractCoordinatesFromUrl } from '@/lib/maps';
 import { normalizeAddressText } from '@/lib/maps';
@@ -61,6 +64,7 @@ const [routeId, setRouteId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
+  const [pendingContactCustomer,setPendingContactCustomer]=useState<Customer|null>(null);
 
   // Bloco 3: Endereço e Satélite
   const [streetAddress, setStreetAddress] = useState('');
@@ -417,11 +421,18 @@ const [routeId, setRouteId] = useState('');
   }, [streetAddress, mapsLink]);
 
   const handleCustomerSelect = (c: Customer) => {
+    if (customerPhones(c).length>1 || customerAddresses(c).length>1){setPendingContactCustomer(c);return;}
+    applyCustomerSelection(c);
+  };
+  const applyCustomerSelection = (c:Customer,chosenPhone?:CustomerPhone,chosenAddress?:CustomerAddress) => {
     setCustomerName(c.name);
-    if (c.address) setStreetAddress(c.address);
-    if (c.phone) setPhone(formatPhoneInput(c.phone));
+    const address=chosenAddress?.address||c.address;
+    if (address) setStreetAddress(address);
+    const phone=chosenPhone?.number||c.phone;
+    if (phone) setPhone(formatPhoneInput(phone));
     if (c.observation) setObservation(c.observation);
-    if (c.maps_link) setMapsLink(c.maps_link);
+    const mapsLink=chosenAddress?.maps_link||c.maps_link;
+    if (mapsLink) setMapsLink(mapsLink);
     // Histórico do cliente não é código do pedido que está sendo editado.
     // O código persistido no pedido continua disponível no carregamento da entrega.
     toast.success('Cliente carregado.');
@@ -1281,6 +1292,7 @@ const [routeId, setRouteId] = useState('');
           </section>
         </div>
       )}
+      {pendingContactCustomer&&<CustomerDestinationSheet customer={pendingContactCustomer} onClose={()=>setPendingContactCustomer(null)} onConfirm={(phone,address)=>{applyCustomerSelection(pendingContactCustomer,phone,address);setPendingContactCustomer(null);}}/>}
     </div>
   );
 }

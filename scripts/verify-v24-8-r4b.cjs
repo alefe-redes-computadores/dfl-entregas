@@ -9,7 +9,7 @@ ok(normalizedStart >= 0 && periodStart > normalizedStart, 'bloco normalized do r
 const normalizedBlock=report.slice(normalizedStart, periodStart);
 ok(normalizedBlock.includes('delivery.developer_test !== true'), 'teste explícito excluído antes das agregações gerais');
 ok(report.includes('customerOperationalCurrent = logisticsCurrent.filter')&&report.includes('delivery.exclude_customer_metrics !== true'), 'exclusão de cliente aplicada somente aos recortes de cliente');
-ok(normalizedBlock.includes('!isInternalOperationalRoute(delivery.route)'), 'rota interna excluída antes das agregações');
+ok(report.includes('!isInternalOperationalRoute(delivery.route, input.motoboys || [])'), 'rota interna excluída apenas da produtividade de entregas');
 ok(!report.includes('Comercial permanece íntegro; apenas os recortes operacionais'), 'regra antiga de exclusão parcial removida');
 
 const highlights=read('lib/delivery-intelligence/selectHighlights.ts');

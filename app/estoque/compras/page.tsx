@@ -354,6 +354,7 @@ export default function ShoppingList() {
         total_amount: 0,
         purchaser_name:
           user?.displayName || undefined,
+        purchaser_id: user?.uid || undefined,
         observation:
           'Compra montada pela reposição inteligente',
         created_at: now,

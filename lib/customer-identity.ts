@@ -1,5 +1,6 @@
 // lib/customer-identity.ts
 import type { Customer } from '@/types';
+import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
 
 const CITY_WORDS =
   /\b(?:patos de minas|minas gerais|brasil|mg|cep)\b/gi;
@@ -211,6 +212,7 @@ export function customerIdentityEvidence(
     name,
   );
 
+  const knownPhones = customerPhones(customer).map(item=>normalizeCustomerPhone(item.number)).filter(Boolean);
   const storedPhone = normalizeCustomerPhone(customer.phone);
   const wantedPhone = normalizeCustomerPhone(details?.phone);
 
@@ -220,7 +222,7 @@ export function customerIdentityEvidence(
         wantedPhone &&
         storedPhone.length >= 10 &&
         wantedPhone.length >= 10,
-    ) && storedPhone === wantedPhone;
+    ) && knownPhones.includes(wantedPhone);
 
   const phoneConflict =
     Boolean(
@@ -228,8 +230,9 @@ export function customerIdentityEvidence(
         wantedPhone &&
         storedPhone.length >= 10 &&
         wantedPhone.length >= 10,
-    ) && storedPhone !== wantedPhone;
+    ) && knownPhones.length > 0 && !knownPhones.includes(wantedPhone);
 
+  const knownAddresses=customerAddresses(customer).map(item=>item.address).filter(Boolean);
   const storedAddress = customer.address?.trim() || '';
   const wantedAddress = details?.address?.trim() || '';
 
@@ -242,7 +245,7 @@ export function customerIdentityEvidence(
   const sameAddress =
     Boolean(storedAddress && wantedAddress) &&
     hasCompleteStreet(storedAddress) && hasCompleteStreet(wantedAddress) &&
-    sameCustomerAddress(storedAddress, wantedAddress);
+    knownAddresses.some(value=>hasCompleteStreet(value)&&sameCustomerAddress(value,wantedAddress));
 
   const storedNumber = extractHouseNumber(storedAddress);
   const wantedNumber = extractHouseNumber(wantedAddress);
@@ -265,10 +268,10 @@ export function customerIdentityEvidence(
         storedNumber &&
         wantedNumber,
     ) &&
-    storedNumber !== wantedNumber;
+    storedNumber !== wantedNumber && !sameAddress;
 
   const knownAddressMismatch =
-    Boolean(storedAddress && wantedAddress) &&
+    Boolean(knownAddresses.length && wantedAddress) &&
     !sameAddress;
 
   const addressConflict =

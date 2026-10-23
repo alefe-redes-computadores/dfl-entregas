@@ -10,10 +10,10 @@ ok(settlement.includes('showAdjustmentForm')&&settlement.includes('aria-expanded
 ok(settlement.includes('settlementStrategy')&&settlement.includes('closeMotoboySettlement('),'tres estrategias e persistencia preservadas');
 ok(settlement.includes('data.physicalDeliveryCount')&&settlement.includes('data.orderCount'),'pedidos e paradas fisicas seguem distintos');
 const equipe=read('app/equipe/page.tsx');
-ok(equipe.includes('Abrir acerto de')&&equipe.includes('motoboys/acerto?id='),'acerto acessivel direto pelo cadastro de equipe');
+ok(!equipe.includes('Abrir acerto de')&&equipe.includes('router.push(`/motoboys/details?id='),'acesso ao acerto pela ficha, sem CTA duplicado na Equipe');
 ok(equipe.includes('/mais/acessos')&&equipe.includes('Cadastro de pessoas não concede acesso'),'equipe nao concede permissions silenciosamente');
 const loja=read('app/loja/page.tsx');
-ok(loja.includes('activeMotoboys.slice(0,3)')&&loja.includes('Acerto de motoboy'),'atalho no painel da loja');
+ok(!loja.includes('activeMotoboys.slice(0,3)')&&loja.includes("router.push('/equipe')"),'Loja premium sem fileira de botoes de acerto');
 const parse=require('typescript');for(const path of ['app/motoboys/acerto/page.tsx','app/equipe/page.tsx']){
  const sf=parse.createSourceFile(path,read(path),parse.ScriptTarget.Latest,true,parse.ScriptKind.TSX);
  assert.equal(sf.parseDiagnostics.length,0,`Sintaxe TSX: ${path}`);count++;

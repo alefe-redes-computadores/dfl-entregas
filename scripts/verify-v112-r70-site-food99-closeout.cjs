@@ -56,7 +56,7 @@ ok(
   'Home distingue entrega da plataforma de balcão e retirada',
 );
 ok(
-  customerForm.includes("setOrigin('food99')") &&
+  customerForm.includes("['food99','99Food',ShoppingBag]") && customerForm.includes("setOrigin(value)") &&
     customers.includes("customerOrigin==='food99'"),
   'cadastro e lista de clientes preservam a origem 99Food',
 );

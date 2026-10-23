@@ -17,7 +17,7 @@ const readModule=(file,stubs)=>{
  },module,module.exports);
  return module.exports;
 };
-const customers=readModule('lib/customer-analytics.ts',{'@/lib/delivery-finance':{deliveryCustomerCharge:charge},'@/lib/operational-time':{deliveryDate:date}});
+const customers=readModule('lib/customer-analytics.ts',{'@/lib/delivery-finance':{deliveryCustomerCharge:charge},'@/lib/operational-time':{deliveryDate:date},'@/lib/internal-owner-identity':{verifiedInternalCustomer:()=>false},'@/lib/customer-contact-book':{customerPhones:(c)=>c.phone?[{number:c.phone}]:[],customerAddresses:(c)=>c.address?[{address:c.address}]:[]}});
 const c=[{id:'m1',name:'Maria',origin:'loja'},{id:'m2',name:'Maria',origin:'loja'},{id:'j1',name:'José',origin:'ifood'},{id:'t1',name:'Teste'}];
 const d=[
  {id:'a',customer_id:'m1',customer_name:'Maria',value:24,created_at:'2026-10-21T11:00:00Z',completed:true},

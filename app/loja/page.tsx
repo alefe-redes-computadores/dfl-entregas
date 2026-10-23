@@ -404,9 +404,8 @@ export default function LojaPage() {
             <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.selectedDateRoutes.filter(route => route.status === 'aberta').length} rota(s) aberta(s) · sequência</p>
           </button>
 
-          <div className="col-span-2 flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800/70 bg-zinc-950/35 px-3 py-2.5"><span className="min-w-0 flex-1 text-[11px] font-bold text-zinc-400">Acerto de motoboy</span>{activeMotoboys.slice(0,3).map(item=><button key={item.id} type="button" onClick={()=>router.push(`/motoboys/acerto?id=${encodeURIComponent(item.id)}`)} className="min-h-9 rounded-lg border border-emerald-500/20 bg-emerald-500/[.07] px-3 text-[11px] font-black text-emerald-300">{item.name}</button>)}{activeMotoboys.length>3&&<button type="button" onClick={()=>router.push('/equipe')} className="text-[10px] font-bold text-zinc-400">Ver equipe</button>}</div>
           <button type="button" aria-expanded={showManagement} onClick={()=>setShowManagement(v=>!v)} className="col-span-2 mt-1 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-3 text-left">
-            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">Gestão · equipe, clientes, estoque e financeiro</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">Gestão da loja · clientes, equipe e recursos</span>
             <span className="h-px min-w-2 flex-1 bg-zinc-800/80" />
             <ChevronDown size={16} className={`shrink-0 text-zinc-500 transition-transform ${showManagement ? 'rotate-180' : ''}`}/>
           </button>

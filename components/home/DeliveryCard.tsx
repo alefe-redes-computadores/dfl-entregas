@@ -27,6 +27,7 @@ import { deliveryPaymentStateLabel, deriveDeliveryPaymentState, deliveryCustomer
 import { summarizeStopFinance } from '@/lib/delivery-stop-finance';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { ownerContextLabel } from '@/lib/owner-order-context';
+import { verifiedInternalCustomer } from '@/lib/internal-owner-identity';
 
 interface DeliveryCardProps {
   delivery: Delivery & { is_expanded?: boolean };
@@ -162,7 +163,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const paymentStateLabel = deliveryPaymentStateLabel(delivery);
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const isSiteOrder = delivery.source_system === 'dfl_site';
-  const operationalContextLabel = ownerContextLabel(delivery);
+  const operationalContextLabel = ownerContextLabel(delivery) || (verifiedInternalCustomer(customer)?'DEV · Interno':null);
   const isDeveloperTest = delivery.developer_test === true || delivery.owner_order_context === 'owner_provisional';
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
   const isUrgent = groupedDeliveries.some((item) => item.is_urgent);

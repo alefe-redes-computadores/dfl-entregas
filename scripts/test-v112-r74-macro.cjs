@@ -9,7 +9,9 @@ const load=(path,mocks={})=>{
  vm.runInNewContext(code.outputText,{module:mod,exports:mod.exports,require:key=>{if(Object.prototype.hasOwnProperty.call(mocks,key))return mocks[key];throw Error('Import nao previsto '+key)},Date,Math,Number,String,Set,Map,Boolean,console,Intl}, {filename:path});
  return mod.exports;
 };
-const identity=load('lib/customer-identity.ts');
+const phone=load('lib/phone.ts');
+const contactBook=load('lib/customer-contact-book.ts',{'@/lib/phone':phone});
+const identity=load('lib/customer-identity.ts',{'@/lib/customer-contact-book':contactBook});
 const maria={id:'maria-antiga',name:'Maria R.',address:'Rua do Cedro, 104 - Alto da Serra',phone:'34999999999'};
 const isolated=identity.customerIdentityEvidence(maria,'Maria',{address:'Alto da Serra'});
 check(isolated.reusable===false,'Maria + bairro Alto da Serra nao vincula Maria R.');
@@ -17,6 +19,11 @@ check(identity.findExistingCustomer([maria],'Maria',{address:'Alto da Serra'})==
 check(identity.customerIdentityEvidence(maria,'Maria',{address:'Rua do Cedro, 104 - Alto da Serra'}).reusable===false,'mesmo endereco com nome parcial não vincula');
 check(identity.customerIdentityEvidence(maria,'Maria R.',{address:'Rua do Cedro, 104 - Alto da Serra'}).reusable===true,'mesmo nome completo e rua numerada identifica');
 check(identity.customerIdentityEvidence(maria,'Maria R.',{address:'Rua Outra, 777 - Alto da Serra'}).reusable===false,'rua e numero diferentes impedem vinculo');
+// Multiple contact aliases must retain strong identity checks, without
+// merging namesakes whose confirmed address conflicts with every saved address.
+const aliases={id:'multi1',name:'João Silva',phone:'34988887777',address:'Rua Principal, 14 - Centro',phones:[{id:'pa',number:'34988887777',primary:true},{id:'pb',number:'34997776666',primary:false}],addresses:[{id:'aa',address:'Rua Principal, 14 - Centro',primary:true},{id:'ab',address:'Rua Alternativa, 20 - Centro',primary:false}]};
+check(identity.customerIdentityEvidence(aliases,'João Silva',{phone:'34997776666',address:'Rua Alternativa, 20 - Centro'}).reusable===true,'telefone e endereco secundarios confirmam mesma identidade');
+check(identity.customerIdentityEvidence(aliases,'João Silva',{phone:'34997776666',address:'Rua Distinta, 99 - Centro'}).reusable===false,'telefone conhecido nao sobrepoe endereco divergente');
 const cancel=d=>d.site_order_status==='Cancelado';
 const status=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLocaleLowerCase('pt-BR').replace(/[\s-]+/g,'_');
 const policy=load('lib/operation/siteInboxPolicy.ts',{

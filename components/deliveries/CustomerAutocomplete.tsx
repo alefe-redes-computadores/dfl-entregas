@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import type { Customer } from '@/types';
+import { customerPhones, customerAddresses, customerPhoneMatches } from '@/lib/customer-contact-book';
 import {
   normalizeCustomerAddress,
   normalizeCustomerName,
@@ -63,9 +64,7 @@ export function CustomerAutocomplete({
           customer.name,
         );
 
-        const customerPhone = normalizeCustomerPhone(
-          customer.phone,
-        );
+        const customerPhone = normalizeCustomerPhone(customer.phone);
 
         const customerAddress =
           normalizeCustomerAddress(customer.address);
@@ -82,14 +81,14 @@ export function CustomerAutocomplete({
 
         if (
           phoneQuery.length >= 3 &&
-          customerPhone.includes(phoneQuery)
+          customerPhoneMatches(customer, value)
         ) {
           score += 80;
         }
 
         if (
           addressQuery.length >= 4 &&
-          customerAddress.includes(addressQuery)
+          customerAddresses(customer).some(item=>normalizeCustomerAddress(item.address).includes(addressQuery))
         ) {
           score += 30;
         }
@@ -182,21 +181,21 @@ export function CustomerAutocomplete({
                   {customer.name}
                 </span>
 
-                {customer.phone && (
+                {customerPhones(customer).length>0 && (
                   <span className="flex shrink-0 items-center gap-1 text-[11px] font-semibold text-emerald-400">
                     <Phone size={10} />
-                    {customer.phone}
+                    {customerPhones(customer)[0].number}{customerPhones(customer).length>1?' · + contatos':''}
                   </span>
                 )}
               </div>
 
-              {customer.address && (
+              {customerAddresses(customer).length>0 && (
                 <span className="mt-0.5 flex items-center gap-1 truncate text-xs text-zinc-400">
                   <MapPin
                     size={11}
                     className="shrink-0 text-zinc-500"
                   />
-                  {customer.address}
+                  {customerAddresses(customer)[0].address}{customerAddresses(customer).length>1?' · + endereços':''}
                 </span>
               )}
             </button>

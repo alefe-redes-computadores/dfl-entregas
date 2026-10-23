@@ -35,7 +35,7 @@ ok(normalized>=0&&period>normalized,'pipeline normalized dos relatórios localiz
 const clean=reports.slice(normalized,period);
 ok(clean.includes('delivery.developer_test !== true'),'teste explícito excluído antes das agregações');
 ok(reports.includes('customerOperationalCurrent = logisticsCurrent.filter')&&reports.includes('delivery.exclude_customer_metrics !== true'),'perfil interno excluído apenas da análise de cliente');
-ok(clean.includes('!isInternalOperationalRoute(delivery.route)'),'rota interna excluída no mesmo pipeline');
+ok(reports.includes('!isInternalOperationalRoute(delivery.route, input.motoboys || [])'),'rota interna excluída da produtividade e não do faturamento');
 ok(exclusions.includes('export function isInternalOperationalCustomer')&&exclusions.includes('export function isInternalOperationalRoute'),
    'autoridade de exclusão permanece centralizada');
 

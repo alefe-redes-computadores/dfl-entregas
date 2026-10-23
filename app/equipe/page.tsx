@@ -325,11 +325,10 @@ export default function TeamPage() {
                     </span>
                   </div>
                   <p className="mt-0.5 text-[10px] text-zinc-500">
-                    Cadastro, regra de pagamento e histórico
+                    Cadastro, regra de pagamento, histórico e acerto
                   </p>
                 </button>
 
-                <button type="button" onClick={()=>router.push(`/motoboys/acerto?id=${encodeURIComponent(motoboy.id)}`)} className="flex h-9 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/[.07] px-2.5 text-[10px] font-black text-emerald-300" aria-label={`Abrir acerto de ${motoboy.name}`}>Acerto</button>
                 <button
                   type="button"
                   onClick={() => toggleMotoboy(motoboy.id, motoboy.active)}

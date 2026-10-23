@@ -13,6 +13,9 @@ import { paymentStateForInput } from '@/lib/delivery-finance';
 import { firstMultiOrderIssue } from '@/lib/operation/multiOrderDraft';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
+import { CustomerDestinationSheet } from '@/components/customers/CustomerDestinationSheet';
+import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
+import type { CustomerPhone, CustomerAddress } from '@/types';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
 import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrdersText } from '@/lib/ifood-order-parser';
@@ -115,6 +118,7 @@ const [routeId, setRouteId] = useState('');
 
   const [customerName, setCustomerName] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [pendingContactCustomer,setPendingContactCustomer]=useState<Customer|null>(null);
   const typedCustomerBeforeSelection = useRef('');
   const previousCustomerDraft = useRef<{name:string;phone:string;address:string;mapsLink:string;observation:string}|null>(null);
   const [selectedCustomerLabel, setSelectedCustomerLabel] = useState('');
@@ -460,6 +464,10 @@ const [routeId, setRouteId] = useState('');
   }, [activeAddress, activeMapsLink, knownNeighborhoods]);
 
   const handleCustomerSelect = (c: Customer, typedQuery?: string) => {
+    if (customerPhones(c).length>1 || customerAddresses(c).length>1) { setPendingContactCustomer(c); return; }
+    applyCustomerSelection(c,undefined,undefined,typedQuery);
+  };
+  const applyCustomerSelection = (c:Customer, chosenPhone?:CustomerPhone, chosenAddress?:CustomerAddress, typedQuery?:string) => {
     previousCustomerDraft.current = {
       name: typedQuery || typedCustomerBeforeSelection.current || activeCustomerName,
       phone: activePhone, address: activeAddress, mapsLink: activeMapsLink,
@@ -468,10 +476,13 @@ const [routeId, setRouteId] = useState('');
     setSelectedCustomerLabel(c.name);
     if (!activeExtra) setSelectedCustomerId(c.id);
     setActiveCustomerName(c.name);
-    if (c.address) setActiveAddress(c.address);
-    if (c.phone) setActivePhone(formatPhoneInput(c.phone));
+    const address=chosenAddress?.address||c.address;
+    if (address) setActiveAddress(address);
+    const phone=chosenPhone?.number||c.phone;
+    if (phone) setActivePhone(formatPhoneInput(phone));
     if (c.observation) setActiveObservation(c.observation);
-    if (c.maps_link) setActiveMapsLink(c.maps_link);
+    const mapsLink=chosenAddress?.maps_link||c.maps_link;
+    if (mapsLink) setActiveMapsLink(mapsLink);
     // A confirmação pertence ao pedido, nunca deve vir automaticamente de outro pedido.
     toast.success('Cliente carregado.');
   };
@@ -1191,6 +1202,7 @@ const [routeId, setRouteId] = useState('');
           {isSaving ? 'Salvando...' : extraIfoodOrders.length ? `Salvar ${extraIfoodOrders.length + 1} pedidos` : 'Salvar entrega'}
         </button>
       </form>
+      {pendingContactCustomer&&<CustomerDestinationSheet customer={pendingContactCustomer} onClose={()=>setPendingContactCustomer(null)} onConfirm={(phone,address)=>{applyCustomerSelection(pendingContactCustomer,phone,address);setPendingContactCustomer(null);}}/>}
     </div>
   );
 }

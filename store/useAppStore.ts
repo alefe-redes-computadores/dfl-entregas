@@ -3334,14 +3334,13 @@ export const useAppStore = create<AppState>()(
            * Cadastro selecionado/reutilizado é enriquecido.
            * Campo vazio nunca apaga dado bom já existente.
            */
-          if (details?.address?.trim()) {
-            updatedFields.address =
-              details.address.trim();
+          if (!customer.address && details?.address?.trim()) {
+            updatedFields.address = details.address.trim();
           }
 
-          if (details?.mapsLink?.trim()) {
-            updatedFields.maps_link =
-              details.mapsLink.trim();
+          if (!customer.maps_link && details?.mapsLink?.trim() &&
+              (!customer.address || customer.address === details?.address)) {
+            updatedFields.maps_link = details.mapsLink.trim();
           }
 
           if (details?.confirmationCode?.trim()) {
@@ -3354,18 +3353,16 @@ export const useAppStore = create<AppState>()(
               details.observation.trim();
           }
 
-          if (derivedNeighborhood) {
-            updatedFields.neighborhood =
-              derivedNeighborhood;
+          if (derivedNeighborhood && !customer.neighborhood) {
+            updatedFields.neighborhood = derivedNeighborhood;
           }
 
           if (details?.origin) {
             updatedFields.origin = details.origin;
           }
 
-          if (details?.phone?.trim()) {
-            updatedFields.phone =
-              details.phone.trim();
+          if (!customer.phone && details?.phone?.trim()) {
+            updatedFields.phone = details.phone.trim();
           }
 
           set((state) => ({

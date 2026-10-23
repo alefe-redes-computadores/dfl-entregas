@@ -1,6 +1,7 @@
 // lib/operational-exclusions.ts
 import type { Customer, Motoboy, Route } from '@/types';
 import { isOperationalCustomer } from '@/lib/customer-analytics';
+import { verifiedInternalMotoboy } from '@/lib/internal-owner-identity';
 
 function normalize(value?: string | null): string {
   return (value || '')
@@ -20,11 +21,7 @@ export function isInternalOperationalCustomer(customer?: Customer | null): boole
 }
 
 export function isInternalOperationalMotoboy(motoboy?: Motoboy | null): boolean {
-  if (!motoboy) return false;
-  const name = normalize(motoboy.name);
-  return name === 'alefe' ||
-    name === 'alefe johsefe' ||
-    name === 'alefe johsefe de brito gomes';
+  return verifiedInternalMotoboy(motoboy);
 }
 
 export function isInternalOperationalRoute(
@@ -42,8 +39,6 @@ export function isInternalOperationalRoute(
 
   if (linked && isInternalOperationalMotoboy(linked)) return true;
 
-  const routeName = normalize(route.motoboy_name);
-  return routeName === 'alefe' ||
-    routeName === 'alefe johsefe' ||
-    routeName === 'alefe johsefe de brito gomes';
+  // A route with only a motoboy_name never proves internal ownership.
+  return false;
 }

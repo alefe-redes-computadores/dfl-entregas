@@ -1,4 +1,5 @@
 import type { Delivery } from '@/types';
+import { ownerNameAndPhone } from '@/lib/internal-owner-identity';
 
 export type OwnerOrderContext = NonNullable<Delivery['owner_order_context']>;
 
@@ -12,9 +13,7 @@ const normalize = (value?: string | null) => (value || '')
 const digits = (value?: string | null) => (value || '').replace(/\D/g, '');
 
 export function hasOwnerIdentity(input: { name?: string | null; phone?: string | null }): boolean {
-  const name = normalize(input.name);
-  const phone = digits(input.phone);
-  return name === 'alefe' || name.startsWith('alefe ') || phone.endsWith('34999229439');
+  return ownerNameAndPhone(input.name||undefined,input.phone||undefined);
 }
 
 export function ownerContextFlags(context: OwnerOrderContext) {

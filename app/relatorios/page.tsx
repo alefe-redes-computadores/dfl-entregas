@@ -63,6 +63,7 @@ export default function RelatoriosPage() {
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
   const motoboys = useAppStore((state) => state.motoboys);
+  const ownerUid = useAppStore((state) => state.user?.uid);
   const stockSupplies = useAppStore((state) => state.stockSupplies);
 
   const [periodKey, setPeriodKey] = useState<ReportPeriodKey>('7d');
@@ -76,10 +77,12 @@ export default function RelatoriosPage() {
         deliveries,
         routes,
         customers,
+        motoboys,
+        ownerUid,
         stockSupplies,
         periodKey,
       }),
-    [customers, deliveries, periodKey, routes, stockSupplies],
+    [customers, deliveries, motoboys, ownerUid, periodKey, routes, stockSupplies],
   );
 
   const intelligence = useMemo(() => {

@@ -439,10 +439,16 @@ export interface Delivery {
   updated_at?: string;
 }
 
+export interface CustomerPhone { id: string; number: string; label?: string; primary?: boolean; }
+export interface CustomerAddress { id: string; address: string; neighborhood?: string; maps_link?: string; reference?: string; label?: string; primary?: boolean; }
+
 export interface Customer {
   id: string;
   name: string;
   phone?: string;
+  phones?: CustomerPhone[];
+  addresses?: CustomerAddress[];
+  internal_owner_verified?: boolean;
   origin?: OrderOrigin;
   neighborhood?: string;
   address?: string;
@@ -463,6 +469,7 @@ export interface Motoboy {
   type?: MotoboyType;
   avatar?: string;
   payment_rule?: MotoboyPaymentRule;
+  internal_owner_verified?: boolean;
   /** Responsavel por confirmar no portal: ausente = loja (legado). */
   ifood_confirmation_mode?: 'store' | 'motoboy';
   createdAt?: string;

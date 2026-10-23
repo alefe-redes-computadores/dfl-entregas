@@ -1,4 +1,4 @@
-import type { Customer, Delivery, Route, StockSupply } from '@/types';
+import type { Customer, Delivery, Route, StockSupply, Motoboy } from '@/types';
 import { SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { isInternalOperationalCustomer, isInternalOperationalRoute } from '@/lib/operational-exclusions';
@@ -380,6 +380,7 @@ function buildSupplyDaily(
 function buildStockReport(
   supplies: StockSupply[],
   period: ReportPeriod,
+  ownerUid?: string,
 ): ReportModel['stock'] {
   const current =
     period.key === 'all'
@@ -416,6 +417,7 @@ function buildStockReport(
 
   const purchaserMap = new Map<string, { count: number; revenue: number }>();
   current.forEach((item) => {
+    if (ownerUid && item.purchaser_id === ownerUid) return; // Exclude only verified owner from buyer ranking.
     const key = item.purchaser_name?.trim() || 'Comprador não informado';
     const bucket = purchaserMap.get(key) ?? { count: 0, revenue: 0 };
     purchaserMap.set(key, {
@@ -526,6 +528,8 @@ export function buildReportModel(input: {
   deliveries: Delivery[];
   routes: Route[];
   customers: Customer[];
+  motoboys?: Motoboy[];
+  ownerUid?: string;
   stockSupplies: StockSupply[];
   periodKey: ReportPeriodKey;
 }): ReportModel {
@@ -555,7 +559,7 @@ export function buildReportModel(input: {
     .filter(
       (delivery) =>
         delivery.developer_test !== true &&
-        (!delivery.route || !isInternalOperationalRoute(delivery.route)),
+        true, // sales on internal routes remain part of true commercial revenue
     );
 
   const period = buildPeriod(input.periodKey, normalized);
@@ -626,8 +630,8 @@ export function buildReportModel(input: {
   // Compatibilidade nominal: este conjunto alimenta os recortes comerciais
   // de clientes. A logística DFL possui um recorte próprio logo abaixo.
   const logisticsCurrent = current;
-  const dflLogisticsCurrent = current.filter((delivery) => isDeliveryFulfillment(delivery));
-  const dflLogisticsPrevious = previous.filter((delivery) => isDeliveryFulfillment(delivery));
+  const dflLogisticsCurrent = current.filter((delivery) => isDeliveryFulfillment(delivery) && (!delivery.route || !isInternalOperationalRoute(delivery.route, input.motoboys || [])));
+  const dflLogisticsPrevious = previous.filter((delivery) => isDeliveryFulfillment(delivery) && (!delivery.route || !isInternalOperationalRoute(delivery.route, input.motoboys || [])));
 
   // O conjunto `normalized` já remove perfis internos antes de qualquer
   // agregação. Estes aliases deixam explícito que os recortes abaixo usam
@@ -650,10 +654,10 @@ export function buildReportModel(input: {
   ).sort((a, b) => b.count - a.count);
 
   const operationalRoutes = input.routes.filter(
-    (route) => !isInternalOperationalRoute(route),
+    (route) => !isInternalOperationalRoute(route, input.motoboys || []),
   );
   const routeTiming = buildRouteTimings(operationalRoutes, motoboyOperationalCurrent);
-  const stock = buildStockReport(input.stockSupplies, period);
+  const stock = buildStockReport(input.stockSupplies, period, input.ownerUid);
   const firstEligibleOrder = new Map<string, string>();
   normalized.forEach((delivery) => {
     if (!delivery.customer_id || delivery.exclude_customer_metrics || !delivery.reportDateKey || isInternalOperationalCustomer(delivery.customer)) return;

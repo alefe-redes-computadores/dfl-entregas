@@ -2,6 +2,8 @@
 import type { Customer, Delivery } from '@/types';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { deliveryDate } from '@/lib/operational-time';
+import { verifiedInternalCustomer } from '@/lib/internal-owner-identity';
+import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
 
 export interface CustomerStats {
   deliveries: Delivery[];
@@ -19,24 +21,22 @@ export const normalizeCustomerName = (value?: string) => (value || '')
   .trim()
   .toLocaleLowerCase('pt-BR');
 
-const normalizeCustomerAddress = (value?: string) => normalizeCustomerName(value)
-  .replace(/\b(?:rua|r\.?|avenida|av\.?)\b/g, '')
-  .replace(/[^a-z0-9]+/g, ' ')
-  .trim();
-
-/** Cadastros reais que pertencem à operação, mas não devem disputar rankings de clientes. */
+/** Unified, conservative owner rule: never infer from a matching first name. */
 export function isOperationalCustomer(customer: Customer): boolean {
-  const name = normalizeCustomerName(customer.name);
-  const address = normalizeCustomerAddress(customer.address);
-  return name === 'alefe' && address.includes('lazaro martins marciel 164') && address.includes('jardim quebec');
+  return verifiedInternalCustomer(customer);
 }
 
 export const getDeliveryCreatedAt = (delivery: Delivery) => deliveryDate(delivery) || undefined;
 
 export function deliveryBelongsToCustomer(delivery: Delivery, customer: Customer): boolean {
   if (delivery.customer_id) return delivery.customer_id === customer.id;
-  const deliveryName = normalizeCustomerName(delivery.customer_name);
-  return Boolean(deliveryName) && deliveryName === normalizeCustomerName(customer.name);
+  // Legacy rows without an ID require concordant name, phone and address.
+  const matchingName = normalizeCustomerName(delivery.customer_name) === normalizeCustomerName(customer.name);
+  if (!matchingName || !delivery.phone || !delivery.address_string) return false;
+  const phone = String(delivery.phone).replace(/\D/g, '');
+  const address = String(delivery.address_string).toLocaleLowerCase('pt-BR').trim();
+  return customerPhones(customer).some(item=>item.number.replace(/\D/g,'')===phone) &&
+    customerAddresses(customer).some(item=>item.address.toLocaleLowerCase('pt-BR').trim()===address);
 }
 
 export function getCustomerStats(customer: Customer, deliveries: Delivery[]): CustomerStats {
@@ -70,6 +70,7 @@ export function getCustomerStats(customer: Customer, deliveries: Delivery[]): Cu
  */
 export function buildCustomerStatsIndex(customers: Customer[], deliveries: Delivery[]): Map<string, CustomerStats> {
   const byName = new Map<string, string[]>();
+  const customerById = new Map(customers.map(item=>[item.id,item]));
   const linked = new Map<string, Delivery[]>();
   const knownIds = new Set(customers.map(customer => customer.id));
 
@@ -90,7 +91,15 @@ export function buildCustomerStatsIndex(customers: Customer[], deliveries: Deliv
     }
     const name = normalizeCustomerName(delivery.customer_name);
     if (!name) continue;
-    for (const id of byName.get(name) || []) linked.get(id)?.push(delivery);
+    const candidateIds=byName.get(name)||[];
+    if (candidateIds.length !== 1) continue; // Homonyms remain unassigned.
+    const candidate=customerById.get(candidateIds[0]);
+    if (!candidate) continue;
+    const phone=String(delivery.phone||'').replace(/\D/g,'');
+    const address=String(delivery.address_string||'').toLocaleLowerCase('pt-BR').trim();
+    const verifiedPhone=phone.length>=10&&customerPhones(candidate).some(item=>item.number.replace(/\D/g,'')===phone);
+    const verifiedAddress=address.length>=10&&customerAddresses(candidate).some(item=>item.address.toLocaleLowerCase('pt-BR').trim()===address);
+    if (verifiedPhone && verifiedAddress) linked.get(candidate.id)?.push(delivery);
   }
 
   const stats = new Map<string, CustomerStats>();

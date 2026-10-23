@@ -8,6 +8,7 @@ const parser=read('lib/ifood-order-parser.ts');
 const reports=read('lib/reports/buildReportModel.ts');
 const reportTypes=read('lib/reports/types.ts');
 const customers=read('app/clientes/page.tsx');
+const contactBook=read('lib/customer-contact-book.ts');
 const duplicates=read('lib/customer-duplicates.ts');
 const card=read('components/home/DeliveryCard.tsx');
 ok(types.includes('owner_order_context'), 'contexto operacional persistido na entrega');
@@ -17,7 +18,12 @@ ok(parser.includes('looksLikeCustomerNameLine')&&parser.includes('mesmo quando a
 ok(parser.includes("tokens.some((token) => token.length === 8)"), 'pedido e ID são correlacionados fora da primeira linha');
 ok(reports.includes('delivery.developer_test !== true')&&reports.includes('customerOperationalCurrent = logisticsCurrent.filter'), 'teste sai do geral e provisório sai apenas das métricas de cliente');
 ok(reportTypes.includes('newCustomerCount')&&reports.includes('firstEligibleOrder'), 'relatório mede clientes novos pela primeira compra elegível');
-ok(customers.includes('customerDigits.includes(searchedDigits)'), 'busca de cliente aceita telefone formatado ou somente dígitos');
+ok(customers.includes('customerPhoneMatches(customer,query)') &&
+   customers.includes('matchesExtraPhone') &&
+   contactBook.includes('export function customerPhoneMatches') &&
+   contactBook.includes('digits(item.number).includes(sought)') &&
+   contactBook.includes('sought.length>=3'),
+   'busca de cliente aceita digitos formatados em todos os telefones cadastrados');
 ok(duplicates.includes('Mesmo telefone')&&duplicates.includes('samePhone && sameAddress ? 99'), 'duplicados ganham evidência conservadora por telefone');
 ok(card.includes('suppressCardClick')&&card.includes("handleTriggerAction('expand')"), 'card expande por toque sem clique fantasma após arrasto');
 console.log('\nV77 IDENTIDADE + PARSER + CLIENTES + UX: CONTRATOS OK');
