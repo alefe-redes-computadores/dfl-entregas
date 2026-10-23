@@ -11,7 +11,7 @@ const checks = [
   ['lote urgente entra na frente da posição real', store.includes('delivery.is_urgent ? head - 1 : tail + 1') && store.includes('routeHead.set(delivery.route_id, nextIndex)')],
   ['urgência nasce fixada e preserva autoridade da ordem', store.includes('order_locked: delivery.is_urgent ? true : delivery.order_locked') && store.includes('keepPinnedStopPositions(pending, finalPendingIds)')],
   ['ordem manual usa rota exibida', card.includes('moveDeliveryToIndex(route.id, delivery.id, boundedTarget)')],
-  ['setas móveis preservadas como fallback', card.includes('ArrowUp') && card.includes('ArrowDown') && card.includes('onPointerDown={handleReorderPointerDown}')],
+  ['setas móveis preservadas como fallback', card.includes('ArrowUp') && card.includes('ArrowDown') && card.includes('role="group" aria-label="Subir ou descer parada"') && !card.includes('onPointerDown={handleReorderPointerDown}')],
   ['filas virtuais não reordenam', card.includes("route.id !== 'rota-site-aguardando-confirmacao'")],
 ];
 

@@ -1014,7 +1014,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             <p className="py-4 text-center text-sm text-zinc-600">Nenhuma entrega nesta rota ainda.</p>
           ) : (
             allStopGroups.map((stopGroup) => {
-              const first = stopGroup.representative;
+              // A referência do card precisa ser pendente enquanto houver
+              // qualquer pedido pendente na parada, mesmo se o primeiro foi baixado.
+              const first = stopGroup.pending[0] || stopGroup.representative;
               const physicalStop = stopMeta.get(first.id);
               const cust = getCustomerById(first.customer_id);
               const addressKey = normalizedAddress(first.address_string || cust?.address);

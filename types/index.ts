@@ -393,6 +393,8 @@ export interface Delivery {
   address_string: string;
   maps_link: string;
   observation?: string;
+  /** Registro persistido de tentativa, independente de baixa e confirmação externa. */
+  delivery_attempts?: import('@/lib/delivery-attempts').DeliveryAttempt[];
   drinks?: string;
   /** A edição humana de Bebidas prevalece sobre projeções posteriores do Site. */
   drinks_manual_override?: boolean;

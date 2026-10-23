@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, Globe2, Bike, UtensilsCrossed, Layers3, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle, GripVertical
+  Smartphone, Store, Globe2, Bike, UtensilsCrossed, Layers3, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import clsx from 'clsx';
@@ -14,6 +14,8 @@ import { copyDeliveryToClipboard } from '@/lib/whatsapp';
 import { MiniMap } from '@/components/deliveries/MiniMap';
 import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidencePreview';
 import { locationEvidence } from '@/lib/location-evidence';
+import { appendDeliveryAttempt, deliveryAttemptLabel, DELIVERY_ATTEMPT_REASONS } from '@/lib/delivery-attempts';
+import type { DeliveryAttemptReason } from '@/lib/delivery-attempts';
 import { buildNavigationLinks } from '@/lib/navigation-links';
 import { useAppStore } from '@/store/useAppStore';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
@@ -103,23 +105,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const reorderBusyRef = useRef(false);
   const [reorderBusy, setReorderBusy] = useState(false);
   const [moveSheetOpen, setMoveSheetOpen] = useState(false);
-  // Alça dedicada: não disputa o gesto horizontal de concluir/expandir.
-  const reorderGesture = useRef<null | {
-    pointerId: number;
-    startY: number;
-    origin: number;
-    target: number;
-    moved: boolean;
-    targets: Array<{ index: number; middle: number; element: HTMLElement }>;
-    highlighted: HTMLElement | null;
-  }>(null);
-  const [dropTargetPosition, setDropTargetPosition] = useState<number | null>(null);
-  // Arraste longo: acompanha a lista perto das bordas sem recalcular a rota
-  // inteira nem transformar cada pixel em atualização React.
-  const reorderAutoScrollFrame = useRef<number | null>(null);
-  const reorderPointerY = useRef<number | null>(null);
-  const reorderAutoScrollStep = useRef(0);
-
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const touchCurrentX = useRef(0);
@@ -132,19 +117,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const [completionBusy, setCompletionBusy] = useState(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
-  useEffect(() => () => {
-    if (reorderAutoScrollFrame.current !== null) {
-      window.cancelAnimationFrame(reorderAutoScrollFrame.current);
-      reorderAutoScrollFrame.current = null;
-    }
-    const highlighted = reorderGesture.current?.highlighted;
-    if (highlighted) {
-      highlighted.style.outline = '';
-      highlighted.style.outlineOffset = '';
-    }
-    reorderGesture.current = null;
-  }, []);
-
+  const [attemptOpen, setAttemptOpen] = useState(false);
+  const [attemptReason, setAttemptReason] = useState<DeliveryAttemptReason>('customer_absent');
+  const [attemptTargetId, setAttemptTargetId] = useState(delivery.id);
+  const [attemptNote, setAttemptNote] = useState('');
+  const [attemptMoveLast, setAttemptMoveLast] = useState(false);
+  const [attemptBusy, setAttemptBusy] = useState(false);
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [groupedCodeDrafts, setGroupedCodeDrafts] = useState<Record<string, string>>({});
@@ -276,6 +254,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const groupedCodeDeliveries = pendingGroupedDeliveries.filter((item) =>
     (item.origin === 'ifood' || !item.origin) && ifoodConfirmationMode !== 'motoboy');
   const groupedCodeMode = pendingGroupedDeliveries.length > 1;
+  const lastAttempt = groupedDeliveries
+    .flatMap(item => item.delivery_attempts || [])
+    .sort((left, right) => left.at.localeCompare(right.at)).at(-1);
+
   const [skippedCodeIds, setSkippedCodeIds] = useState<string[]>([]);
 
   const closeConfirmationModal = () => {
@@ -546,130 +528,35 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   };
 
 
-  const stopReorderAutoScroll = () => {
-    reorderAutoScrollStep.current = 0;
-    reorderPointerY.current = null;
-    if (reorderAutoScrollFrame.current !== null) {
-      window.cancelAnimationFrame(reorderAutoScrollFrame.current);
-      reorderAutoScrollFrame.current = null;
-    }
-  };
-
-  const clearReorderGesture = () => {
-    stopReorderAutoScroll();
-    const gesture = reorderGesture.current;
-    if (gesture?.highlighted) {
-      gesture.highlighted.style.outline = '';
-      gesture.highlighted.style.outlineOffset = '';
-    }
-    reorderGesture.current = null;
-    setDropTargetPosition(null);
-  };
-
-  const updateReorderTarget = (clientY: number) => {
-    const gesture = reorderGesture.current;
-    if (!gesture) return;
-    let nearest = gesture.targets[0];
-    if (!nearest) return;
-    // O centro da parada precisa ser relido depois de rolar a página.
-    let nearestDistance = Math.abs(clientY - (nearest.element.getBoundingClientRect().top + nearest.element.getBoundingClientRect().height / 2));
-    for (const candidate of gesture.targets.slice(1)) {
-      const rect = candidate.element.getBoundingClientRect();
-      const distance = Math.abs(clientY - rect.top - rect.height / 2);
-      if (distance < nearestDistance) {
-        nearest = candidate;
-        nearestDistance = distance;
-      }
-    }
-    if (nearest.index === gesture.target && gesture.highlighted === nearest.element) return;
-    if (gesture.highlighted) {
-      gesture.highlighted.style.outline = '';
-      gesture.highlighted.style.outlineOffset = '';
-    }
-    nearest.element.style.outline = '2px solid rgba(16,185,129,.9)';
-    nearest.element.style.outlineOffset = '2px';
-    gesture.highlighted = nearest.element;
-    gesture.target = nearest.index;
-    setDropTargetPosition(nearest.index + 1);
-  };
-
-  const advanceReorderAutoScroll = () => {
-    reorderAutoScrollFrame.current = null;
-    const gesture = reorderGesture.current;
-    const clientY = reorderPointerY.current;
-    const step = reorderAutoScrollStep.current;
-    if (!gesture || !gesture.moved || clientY === null || step === 0) return;
-    const previousY = window.scrollY;
-    window.scrollBy(0, step);
-    updateReorderTarget(clientY);
-    // Sem espaço para rolar (início/fim da página): não agendar RAF em loop.
-    if (Math.abs(window.scrollY - previousY) < 0.5) return;
-    reorderAutoScrollFrame.current = window.requestAnimationFrame(advanceReorderAutoScroll);
-  };
-
-  const handleReorderPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!canReorder || reorderBusyRef.current || reorderGesture.current) return;
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    event.stopPropagation();
-    event.preventDefault();
-    const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-dfl-stop-index]'))
-      .filter((element) => element.dataset.dflRouteId === route.id)
-      .map((element) => ({
-        index: Number(element.dataset.dflStopIndex) - 1,
-        middle: element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2,
-        element,
-      }))
-      .filter((target) => Number.isInteger(target.index) && target.index >= 0 && target.index < pendingCount)
-      .sort((a, b) => a.index - b.index);
-    if (targets.length < 2) return;
-    const origin = Math.max(0, (position || 1) - 1);
-    reorderGesture.current = {
-      pointerId: event.pointerId, startY: event.clientY, origin, target: origin,
-      moved: false, targets, highlighted: null,
-    };
+  const saveAttempt = async () => {
+    if (attemptBusy) return;
+    setAttemptBusy(true);
     try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      clearReorderGesture();
-    }
-    setDropTargetPosition(origin + 1);
-  };
-
-  const handleReorderPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
-    const gesture = reorderGesture.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
-    event.stopPropagation();
-    if (!gesture.moved && Math.abs(event.clientY - gesture.startY) < 8) return;
-    gesture.moved = true;
-    reorderPointerY.current = event.clientY;
-    updateReorderTarget(event.clientY);
-    const edge = 88;
-    const y = event.clientY;
-    const distance = Math.min(y, window.innerHeight - y);
-    const strength = Math.max(0, Math.min(1, (edge - distance) / edge));
-    reorderAutoScrollStep.current = strength === 0 ? 0 : (y < edge ? -1 : 1) * Math.max(2, Math.round(strength * 18));
-    if (reorderAutoScrollStep.current === 0) {
-      if (reorderAutoScrollFrame.current !== null) {
-        window.cancelAnimationFrame(reorderAutoScrollFrame.current);
-        reorderAutoScrollFrame.current = null;
+      // Always use the current snapshot; never overwrite a newer local attempt.
+      const current = useAppStore.getState().deliveries.find(item => item.id === attemptTargetId);
+      if (!current || current.completed || route.status !== 'aberta' || !routeStartedAt(route) || !canManageStop || !pendingGroupedDeliveries.some(item => item.id === current.id)) {
+        throw new Error('A tentativa só pode ser registrada para pedido pendente em rota iniciada.');
       }
-    } else if (reorderAutoScrollFrame.current === null) {
-      reorderAutoScrollFrame.current = window.requestAnimationFrame(advanceReorderAutoScroll);
-    }
-  };
-
-  const handleReorderPointerEnd = (event: React.PointerEvent<HTMLButtonElement>) => {
-    const gesture = reorderGesture.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
-    event.stopPropagation();
-    const shouldMove = gesture.moved && gesture.origin !== gesture.target;
-    const target = gesture.target;
-    clearReorderGesture();
-    if (shouldMove) {
-      suppressCardClick.current = true;
-      window.setTimeout(() => { suppressCardClick.current = false; }, 300);
-      void moveStop(target);
-    }
+      const attempt = {
+        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+        reason: attemptReason,
+        at: new Date().toISOString(),
+        note: attemptNote.trim(),
+      };
+      await updateDelivery(current.id, {
+        delivery_attempts: appendDeliveryAttempt(current.delivery_attempts, attempt),
+      });
+      setAttemptOpen(false);
+      setAttemptNote('');
+      toast.success('Tentativa registrada; entrega continua pendente.', { description: deliveryAttemptLabel(attemptReason) });
+      if (attemptMoveLast && canReorder && !orderLocked) {
+        try { await moveStop(pendingCount - 1); }
+        catch { toast.warning('Tentativa salva; não foi possível mover a parada.'); }
+      }
+      setAttemptMoveLast(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível registrar a tentativa.');
+    } finally { setAttemptBusy(false); }
   };
 
   const resetCardSwipe = () => {
@@ -790,8 +677,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         >
           <div className={clsx("flex flex-col", isExpanded ? "p-3.5 sm:p-4" : "px-3 py-2.5")}>
             <div className="flex items-start gap-3">
-              <div className="relative shrink-0 mt-0.5">
-                <span className={clsx('flex items-center justify-center rounded-xl border', isExpanded ? 'h-10 w-10' : 'h-9 w-9', channelStyle.shell)}>
+              <div className="relative mt-0.5 flex w-10 shrink-0 self-stretch flex-col items-center">
+                <span className={clsx('flex shrink-0 items-center justify-center rounded-xl border', isExpanded ? 'h-10 w-10' : 'h-9 w-9', channelStyle.shell)}>
                   <ChannelIcon size={19} aria-hidden="true" />
                 </span>
                 {position !== undefined && (
@@ -799,6 +686,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     {position}
                   </span>
                 )}
+                <span
+                  aria-label={`Origem ${channelStyle.label}`}
+                  className={clsx('mt-2 flex w-7 min-h-16 flex-1 items-center justify-center rounded-xl border py-3 font-heading text-[10px] font-black uppercase tracking-[.18em]', channelStyle.badge)}
+                  style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                >
+                  {channelStyle.label}
+                </span>
               </div>
 
               <div className="flex min-w-0 flex-1 flex-col">
@@ -810,9 +704,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         : customer?.name || delivery.customer_name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
                       {!isGroupedStop && isVIP && <Crown size={12} className="ml-1 inline align-middle text-amber-500" />}
                     </p>
-                    <span className={clsx('inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-heading text-[9px] font-black uppercase tracking-[.16em]', channelStyle.badge)}>
-                      <ChannelIcon size={11} aria-hidden="true" />{channelStyle.label}
-                    </span>
                   </div>
                   <div className="min-w-0 max-w-[43%] shrink-0 flex flex-col items-end">
                     <span className="block text-right text-[9px] font-bold uppercase tracking-wide text-zinc-500">{isGroupedStop ? 'Valor dos pedidos' : 'Valor do pedido'}</span>
@@ -824,6 +715,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     )}
                   </div>
                 </div>
+
+                {lastAttempt && (
+                  <p className="mt-1 max-w-full break-words text-[10px] font-semibold text-amber-300" title="Tentativa não equivale a entrega concluída">
+                    <AlertTriangle size={11} className="mr-1 inline" />Tentativa: {deliveryAttemptLabel(lastAttempt.reason)}
+                  </p>
+                )}
 
                 {/* Linha dos Identificadores com Press & Hold */}
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
@@ -1035,24 +932,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         <div className="flex w-full flex-wrap items-center justify-start gap-2" aria-label="Reordenar parada">
                           <button type="button" disabled={reorderBusy} onClick={(e)=>void toggleStopLock(e)} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black disabled:opacity-40 ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Inteligente':'Fixar'}</button>
                           <button type="button" data-no-card-swipe="true" onClick={(event) => {event.stopPropagation();setMoveSheetOpen(true);}} className="flex h-10 min-w-0 items-center justify-center gap-1 rounded-xl border border-sky-500/25 bg-sky-500/[.08] px-3 text-[11px] font-bold text-sky-200"><ArrowUp size={13}/><ArrowDown size={13}/>Mover</button>
-                          {canReorder && <button
-                            type="button"
-                            data-no-card-swipe="true"
-                            disabled={reorderBusy}
-                            onPointerDown={handleReorderPointerDown}
-                            onPointerMove={handleReorderPointerMove}
-                            onPointerUp={handleReorderPointerEnd}
-                            onPointerCancel={clearReorderGesture}
-                            onLostPointerCapture={clearReorderGesture}
-                            onClick={(event) => event.stopPropagation()}
-                            style={{ touchAction: 'none' }}
-                            className={`hidden h-9 min-w-9 items-center justify-center gap-1 rounded-xl border px-2 text-[10px] font-black active:scale-95 ${dropTargetPosition !== null ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-200' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`}
-                            aria-label={dropTargetPosition === null ? 'Segure e arraste para reposicionar a parada' : `Solte para mover até a parada ${dropTargetPosition}`}
-                            title="Arrastar parada"
-                          >
-                            <GripVertical size={16}/>
-                            {dropTargetPosition !== null && <span aria-live="polite">{dropTargetPosition}</span>}
-                          </button>}
                           {canReorder && <div role="group" aria-label="Subir ou descer parada" className="flex shrink-0 items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]">
                             <button
                               type="button"
@@ -1218,6 +1097,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   )}
                 </div>
 
+                {canManageStop && Boolean(routeStartedAt(route)) && (
+                  <button type="button" data-no-card-swipe="true" onClick={(event) => {
+                    event.stopPropagation();
+                    setAttemptTargetId(pendingGroupedDeliveries[0]?.id || delivery.id);
+                    setAttemptReason('customer_absent');
+                    setAttemptMoveLast(false);
+                    setAttemptNote('');
+                    setAttemptOpen(true);
+                  }} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.07] px-3 text-[11px] font-black text-amber-200 active:bg-amber-500/15">
+                    <AlertTriangle size={14} /> Registrar tentativa (sem dar baixa)
+                  </button>
+                )}
                 <div className="flex items-center gap-2 mt-1">
                   <button
                     onClick={() => handleTriggerAction('complete')}
@@ -1284,6 +1175,35 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           )}
         </div>
       </div>
+
+      {attemptOpen && (
+        <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/80 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-10 backdrop-blur-sm sm:items-center" onClick={() => { if (!attemptBusy) setAttemptOpen(false); }} role="presentation">
+          <section role="dialog" aria-modal="true" aria-label="Registrar tentativa de entrega" className="max-h-[88dvh] w-full max-w-sm overflow-y-auto rounded-[24px] border border-amber-500/25 bg-zinc-950 p-4 shadow-2xl" onClick={event => event.stopPropagation()}>
+            <h3 className="text-base font-black text-zinc-100">Registrar tentativa</h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">A entrega permanece pendente. Não registra confirmação, pagamento ou conclusão.</p>
+            {pendingGroupedDeliveries.length > 1 && <label className="mt-4 block text-[11px] font-bold text-zinc-300">Pedido desta parada
+              <select value={attemptTargetId} onChange={event => setAttemptTargetId(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100">
+                {pendingGroupedDeliveries.map(item => <option key={item.id} value={item.id}>{item.customer_name || getCustomerById(item.customer_id)?.name || item.order_id || item.id}{item.order_id ? ` · #${item.order_id}` : ''}</option>)}
+              </select>
+            </label>}
+            <label className="mt-4 block text-[11px] font-bold text-zinc-300">Motivo
+              <select value={attemptReason} onChange={event => setAttemptReason(event.target.value as DeliveryAttemptReason)} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100">
+                {DELIVERY_ATTEMPT_REASONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className="mt-3 block text-[11px] font-bold text-zinc-300">Observação (opcional)
+              <textarea rows={3} maxLength={240} value={attemptNote} onChange={event => setAttemptNote(event.target.value)} placeholder="Ex.: interfone sem resposta; combinar nova tentativa" className="mt-1 w-full resize-none rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-100 outline-none focus:border-amber-500" />
+            </label>
+            {canReorder && !orderLocked && <label className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 text-[11px] text-zinc-300">
+              <input type="checkbox" checked={attemptMoveLast} onChange={event => setAttemptMoveLast(event.target.checked)} className="h-4 w-4 accent-amber-400" /> Deixar esta parada por último
+            </label>}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" disabled={attemptBusy} onClick={() => setAttemptOpen(false)} className="h-11 rounded-xl border border-zinc-700 bg-zinc-900 text-xs font-bold text-zinc-300 disabled:opacity-50">Cancelar</button>
+              <button type="button" disabled={attemptBusy} onClick={() => void saveAttempt()} className="h-11 rounded-xl bg-amber-400 text-xs font-black text-zinc-950 disabled:opacity-50">{attemptBusy ? 'Salvando…' : 'Registrar'}</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {deleteOpen && (
         <div className="fixed inset-0 z-[140] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center" onClick={() => { if (!deleteBusy) setDeleteOpen(false); }} role="presentation">

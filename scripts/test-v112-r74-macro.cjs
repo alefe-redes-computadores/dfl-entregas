@@ -52,7 +52,7 @@ const card=read('components/home/DeliveryCard.tsx');
 check(card.includes('Pular este')&&card.includes('skippedCodeIds.includes(item.id)'),'cada codigo tem pulo individual');
 check(card.includes('groupedCodeDeliveries.map((item, index)'),'modal exibe cliente por pedido');
 check(card.includes('moveSheetOpen')&&card.includes('Mover / Fixar parada'),'movimentacao mobile em folha inferior');
-check(card.includes("className={`hidden h-9 min-w-9"),'alca de arrasto oculta no mobile');
+check(!card.includes("className={`hidden h-9 min-w-9") && !card.includes('handleReorderPointerDown') && card.includes('role="group" aria-label="Subir ou descer parada"') && card.includes('disabled={reorderBusy || orderLocked || (position || 1) <= 1}'), 'alça removida; setas e travas presentes no mobile');
 const legacy=read('scripts/verify-v111-r66-site-inbox.cjs');
 check(legacy.includes('versao remota lida e revalidada dentro da mesma transacao') && legacy.includes('patch.site_order_status'),'R66 verifica autoridade comercial e revisao remota');
 const store=read('store/useAppStore.ts');

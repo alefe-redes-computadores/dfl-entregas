@@ -52,7 +52,7 @@ ok(store.includes('byDeliveryId.get(id)'), 'organizador evita busca linear por i
 ok(hook.includes('const customerById = new Map('), 'cliente indexado no snapshot');
 ok(hook.includes('const pendingGroups = groups.flatMap('), 'grupo pendente reaproveita grupo calculado');
 ok(card.includes('disabled={copyBusy}') && card.includes('aria-busy={copyBusy}'), 'copiar bloqueia toque duplo com feedback');
-ok(card.includes('setPointerCapture(event.pointerId)') && card.includes('clearReorderGesture();'), 'arrastar trata perda de captura');
+ok(!card.includes('setPointerCapture(event.pointerId)') && !card.includes('clearReorderGesture();') && card.includes('role="group" aria-label="Subir ou descer parada"') && card.includes('disabled={reorderBusy || orderLocked || (position || 1) <= 1}'), 'setas e trava substituem captura por arraste');
 const paid = {id:'a',value:64,payment_method:'dinheiro',is_paid:false,address_string:'Rua A'};
 const canceled = {...paid,id:'b',value:200,change_for:400,source_system:'dfl_site',site_order_status:'cancelado',address_string:'Rua B'};
 const normal = {...paid,id:'c',value:20,change_for:50,address_string:'Rua B'};

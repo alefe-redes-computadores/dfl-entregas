@@ -11,7 +11,7 @@ const card=read('components/home/DeliveryCard.tsx');const route=read('components
 const store=read('store/useAppStore.ts');const preview=read('components/deliveries/LocationEvidencePreview.tsx');
 ok(card.includes('void moveStop(0)')&&card.includes('void moveStop(pendingCount-1)'),'acoes ir primeiro e deixar por ultimo usam motor real');
 ok(card.includes('disabled={reorderBusy || orderLocked || (position || 1) <= 1}')&&card.includes('disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount}'),'posicoes e fixacao bloqueiam movimentacao ilegal');
-ok(card.includes('Mover parada expandida')&&card.includes('role="group" aria-label="Subir ou descer parada"')&&card.includes('onPointerMove={handleReorderPointerMove}'),'setas e arraste existentes preservados');
+ok(card.includes('Mover parada expandida')&&card.includes('role="group" aria-label="Subir ou descer parada"')&&!card.includes('onPointerMove={handleReorderPointerMove}'),'setas presentes e alça de arraste removida');
 ok(card.includes('max-w-[54%]')&&card.includes('[overflow-wrap:anywhere]')&&card.includes('min-w-0 flex-1 flex-col'),'cabecalho pode expandir verticalmente sem cortar nome nem valor');
 ok(route.includes('role="status" aria-live="polite"')&&route.includes('Aguardando confirmação do fechamento')&&route.includes('autoCloseCompletedRoutes !== false'),'fechamento comunica estado sem simular ACK remoto');
 ok(store.includes('keepPinnedStopPositions(pending, finalPendingIds)')&&store.includes('moveStopToIndex(pending, deliveryId, rawTarget)')&&store.includes('canAutoCloseRoute(route, routeDeliveries)'),'motor transacional agrupado e fechamento preservados');

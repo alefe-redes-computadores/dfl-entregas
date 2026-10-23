@@ -11,7 +11,7 @@ ok(map.indexOf('const targetLocation = useMemo')<map.indexOf('if (!address && !m
 ok(read('app/entregas/nova/page.tsx').includes('LocationEvidencePreview address={activeAddress}')&&read('app/entregas/editar/page.tsx').includes('LocationEvidencePreview address={streetAddress}'),'previa em criacao e edicao');
 ok(radar.includes("insight.severity === 'warning' || insight.severity === 'attention'")&&radar.includes('Silenciar radar hoje'),'radar so chama atencao quando relevante');
 ok(read('app/loja/page.tsx').includes("router.push('/mais/notificacoes')")&&read('app/mais/notificacoes/page.tsx').includes('O Android exige autorização explícita'),'configuracoes reais e permissao explicita');
-ok(card.includes('role="group" aria-label="Subir ou descer parada"')&&card.includes('onPointerMove={handleReorderPointerMove}')&&card.includes('keepPinned')===false,'setas e arraste seguros permanecem');
+ok(card.includes('role="group" aria-label="Subir ou descer parada"')&&!card.includes('onPointerMove={handleReorderPointerMove}')&&card.includes('keepPinned')===false,'setas e mover por posição permanecem, arraste removido');
 ok(store.includes('keepPinnedStopPositions(pending, finalPendingIds)')&&store.includes('moveStopToIndex(pending, deliveryId, rawTarget)'),'motor de reordenacao central preservado');
 ok(store.includes('autoCloseCompletedRoutes !== false')&&store.includes('canAutoCloseRoute(route, routeDeliveries)'),'fechamento seguro preservado');
 ok(read('components/motoboys/MotoboyForm.tsx').includes('ifood_confirmation_mode:ifoodMode')&&card.includes("ifoodConfirmationMode !== 'motoboy'"),'confirmacao iFood continua por motoboy');

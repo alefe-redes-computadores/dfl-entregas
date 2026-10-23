@@ -11,16 +11,11 @@ const recurrence = read('lib/customer-recurrence.ts');
 const store = read('store/useAppStore.ts');
 const pipeline = read('components/home/RouteAccordion.tsx');
 
-// Gestos: somente pela alça, Pointer Capture e posicionamento por PARADA física.
-assert.match(card, /<GripVertical size=\{16\}/);
-assert.match(card, /touchAction: 'none'/);
-assert.match(card, /setPointerCapture\(event.pointerId\)/);
-assert.match(card, /handleReorderPointerCancel|onPointerCancel=\{clearReorderGesture\}/);
+// R81: controls intentionally have no drag handle or pointer gesture.
+assert.doesNotMatch(card, /handleReorderPointerDown|<GripVertical size=\{16\}|setPointerCapture\(event.pointerId\)/);
+assert.match(card, /role="group" aria-label="Subir ou descer parada"/);
+assert.match(card, /disabled=\{reorderBusy \|\| orderLocked \|\| \(position \|\| 1\) <= 1\}/);
 assert.match(card, /data-dfl-stop-index=\{canReorder \? position : undefined\}/);
-assert.match(card, /element\.dataset\.dflRouteId === route\.id/);
-assert.match(card, /void moveStop\(target\)/);
-assert.match(card, /Math\.abs\(event\.clientY - gesture\.startY\) < 8/);
-assert.match(card, /onLostPointerCapture=\{clearReorderGesture\}/);
 assert.match(store, /const groups = groupDeliveriesByStop\(pending\)/);
 assert.match(store, /const orderedIds = moveStopToIndex\(pending, deliveryId, rawTarget\)/);
 assert.match(pipeline, /pendingStopGroups/);
