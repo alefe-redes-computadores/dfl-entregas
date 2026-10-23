@@ -104,8 +104,11 @@ export function OperationalRadar() {
   const { hiddenIds, hideForToday, mutedToday, muteForToday } = useHiddenInsightsToday();
 
   if (mutedToday) return null;
+  // Home is for actionable signals. Positive/info insights remain in Reports;
+  // do not spend a full card on a generic tip outside operating hours.
   const visibleHighlights = intelligence.highlights.filter(
-    (insight) => !hiddenIds.has(insight.id),
+    (insight) => !hiddenIds.has(insight.id) &&
+      (insight.severity === 'warning' || insight.severity === 'attention'),
   );
   const signal = chooseHomeSignal(visibleHighlights);
   if (!signal) return null;

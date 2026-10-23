@@ -12,6 +12,8 @@ import clsx from 'clsx';
 import type { Delivery, Customer, Route } from '@/types';
 import { copyDeliveryToClipboard } from '@/lib/whatsapp';
 import { MiniMap } from '@/components/deliveries/MiniMap';
+import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidencePreview';
+import { locationEvidence } from '@/lib/location-evidence';
 import { useAppStore } from '@/store/useAppStore';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { Capacitor } from '@capacitor/core';
@@ -939,6 +941,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 {!isExpanded && (
                   <div className="mt-1.5 flex w-full flex-col gap-1.5 border-t border-zinc-800/50 pt-1.5">
 
+                    <LocationEvidencePreview address={delivery.address_string} mapsLink={delivery.maps_link} compact />
                     <div className="flex items-center gap-2.5">
                       <a
                         href={mapTarget || '#'}
@@ -1124,7 +1127,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="flex items-center gap-2 pl-1 flex-wrap">
                   {hasCoordinatesOrLink ? (
                     <span className="flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
-                      <Navigation size={10} /> Ponto Preciso Ativo
+                      <Navigation size={10} /> {locationEvidence(delivery.address_string, delivery.maps_link).title}
                     </span>
                   ) : !hasStreetNumber ? (
                     <span className="flex items-center gap-1 rounded bg-amber-500/15 px-2 py-1 text-[10px] font-bold text-amber-400 border border-amber-500/30">

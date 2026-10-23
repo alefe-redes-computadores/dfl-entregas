@@ -15,6 +15,7 @@ import { CustomerDestinationSheet } from '@/components/customers/CustomerDestina
 import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
 import type { CustomerPhone, CustomerAddress } from '@/types';
 import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete';
+import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidencePreview';
 import { extractCoordinatesFromUrl } from '@/lib/maps';
 import { normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
@@ -1091,6 +1092,7 @@ const [routeId, setRouteId] = useState('');
               className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
             />
           </div>
+          <LocationEvidencePreview address={streetAddress} mapsLink={mapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':'Loja'}/>
         </section>
 
           </>

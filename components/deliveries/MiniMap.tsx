@@ -9,11 +9,11 @@ interface MiniMapProps {
 }
 
 export function MiniMap({ address, mapsLink }: MiniMapProps) {
-  if (!address && !mapsLink) return null;
-
+  // Hooks must stay unconditional when the form goes from empty to filled.
   const targetLocation = useMemo(() => {
     return resolveStopLocation({ address_string: address || '' }, mapsLink);
   }, [address, mapsLink]);
+  if (!address && !mapsLink) return null;
 
   const encodedTarget = encodeURIComponent(targetLocation);
   const embedUrl = `https://maps.google.com/maps?q=${encodedTarget}&t=&z=16&ie=UTF8&iwloc=&output=embed`;

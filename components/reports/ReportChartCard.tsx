@@ -61,11 +61,11 @@ export function ReportChartCard({
 
   return (
     <section className="overflow-hidden rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 shadow-sm">
-      <div className="flex min-w-0 items-start justify-between gap-3 px-4 pb-2 pt-4 sm:px-5 sm:pt-5">
+      <div className="flex min-w-0 items-start justify-between gap-3 px-3.5 pb-2 pt-4 sm:px-5 sm:pt-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-zinc-100">
             <span className="text-emerald-400">{icon}</span>
-            <h2 className="min-w-0 break-words text-[15px] font-black tracking-tight sm:text-base">{title}</h2>
+            <h2 className="min-w-0 break-words text-sm font-black leading-snug tracking-tight sm:text-base">{title}</h2>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-zinc-500">{description}</p>
           {onSelectBucket && chartData.length > 0 && (
@@ -90,7 +90,7 @@ export function ReportChartCard({
           Nenhum dado confiável para esta análise.
         </div>
       ) : (
-        <div className="h-[214px] w-full min-w-0 px-1 pb-1 sm:h-[250px] sm:px-2">
+        <div className="h-[210px] min-w-0 w-full overflow-hidden px-1 pb-1 sm:h-[250px] sm:px-2">
           <ResponsiveContainer width="100%" height="100%">
             {chartType === 'line' ? (
               <LineChart

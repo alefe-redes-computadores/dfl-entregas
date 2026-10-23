@@ -15,7 +15,7 @@ check(card.includes('setMoveSheetOpen(true)')&&card.includes('toggleStopLock')&&
 check(card.includes('channelStyle.badge')&&card.includes('channelStyle.rail'),'origens visuais persistem sem mudar dados');
 check(!chart.includes('ResponsiveContainer')&&chart.includes('leadingPercent')&&chart.includes('role="progressbar"'),'relatorio de canal leve, compacto e acessivel');
 check(chart.includes("'iFood'")&&chart.includes("'99Food'")&&chart.includes("'Loja'"),'canais comerciais sem WhatsApp inventado');
-check(report.includes('h-[214px]')&&report.includes('sm:h-[250px]')&&report.includes('break-words'),'graficos e textos responsivos sem extravasar');
+check(report.includes('h-[210px]')&&report.includes('min-w-0 w-full overflow-hidden')&&report.includes('sm:h-[250px]')&&report.includes('break-words'),'graficos e textos responsivos sem extravasar');
 check(!/onSnapshot\(|getDocs\(|runTransaction\(/.test([card,chart,report].join('\n')),'polimento sem novas consultas Firestore');
 const test103=read('scripts/verify-v103-mobile-cards.cjs');
 check(test103.includes('Seta subir respeita trava')&&test103.includes('Seta descer respeita trava')&&test103.includes('Reordenação visível no Android'),'V103 permanece ativo e mais rigoroso');

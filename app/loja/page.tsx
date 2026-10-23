@@ -51,7 +51,8 @@ export default function LojaPage() {
   const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
-  const settingsProtectionOff = storeSettings.routeReminderEnabled === false && storeSettings.autoCloseCompletedRoutes === false;
+  const routeReminderActive = storeSettings.routeReminderEnabled !== false;
+  const autoCloseActive = storeSettings.autoCloseCompletedRoutes !== false;
 
   const [isStoreOpen, setIsStoreOpen] = useState(false);
   const toggleInFlight = useRef(false);
@@ -738,6 +739,7 @@ export default function LojaPage() {
 
         {isSettingsOpen && (
           <div className="flex flex-col gap-4 rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-4">
+            <button type="button" onClick={()=>router.push('/mais/notificacoes')} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] px-3 text-left text-xs font-bold text-emerald-300">Personalizar notificações, horários e categorias <ChevronRight size={16}/></button>
             <section className="rounded-2xl border border-amber-500/20 bg-zinc-950/50 p-3">
               <p className="text-xs font-black text-zinc-100">Entrega por plataforma</p>
               <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">Defina se a plataforma entrega o pedido ou se a DFL precisa de endereço e rota. A alteração vale para novos cadastros; históricos não mudam.</p>
@@ -787,8 +789,11 @@ export default function LojaPage() {
             </div>
 
             <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/10 text-violet-400"><BellRing size={18}/></div><div><p className="text-sm font-black text-zinc-200">Proteção de rotas</p><p className="text-[10px] text-zinc-600">Lembra às 23:30 e fecha concluídas esquecidas</p></div></div>
-              <button type="button" onClick={()=>updateStoreSettings({routeReminderEnabled:settingsProtectionOff,autoCloseCompletedRoutes:settingsProtectionOff})} className={`relative inline-flex h-8 w-14 items-center rounded-full ${!settingsProtectionOff?'bg-violet-500':'border border-zinc-700 bg-zinc-800'}`}><span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${!settingsProtectionOff?'translate-x-7':'translate-x-1'}`}/></button>
+              <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/10 text-violet-400"><BellRing size={18}/></div><div><p className="text-sm font-black text-zinc-200">Rotas e lembretes</p><p className="text-[10px] text-zinc-600">Configure lembretes e fechamento separadamente.</p></div></div>
+              <div className="flex min-w-0 flex-col gap-2">
+                <button type="button" role="switch" aria-checked={routeReminderActive} disabled={storeSettingsBusy} onClick={()=>void updateStoreSettings({routeReminderEnabled:!routeReminderActive}).catch(()=>toast.error('Não foi possível salvar lembretes.'))} className={`min-h-10 rounded-xl border px-3 text-[10px] font-bold disabled:opacity-50 ${routeReminderActive?'border-violet-500/40 bg-violet-500/10 text-violet-300':'border-zinc-700 text-zinc-400'}`}>Lembretes {routeReminderActive?'ligados':'desligados'}</button>
+                <button type="button" role="switch" aria-checked={autoCloseActive} disabled={storeSettingsBusy} onClick={()=>void updateStoreSettings({autoCloseCompletedRoutes:!autoCloseActive}).catch(()=>toast.error('Não foi possível salvar fechamento automático.'))} className={`min-h-10 rounded-xl border px-3 text-[10px] font-bold disabled:opacity-50 ${autoCloseActive?'border-emerald-500/40 bg-emerald-500/10 text-emerald-300':'border-zinc-700 text-zinc-400'}`}>Fechamento auto {autoCloseActive?'ligado':'desligado'}</button>
+              </div>
             </div>
 
             <button onClick={handleSaveAllSettings} disabled={storeSettingsBusy || storeToggleBusy} aria-busy={storeSettingsBusy} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white active:scale-95"><Check size={16} /> Salvar configurações</button>

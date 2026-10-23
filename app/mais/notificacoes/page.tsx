@@ -328,6 +328,7 @@ export default function NotificationSettingsPage() {
         </div>
       </header>
 
+      <p className="mb-3 rounded-xl border border-zinc-800 bg-zinc-900/35 px-3 py-2.5 text-[11px] leading-relaxed text-zinc-400">As categorias abaixo já controlam avisos reais. O Android exige autorização explícita. Lembretes de turno/estoque são agendados localmente; ações diretas na notificação ainda não estão disponíveis.</p>
       {saving && <p role="status" className="mb-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">Salvando suas preferências…</p>}
       <fieldset disabled={saving} className="min-w-0">
 
