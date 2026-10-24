@@ -63,6 +63,9 @@ export function ShoppingSession({ supply, onFinish, busy }: {
   const supplies = useAppStore(state => state.stockSupplies);
   // O primeiro render deve ser igual no servidor e no Android, antes de ler localStorage.
   const [draft, setDraft] = useState<Draft>(() => emptyDraft(supply.items));
+  // Eventos nativos de pausa podem chegar antes do proximo debounce.
+  const draftSnapshotRef = useRef<Draft>(draft);
+  draftSnapshotRef.current = draft;
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
   const activeSupplyIdRef = useRef<string | null>(null);
   const saveDraftRef = useRef<(() => void) | null>(null);
@@ -75,7 +78,7 @@ export function ShoppingSession({ supply, onFinish, busy }: {
   // Evita recriar o rascunho após uma finalização confirmada, antes do unmount.
   const completedSessionRef = useRef<string | null>(null);
 
-  const supplySignature = shoppingSupplySignature(supply.items);
+  const supplySignature = useMemo(() => shoppingSupplySignature(supply.items), [supply.items]);
   const hydrationKey = `${supply.id}:${supplySignature}`;
 
   useEffect(() => {
@@ -100,7 +103,8 @@ export function ShoppingSession({ supply, onFinish, busy }: {
     // Debounce de escrita síncrona no Android; o flush em pagehide assegura
     // o progresso quando a tela for fechada logo após uma alteração.
     const persist = () => {
-      try { window.localStorage.setItem(storageKey(supply.id), JSON.stringify(draft)); setLocalDraftSaved(true); }
+      if (completedSessionRef.current === supply.id) return;
+      try { window.localStorage.setItem(storageKey(supply.id), JSON.stringify(draftSnapshotRef.current)); setLocalDraftSaved(true); }
       catch { setLocalDraftSaved(false); }
     };
     saveDraftRef.current = persist;
@@ -110,9 +114,10 @@ export function ShoppingSession({ supply, onFinish, busy }: {
 
   useEffect(() => {
     const flush = () => { if (hydratedKey === hydrationKey && !finishing && completedSessionRef.current !== supply.id) saveDraftRef.current?.(); };
+    const onVisibilityChange = () => { if (document.visibilityState === 'hidden') flush(); };
     window.addEventListener('pagehide', flush);
-    document.addEventListener('visibilitychange', flush);
-    return () => { window.removeEventListener('pagehide', flush); document.removeEventListener('visibilitychange', flush); };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => { window.removeEventListener('pagehide', flush); document.removeEventListener('visibilitychange', onVisibilityChange); };
   }, [hydratedKey, hydrationKey, finishing, supply.id]);
 
   const productById = useMemo(() => new Map(products.map(product => [product.id, product])), [products]);
@@ -210,13 +215,14 @@ export function ShoppingSession({ supply, onFinish, busy }: {
               <label className="mt-3 block text-[11px] font-bold text-zinc-400">Preço por {item.presentation_label || item.purchase_unit || item.unit}
                 <input inputMode="numeric" disabled={locked} value={draft.prices[item.id] || 'R$ 0,00'} onChange={event => setDraft(previous => ({...previous, prices: {...previous.prices, [item.id]: formatBRLCents(event.target.value)}}))} className={`mt-1 h-11 w-full rounded-xl border bg-zinc-900 px-3 text-base font-bold text-zinc-100 outline-none disabled:opacity-60 ${marked && !item.total_price ? 'border-red-500/50' : 'border-zinc-800 focus:border-amber-500'}`}/>
               </label>
-              {product && <div className="mt-2 rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-3">
+              {product && <details className="mt-2 rounded-xl border border-zinc-800/80 bg-zinc-900/45 px-3 py-2.5">
+                <summary className="cursor-pointer text-[10px] font-bold text-zinc-400">Estoque estimado e comparação de custos</summary>
                 <div className="flex items-center justify-between gap-2"><span className="text-[10px] text-zinc-500">Estoque após a compra {formatStockQuantity(product.current_quantity, product.unit)} → <b className="text-zinc-200">{formatStockQuantity(projected, product.unit)}</b>{preview && preview.lineCount > 1 ? <small className="block text-amber-300">Somando {preview.lineCount} itens deste produto</small> : null}</span>
                   {unitCost > 0 && signal && <span className={`flex shrink-0 items-center gap-1 text-[10px] font-bold ${signal.tone === 'good' ? 'text-emerald-400' : signal.tone === 'bad' ? 'text-red-400' : 'text-zinc-400'}`}>{signal.tone === 'good' ? <TrendingDown size={12}/> : signal.tone === 'bad' ? <TrendingUp size={12}/> : null}{signal.label}</span>}
                 </div>
                 {nextCost !== null && <p className="mt-2 text-[10px] text-zinc-500">Custo médio projetado: <b className="text-emerald-400">{currency(nextCost)}</b></p>}
                 {nextCost === null && <p className="mt-2 text-[10px] text-amber-300">Informe o preço de todos os itens deste produto para prever o custo médio.</p>}
-              </div>}
+              </details>}
             </article>
           );
         })}

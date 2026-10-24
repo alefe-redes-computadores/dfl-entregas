@@ -10,6 +10,9 @@ import { buildRouteChangePlan } from '@/lib/route-change-plan';
 import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 
+/** Endereco publico unico do iFood; abrir o link nunca confirma pedido no DFL. */
+export const IFOOD_DRIVER_CONFIRMATION_URL = 'https://confirmacao-entrega-propria.ifood.com.br/';
+
 const formatMoney = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const deliveryCharge = (delivery: Delivery) => delivery.customer_charge ?? delivery.value ?? 0;
@@ -65,10 +68,12 @@ export async function copyDeliveryToClipboard(
   savedCustomerCode?: string,
   relatedDeliveries: Delivery[] = [delivery],
   stopPosition?: number,
+  ifoodConfirmationMode: 'store' | 'motoboy' = 'store',
 ): Promise<boolean> {
   try {
     const parts: string[] = [];
     const isIfood = delivery.origin === 'ifood';
+    const driverConfirmsIfood = ifoodConfirmationMode === 'motoboy';
     const valueStr = formatMoney(deliveryCharge(delivery));
     const isUrgent = delivery.is_urgent;
     // `savedCustomerCode` é mantido na assinatura por compatibilidade dos chamadores,
@@ -99,14 +104,21 @@ export async function copyDeliveryToClipboard(
           ? 'Pago ✅'
           : `Cobrar R$ ${formatMoney(deliveryCharge(item))} · ${(item.payment_method||'dinheiro').replace(/_/g,' ')}`;
         parts.push(`${index + 1}. *${itemName}* · ${itemOrigin} · ${itemReference}`);
-        if(item.origin==='ifood')parts.push(itemCode?`   🔑 Código: *${itemCode}*`:'   🚨 *PEDIR O CÓDIGO DE 4 DÍGITOS*');
+        if (item.origin === 'ifood') parts.push(driverConfirmsIfood
+          ? itemCode ? `   🔑 Código: *${itemCode}* · confirmar no portal` : '   🚨 *PEDIR O CÓDIGO DE 4 DÍGITOS E CONFIRMAR NO PORTAL*'
+          : itemCode ? `   🔑 Código: *${itemCode}*` : '   🚨 *PEDIR O CÓDIGO DE 4 DÍGITOS*');
+        if (driverConfirmsIfood && item.origin === 'ifood' && !item.ifood_id) parts.push('   ⚠️ *ID iFood ausente — solicitar à loja*');
         parts.push(`   ${deliveryPaid(item)?'✅':'💵'} ${payment}`);
       });
       parts.push('📍 *Uma parada física · entregar cada pedido separadamente*');
       const address = routeAddressParts(delivery.address_string);
       parts.push(`📍 *Destino:* ${address.neighborhood} · ${address.streetWithNumber}`);
       const mapLink=delivery.maps_link||`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanAddressForMaps(delivery.address_string))}`;
+      if (driverConfirmsIfood && groupedOrders.some(item => item.origin === 'ifood')) parts.push('', '🗺️ *1. Navegar ate a parada:*');
       parts.push('', '🗺️ *Abrir no mapa:*', mapLink);
+      if (driverConfirmsIfood && groupedOrders.some(item => item.origin === 'ifood')) {
+        parts.push('', '🔴 *2. Confirmar pedidos iFood no portal:*', IFOOD_DRIVER_CONFIRMATION_URL, 'Solicite o código de 4 dígitos e confirme cada ID iFood separadamente. Abrir o link não confirma a entrega.');
+      }
       await navigator.clipboard.writeText(parts.join('\n'));
       return true;
     }
@@ -117,10 +129,11 @@ export async function copyDeliveryToClipboard(
       if (!delivery.ifood_id && delivery.order_id) parts.push(`🧾 *Pedido #${delivery.order_id}*`);
 
       if (currentCode) {
-        parts.push(`🔑 *Código iFood:* \`${currentCode}\` ✅`);
+        parts.push(driverConfirmsIfood ? `🔑 *Código iFood:* \`${currentCode}\` · *CONFIRMAR NO PORTAL*` : `🔑 *Código iFood:* \`${currentCode}\` ✅`);
       } else {
-        parts.push(`🚨 *PEGAR O CÓDIGO DE 4 DÍGITOS COM O CLIENTE!*`);
+        parts.push(driverConfirmsIfood ? `🚨 *PEGAR O CÓDIGO DE 4 DÍGITOS E CONFIRMAR NO PORTAL!*` : `🚨 *PEGAR O CÓDIGO DE 4 DÍGITOS COM O CLIENTE!*`);
       }
+      if (driverConfirmsIfood && !delivery.ifood_id) parts.push('⚠️ *ID iFood ausente — pedir à loja antes de confirmar*');
     } else {
       if (delivery.order_id) parts.push(`🧾 *Pedido #${delivery.order_id}*`);
     }
@@ -169,6 +182,7 @@ export async function copyDeliveryToClipboard(
       parts.push(`🗺️ *Mapa:*`); parts.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanAddress)}`);
     }
 
+    if (driverConfirmsIfood && isIfood) parts.push('', '🔴 *Confirmar no iFood:*', IFOOD_DRIVER_CONFIRMATION_URL, 'Informe o ID iFood e o código de 4 dígitos recebido do cliente.');
     const textToCopy = parts.join('\n');
     await navigator.clipboard.writeText(textToCopy);
     return true;
@@ -280,7 +294,8 @@ export async function generateRouteMessages(
   deliveries: Delivery[],
   storeAddress: string,
   getCustomerById: (id: string) => Customer | undefined,
-  previousRoute?: Route | null
+  previousRoute?: Route | null,
+  ifoodConfirmationMode: 'store' | 'motoboy' = 'store',
 ): Promise<{ success: boolean; hasFuzzyAddresses: boolean; fuzzyList: any[]; messages: string[] }> {
   try {
     let hasFuzzyAddresses = false;
@@ -288,6 +303,7 @@ export async function generateRouteMessages(
 
     const msg1: string[] = [];
     const msg2: string[] = [];
+    const driverConfirmsIfood = ifoodConfirmationMode === 'motoboy';
 
     const totalDeliveries = deliveries.length;
     const deliveriesByStop = new Map<string, Delivery[]>();
@@ -413,8 +429,8 @@ export async function generateRouteMessages(
       const codes = ifoodOrders.map((item) => orderConfirmationCode(item.confirmation_code));
       const missingIfoodCode = codes.some((code) => !code);
       if (ifoodOrders.length === 1 && stopGroup.deliveries.length === 1) {
-        if (codes[0]) msg1.push(`🔑 *Código iFood:* *${codes[0]}* ✅`);
-        else { stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly, client: firstName(clientName) }); msg1.push(`🚨 *PEGAR CÓDIGO COM O CLIENTE!*`); }
+        if (codes[0]) msg1.push(driverConfirmsIfood ? `🔑 *Código iFood:* *${codes[0]}* · confirmar no portal` : `🔑 *Código iFood:* *${codes[0]}* ✅`);
+        else { stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly, client: firstName(clientName) }); msg1.push(driverConfirmsIfood ? `🚨 *PEGAR CÓDIGO E CONFIRMAR NO PORTAL!*` : `🚨 *PEGAR CÓDIGO COM O CLIENTE!*`); }
       } else if (missingIfoodCode) {
         // Mesmo que outro pedido da mesma parada tenha código válido.
         stopsNeedingCode.push({ num: stopNumber, neighborhood, street: streetOnly, client: firstName(clientName) });
@@ -436,7 +452,9 @@ export async function generateRouteMessages(
         else paymentText=`R$ ${valueStr} · ${(item.payment_method || 'dinheiro').toUpperCase()}`;
         const customerText = stopGroup.deliveries.length > 1 && itemCustomerName ? `*${itemCustomerName}* · ` : '';
         const codeText = item.origin === 'ifood'
-          ? specificCode ? ` · 🔑 *${specificCode}*` : ' · 🚨 *pedir código*'
+          ? driverConfirmsIfood
+            ? specificCode ? ` · 🔑 *${specificCode}* · confirmar no portal` : ' · 🚨 *pedir código e confirmar no portal*'
+            : specificCode ? ` · 🔑 *${specificCode}*` : ' · 🚨 *pedir código*'
           : '';
         const paymentAction = ` · ${paymentText}`;
         msg1.push(`• ${customerText}${reference}${codeText}${paymentAction}`);
@@ -452,16 +470,27 @@ export async function generateRouteMessages(
         msg1.push(`📲 *Contato:* *${formatOperationalPhone(clientPhone)}*`);
         if (stopGroup.deliveries.some((item) => item.notify_whatsapp)) msg1.push(`↳ https://wa.me/55${clientPhone}?text=${gateMsg}`);
       }
+      if (driverConfirmsIfood && ifoodOrders.length > 0) {
+        msg1.push(`🔴 *Confirmar iFood desta parada:* ${IFOOD_DRIVER_CONFIRMATION_URL}`);
+        if (ifoodOrders.some(item => !item.ifood_id)) msg1.push('⚠️ ID iFood ausente: peça à loja antes de confirmar.');
+      }
       msg1.push(`──────────────`);
     });
 
-    msg1.push(`🗺️ *ROTA OTIMIZADA:*`);
+    msg1.push(driverConfirmsIfood && ifoodCount > 0 ? `🗺️ *1. ROTA OTIMIZADA:*` : `🗺️ *ROTA OTIMIZADA:*`);
     msg1.push(`⚠️ *Sequência pronta com as paradas. Clique no link e inicie a rota:*`);
     msg1.push('');
 
     if (routeMapAddresses.length > 0) {
       const mapUrl = buildGoogleMapsRouteUrl(storeAddress, routeMapAddresses);
       msg1.push(mapUrl);
+      msg1.push('');
+    }
+
+    if (driverConfirmsIfood && ifoodCount > 0) {
+      msg1.push('🔴 *2. CONFIRMAÇÃO IFOOD*');
+      msg1.push(IFOOD_DRIVER_CONFIRMATION_URL);
+      msg1.push('Para cada pedido: usar ID iFood de 8 dígitos + código de 4 dígitos do cliente. Abrir o link não conclui o pedido automaticamente.');
       msg1.push('');
     }
 
@@ -542,7 +571,11 @@ export async function generateRouteMessages(
           const candidateName=candidateCustomer?.name||candidate.customer_name||'Cliente';
           const reference=candidate.origin==='ifood'&&candidate.ifood_id?`ID *${candidate.ifood_id}*`:candidate.order_id?`pedido *#${candidate.order_id}*`:'sem identificador';
           const code=orderConfirmationCode(candidate.confirmation_code);
-          const codeInfo=candidate.origin==='ifood'?(code?` · 🔑 *${code}*`:' · 🔑 *pedir código*'):'';
+          const codeInfo=candidate.origin==='ifood'
+            ? driverConfirmsIfood
+              ? code ? ` · 🔑 *${code}* · confirmar no portal` : ' · 🔑 *pedir código e confirmar*'
+              : code ? ` · 🔑 *${code}*` : ' · 🔑 *pedir código*'
+            : '';
           const candidateDrinks=candidate.drinks?.trim()?` · 🥤 *${candidate.drinks.trim()}*`:'';
           const amount=deliveryCharge(candidate);
           const paymentAction=deliveryPaid(candidate)?'':` · cobrar *R$ ${formatMoney(amount)}* · ${(candidate.payment_method||'dinheiro').replace(/_/g,' ')}`;
@@ -550,9 +583,18 @@ export async function generateRouteMessages(
         });
         const groupedTotal=groupedDeliveries.filter(item=>!deliveryPaid(item)).reduce((sum,item)=>sum+deliveryCharge(item),0);
         if(groupedTotal>0)msg2.push(`   💰 Total da parada a cobrar: *R$ ${formatMoney(groupedTotal)}*`);
+        if (driverConfirmsIfood && groupedDeliveries.some(item => item.origin === 'ifood')) {
+          msg2.push(`   ↳ 🔴 *Confirmar IDs desta parada:* ${IFOOD_DRIVER_CONFIRMATION_URL}`);
+        }
         msg2.push('   📍 *1 parada física · pedidos e códigos separados*');
       }else{
         msg2.push(`${getNumberEmoji(num)} *${neighborhood}*${streetLabel}${drinkInfo}${flags}${zapWarning}`);
+        const single = groupedDeliveries[0];
+        if (driverConfirmsIfood && single?.origin === 'ifood') {
+          const code = orderConfirmationCode(single.confirmation_code);
+          msg2.push(`   ↳ ID iFood *${single.ifood_id || 'AUSENTE'}* · ${code ? `código *${code}*` : 'pedir código ao cliente'}`);
+          msg2.push(`   ↳ 🔴 *Portal:* ${IFOOD_DRIVER_CONFIRMATION_URL}`);
+        }
       }
     });
 
@@ -585,11 +627,19 @@ export async function generateRouteMessages(
     // LISTA ORGANIZADA DE CÓDIGOS NO FINAL
     if (stopsNeedingCode.length > 0) {
       msg2.push(`🔐 *Confirmações necessárias*`);
-      msg2.push(`*Pegar com o cliente:*`);
+      msg2.push(driverConfirmsIfood ? `*Pegar com o cliente e confirmar no portal:*` : `*Pegar com o cliente:*`);
       stopsNeedingCode.forEach((stop) => {
         const duplicateNeighborhood = neighborhoodCounts[stop.neighborhood] > 1;
         msg2.push(`  • ${getNumberEmoji(stop.num)} *${stop.neighborhood}*${duplicateNeighborhood ? ` · ${stop.street}` : ''} (${stop.client})`);
       });
+      msg2.push(`──────────────`);
+    }
+
+    if (driverConfirmsIfood && ifoodCount > 0) {
+      msg2.push('🔴 *CONFIRMAR ENTREGAS IFOOD — RESPONSABILIDADE DO MOTOBOY*');
+      msg2.push('Para cada pedido: ID iFood (8 dígitos), código do cliente (4 dígitos) e confirmação individual no portal:');
+      msg2.push(IFOOD_DRIVER_CONFIRMATION_URL);
+      msg2.push('⚠️ Abrir o portal ou salvar um código no DFL não confirma a entrega.');
       msg2.push(`──────────────`);
     }
 

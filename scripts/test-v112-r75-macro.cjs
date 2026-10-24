@@ -16,7 +16,7 @@ const f=read('components/motoboys/MotoboyForm.tsx');
 ok(f.includes('setIfoodMode') && f.includes('ifood_confirmation_mode:ifoodMode'),'formulario de motoboy');
 const card=read('components/home/DeliveryCard.tsx');
 ok(card.includes("ifoodConfirmationMode !== 'motoboy'"),'captura de codigo por motoboy');
-ok(card.includes('flex flex-col gap-2 border-t border-zinc-800/40 pt-2'),'acoes de parada com espaco');
+ok(card.includes('aria-label="Ações rápidas da parada"') && card.includes("handleTriggerAction('complete')") && card.includes('aria-label="Subir ou descer parada"'),'acoes de parada com espaco');
 const conf=read('app/confirmacoes/page.tsx');
 ok(conf.includes('selfConfirmRouteIds'),'central filtra responsabilidade do motoboy');
 const c=read('components/home/OperationalCommandCenter.tsx');

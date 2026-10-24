@@ -86,6 +86,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [sequenceExpanded, setSequenceExpanded] = useState(false);
   const [sequenceShowAll, setSequenceShowAll] = useState(false);
+  const [showPlanning, setShowPlanning] = useState(false);
   const [showRouteTools, setShowRouteTools] = useState(false);
   const [fuzzyModalOpen, setFuzzyModalOpen] = useState(false);
   const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
@@ -208,6 +209,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       setIsOpen(false);
       setSequenceExpanded(false);
       setSequenceShowAll(false);
+      setShowPlanning(false);
       setShowRouteTools(false);
     }
     previousRouteStatus.current = route.status;
@@ -220,13 +222,16 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         setShowRouteTools(false);
         setSequenceExpanded(false);
         setSequenceShowAll(false);
+        setShowPlanning(false);
       }
       if (next && !isVirtualRoute) rememberOpenRouteId(route.id);
       return next;
     });
   };
 
-  const motoboyObj = motoboys.find((m) => m.name === route.motoboy_name);
+  // ID e a autoridade; nome so e fallback para rotas legadas. Sem consultas remotas.
+  const motoboyObj = motoboys.find((m) => m.id === route.motoboy_id) || motoboys.find((m) => m.name === route.motoboy_name);
+  const ifoodConfirmationMode = motoboyObj?.ifood_confirmation_mode || 'store';
   // Faturamento comercial, distinto de dinheiro a receber e do custo do motoboy.
   const routeRevenue = useMemo(() => deliveries.reduce((total, delivery) =>
     total + (isCancelledSiteDelivery(delivery) ? 0 : deliveryEconomicValue(delivery)), 0), [deliveries]);
@@ -537,7 +542,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     try {
       await safeRouteHaptic();
       const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-      const result = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute());
+      const result = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute(), ifoodConfirmationMode);
       if (result.hasFuzzyAddresses && result.fuzzyList.length > 0 && msgType === 1) {
         setCurrentFuzzyList(result.fuzzyList);
         setPendingActionType('copy1');
@@ -561,7 +566,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     await navigator.clipboard.writeText(message);
     const feedback = {
       1: ['Rota e contatos copiados!', 'Paradas, endereços, contatos e mapa prontos para o WhatsApp.'],
-      2: ['Checklist de saída copiado!', 'Bebidas, maquininha e códigos prontos para conferência.'],
+      2: ['Checklist de saída copiado!', ifoodConfirmationMode === 'motoboy' ? 'Bebidas, ID iFood, códigos e link oficial de confirmação.' : 'Bebidas, maquininha e códigos prontos para conferência.'],
       3: ['Dinheiro da rota copiado!', 'Recebimentos, trocos e retorno físico por parada prontos.'],
     }[msgType];
     toast.success(feedback[0], { description: feedback[1] });
@@ -576,7 +581,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     setRouteCopyBusy(true);
     try {
       const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-      const prepared = messages || (await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute())).messages;
+      const prepared = messages || (await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute(), ifoodConfirmationMode)).messages;
       await copyGeneratedRouteMessage(msgType, prepared);
     } catch (error) {
       console.error('[ROUTE COPY]', error);
@@ -593,7 +598,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     setRouteCardBusy(true);
     try {
       const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-      const generated = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute());
+      const generated = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute(), ifoodConfirmationMode);
       const message = mode === 'checklist' ? (generated.messages[1] || '') : [generated.messages[0], generated.messages[1]].filter(Boolean).join('\n\n');
       if (mode === 'full' && generated.hasFuzzyAddresses) {
         toast.error('Confira os endereços incompletos antes de compartilhar.', { description: 'Use o texto da rota para revisar os endereços e o link de navegação.' });
@@ -617,7 +622,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       const card = await buildRouteShareCard(route, pendingDeliveries, storeAddr, {
         origin: storePoint ? `${storePoint.lat},${storePoint.lng}` : null,
         stops: stopPoints,
-      });
+      }, ifoodConfirmationMode);
       const filename = `rota-${route.id}-${Date.now()}.png`;
       if (Capacitor.isNativePlatform()) {
         const saved = await Filesystem.writeFile({ path: `dfl-rotas/${filename}`, data: card.dataUrl.split(',')[1], directory: Directory.Cache, recursive: true });
@@ -860,7 +865,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   return (
-    <div className={clsx("overflow-hidden rounded-[20px] border transition-all duration-200 relative", isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : isInProgress ? "bg-zinc-900/70 border-zinc-600/70" : "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]")}>
+    <div className={clsx("overflow-hidden rounded-[20px] border transition-colors duration-150 relative", isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : isInProgress ? "bg-zinc-900/70 border-zinc-600/70" : "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]")}>
       {totalDeliveries > 0 && !isCompleted && (
         <div className="absolute top-0 left-0 h-1 bg-zinc-800 w-full">
           <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
@@ -914,7 +919,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       </button>
 
       {closingRoute && <div role="status" aria-live="polite" className="mx-3 mb-2 rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-[11px] font-semibold text-sky-200">Última entrega salva. Conferindo e fechando a rota no servidor…</div>}
-      {isOpen && totalDeliveries > 0 && (
+      {isOpen && totalDeliveries > 1 && totalStops !== totalDeliveries && (
         <div className="mx-3 mb-2 flex flex-wrap items-center gap-1.5" aria-label="Resumo operacional da rota">
           <span className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1 text-[10px] font-bold text-zinc-300">{totalDeliveries} pedido{totalDeliveries === 1 ? '' : 's'} · {totalStops} parada{totalStops === 1 ? '' : 's'}</span>
           <span className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1 text-[10px] font-bold text-zinc-300">{pendingStopsCount} parada{pendingStopsCount === 1 ? '' : 's'} pendente{pendingStopsCount === 1 ? '' : 's'}</span>
@@ -928,7 +933,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <span>{storeSettings.autoCloseCompletedRoutes !== false ? 'Todas as entregas concluídas. Aguardando confirmação do fechamento; se necessário, use Finalizar rota.' : 'Todas as entregas concluídas. Fechamento automático desligado: finalize a rota manualmente.'}</span>
         </div>
       )}
-      {isOpen && !isCompleted && !isVirtualRoute && routePreviewStops.length > 0 && (
+      {isOpen && !isCompleted && !isVirtualRoute && routePreviewStops.length > 0 && routePreviewStops.length > 1 && (
         <div className="px-3 pb-3" aria-label="Prévia da sequência da rota">
           <div className={`rounded-2xl border px-3 py-2.5 ${isInProgress?'border-amber-500/25 bg-amber-500/[.04]':'border-zinc-800 bg-zinc-950/40'}`}>
             <button type="button" onClick={() => { setSequenceExpanded(value => !value); setSequenceShowAll(false); }} aria-expanded={sequenceExpanded} aria-controls={`sequence-${route.id}`} aria-label={`${sequenceExpanded ? 'Recolher' : 'Expandir'} sequência da ${route.name}`} className="flex min-h-10 w-full items-center justify-between gap-2 text-left">
@@ -946,17 +951,14 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       )}
 
       {isOpen && isNotStarted && !isVirtualRoute && (
-        <div className="px-4 pb-3">
-          <PreRouteIntelligence
-            route={route}
-            deliveries={sortedDeliveries}
-            customers={customers}
-          />
-          <RouteSequenceAdvisor
-            route={route}
-            deliveries={sortedDeliveries}
-            customers={customers}
-          />
+        <div className="px-3 pb-2">
+          <button type="button" aria-expanded={showPlanning} onClick={()=>setShowPlanning(open=>!open)} className="flex min-h-10 w-full items-center justify-between gap-2 rounded-xl border border-sky-500/15 bg-sky-500/[.04] px-3 text-[11px] font-bold text-sky-200">
+            <span>Planejamento da rota</span><ChevronDown size={15} className={showPlanning?'rotate-180':''}/>
+          </button>
+          {showPlanning && <div className="mt-2 space-y-2">
+            <PreRouteIntelligence route={route} deliveries={sortedDeliveries} customers={customers} />
+            <RouteSequenceAdvisor route={route} deliveries={sortedDeliveries} customers={customers} />
+          </div>}
         </div>
       )}
 
@@ -1186,6 +1188,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           deliveries={deliveries}
           getCustomerById={getCustomerById}
           isPrivacyMode={isPrivacyMode}
+          ifoodConfirmationMode={ifoodConfirmationMode}
           busy={actionBusy}
           onClose={() => setDepartureChecklistOpen(false)}
           onConfirm={confirmStartRoute}
@@ -1353,7 +1356,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <div className="dfl-bottom-sheet safe-bottom relative flex max-h-[88dvh] flex-col overflow-y-auto rounded-t-[30px] p-5 pb-6 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-200" onClick={(event) => event.stopPropagation()}>
              <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-zinc-700" />
              <div className="mb-4 flex items-center justify-between gap-3">
-               <div><h3 className="flex items-center gap-2 font-heading text-lg font-black text-zinc-50"><Copy size={18} className="text-emerald-400"/> {routeCopyBusy ? 'Copiando mensagem…' : 'Copiar para o motoboy'}</h3><p className="mt-1 text-[10px] text-zinc-500">R73 · logística, checklist e dinheiro quando houver.</p></div>
+               <div><h3 className="flex items-center gap-2 font-heading text-lg font-black text-zinc-50"><Copy size={18} className="text-emerald-400"/> {routeCopyBusy ? 'Copiando mensagem…' : 'Copiar para o motoboy'}</h3><p className="mt-1 text-[10px] text-zinc-500">{ifoodConfirmationMode === 'motoboy' ? 'Motoboy confirma iFood · link do portal incluso.' : 'Loja confirma iFood · coletar o código com o cliente.'} Logística e checklist por parada.</p></div>
                <button aria-label="Fechar" onClick={() => setIsCopyMenuOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-800 text-zinc-400 active:scale-90"><X size={18}/></button>
              </div>
 

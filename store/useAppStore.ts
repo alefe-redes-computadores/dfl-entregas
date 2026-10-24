@@ -4,6 +4,8 @@ import { toast } from '@/lib/operational-toast';
 import { persist } from 'zustand/middleware';
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField, runTransaction, query, where } from 'firebase/firestore';
 import { createSerializedWriteQueue } from '@/lib/store/serializedWriteQueue';
+import { queueDeliveryDocuments } from '@/lib/store/atomicDeliveryWriteQueue';
+import { createKeyedWriteQueue } from '@/lib/store/keyedWriteQueue';
 import { rollbackAddedEntity, rollbackUpdatedEntity, rollbackDeletedEntity, rollbackAddedEntities, rollbackUpdatedEntities } from '@/lib/operation/optimisticRollback';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from '@/lib/firebase';
@@ -55,6 +57,8 @@ import { deliveryCustomerCharge, paymentStateForInput } from '@/lib/delivery-fin
 import { isSiteOrderAwaitingConfirmation, isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
 import { mergeCloudFirstById, mergeDeliveriesPreservingExpansion } from '@/lib/operation/snapshotMerge';
+import { assertRemoteDeliveryTransition, assertRouteClosureStable, assertRemoteSettlementAdjustment } from '@/lib/operation/remoteOperationGuards';
+import { captureOperationalBaseline, operationalDeliverySignature, operationalRouteSignature, preserveInFlightLocalEdits, trustedIncrementalCheckpoint, syncOwnerStillCurrent } from '@/lib/operation/snapshot-sync-safety';
 import { markUnreadSiteOrders } from '@/lib/site-order-inbox';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 import { kickSiteRoute } from '@/lib/integration/client/routeKick';
@@ -347,6 +351,8 @@ const pendingStockSupplyWrites = new Map<string, Promise<void>>();
 
 // Todas as gravações do documento store_settings seguem a ordem das alterações locais.
 const queueStoreSettingsWrite = createSerializedWriteQueue();
+// Serializa somente escritas do MESMO documento; evita sobrescrita fora de ordem.
+const queueEntityWrite = createKeyedWriteQueue();
 
 /**
  * V39 — orçamento de leituras Firestore.
@@ -373,12 +379,9 @@ const incrementalCollection = <T>(
     return collection(db, collectionName);
   }
 
-  const newestLocalMs = localItems.reduce((latest, item) => {
-    const raw = timestampOf(item);
-    if (!raw) return latest;
-    const value = Date.parse(raw);
-    return Number.isFinite(value) ? Math.max(latest, value) : latest;
-  }, 0);
+  // Relógio de aparelho adiantado não pode criar buraco no checkpoint.
+  // O overlap de 5 minutos continua aplicado abaixo normalmente.
+  const newestLocalMs = trustedIncrementalCheckpoint(localItems, timestampOf, Date.now());
 
   if (!newestLocalMs) {
     return collection(db, collectionName);
@@ -556,6 +559,11 @@ export const useAppStore = create<AppState>()(
         initDataInFlight = true;
 
         const syncStartedAt = new Date().toISOString();
+        // A consulta assíncrona não pode reaplicar dados de uma conta anterior.
+        const syncOwnerUid = get().user?.uid;
+        // Captura somente campos operacionais; gestos visuais não concorrem com Firestore.
+        const deliveryBaseline = captureOperationalBaseline(get().deliveries, operationalDeliverySignature);
+        const routeBaseline = captureOperationalBaseline(get().routes, operationalRouteSignature);
         const knownDeliveryIds = new Set(get().deliveries.map((item) => item.id));
         let siteOrderWatchReady = false;
         try {
@@ -618,6 +626,13 @@ export const useAppStore = create<AppState>()(
             getDoc(doc(db, 'store', 'store_settings'))
           ]);
 
+          // Logout/troca de usuário enquanto as queries estavam em voo:
+          // descartar a resposta antes de qualquer merge ou notificação.
+          if (!syncOwnerStillCurrent(syncOwnerUid, get().user?.uid)) {
+            set({ isSyncing: false });
+            return;
+          }
+
           const syncCollections: Record<string, number> = {
             routes: routesSnap.size,
             deliveries: deliveriesSnap.size,
@@ -655,8 +670,10 @@ export const useAppStore = create<AppState>()(
 
           // R47: cloud authority and local UI state, with indexed reconciliation.
           // No Firestore reads or writes are added by this merge.
-          const mergedRoutes = mergeCloudFirstById(fbRoutes, get().routes);
-          let mergedDeliveries = mergeDeliveriesPreservingExpansion(fbDeliveries, get().deliveries);
+          // Cloud-first permanece a regra. Só edições feitas DURANTE esta
+          // consulta vencem um snapshot remoto anterior; não criar writes extras.
+          const mergedRoutes = preserveInFlightLocalEdits(mergeCloudFirstById(fbRoutes, get().routes), get().routes, routeBaseline, operationalRouteSignature);
+          let mergedDeliveries = preserveInFlightLocalEdits(mergeDeliveriesPreservingExpansion(fbDeliveries, get().deliveries), get().deliveries, deliveryBaseline, operationalDeliverySignature);
 
           mergedDeliveries.sort((a, b) => {
              const orderA = a.order_index !== undefined ? a.order_index : new Date(a.updated_at || 0).getTime();
@@ -999,7 +1016,7 @@ export const useAppStore = create<AppState>()(
         const optimisticRoute: Route = { ...previousRoute, ...nextData };
         set((state) => ({ routes: state.routes.map((route) => route.id === routeId ? optimisticRoute : route) }));
         try {
-          await updateDoc(doc(db, 'routes', routeId), sanitizeForFirebase(nextData));
+          await queueEntityWrite('routes', routeId, () => updateDoc(doc(db, 'routes', routeId), sanitizeForFirebase(nextData)));
         } catch (error) {
           set((state) => ({ routes: rollbackUpdatedEntity(state.routes, previousRoute, optimisticRoute) }));
           console.error('Erro ao atualizar rota:', error);
@@ -1048,7 +1065,7 @@ export const useAppStore = create<AppState>()(
           routes: state.routes.map((r) => r.id === routeId ? optimisticRoute : r),
         }));
         try {
-          await updateDoc(doc(db, 'routes', routeId), sanitizeForFirebase({ started_at: now, departure_time: now, updated_at: now, ...audit }));
+          await queueEntityWrite('routes', routeId, () => updateDoc(doc(db, 'routes', routeId), sanitizeForFirebase({ started_at: now, departure_time: now, updated_at: now, ...audit })));
 
           /*
            * Fast lane reverso:
@@ -1105,7 +1122,7 @@ export const useAppStore = create<AppState>()(
         const previousIndex = get().routes.findIndex((route) => route.id === routeId);
         set((state) => ({ routes: state.routes.filter((r) => r.id !== routeId) }));
         try {
-          await deleteDoc(doc(db, 'routes', routeId));
+          await queueEntityWrite('routes', routeId, () => deleteDoc(doc(db, 'routes', routeId)));
         } catch (error) {
           set((state) => ({ routes: rollbackDeletedEntity(state.routes, routeToDelete, previousIndex) }));
           console.error('Erro ao excluir rota:', error);
@@ -1136,7 +1153,7 @@ export const useAppStore = create<AppState>()(
         }));
         try {
           const safeData = sanitizeForFirebase(dataWithTimestamp);
-          await updateDoc(doc(db, 'motoboys', id), safeData);
+          await queueEntityWrite('motoboys', id, () => updateDoc(doc(db, 'motoboys', id), safeData));
         } catch (error) {
           set((state) => ({ motoboys: rollbackUpdatedEntity(state.motoboys, previousMotoboy, optimisticMotoboy) }));
           console.error(error);
@@ -1176,7 +1193,7 @@ export const useAppStore = create<AppState>()(
         const previousIndex = get().motoboys.findIndex((item) => item.id === id);
         set((state) => ({ motoboys: state.motoboys.filter((m) => m.id !== id) }));
         try {
-          await deleteDoc(doc(db, 'motoboys', id));
+          await queueEntityWrite('motoboys', id, () => deleteDoc(doc(db, 'motoboys', id)));
         } catch (error) {
           set((state) => ({ motoboys: rollbackDeletedEntity(state.motoboys, currentMotoboy, previousIndex) }));
           console.error(error);
@@ -1216,7 +1233,7 @@ export const useAppStore = create<AppState>()(
           ),
         }));
         try {
-          await updateDoc(doc(db, 'fuelings', id), sanitizeForFirebase(dataWithTimestamp));
+          await queueEntityWrite('fuelings', id, () => updateDoc(doc(db, 'fuelings', id), sanitizeForFirebase(dataWithTimestamp)));
         } catch (error) {
           set((state) => ({ fuelings: rollbackUpdatedEntity(state.fuelings, previousFueling, optimisticFueling) }));
           console.error('Erro ao atualizar compra de estoque:', error);
@@ -1230,7 +1247,7 @@ export const useAppStore = create<AppState>()(
         const previousIndex = previousFuelings.findIndex((item) => item.id === id);
         set((state) => ({ fuelings: state.fuelings.filter((item) => item.id !== id) }));
         try {
-          await deleteDoc(doc(db, 'fuelings', id));
+          await queueEntityWrite('fuelings', id, () => deleteDoc(doc(db, 'fuelings', id)));
         } catch (error) {
           set((state) => ({ fuelings: rollbackDeletedEntity(state.fuelings, previousFueling, previousIndex) }));
           console.error('Erro ao excluir compra de estoque:', error);
@@ -1360,7 +1377,7 @@ export const useAppStore = create<AppState>()(
         const next = { ...data, updated_at: new Date().toISOString() };
         const optimistic = { ...current, ...next };
         set((state) => ({ stockSuppliers: state.stockSuppliers.map((item) => item.id === id ? optimistic : item) }));
-        try { await updateDoc(doc(db, 'stock_suppliers', id), sanitizeForFirebase(next)); }
+        try { await queueEntityWrite('stock_suppliers', id, () => updateDoc(doc(db, 'stock_suppliers', id), sanitizeForFirebase(next))); }
         catch (error) {
           set((state) => ({ stockSuppliers: rollbackUpdatedEntity(state.stockSuppliers, current, optimistic) }));
           throw error;
@@ -1399,7 +1416,7 @@ export const useAppStore = create<AppState>()(
         const next = { ...data, updated_at: new Date().toISOString() };
         const optimistic = { ...current, ...next };
         set((state) => ({ teamMembers: state.teamMembers.map((item) => item.id === id ? optimistic : item) }));
-        try { await updateDoc(doc(db, 'team_members', id), sanitizeForFirebase(next)); }
+        try { await queueEntityWrite('team_members', id, () => updateDoc(doc(db, 'team_members', id), sanitizeForFirebase(next))); }
         catch (error) {
           set((state) => ({ teamMembers: rollbackUpdatedEntity(state.teamMembers, current, optimistic) }));
           throw error;
@@ -1446,7 +1463,7 @@ export const useAppStore = create<AppState>()(
         const next = { ...data, updated_at: new Date().toISOString() };
         const optimistic = { ...current, ...next };
         set((state) => ({ stockProducts: state.stockProducts.map((item) => item.id === id ? optimistic : item) }));
-        try { await updateDoc(doc(db, 'stock_products', id), sanitizeForFirebase(next)); }
+        try { await queueEntityWrite('stock_products', id, () => updateDoc(doc(db, 'stock_products', id), sanitizeForFirebase(next))); }
         catch (error) { set((state) => ({ stockProducts: rollbackUpdatedEntity(state.stockProducts, current, optimistic) })); throw error; }
       },
 
@@ -1754,7 +1771,7 @@ export const useAppStore = create<AppState>()(
 
         try {
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
-          await setDoc(doc(db, 'deliveries', delivery.id), safeData);
+          await queueEntityWrite('deliveries', delivery.id, () => setDoc(doc(db, 'deliveries', delivery.id), safeData));
           if (deliveryWithTimestamp.route_id && !deliveryWithTimestamp.is_urgent) {
             try {
               await autoOrganizeLoadedRouteAfterInsert(deliveryWithTimestamp.route_id, get().deliveries, get().customers, get().storeSettings);
@@ -1814,7 +1831,7 @@ export const useAppStore = create<AppState>()(
             doc(db, 'deliveries', delivery.id),
             sanitizeForFirebase(delivery),
           ));
-          await batch.commit();
+          await queueDeliveryDocuments(queueEntityWrite, prepared.map((delivery) => delivery.id), () => batch.commit());
           const touchedRoutes = Array.from(new Set(prepared.map((delivery) => delivery.route_id).filter(Boolean)));
           for (const touchedRouteId of touchedRoutes) {
             // Não desfazer, no mesmo cadastro, a prioridade fixada de uma urgência.
@@ -2103,7 +2120,30 @@ export const useAppStore = create<AppState>()(
           if (updatedCustomerData && customer) {
             batch.update(doc(db, 'customers', customer.id), sanitizeForFirebase(updatedCustomerData));
           }
-          await batch.commit();
+          if (isCompleting || isReopening || routeChanged) {
+            // R95: validação REMOTA somente para transições críticas. Edições
+            // comuns continuam com batch e SEM leitura Firestore adicional.
+            const commitCritical = () => runTransaction(db, async (transaction) => {
+              const deliveryRef = doc(db, 'deliveries', id);
+              const currentSnap = await transaction.get(deliveryRef);
+              const needsRoute = Boolean(nextRouteId && (routeChanged || isDeliveryFulfillment(deliveryToUpdate)));
+              const routeSnap = needsRoute ? await transaction.get(doc(db, 'routes', nextRouteId)) : null;
+              const remoteDelivery = currentSnap.exists() ? { ...currentSnap.data(), id: currentSnap.id } as Delivery : null;
+              const remoteRoute = routeSnap?.exists() ? { ...routeSnap.data(), id: nextRouteId } as Route : null;
+              assertRemoteDeliveryTransition(deliveryToUpdate, remoteDelivery, dataWithTimestamp, remoteRoute, needsRoute);
+              transaction.update(deliveryRef, safeData);
+              if (updatedCustomerData && customer) {
+                transaction.update(doc(db, 'customers', customer.id), sanitizeForFirebase(updatedCustomerData));
+              }
+            });
+            await queueDeliveryDocuments(queueEntityWrite, [id], () =>
+              updatedCustomerData && customer
+                ? queueEntityWrite('customers', customer.id, commitCritical)
+                : commitCritical()
+            );
+          } else {
+            await queueDeliveryDocuments(queueEntityWrite, [id], () => batch.commit());
+          }
           deliveryCommitCompleted = true;
 
           // Urgência pertence à parada física. Todos os pedidos do mesmo
@@ -2278,7 +2318,7 @@ export const useAppStore = create<AppState>()(
 
         let deletionCommitted = false;
         try {
-          await deleteDoc(doc(db, 'deliveries', id));
+          await queueEntityWrite('deliveries', id, () => deleteDoc(doc(db, 'deliveries', id)));
           deletionCommitted = true;
 
           if (linkedRouteId) {
@@ -2383,6 +2423,8 @@ export const useAppStore = create<AppState>()(
               throw new Error('Uma entrega foi alterada, cancelada ou ainda está pendente em outro aparelho. Atualize a rota.');
             }
           }
+          // R95: conferir novamente a fotografia operacional antes das gravações.
+          assertRouteClosureStable(routeId, routeBeforeClose, routeDeliveries, get().routes, get().deliveries);
           const closedAt = remoteRoute.end_time || endTime;
           transaction.update(routeRef, {
             status: 'fechada',
@@ -2504,7 +2546,7 @@ export const useAppStore = create<AppState>()(
 
         const now = new Date().toISOString();
         const ref = doc(db, 'routes', routeId);
-        const remote = await runTransaction(db, async (transaction) => {
+        const remote = await queueEntityWrite('routes', routeId, () => runTransaction(db, async (transaction) => {
           const snapshot = await transaction.get(ref);
           if (!snapshot.exists()) throw new Error('Rota excluída no servidor. Atualize a tela.');
           const saved = snapshot.data() as Route;
@@ -2517,7 +2559,7 @@ export const useAppStore = create<AppState>()(
             updated_at: now,
           });
           return saved;
-        });
+        }));
         // Não apagar o encerramento histórico nem afirmar sucesso antes do servidor.
         set((state) => ({
           routes: state.routes.map((route) => route.id === routeId
@@ -2671,7 +2713,7 @@ export const useAppStore = create<AppState>()(
               updated_at: now,
             });
           });
-          await batch.commit();
+          await queueDeliveryDocuments(queueEntityWrite, normalized.map((delivery) => delivery.id), () => batch.commit());
         } catch (error) {
           const touched = new Set(normalized.map((delivery) => delivery.id));
           set((current) => ({
@@ -2762,6 +2804,13 @@ export const useAppStore = create<AppState>()(
         if (!historical.empty) throw new Error('Já existe um acerto para este motoboy e dia.');
         const settlementRef = doc(db, 'operational_expenses', settlementDocumentId(expense.source_id));
         const adjustmentRefs = [...new Set(adjustmentIds)].map((id) => doc(db, 'motoboy_adjustments', id));
+        const includedIds = new Set(adjustmentIds);
+        const localAdjustmentsAtStart = new Map(get().motoboyAdjustments
+          .filter((item) => includedIds.has(item.id))
+          .map((item) => [item.id, { ...item }] as const));
+        if (localAdjustmentsAtStart.size !== adjustmentRefs.length) {
+          throw new Error('Existem ajustes não carregados no acerto. Sincronize antes de fechar.');
+        }
         const now = new Date().toISOString();
         await runTransaction(db, async (transaction) => {
           const settlementSnapshot = await transaction.get(settlementRef);
@@ -2770,7 +2819,8 @@ export const useAppStore = create<AppState>()(
           for (const adjustmentRef of adjustmentRefs) adjustmentSnapshots.push(await transaction.get(adjustmentRef));
           for (const snapshot of adjustmentSnapshots) {
             if (!snapshot.exists()) throw new Error('Um ajuste pendente não existe mais. Atualize a tela.');
-            const adjustment = snapshot.data() as MotoboyAdjustment;
+            const adjustment = { ...snapshot.data(), id: snapshot.id } as MotoboyAdjustment;
+            assertRemoteSettlementAdjustment(adjustment, localAdjustmentsAtStart.get(snapshot.id));
             if (adjustment.status !== 'pending' || adjustment.motoboy_id !== expense.motoboy_id || adjustment.operational_date !== expense.operational_date) {
               throw new Error('Um ajuste foi alterado em outro aparelho. Atualize antes de fechar.');
             }
@@ -3135,7 +3185,7 @@ export const useAppStore = create<AppState>()(
         }));
         try {
           const safeData = sanitizeForFirebase(dataWithTimestamp);
-          await updateDoc(doc(db, 'customers', id), safeData);
+          await queueEntityWrite('customers', id, () => updateDoc(doc(db, 'customers', id), safeData));
         } catch (error) {
           set((state) => ({ customers: rollbackUpdatedEntity(state.customers, previousCustomer, optimisticCustomer) }));
           console.error(error);
@@ -3261,15 +3311,14 @@ export const useAppStore = create<AppState>()(
       findOrCreateCustomer: (name, details) => {
         const rawName = name.trim();
         if (!rawName) return Promise.resolve('');
-        // Serializa pela evidência mais estável disponível. Assim duas telas
-        // não criam cadastros paralelos para o mesmo telefone com grafias
-        // ligeiramente diferentes, sem unir homônimos de endereços distintos.
+        // A fila de concorrencia acompanha a identidade completa, nao o telefone isolado.
+        // Pessoas com o mesmo telefone mas endereco/nome diferentes nao disputam um cadastro.
         const normalizedPhone = normalizeCustomerPhone(details?.phone);
         const normalizedAddress = normalizeCustomerAddress(details?.address);
         const normalizedName = normalizeCustomerName(rawName);
-        const flightKey = normalizedPhone.length >= 10
-          ? `phone:${normalizedPhone}`
-          : `identity:${normalizedName}|${normalizedAddress}`;
+        const flightKey = normalizedAddress
+          ? `identity:${normalizedName}|${normalizedAddress}`
+          : `identity:${normalizedName}|sem-endereco|${normalizedPhone}`;
         const pending = customerCreationFlights.get(flightKey);
         if (pending) {
           return pending.catch(() => '').then(() =>

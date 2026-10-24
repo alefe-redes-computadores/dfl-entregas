@@ -92,7 +92,23 @@ function confidenceLabel(confidence: OperationalInsight['confidence']): string {
   return 'amostra inicial';
 }
 
+// R89: radar silenciado nao monta o motor de inteligencia pesado.
+// Cada componente mantem a ordem dos seus hooks e o estado segue no hook do usuario.
 export function OperationalRadar() {
+  const { hiddenIds, hideForToday, mutedToday, muteForToday } = useHiddenInsightsToday();
+  if (mutedToday) return null;
+  return <OperationalRadarActive hiddenIds={hiddenIds} hideForToday={hideForToday} muteForToday={muteForToday} />;
+}
+
+function OperationalRadarActive({
+  hiddenIds,
+  hideForToday,
+  muteForToday,
+}: {
+  hiddenIds: ReadonlySet<string>;
+  hideForToday: (insightId: string) => void;
+  muteForToday: () => void;
+}) {
   const router = useRouter();
   const intelligence = useDeliveryIntelligence({
     lookbackDays: 30,
@@ -101,9 +117,6 @@ export function OperationalRadar() {
   });
   const routes = useAppStore((state) => state.routes);
   const routeIds = useMemo(() => new Set(routes.map((route) => route.id)), [routes]);
-  const { hiddenIds, hideForToday, mutedToday, muteForToday } = useHiddenInsightsToday();
-
-  if (mutedToday) return null;
   // Home is for actionable signals. Positive/info insights remain in Reports;
   // do not spend a full card on a generic tip outside operating hours.
   const visibleHighlights = intelligence.highlights.filter(

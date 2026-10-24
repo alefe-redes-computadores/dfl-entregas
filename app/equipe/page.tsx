@@ -1,7 +1,7 @@
 // app/equipe/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Bike,
@@ -17,6 +17,7 @@ import {
 import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
+import { matchesOperationSearch } from '@/lib/operation/searchR99';
 import type { TeamMember, TeamMemberRole } from '@/types';
 
 const roles: Array<[TeamMemberRole, string]> = [
@@ -53,6 +54,10 @@ export default function TeamPage() {
   const [editing, setEditing] = useState<TeamMember | null | undefined>(undefined);
   const [form, setForm] = useState(empty);
   const [busy, setBusy] = useState(false);
+  // R99: bloqueio síncrono por registro; impede dois toques antes do render.
+  const activeWritesRef = useRef(new Set<string>());
+  const [activeWrites, setActiveWrites] = useState<Set<string>>(() => new Set());
+  const savingRef = useRef(false);
   const [query, setQuery] = useState('');
   const [showInactiveMotoboys, setShowInactiveMotoboys] = useState(false);
 
@@ -67,7 +72,7 @@ export default function TeamPage() {
   const filteredMembers = useMemo(() => {
     const term = normalize(query.trim());
     return [...members]
-      .filter((member) => !term || normalize(member.name).includes(term))
+      .filter((member) => !term || matchesOperationSearch([member.name, member.phone || '', roles.find(([role]) => role === member.role)?.[1] || member.role].join(' '), term))
       .sort(
         (a, b) =>
           Number(b.active) - Number(a.active) ||
@@ -78,7 +83,7 @@ export default function TeamPage() {
   const filteredMotoboys = useMemo(() => {
     const term = normalize(query.trim());
     return [...motoboys]
-      .filter((motoboy) => !term || normalize(motoboy.name).includes(term))
+      .filter((motoboy) => !term || matchesOperationSearch([motoboy.name, motoboy.type || ''].join(' '), term))
       .sort(
         (a, b) =>
           Number(b.active) - Number(a.active) ||
@@ -119,11 +124,13 @@ export default function TeamPage() {
   };
 
   const save = async () => {
+    if (savingRef.current) return;
     if (form.name.trim().length < 2) {
       toast.error('Informe o nome.');
       return;
     }
 
+    savingRef.current = true;
     setBusy(true);
     try {
       if (editing) {
@@ -153,25 +160,31 @@ export default function TeamPage() {
     } catch {
       toast.error('Não foi possível salvar.');
     } finally {
+      savingRef.current = false;
       setBusy(false);
     }
   };
 
-  const toggleMember = async (member: TeamMember) => {
+  // R99: serializa ações por pessoa, evitando estados inversos por toques repetidos.
+  const withWriteLock = async (key: string, action: () => Promise<unknown>, error: string) => {
+    if (activeWritesRef.current.has(key)) return;
+    activeWritesRef.current.add(key);
+    setActiveWrites(new Set(activeWritesRef.current));
     try {
-      await update(member.id, { active: !member.active });
+      await action();
     } catch {
-      toast.error('Não foi possível alterar o status.');
+      toast.error(error);
+    } finally {
+      activeWritesRef.current.delete(key);
+      setActiveWrites(new Set(activeWritesRef.current));
     }
   };
 
-  const toggleMotoboy = async (id: string, active: boolean) => {
-    try {
-      await updateMotoboy(id, { active: !active });
-    } catch {
-      toast.error('Não foi possível alterar a escala.');
-    }
-  };
+  const toggleMember = async (member: TeamMember) =>
+    withWriteLock('interno:' + member.id, () => update(member.id, { active: !member.active }), 'Não foi possível alterar o status.');
+
+  const toggleMotoboy = async (id: string, active: boolean) =>
+    withWriteLock('motoboy:' + id, () => updateMotoboy(id, { active: !active }), 'Não foi possível alterar a escala.');
 
   return (
     <div className="dfl-page gap-4">
@@ -206,8 +219,9 @@ export default function TeamPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar pessoa"
-          className="dfl-search pl-11 pr-4 focus:border-violet-500/50"
+          className="dfl-search pl-11 pr-16 focus:border-violet-500/50"
         />
+        {query && <button type="button" onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-2 text-[10px] font-bold text-violet-300" aria-label="Limpar busca de equipe">Limpar</button>}
       </div>
 
       <section className="space-y-3">
@@ -251,6 +265,8 @@ export default function TeamPage() {
                 <button
                   type="button"
                   onClick={() => toggleMember(member)}
+                  disabled={activeWrites.has('interno:' + member.id)}
+                  aria-label={`Alterar status de ${member.name}`}
                   className={`rounded-lg px-2.5 py-1.5 text-[9px] font-black ${
                     member.active
                       ? 'bg-emerald-500/10 text-emerald-400'
@@ -332,6 +348,8 @@ export default function TeamPage() {
                 <button
                   type="button"
                   onClick={() => toggleMotoboy(motoboy.id, motoboy.active)}
+                  disabled={activeWrites.has('motoboy:' + motoboy.id)}
+                  aria-label={`Alterar escala de ${motoboy.name}`}
                   className={`rounded-lg px-2.5 py-1.5 text-[9px] font-black ${
                     motoboy.active
                       ? 'bg-amber-500/10 text-amber-400'
@@ -403,7 +421,8 @@ export default function TeamPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setEditing(undefined)}
+                onClick={() => !busy && setEditing(undefined)}
+                disabled={busy}
                 className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-zinc-500"
               >
                 <X size={16} />

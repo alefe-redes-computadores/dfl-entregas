@@ -22,19 +22,17 @@ export function useOptimizedDeliveries(
   return useMemo(() => {
     const customerById = new Map(customerSnapshot.map((customer) => [customer.id, customer] as const));
     const customerFor = (id: string) => customerById.get(id) || getCustomerById(id);
-    const neighborhoodCounts = deliveries.reduce((acc, delivery) => {
+    // R89: uma passagem e uma busca de cliente por pedido; mesma semantica
+    // de contagem anterior, sem consultas, geocoding ou ordem alterada.
+    const neighborhoodCounts: Record<string, number> = {};
+    const addressCounts: Record<string, number> = {};
+    for (const delivery of deliveries) {
       const customer = customerFor(delivery.customer_id);
       const neighborhood = customer?.neighborhood?.trim().toLowerCase();
-      if (neighborhood) acc[neighborhood] = (acc[neighborhood] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const addressCounts = deliveries.reduce((acc, delivery) => {
-      const customer = customerFor(delivery.customer_id);
+      if (neighborhood) neighborhoodCounts[neighborhood] = (neighborhoodCounts[neighborhood] || 0) + 1;
       const key = normalizedAddress(delivery.address_string || customer?.address);
-      if (key) acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+      if (key) addressCounts[key] = (addressCounts[key] || 0) + 1;
+    }
 
     const groups = groupDeliveriesByStop(deliveries);
     // groupDeliveriesByStop já aplica a prioridade operacional. Não há leitura

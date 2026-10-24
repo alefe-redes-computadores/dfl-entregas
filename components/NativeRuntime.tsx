@@ -127,6 +127,9 @@ export function NativeRuntime() {
           const now = Date.now();
           if (now - lastBackAt < 650) return;
           lastBackAt = now;
+          const request = new CustomEvent('dfl:native-back-request', { cancelable: true });
+          window.dispatchEvent(request);
+          if (request.defaultPrevented) return;
           const target = nativeBackTarget(
             window.location.pathname,
             window.location.search,

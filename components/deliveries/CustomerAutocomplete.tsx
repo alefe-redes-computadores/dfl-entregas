@@ -19,6 +19,7 @@ import {
   normalizeCustomerAddress,
   normalizeCustomerName,
   normalizeCustomerPhone,
+  sameCustomerIdentityAddress,
 } from '@/lib/customer-identity';
 
 interface CustomerAutocompleteProps {
@@ -26,6 +27,8 @@ interface CustomerAutocompleteProps {
   onChange: (value: string) => void;
   onSelect?: (customer: Customer, typedQuery?: string) => void;
   customers: Customer[];
+  addressContext?: string;
+  strictMatch?: boolean;
 }
 
 export function CustomerAutocomplete({
@@ -33,6 +36,8 @@ export function CustomerAutocomplete({
   onChange,
   onSelect,
   customers,
+  addressContext,
+  strictMatch = false,
 }: CustomerAutocompleteProps) {
   const [showSuggestions, setShowSuggestions] =
     useState(false);
@@ -60,7 +65,17 @@ export function CustomerAutocomplete({
       return [];
     }
 
-    return customers
+    // No iFood nao sugerir homonimos nem contatos apenas parecidos:
+    // comparar nome inteiro e endereco ANTES de ranquear resultados.
+    const candidates = strictMatch
+      ? customers.filter((customer) =>
+          normalizeCustomerName(customer.name) === nameQuery &&
+          Boolean(addressContext) &&
+          customerAddresses(customer).some((entry) =>
+            sameCustomerIdentityAddress(entry.address, addressContext)))
+      : customers;
+
+    return candidates
       .map((customer) => {
         const customerName = normalizeCustomerName(
           customer.name,
@@ -108,7 +123,7 @@ export function CustomerAutocomplete({
       )
       .slice(0, 6)
       .map((item) => item.customer);
-  }, [customers, deferredQuery]);
+  }, [customers, deferredQuery, addressContext, strictMatch]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -169,6 +184,11 @@ export function CustomerAutocomplete({
         />
       </div>
 
+      {strictMatch && !!value.trim() && (
+        <p className="text-[10px] font-medium text-zinc-500" role="status">
+          iFood: cadastro sugerido apenas com nome e endereço completos iguais.
+        </p>
+      )}
       {showSuggestions && deferredQuery === value && suggestions.length > 0 && (
         <div className="absolute top-full z-30 mt-1 max-h-72 w-full divide-y divide-zinc-800/60 overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/95 shadow-2xl backdrop-blur-xl">
           {suggestions.map((customer) => (

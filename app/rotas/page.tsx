@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Bike, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, Search, User, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { matchesOperationSearch } from '@/lib/operation/searchR99';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { OPERATION_BATCH, OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
@@ -84,7 +85,7 @@ export default function RoutesPage() {
   const searchTerm = useMemo(() => query.trim().toLocaleLowerCase('pt-BR'), [query]);
 
   const searchedDayRoutes = useMemo(() => dayRoutes.filter(route =>
-    !searchTerm || `${route.name} ${route.motoboy_name}`.toLocaleLowerCase('pt-BR').includes(searchTerm)
+    !searchTerm || `${route.name} ${route.motoboy_name}`.toLocaleLowerCase('pt-BR').includes(searchTerm) || matchesOperationSearch(`${route.name} ${route.motoboy_name || ''}`, searchTerm)
   ), [dayRoutes, searchTerm]);
 
   // R49: somente classificar/ordenar o universo completo aqui. A quantidade de
@@ -192,9 +193,10 @@ export default function RoutesPage() {
       </div>
     </section>
 
-    <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar neste dia" className="dfl-search pl-11 pr-4"/></div>
+    <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar rota ou entregador" className="dfl-search pl-11 pr-16"/>{query && <button type="button" onClick={() => setQuery('')} aria-label="Limpar busca de rotas" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-2 text-[10px] font-bold text-emerald-300">Limpar</button>}</div>
     <div className="dfl-filter-row">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
 
+    <p aria-live="polite" className="px-1 text-[10px] text-zinc-500">{rows.length} rota{rows.length === 1 ? '' : 's'} neste filtro · {renderedRows.length} exibida{renderedRows.length === 1 ? '' : 's'}</p>
     <div className="flex flex-col gap-3">
       {renderedRows.map(({ route, linked, completed, stops, amount, customerCharge, pendingCharge, pendingPayments, state }) => {
         const progress = linked.length ? Math.round((completed / linked.length) * 100) : 0;

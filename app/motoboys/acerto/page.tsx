@@ -6,6 +6,7 @@ import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { getMotoboyDayData,operationalDateKey } from '@/lib/motoboy-analytics';
+import { settlementRouteOrder } from '@/lib/motoboy-route-order';
 import { moneyValueToDraft,normalizeMoneyDraft,parseMoneyDraft } from '@/lib/route-cash-flow';
 import type { MotoboySettlementAdjustment } from '@/types';
 import { pendingAdjustmentsForSettlement, settlementAdjustmentSnapshot, settlementSourceId } from '@/lib/motoboy-settlement-authority';
@@ -163,7 +164,8 @@ function Content(){
       groupedExplanation,
       '',
       `🛣️ *CONTAGEM POR ROTA*`,
-      ...data.routeBreakdown.map(item=>`↳ *${item.label}:* ${item.orderCount} pedido${item.orderCount===1?'':'s'} → ${item.physicalDeliveryCount} parada${item.physicalDeliveryCount===1?'':'s'}${item.groupedOrderCount>0?` · ${item.groupedOrderCount} agrupado${item.groupedOrderCount===1?'':'s'}`:''}`),
+      // R88: ordem visual natural; o caixa e a diaria permanecem intactos.
+      ...settlementRouteOrder(data.routeBreakdown).map((item,index)=>`*${String(index+1).padStart(2,'0')} · ${item.label}*  •  ${item.orderCount} pedido${item.orderCount===1?'':'s'}  →  ${item.physicalDeliveryCount} parada${item.physicalDeliveryCount===1?'':'s'}${item.groupedOrderCount>0?`  ·  ${item.groupedOrderCount} agrupado${item.groupedOrderCount===1?'':'s'}`:''}`),
       '',
       '──────────────────',
       `💰 *DIÁRIA*`,

@@ -123,7 +123,8 @@ export default function RelatoriosPage() {
   const currentPeriodLabel =
     PERIODS.find((period) => period.value === periodKey)?.label ?? 'Período';
 
-  const topHour = model.hours.reduce<(typeof model.hours)[number] | undefined>((best, hour) => !best || hour.count > best.count ? hour : best, undefined);
+  // R99: ranking derivado apenas quando o modelo do relatório muda.
+  const topHour = useMemo(() => model.hours.reduce<(typeof model.hours)[number] | undefined>((best, hour) => !best || hour.count > best.count ? hour : best, undefined), [model.hours]);
   const topNeighborhood = model.neighborhoods[0];
   const topMotoboy = model.motoboys[0];
 

@@ -309,17 +309,14 @@ export default function DeliveryInboxPage() {
             </h1>
           </div>
 
-          {channel === 'manual' && <div role="status" aria-label={`${active.length} rascunhos pendentes`} className="rounded-xl border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-center">
-            <p className="text-sm font-black">{active.length}</p>
-            <p className="text-[8px] font-bold uppercase text-zinc-500">pendentes</p>
-          </div>}
+
         </div>
       </header>
 
-      <div className="mx-auto max-w-2xl space-y-4 p-3.5">
+      <div className="mx-auto max-w-2xl space-y-3 p-3 sm:p-4">
         <nav aria-label="Fontes da Caixa de Entrada" className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={()=>setChannel('site')} aria-pressed={channel==='site'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='site'?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}>Site · automático</button>
-          <button type="button" onClick={()=>setChannel('manual')} aria-pressed={channel==='manual'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='manual'?'border-violet-500/40 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}>iFood / 99Food / Texto</button>
+          <button type="button" onClick={()=>setChannel('site')} aria-pressed={channel==='site'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='site'?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}>Site</button>
+          <button type="button" onClick={()=>setChannel('manual')} aria-pressed={channel==='manual'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='manual'?'border-violet-500/40 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}>Importar</button>
         </nav>
         {channel==='site'?<SiteInboxPanel focusedId={focusedSiteOrder}/>:<div className="space-y-4">
         <section className="overflow-hidden rounded-[24px] border border-violet-500/20 bg-gradient-to-br from-violet-500/[.10] via-zinc-900/70 to-zinc-950 p-4">
@@ -330,12 +327,11 @@ export default function DeliveryInboxPage() {
 
             <div>
               <h2 className="font-heading text-[15px] font-black">
-                Jogue os pedidos aqui
+                Cole seus pedidos
               </h2>
-              <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
-                iFood, 99Food, WhatsApp ou texto livre. Nada vira
-                entrega, cliente ou financeiro até você
-                confirmar o lançamento.
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                Cole pedidos de iFood, 99Food ou mensagens. Revise antes de lançar;
+                nada vira entrega automaticamente.
               </p>
             </div>
           </div>
@@ -345,11 +341,11 @@ export default function DeliveryInboxPage() {
             onChange={(event) =>
               setText(event.target.value)
             }
-            rows={6}
+            rows={4}
             placeholder={
-              "Cole um ou vários pedidos...\n\nO cérebro separa, identifica e sinaliza o que precisa de revisão."
+              "Cole um ou vários pedidos para analisar..."
             }
-            className="mt-4 w-full resize-none rounded-2xl border border-zinc-800 bg-black/25 p-3 text-xs leading-relaxed text-zinc-200 outline-none placeholder:text-zinc-700 focus:border-violet-500/40"
+            className="mt-3 min-h-[112px] max-h-[38vh] w-full resize-y overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-950/70 p-3 text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-violet-400/70"
           />
 
           <div className="mt-2 grid grid-cols-[auto_1fr] gap-2">
@@ -374,51 +370,39 @@ export default function DeliveryInboxPage() {
           </div>
         </section>
 
-        <section className="grid grid-cols-3 gap-2">
-          <Stat
-            label="Prontos"
-            value={ready.length}
-            tone="emerald"
-          />
-          <Stat
-            label="Revisar"
-            value={review.length}
-            tone="amber"
-          />
-          <Stat
-            label="Lançados"
-            value={launched.length}
-            tone="zinc"
-          />
-        </section>
+        {launched.length > 0 && (
+          <p role="status" className="px-1 text-[11px] font-semibold text-zinc-400">
+            {launched.length} {launched.length === 1 ? 'pedido lançado' : 'pedidos lançados'} hoje
+          </p>
+        )}
 
         <nav aria-label="Filtrar rascunhos da Caixa de Entrada" className="grid grid-cols-3 gap-2">
           {([
-            ['todos', 'Pendentes', active.length],
+            ['todos', 'Todos', active.length],
             ['revisar', 'Revisar', review.length],
             ['prontos', 'Prontos', ready.length],
           ] as const).map(([key, label, count]) => (
             <button key={key} type="button" aria-pressed={view === key}
               onClick={() => setView(key)}
-              className={`min-h-11 rounded-xl border px-2 text-[11px] font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${view === key ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-zinc-800 bg-zinc-900/40 text-zinc-400'}`}>
+              className={`min-h-11 rounded-xl border px-1.5 text-[11px] font-black tabular-nums focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${view === key ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-zinc-800 bg-zinc-900/40 text-zinc-400'}`}>
               {label} <span className="opacity-70">{count}</span>
             </button>
           ))}
         </nav>
 
         {filteredDrafts.length === 0 ? (
-          <section className="rounded-[24px] border border-dashed border-zinc-800 bg-zinc-900/25 p-8 text-center">
+          <section className="rounded-[20px] border border-dashed border-zinc-700/70 bg-zinc-900/25 px-4 py-7 text-center">
             <Inbox
-              className="mx-auto text-zinc-700"
+              className="mx-auto text-zinc-500"
               size={28}
             />
             <h3 className="mt-3 text-sm font-black">
-              {active.length === 0 ? 'Caixa limpa' : 'Nada nesta seleção'}
+              {active.length === 0 ? 'Nenhum pedido aguardando' : 'Nada nesta seleção'}
             </h3>
-            <p className="mt-1 text-[10px] text-zinc-600">
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
               {active.length === 0
-                ? 'Os próximos textos analisados aparecem aqui como rascunhos.'
-                : 'Os outros rascunhos continuam disponíveis na aba Pendentes.'}
+                ? 'Cole os pedidos acima; os rascunhos aparecerão aqui após a análise.'
+                : 'Use Pendentes para consultar os demais pedidos.'}
             </p>
           </section>
         ) : (
@@ -473,34 +457,6 @@ export default function DeliveryInboxPage() {
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "emerald" | "amber" | "zinc";
-}) {
-  const className =
-    tone === "emerald"
-      ? "border-emerald-500/15 bg-emerald-500/[.05] text-emerald-400"
-      : tone === "amber"
-        ? "border-amber-500/15 bg-amber-500/[.05] text-amber-400"
-        : "border-zinc-800 bg-zinc-900/45 text-zinc-400";
-
-  return (
-    <div
-      className={`rounded-2xl border p-3 ${className}`}
-    >
-      <p className="text-lg font-black">{value}</p>
-      <p className="text-[8px] font-black uppercase tracking-wide opacity-70">
-        {label}
-      </p>
-    </div>
-  );
-}
-
 function DraftCard({
   draft,
   onLaunch,
@@ -535,13 +491,15 @@ function DraftCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[9px] font-black uppercase text-zinc-500">
+            <span className="text-[10px] font-black uppercase text-zinc-300">
               {meta.label}
             </span>
 
-            <span className="rounded-full bg-zinc-950 px-2 py-0.5 text-[8px] font-black text-zinc-500">
-              {draft.confidence}% leitura
-            </span>
+            {draft.confidence < 80 && (
+              <span className="rounded-full bg-zinc-950 px-2 py-0.5 text-[9px] font-bold text-amber-300">
+                Leitura {draft.confidence}% · conferir
+              </span>
+            )}
 
             {draft.status === 'launching' ? (
               <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[8px] font-black text-violet-300">Aguardando retorno</span>
@@ -549,11 +507,7 @@ function DraftCard({
               <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[8px] font-black text-red-400">
                 Possível duplicado
               </span>
-            ) : needsReview ? (
-              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[8px] font-black text-amber-400">
-                Revisar
-              </span>
-            ) : (
+            ) : needsReview ? null : (
               <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[8px] font-black text-emerald-400">
                 Pronto
               </span>
@@ -575,8 +529,7 @@ function DraftCard({
             <p className="mt-1 text-[9px] font-bold text-zinc-600">
               {draft.parsed.orderId &&
                 `#${draft.parsed.orderId}`}
-              {draft.parsed.orderId &&
-              draft.parsed.ifoodId
+              {draft.parsed.orderId && draft.source === 'ifood' && draft.parsed.ifoodId
                 ? " · "
                 : ""}
               {draft.source === 'ifood' && draft.parsed.ifoodId &&
@@ -586,11 +539,8 @@ function DraftCard({
 
           {(draft.parsed.customerCharge ||
             draft.parsed.value) && (
-            <p className="mt-1 text-[9px] text-zinc-600">
-              Valor detectado: R${" "}
-              {draft.parsed.customerCharge ||
-                draft.parsed.value}{" "}
-              · ainda não lançado
+            <p className="mt-1 text-[11px] font-semibold text-zinc-300">
+              Valor identificado: R$ {draft.parsed.customerCharge || draft.parsed.value}
             </p>
           )}
         </div>

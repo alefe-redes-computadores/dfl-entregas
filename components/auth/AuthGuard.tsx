@@ -19,14 +19,16 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const logout = useAppStore((state) => state.logout);
 
   const hasInitializedRef = useRef(false);
+  const initializedUidRef = useRef<string | null>(null);
 
   // Só cuida do login/logout do Firebase. NÃO dispara initData aqui —
   // isso fica por conta do efeito abaixo, que espera a hidratação local terminar.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       useAppStore.setState({ user: currentUser, authLoaded: true });
-      if (!currentUser) {
+      if (!currentUser || initializedUidRef.current !== currentUser.uid) {
         hasInitializedRef.current = false; // permite reinicializar num próximo login
+        initializedUidRef.current = currentUser?.uid || null;
       }
     });
     return () => unsubscribe();

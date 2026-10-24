@@ -14,6 +14,7 @@ type Props = {
   deliveries: Delivery[];
   getCustomerById: (id?: string) => Customer | undefined;
   isPrivacyMode?: boolean;
+  ifoodConfirmationMode?: 'store' | 'motoboy';
   busy?: boolean;
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
@@ -24,11 +25,14 @@ export function RouteDepartureChecklist({
   deliveries,
   getCustomerById,
   isPrivacyMode = false,
+  ifoodConfirmationMode = 'store',
   busy = false,
   onClose,
   onConfirm,
 }: Props) {
   const [busySeconds, setBusySeconds] = useState(0);
+  const hasIfoodOrders = deliveries.some(item => item.origin === 'ifood');
+  const driverConfirmsIfood = hasIfoodOrders && ifoodConfirmationMode === 'motoboy';
 
   useEffect(() => {
     if (!busy) {
@@ -181,6 +185,14 @@ export function RouteDepartureChecklist({
                 </div>
               ))}
             </div>
+          </section>
+        )}
+
+        {hasIfoodOrders && (
+          <section className={`mt-3 rounded-2xl border p-4 ${driverConfirmsIfood ? 'border-red-500/25 bg-red-500/[.06]' : 'border-sky-500/20 bg-sky-500/[.05]'}`} aria-label="Responsável pela confirmação iFood">
+            <p className="text-[10px] font-black uppercase tracking-[.14em] text-zinc-200">{driverConfirmsIfood ? 'Motoboy confirma no iFood' : 'Loja confirma no iFood'}</p>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-400">{driverConfirmsIfood ? 'Solicite o código de 4 dígitos ao cliente, localize o pedido pelo ID iFood e confirme externamente.' : 'Solicite o código de 4 dígitos ao cliente e informe à loja. Não faça confirmação no portal.'}</p>
+            {driverConfirmsIfood && <a href="https://confirmacao-entrega-propria.ifood.com.br/" target="_blank" rel="noopener noreferrer" className="mt-3 flex min-h-11 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/15 px-3 text-center text-xs font-black text-red-200">Abrir portal de confirmação iFood ↗</a>}
           </section>
         )}
 

@@ -7,16 +7,17 @@ interface PageHeaderProps {
   title: string;
   subtitle?: string;
   to: string;
+  onBack?: () => void;
 }
 
-export function PageHeader({ title, subtitle, to }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, to, onBack }: PageHeaderProps) {
   const router = useRouter();
 
   return (
     <div className="mb-5 flex items-center gap-3 border-b border-zinc-800/80 pb-4 pt-2">
       <button
         type="button"
-        onClick={() => router.replace(to)}
+        onClick={() => onBack ? onBack() : router.replace(to)}
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-300 transition active:scale-95"
         aria-label="Voltar"
       >

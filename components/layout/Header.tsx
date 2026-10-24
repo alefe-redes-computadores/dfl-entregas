@@ -6,7 +6,8 @@ import { PwaInstallPrompt } from '@/components/pwa/PwaInstallPrompt';
 import { User, LogOut, RefreshCw } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { UserAvatar } from '@/components/UserAvatar';
-import { latestSyncDiagnostic, SYNC_DIAGNOSTIC_EVENT } from '@/lib/sync-diagnostics';
+import { latestSyncDiagnostic, latestSuccessfulSyncDiagnostic, SYNC_DIAGNOSTIC_EVENT } from '@/lib/sync-diagnostics';
+import { shouldRefreshOnForeground } from '@/lib/operation/foreground-sync-policy';
 
 function relativeUpdate(value?: string) {
   if (!value) return 'Ainda nao atualizado';
@@ -30,21 +31,26 @@ export function Header() {
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
   const initData = useAppStore((state) => state.initData);
-  const lastForegroundSyncRef = useRef(0);
+  const lastForegroundSyncRef = useRef(Date.now());
   const refreshInFlightRef = useRef(false);
   
   const [greeting, setGreeting] = useState('Boa noite');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<string | undefined>();
+  const [online, setOnline] = useState(true);
   const [, setClock] = useState(0);
 
   useEffect(() => {
     setGreeting(getGreeting());
-    setLastUpdate(latestSyncDiagnostic()?.finishedAt);
+    setLastUpdate(latestSuccessfulSyncDiagnostic()?.finishedAt);
+    setOnline(typeof navigator === 'undefined' ? true : navigator.onLine);
   }, []);
 
   useEffect(() => {
-    const update = (event: Event) => setLastUpdate((event as CustomEvent<{ finishedAt?: string }>).detail?.finishedAt);
+    const update = (event: Event) => {
+      const diagnostic = (event as CustomEvent<{ finishedAt?: string; status?: string }>).detail;
+      if (diagnostic?.status === 'success') setLastUpdate(diagnostic.finishedAt);
+    };
     let timer = 0;
     const tick = () => {
       timer = window.setTimeout(() => {
@@ -64,6 +70,10 @@ export function Header() {
       if (showFeedback) toast.info('Aguarde o carregamento da sessão.');
       return;
     }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      if (showFeedback) toast.info('Sem conexão. Os dados locais continuam disponíveis.');
+      return;
+    }
     if (refreshInFlightRef.current || snapshot.isSyncing) {
       if (showFeedback) toast.info('A atualização já está em andamento.', { id: 'operation-sync' });
       return;
@@ -79,6 +89,9 @@ export function Header() {
         if (failed) toast.error('Não foi possível atualizar agora.', { id: toastId });
         else toast.success('Operação atualizada.', { id: toastId, duration: 1400 });
       }
+    } catch (error) {
+      console.warn('[DFL SYNC] Atualização interrompida:', error);
+      if (showFeedback) toast.error('Falha na atualização. Tente novamente.', { id: 'operation-sync' });
     } finally {
       refreshInFlightRef.current = false;
     }
@@ -87,14 +100,37 @@ export function Header() {
   useEffect(() => {
     const refreshOnForeground = () => {
       if (document.visibilityState !== 'visible') return;
+      // Proteção histórica: o mesmo evento pode chegar pelo WebView e pelo PWA.
       if (Date.now() - lastForegroundSyncRef.current < 120_000) return;
+      const state = useAppStore.getState();
+      const latest = latestSyncDiagnostic();
+      const eligible = shouldRefreshOnForeground({
+        nowMs: Date.now(),
+        lastAttemptMs: lastForegroundSyncRef.current,
+        lastSuccessfulSyncMs: latestSuccessfulSyncDiagnostic()?.finishedAt,
+        online: navigator.onLine,
+        visible: document.visibilityState === 'visible',
+        recovering: state.syncError || latest?.status === 'error',
+      });
+      if (!eligible || state.isSyncing || !state.user || !state.authLoaded || !state.hasHydrated) return;
+      // Reservar o horário antes de iniciar o fetch: dois eventos não podem duplicá-lo.
+      lastForegroundSyncRef.current = Date.now();
       void refreshNow(false);
     };
+    const onNetworkOnline = () => {
+      setOnline(true);
+      refreshOnForeground();
+    };
+    const onNetworkOffline = () => setOnline(false);
     document.addEventListener('visibilitychange', refreshOnForeground);
     window.addEventListener('dfl:app-foreground', refreshOnForeground);
+    window.addEventListener('online', onNetworkOnline);
+    window.addEventListener('offline', onNetworkOffline);
     return () => {
       document.removeEventListener('visibilitychange', refreshOnForeground);
       window.removeEventListener('dfl:app-foreground', refreshOnForeground);
+      window.removeEventListener('online', onNetworkOnline);
+      window.removeEventListener('offline', onNetworkOffline);
     };
   }, [refreshNow]);
 
@@ -128,7 +164,7 @@ export function Header() {
                       <span className="absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping bg-sky-500" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-sky-500" />
                     </>
-                  ) : syncError ? (
+                  ) : (syncError || !online) ? (
                     <>
                       <span className="absolute inline-flex h-full w-full rounded-full opacity-75 animate-pulse bg-red-500" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
@@ -141,9 +177,21 @@ export function Header() {
                   )}
                 </span>
                 
-                <span className={`text-[11px] font-medium tracking-wide ${syncError && !isSyncing ? 'text-red-400' : 'text-zinc-400'}`}>
-                  {isSyncing ? 'Sincronizando...' : syncError ? 'Offline / Erro' : relativeUpdate(lastUpdate)}
-                </span>
+                {(syncError || !online) && !isSyncing ? (
+                  <button
+                    type="button"
+                    onClick={() => void refreshNow(true)}
+                    disabled={!online}
+                    aria-label={online ? 'Falha na atualização; tentar novamente' : 'Sem conexão; dados locais preservados'}
+                    className="min-h-8 rounded-lg border border-red-500/25 bg-red-500/[.06] px-2 text-left text-[10px] font-bold text-red-300 active:bg-red-500/15"
+                  >
+                    {online ? 'Falha na atualização · Tentar novamente' : 'Sem conexão · dados locais'}
+                  </button>
+                ) : (
+                  <span aria-live="polite" className="text-[11px] font-medium tracking-wide text-zinc-400">
+                    {isSyncing ? 'Sincronizando...' : relativeUpdate(lastUpdate)}
+                  </span>
+                )}
 
               </div>
             </div>
@@ -153,7 +201,7 @@ export function Header() {
             <button
               type="button"
               onClick={() => void refreshNow(true)}
-              disabled={isSyncing}
+              disabled={isSyncing || !online}
               className="grid h-10 w-10 place-items-center rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-300 transition active:scale-95 disabled:opacity-60"
               aria-label={isSyncing ? 'Atualizando operação' : 'Buscar pedidos novos'}
               title="Buscar pedidos novos"

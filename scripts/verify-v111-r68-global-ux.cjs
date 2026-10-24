@@ -17,7 +17,7 @@ const conditions=[
  [!home.includes('oldestPendingSiteOrder'),'sort e fila duplicada removidos'],
  [home.includes('siteInboxProjection(allDeliveries)'),'autoridade da Caixa preservada'],
  [home.includes('siteInboxSummary(siteInbox)') && fs.existsSync('lib/operation/siteInboxSummary.ts'),'somente avisos nao zerados'],
- [inbox.includes("channel === 'manual' &&"),'contador duplicado removido da aba Site'],
+ [inbox.includes('>Site</button>') && inbox.includes('>Importar</button>') && inbox.includes('aria-label="Filtrar rascunhos da Caixa de Entrada"') && !inbox.includes('<Stat'),'contador duplicado removido da aba Site'],
  [!inbox.includes('sitePendingCount'),'sem recalculo da projecao da Caixa na barra fixa'],
  [panel.includes('projection.total'),'contador unico da Caixa'],
  [!panel.includes('grid grid-cols-3 gap-1.5 text-center'),'metricas nao triplicadas acima dos filtros'],

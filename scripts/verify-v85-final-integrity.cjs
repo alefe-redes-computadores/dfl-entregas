@@ -17,16 +17,19 @@ const parser = read('lib/ifood-order-parser.ts');
 const details = read('app/entregas/details/page.tsx');
 
 ok(
-  identity.includes('(samePhone && compatibleName)') &&
-    identity.includes('storedMissingIncomingIdentity') &&
+  identity.includes('sameCustomerIdentityAddress') &&
+    identity.includes('exactName &&') &&
+    identity.includes('sameAddress &&') &&
+    !identity.includes('storedMissingIncomingIdentity') &&
     identity.includes('!addressConflict') &&
     identity.includes('!phoneConflict'),
-  'cliente reutiliza evidência forte sem atravessar conflitos',
+  'cliente exige nome e endereço completos sem atravessar conflitos',
 );
 ok(
-  store.includes("? `phone:${normalizedPhone}`") &&
-    store.includes('`identity:${normalizedName}|${normalizedAddress}`'),
-  'concorrência de cliente usa telefone ou identidade composta',
+  store.includes('const flightKey = normalizedAddress') &&
+    store.includes('`identity:${normalizedName}|${normalizedAddress}`') &&
+    store.includes('sem-endereco|${normalizedPhone}'),
+  'concorrência não agrupa homônimos por telefone',
 );
 ok(
   reconciler.includes("['delivery.completed', 'route.completed']") &&

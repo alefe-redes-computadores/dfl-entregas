@@ -11,7 +11,7 @@ const checks=[
     'Caixa de Entrada',
     'Analisar pedidos',
     'Possível duplicado',
-    'ainda não lançado'
+    'Lançar entrega'
   ]],
   ['app/loja/page.tsx',[
     "router.push('/loja/caixa-de-entrada')",

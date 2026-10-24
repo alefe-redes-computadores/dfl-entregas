@@ -16,6 +16,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { buildPendingMotoboySettlements } from '@/lib/motoboy-settlement-tasks';
 import { siteInboxSummary } from '@/lib/operation/siteInboxSummary';
 import { siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
+import { classifyHomeExceptions } from '@/lib/operation/home-exceptions';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { Inbox } from 'lucide-react';
@@ -45,6 +46,7 @@ export function OperationalCommandCenter({
     (state) => state.ifoodPendingConfirmations,
   );
   const allDeliveries = useAppStore((state) => state.deliveries);
+  const customers = useAppStore((state) => state.customers);
   const motoboys = useAppStore((state) => state.motoboys);
   const operationalExpenses = useAppStore((state) => state.operationalExpenses);
 
@@ -57,19 +59,18 @@ export function OperationalCommandCenter({
   const siteInbox = useMemo(() => siteInboxProjection(allDeliveries), [allDeliveries]);
   const allRoutes = useAppStore(state => state.routes);
   const allRouteIds = useMemo(() => new Set(allRoutes.map(route => route.id)), [allRoutes]);
-  const corruptLinks = pending.filter(item => item.route_id && !allRouteIds.has(item.route_id));
-
-  const noAddress = pending.filter(
-    (delivery) => !delivery.address_string?.trim() && (!delivery.source_system || delivery.route_id),
+  // R88: classificar a fila em uma passagem, usando clientes ja carregados.
+  const { unassigned, corruptLinks, noAddress, addressOnly: locationCandidates } = useMemo(
+    () => classifyHomeExceptions(pending, customers, allRouteIds),
+    [deliveries, customers, allRouteIds],
   );
-
-  const addressOnly = pending.filter(
+  // R77: preservar a conferencia geografica no painel, inclusive quando os
+  // dados do pedido mudam durante uma operacao. Só revalida candidatos.
+  const addressOnly = useMemo(() => locationCandidates.filter(
     (delivery) =>
-      Boolean(delivery.route_id) &&
-      Boolean(delivery.address_string?.trim()) &&
       !/\b\d{1,5}\b/.test(delivery.address_string || '') &&
       !extractLatLngFromMapsUrl(delivery.maps_link),
-  );
+  ), [locationCandidates]);
 
   // Show exactly who needs action. No vague warning for a complete street
   // address simply because a GPS link was not supplied.
@@ -145,6 +146,16 @@ export function OperationalCommandCenter({
       icon: Inbox,
       tone: 'amber',
       priority: 115,
+    },
+    {
+      key: 'unassigned-route',
+      label: 'Entregas sem rota',
+      description: `${deliveryHint(unassigned[0])} · escolha a rota`,
+      count: unassigned.length,
+      href: deliveryActionHref(unassigned[0]),
+      icon: ShieldAlert,
+      tone: 'red',
+      priority: 114,
     },
     {
       key: 'broken-route-link',

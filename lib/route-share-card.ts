@@ -51,6 +51,7 @@ export async function buildRouteShareCard(
   deliveries: Delivery[],
   storeAddress: string,
   explicitCoordinates?: { origin?: string | null; stops?: Record<string, string | null> },
+  ifoodConfirmationMode: 'store' | 'motoboy' = 'store',
 ): Promise<RouteShareCard> {
   const groups = groupDeliveriesByStop(deliveries);
   const origin = explicitCoordinates?.origin || coordinates(storeAddress);
@@ -66,6 +67,11 @@ export async function buildRouteShareCard(
   const cardOrders = chargeable.filter(item => /cart[aã]o|cartao|cr[eé]dito|d[eé]bito/i.test(item.payment_method || ''));
   const cashOrders = chargeable.filter(item => item.payment_method === 'dinheiro');
   const pendingCodes = deliveries.filter(item => item.origin === 'ifood' && !item.confirmation_code).length;
+  const ifoodOrders = deliveries.filter(item => item.origin === 'ifood');
+  const ifoodVisibleOrders = ifoodOrders.slice(0, 7);
+  const driverConfirmsIfood = ifoodConfirmationMode === 'motoboy' && ifoodOrders.length > 0;
+  // Sem link clicável dentro do PNG: o link clicável segue no texto compartilhado.
+  const ifoodPanelHeight = ifoodOrders.length ? 105 + ifoodVisibleOrders.length * 34 + (ifoodOrders.length > 7 ? 28 : 0) : 0;
   const drinkGroups = new Map<string, number>();
   for (const item of deliveries) {
     const label = (item.drinks || '').trim();
@@ -75,7 +81,7 @@ export async function buildRouteShareCard(
   const drinks = [...drinkGroups.entries()].map(([name, count]) => `${count}× ${name}`);
   const stopsHeight = groups.length * 116;
   const mapHeight = map ? 320 : 0;
-  const checklistHeight = 196 + (drinks.length ? 46 + Math.min(drinks.length, 5) * 36 : 0);
+  const checklistHeight = 196 + (drinks.length ? 46 + Math.min(drinks.length, 5) * 36 : 0) + (driverConfirmsIfood ? 128 : 0) + (ifoodPanelHeight ? ifoodPanelHeight + 34 : 0);
   const requestedHeight = 457 + mapHeight + 25 + stopsHeight + checklistHeight + 105;
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
@@ -138,6 +144,33 @@ export async function buildRouteShareCard(
   if (drinks.length) {
     text('BEBIDAS PARA CONFERIR', 76, y + 208, '900 26px Arial', '#34d399');
     drinks.slice(0, 5).forEach((drink, i) => text(drink, 76, y + 245 + i * 36, '700 24px Arial', '#f8fafc'));
+  }
+  // R88: cada pedido leva seu proprio ID e codigo; dados ausentes sao pendencias.
+  if (ifoodOrders.length) {
+    const panelY = y + 188 + (drinks.length ? 80 + (Math.min(drinks.length, 5) - 1) * 36 : 0);
+    roundBox(ctx, 72, panelY, 935, ifoodPanelHeight + (driverConfirmsIfood ? 128 : 0), 18, driverConfirmsIfood ? '#321a23' : '#173039');
+    text(driverConfirmsIfood ? 'IFOOD  /  MOTOBOY CONFIRMA' : 'IFOOD  /  LOJA CONFIRMA', 92, panelY + 32, '900 25px Arial', driverConfirmsIfood ? '#fda4af' : '#7dd3fc');
+    text(driverConfirmsIfood ? 'Portal: confirmacao-entrega-propria.ifood.com.br' : 'Coletar o codigo e informar a loja', 92, panelY + 62, '700 23px Arial', '#ffffff');
+    text('ID e codigo sao individuais por pedido.', 92, panelY + 87, '600 18px Arial', '#cbd5e1');
+    ifoodVisibleOrders.forEach((item, index) => {
+      const id = String(item.ifood_id || '').replace(/\D/g, '');
+      const code = String(item.confirmation_code || '').replace(/\D/g, '');
+      const number = String(item.order_id || index + 1).trim();
+      const idLabel = id.length === 8 ? id : 'PENDENTE';
+      const codeLabel = code.length === 4 ? code : 'PEDIR CODIGO';
+      text(`#${number}   |   ID: ${idLabel}   |   CODIGO: ${codeLabel}`, 92, panelY + 116 + index * 34, '700 21px Arial', '#f8fafc', 880);
+    });
+    if (ifoodOrders.length > ifoodVisibleOrders.length) {
+      text(`+ ${ifoodOrders.length - ifoodVisibleOrders.length} pedidos no texto completo`, 92, panelY + 116 + ifoodVisibleOrders.length * 34, '700 19px Arial', '#fdba74', 880);
+    }
+    // R85: reservar e usar 128 px somente quando o portal cabe ao motoboy.
+    // Registrar o codigo no DFL NAO confirma a entrega na plataforma.
+    if (driverConfirmsIfood) {
+      const footerY = panelY + ifoodPanelHeight + 13;
+      text('1  Pedir o codigo de 4 digitos ao cliente', 92, footerY + 24, '700 22px Arial', '#fef2f2', 875);
+      text('2  Confirmar cada ID + codigo no portal iFood', 92, footerY + 56, '700 22px Arial', '#fef2f2', 875);
+      text('Codigo salvo no DFL NAO confirma no portal', 92, footerY + 88, '700 20px Arial', '#fda4af', 875);
+    }
   }
   text('DFL  •  Conferir antes de iniciar a viagem', 54, canvas.height - 42, '700 22px Arial', '#748891');
   return { dataUrl: canvas.toDataURL('image/png'), usedRealMap: Boolean(map) };

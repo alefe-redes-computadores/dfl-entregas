@@ -52,6 +52,9 @@ export default function HomePage() {
   const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
 
   const [globalMotoboy, setGlobalMotoboy] = useState<string | null>(null);
+  // R90: balcão/retirada/99Food não montam dezenas de cards numa só pintura.
+  // Os totais e a contabilidade continuam usando TODOS os pedidos do período.
+  const [storeOrdersVisibleLimit, setStoreOrdersVisibleLimit] = useState(8);
 
   const selectedDateKey = saoPauloDateKey(selectedDate);
 
@@ -329,6 +332,10 @@ export default function HomePage() {
     }
   }, [activeMotoboysToday, globalMotoboy]);
 
+  useEffect(() => {
+    setStoreOrdersVisibleLimit(8);
+  }, [selectedDateKey, globalMotoboy]);
+
   const hasOperationSummary =
     totalEntregas > 0 ||
     openRoutes.length > 0 ||
@@ -483,7 +490,7 @@ export default function HomePage() {
           </div>
 
           <div className="space-y-2">
-            {storeOrdersDoDia.map((order) => {
+            {storeOrdersDoDia.slice(0, storeOrdersVisibleLimit).map((order) => {
               const mode = getFulfillmentMode(order);
               const isPickup = mode === 'pickup';
               const isPlatform = mode === 'external_delivery';
@@ -519,6 +526,17 @@ export default function HomePage() {
               );
             })}
           </div>
+          {storeOrdersDoDia.length > storeOrdersVisibleLimit && (
+            <button
+              type="button"
+              onClick={() => setStoreOrdersVisibleLimit((limit) => limit + 12)}
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-zinc-700/70 bg-zinc-900/45 px-4 text-xs font-bold text-zinc-300 transition-colors active:bg-zinc-800"
+              aria-label={`Mostrar mais pedidos da loja; ${storeOrdersDoDia.length - storeOrdersVisibleLimit} restantes`}
+            >
+              Ver mais {Math.min(12, storeOrdersDoDia.length - storeOrdersVisibleLimit)} pedidos
+              <span className="text-[10px] font-medium text-zinc-500">{Math.min(storeOrdersVisibleLimit, storeOrdersDoDia.length)} de {storeOrdersDoDia.length}</span>
+            </button>
+          )}
         </section>
       )}
 

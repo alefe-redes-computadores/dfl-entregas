@@ -3,6 +3,7 @@
 
 import { commercialMovementPreview, commercialPresentationEquation, humanPresentation } from '@/lib/stock-commercial-display-v2';
 import { committedStockQuantityMap } from '@/lib/stock-shopping';
+import { dualStockView, looseMovementPresentation, stockMovementBaseQuantity } from '@/lib/stock-dual-unit';
 
 import {
   Suspense,
@@ -146,9 +147,11 @@ function Content() {
     : product?.unit === 'l'
       ? [{ id: '__input-ml', label: 'Digitar em ml', purchase_unit: 'ml' as const, conversion_quantity: 0.001, active: true }]
       : [];
+  const loosePresentation = looseMovementPresentation(product);
   const presentations = [
     ...operationalPresentations,
-    ...(product?.presentations || []).filter((item) => item.active && Number(item.conversion_quantity) > 0),
+    ...(loosePresentation ? [loosePresentation] : []),
+    ...(product?.presentations || []).filter((item) => item.active && Number(item.conversion_quantity) > 0 && item.id !== (loosePresentation ? dualStockView(product!)?.presentationId : undefined)),
   ];
   const selectedPresentation = presentations.find((item) => item.id === presentationId);
   const conversion = selectedPresentation ? Number(selectedPresentation.conversion_quantity) : 1;
@@ -212,7 +215,10 @@ function Content() {
     type === 'saida' ||
     type === 'perda';
 
-  const baseTyped = roundStockQuantity(typed * conversion);
+  const baseTyped = stockMovementBaseQuantity(typed, conversion, product.current_quantity, {
+    loose: selectedPresentation?.id === '__loose-unit',
+    direction: canUseRemaining && mode === 'moved' ? 'remove' : canUseRemaining ? 'set' : 'add',
+  });
   const rawAmount = canUseRemaining && mode === 'remaining'
     ? roundStockQuantity(product.current_quantity - baseTyped)
     : baseTyped;
@@ -387,7 +393,7 @@ function Content() {
 
         team_member_name: memberName || useAppStore.getState().user?.displayName || undefined,
         team_member_photo_url: useAppStore.getState().user?.photoURL || undefined,
-        presentation_id: selectedPresentation?.id?.startsWith('__input-') ? undefined : selectedPresentation?.id,
+        presentation_id: selectedPresentation?.id?.startsWith('__') ? undefined : selectedPresentation?.id,
         presentation_label: selectedPresentation?.label,
         presentation_quantity: typed,
         presentation_unit: selectedPresentation?.purchase_unit || product.unit,
@@ -519,6 +525,7 @@ function Content() {
             <p className="mt-1 font-heading text-3xl font-black text-zinc-100">
               {formatStockQuantity(product.current_quantity, product.unit)}
             </p>
+            {dualStockView(product) && <p className="mt-1 text-[11px] font-bold text-emerald-300">{dualStockView(product)?.secondary}</p>}
           </div>
           <p className="max-w-[46%] text-right text-[9px] leading-relaxed text-zinc-600">
             Confira o produto antes de registrar a movimentação.

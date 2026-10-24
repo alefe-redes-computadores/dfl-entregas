@@ -215,6 +215,10 @@ export interface StockProduct {
   icon?: string;
   color?: string;
   presentations?: StockProductPresentation[];
+  /** EAN/UPC/Code128 cadastrado pelo operador; nao consulta base externa. */
+  barcode?: string;
+  /** Quantas unidades avulsas existem na embalagem-base de cadastros legados. */
+  loose_units_per_package?: number;
   created_at: string;
   updated_at: string;
 }

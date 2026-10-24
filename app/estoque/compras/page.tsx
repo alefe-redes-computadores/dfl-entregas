@@ -17,7 +17,17 @@ import {
   Search,
   X,
   ShoppingBasket,
+  ClipboardCopy,
+  FileText,
+  Share2,
+  ListChecks,
+  ChevronDown,
+  ShieldCheck,
+  WifiOff,
 } from 'lucide-react';
+import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { toast } from '@/lib/operational-toast';
 import { claimSubmission, releaseSubmission } from '@/lib/operation/submissionGate';
 
@@ -35,6 +45,9 @@ import {
   commercialPurchasePlan,
 } from '@/lib/stock-shopping';
 import { humanPurchasePlan } from '@/lib/stock-commercial-display-v2';
+import { buildStockMarketRows, readStockMarketChecks, serializeStockMarketChecks, STOCK_MARKET_CHECKLIST_KEY, stockMarketChecked, stockMarketText } from '@/lib/stock-market-list';
+import { exportStockMarketPdf } from '@/lib/stock-market-pdf';
+import { StockPurchaseIntelligencePanel } from '@/components/stock/StockPurchaseIntelligencePanel';
 import { invalidStockPurchaseSelections, validateStockPurchaseQuantity } from '@/lib/stock-purchase-draft';
 import { compactStockPurchaseDraft, parseStockPurchaseDraft, STOCK_PURCHASE_DRAFT_KEY } from '@/lib/stock-purchase-session';
 import { guardedStockRecommendation } from '@/lib/stock-recommendation-guard';
@@ -202,9 +215,37 @@ export default function ShoppingList() {
   );
 
   const [busy, setBusy] = useState(false);
+  const [leavePrompt, setLeavePrompt] = useState(false);
+  const purchaseCommitted = useRef(false);
   const purchaseSubmitLock = useRef(false);
   const initializedSuggestions = useRef(new Set<string>());
   const draftRestored = useRef(false);
+  // O Android pode suspender a PWA antes dos 180ms do debounce.
+  const purchaseDraftSnapshotRef = useRef({ selected, quantities, presentationIds });
+  purchaseDraftSnapshotRef.current = { selected, quantities, presentationIds };
+  const purchaseCompletedRef = useRef(false);
+  const [draftStorageFailed, setDraftStorageFailed] = useState(false);
+  const persistPurchaseDraft = useCallback((showError: boolean) => {
+    if (!draftRestored.current || purchaseCompletedRef.current) return;
+    const snapshot = purchaseDraftSnapshotRef.current;
+    try {
+      if (!Object.values(snapshot.selected).some(Boolean)) {
+        window.localStorage.removeItem(STOCK_PURCHASE_DRAFT_KEY);
+      } else {
+        window.localStorage.setItem(STOCK_PURCHASE_DRAFT_KEY, JSON.stringify({
+          version: 1,
+          updatedAt: new Date().toISOString(),
+          selected: snapshot.selected,
+          quantities: snapshot.quantities,
+          presentationIds: snapshot.presentationIds,
+        }));
+      }
+      if (showError) setDraftStorageFailed(false);
+    } catch {
+      // Quota cheia / armazenamento desabilitado: nunca alegar rascunho salvo.
+      if (showError) setDraftStorageFailed(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (draftRestored.current || !products.length) return;
@@ -226,23 +267,23 @@ export default function ShoppingList() {
   }, [products]);
 
   useEffect(() => {
-    if (!draftRestored.current || busy) return;
-    const timer = window.setTimeout(() => {
-      const hasSelection = Object.values(selected).some(Boolean);
-      if (!hasSelection) {
-        localStorage.removeItem(STOCK_PURCHASE_DRAFT_KEY);
-        return;
-      }
-      localStorage.setItem(STOCK_PURCHASE_DRAFT_KEY, JSON.stringify({
-        version: 1,
-        updatedAt: new Date().toISOString(),
-        selected,
-        quantities,
-        presentationIds,
-      }));
-    }, 180);
+    if (!draftRestored.current || busy || purchaseCompletedRef.current) return;
+    const timer = window.setTimeout(() => persistPurchaseDraft(true), 180);
     return () => window.clearTimeout(timer);
-  }, [busy, presentationIds, quantities, selected]);
+  }, [busy, presentationIds, quantities, selected, persistPurchaseDraft]);
+
+  useEffect(() => {
+    const onPageHide = () => persistPurchaseDraft(false);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') persistPurchaseDraft(false);
+    };
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [persistPurchaseDraft]);
 
   /*
    * O store hidrata depois da primeira renderização em alguns aparelhos.
@@ -301,6 +342,132 @@ export default function ShoppingList() {
     validateStockPurchaseQuantity(quantities[product.id], purchaseUnitFor(product)).valid,
   ), [selectedProducts, quantities, purchaseUnitFor]);
 
+  // Lista de mercado é um rascunho local separado: nunca dá entrada no estoque.
+  const marketPreview = useMemo(() => buildStockMarketRows(
+    products, selected, quantities, presentationIds,
+  ), [products, selected, quantities, presentationIds]);
+  const [marketChecked, setMarketChecked] = useState<Record<string, string>>({});
+  const [marketReady, setMarketReady] = useState(false);
+  const [marketVisibleLimit, setMarketVisibleLimit] = useState(12);
+  const [marketExpanded, setMarketExpanded] = useState(false);
+  const [marketStorageWarning, setMarketStorageWarning] = useState(false);
+  const [marketExportBusy, setMarketExportBusy] = useState(false);
+  const marketExportLock = useRef(false);
+  const marketPurchased = useMemo(() => marketPreview.rows.filter(row => stockMarketChecked(row, marketChecked)).length,
+    [marketPreview.rows, marketChecked]);
+  const canExportMarket = marketPreview.rows.length > 0 && marketPreview.invalid.length === 0 && invalidSelected.length === 0;
+
+  useEffect(() => {
+    if (marketReady || !marketPreview.rows.length) return;
+    try {
+      setMarketChecked(readStockMarketChecks(window.localStorage.getItem(STOCK_MARKET_CHECKLIST_KEY), marketPreview.rows));
+    } catch { setMarketChecked({}); setMarketStorageWarning(true); }
+    setMarketReady(true);
+  }, [marketReady, marketPreview.rows]);
+
+  useEffect(() => {
+    if (!marketReady || busy) return;
+    const timer = window.setTimeout(() => {
+      try { window.localStorage.setItem(STOCK_MARKET_CHECKLIST_KEY, serializeStockMarketChecks(marketPreview.rows, marketChecked)); }
+      catch { setMarketStorageWarning(true); }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [marketChecked, marketPreview.rows, marketReady, busy]);
+
+  const marketText = () => stockMarketText(marketPreview.rows, marketChecked);
+  const marketHaptic = (style: ImpactStyle = ImpactStyle.Light) => {
+    if (Capacitor.isNativePlatform()) void Haptics.impact({ style }).catch(() => undefined);
+  };
+  const downloadMarket = async () => {
+    if (!canExportMarket || marketExportLock.current) return;
+    marketExportLock.current = true;
+    setMarketExportBusy(true);
+    try {
+      const mode = await exportStockMarketPdf(marketPreview.rows, marketChecked);
+      marketHaptic();
+      toast.success(mode === 'shared' ? 'Lista enviada para compartilhamento.' : 'PDF da lista preparado.');
+    } catch (error) {
+      const cancelled = (error as { name?: string })?.name === 'AbortError' || /cancel/i.test(String(error));
+      if (!cancelled) toast.error('Não foi possível gerar ou enviar o PDF. Tente Copiar a lista.');
+    } finally {
+      marketExportLock.current = false;
+      setMarketExportBusy(false);
+    }
+  };
+  const copyMarket = async () => {
+    if (!canExportMarket) { toast.error('Corrija as quantidades selecionadas antes de exportar.'); return; }
+    try {
+      const text = marketText();
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const helper = document.createElement('textarea');
+        helper.value = text;
+        helper.setAttribute('readonly', '');
+        helper.style.position = 'fixed';
+        helper.style.opacity = '0';
+        document.body.appendChild(helper);
+        helper.select();
+        try { if (!document.execCommand('copy')) throw new Error('clipboard unavailable'); }
+        finally { helper.remove(); }
+      }
+      marketHaptic();
+      toast.success('Lista copiada. Cole no Samsung Notes ou WhatsApp.');
+    } catch { toast.error('Não foi possível copiar. Use Compartilhar ou PDF.'); }
+  };
+  const shareMarket = async () => {
+    if (!canExportMarket) { toast.error('Corrija as quantidades selecionadas antes de compartilhar.'); return; }
+    const message = marketText();
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Share.share({ title: 'DFL - Lista de compras', text: message, dialogTitle: 'Enviar lista de mercado' });
+        marketHaptic();
+      } else if (navigator.share) {
+        await navigator.share({ title: 'DFL - Lista de compras', text: message });
+      } else {
+        await copyMarket();
+      }
+    } catch (error) {
+      if ((error as { name?: string })?.name !== 'AbortError' && !String(error).toLowerCase().includes('cancel')) {
+        toast.error('Não foi possível compartilhar a lista. Tente Copiar.');
+      }
+    }
+  };
+
+  // R98: salvar imediatamente quando o Android coloca a compra em segundo plano.
+  useEffect(() => {
+    const saveNow = () => {
+      if (purchaseCommitted.current) return;
+      try {
+        if (!Object.values(selected).some(Boolean)) return;
+        localStorage.setItem(STOCK_PURCHASE_DRAFT_KEY, JSON.stringify({
+          version: 1, updatedAt: new Date().toISOString(),
+          selected, quantities, presentationIds,
+        }));
+      } catch (error) { console.warn('Rascunho de compra nao persistido:', error); }
+    };
+    const visibility = () => { if (document.visibilityState === 'hidden') saveNow(); };
+    const nativeBack = (event: Event) => {
+      if (purchaseCommitted.current || !Object.values(selected).some(Boolean)) return;
+      event.preventDefault();
+      setLeavePrompt(true);
+    };
+    const leaving = (event: BeforeUnloadEvent) => {
+      if (purchaseCommitted.current || !Object.values(selected).some(Boolean)) return;
+      saveNow(); event.preventDefault(); event.returnValue = '';
+    };
+    window.addEventListener('dfl:native-back-request', nativeBack);
+    window.addEventListener('beforeunload', leaving);
+    window.addEventListener('pagehide', saveNow);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      window.removeEventListener('dfl:native-back-request', nativeBack);
+      window.removeEventListener('beforeunload', leaving);
+      window.removeEventListener('pagehide', saveNow);
+      document.removeEventListener('visibilitychange', visibility);
+    };
+  }, [selected, quantities, presentationIds]);
+
   const create = async () => {
     if (busy || purchaseSubmitLock.current) return;
     if (invalidSelected.length) {
@@ -312,6 +479,9 @@ export default function ShoppingList() {
       return;
     }
     // O ref fecha a janela entre dois toques antes de o React aplicar setBusy.
+    // Guardar a selecao ANTES da requisicao: se o Android fechar no envio,
+    // a ultima embalagem/quantidade continua recuperavel.
+    persistPurchaseDraft(true);
     if (!claimSubmission(purchaseSubmitLock)) return;
     setBusy(true);
 
@@ -363,8 +533,15 @@ export default function ShoppingList() {
 
       await addStockSupply(supply);
 
-      localStorage.removeItem(STOCK_PURCHASE_DRAFT_KEY);
+      // Sucesso remoto NAO pode virar falso erro por quota/localStorage.
+      purchaseCompletedRef.current = true;
+      try { window.localStorage.removeItem(STOCK_PURCHASE_DRAFT_KEY); }
+      catch { /* compra criada; nenhum segundo envio por falha de limpeza local */ }
 
+      // Checklist local só é limpo após a persistência da compra.
+      try { localStorage.removeItem(STOCK_MARKET_CHECKLIST_KEY); } catch { /* Compra já salva: cache opcional. */ }
+
+      purchaseCommitted.current = true;
       toast.success('Compra montada.');
 
       router.replace(
@@ -398,7 +575,13 @@ export default function ShoppingList() {
         title="Montar compra"
         subtitle="Do estoque para o carrinho"
         to="/estoque"
+        onBack={() => {
+          if (busy || (!purchaseCommitted.current && selectedProducts.length > 0)) setLeavePrompt(true);
+          else router.replace('/estoque');
+        }}
       />
+
+      {leavePrompt && <div role="dialog" aria-modal="true" aria-label="Sair da compra" className="fixed inset-0 z-[170] flex items-end justify-center bg-black/80 p-3 backdrop-blur-sm"><section className="w-full max-w-md rounded-[28px] border border-amber-500/25 bg-zinc-950 p-5 shadow-2xl"><p className="text-[10px] font-black uppercase tracking-[.14em] text-amber-400">Compra em andamento</p><h2 className="mt-2 font-heading text-lg font-black text-zinc-100">Deseja realmente sair?</h2><p className="mt-2 text-xs leading-relaxed text-zinc-400">Sua seleção, quantidades e embalagens serão preservadas no rascunho deste aparelho. Nenhuma compra será registrada sem sua confirmação.</p><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setLeavePrompt(false)} className="h-12 rounded-xl bg-emerald-500 font-black text-zinc-950">Continuar compra</button><button type="button" onClick={() => { setLeavePrompt(false); router.replace('/estoque'); }} disabled={busy} className="h-12 rounded-xl border border-zinc-700 bg-zinc-900 text-xs font-bold text-zinc-300 disabled:opacity-50">Sair e salvar</button></div></section></div>}
 
       <section className="mb-4 rounded-[24px] border border-amber-500/20 bg-amber-500/[.06] p-4">
         <div className="flex gap-3">
@@ -416,6 +599,55 @@ export default function ShoppingList() {
           </div>
         </div>
       </section>
+
+      {draftStorageFailed && (
+        <p role="alert" className="mb-3 rounded-xl border border-amber-500/35 bg-amber-500/[.08] px-3 py-2.5 text-[11px] font-semibold text-amber-200">
+          Não foi possível guardar o rascunho neste aparelho. Confira o espaço de armazenamento antes de sair.
+        </p>
+      )}
+
+      <section className="mb-4 overflow-hidden rounded-[24px] border border-emerald-500/25 bg-gradient-to-br from-zinc-900/90 via-zinc-900/75 to-emerald-950/15 p-3.5 shadow-[0_18px_38px_rgba(0,0,0,.15)]" aria-label="Lista de mercado R96">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400"><ListChecks size={20} /></span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-black text-zinc-100">Lista para levar ao mercado</h2>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-400">{marketPreview.rows.length} itens selecionados · {marketPurchased} marcados como comprados</p>
+            <p className="mt-0.5 text-[10px] leading-relaxed text-zinc-500">Planejamento local, separado do recebimento real do estoque.</p>
+          </div>
+        </div>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800" role="progressbar" aria-label="Progresso da lista" aria-valuemin={0} aria-valuemax={marketPreview.rows.length} aria-valuenow={marketPurchased}>
+          <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-150" style={{ width: `${marketPreview.rows.length ? (marketPurchased / marketPreview.rows.length) * 100 : 0}%` }} />
+        </div>
+        {marketStorageWarning && <p role="alert" className="mt-2 flex items-start gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-2.5 text-[11px] text-amber-200"><WifiOff size={15} className="mt-0.5 shrink-0" />Não foi possível guardar o checklist neste aparelho. Ele continua disponível enquanto esta tela estiver aberta.</p>}
+        {marketPreview.invalid.length > 0 && <p role="alert" className="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">{marketPreview.invalid.length} quantidade(s) inválida(s). Revise antes de exportar: {marketPreview.invalid[0]}.</p>}
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <button type="button" disabled={!canExportMarket || marketExportBusy} onClick={() => void downloadMarket()} className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-2 text-[11px] font-black text-emerald-300 transition-colors active:bg-emerald-500/20 disabled:opacity-40" aria-label="Gerar ou compartilhar PDF da lista de mercado"><FileText size={14} />{marketExportBusy ? 'Gerando...' : 'PDF'}</button>
+          <button type="button" disabled={!canExportMarket} onClick={() => void shareMarket()} className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900/80 px-2 text-[11px] font-black text-zinc-200 transition-colors active:bg-zinc-800 disabled:opacity-40" aria-label="Compartilhar lista para Samsung Notes"><Share2 size={14} />Enviar</button>
+          <button type="button" disabled={!canExportMarket} onClick={() => void copyMarket()} className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900/80 px-2 text-[11px] font-black text-zinc-200 transition-colors active:bg-zinc-800 disabled:opacity-40" aria-label="Copiar lista de mercado"><ClipboardCopy size={14} />Copiar</button>
+        </div>
+        {marketPreview.rows.length > 0 && <button type="button" aria-expanded={marketExpanded} onClick={() => { setMarketExpanded(value => !value); marketHaptic(); }} className="mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/[.055] px-3 text-left text-[11px] font-bold text-emerald-200 transition-colors active:bg-emerald-500/10"><span className="flex items-center gap-2"><ShieldCheck size={16} />{marketExpanded ? 'Recolher checklist' : 'Conferir itens no mercado'}</span><ChevronDown size={16} className={marketExpanded ? 'rotate-180 transition-transform' : 'transition-transform'} /></button>}
+        {marketExpanded && marketPreview.rows.length > 0 && <div className="mt-2 max-h-[420px] space-y-1.5 overflow-y-auto rounded-xl border border-zinc-800/70 bg-zinc-950/40 p-2" aria-label="Checklist de produtos do mercado">
+          {marketPreview.rows.slice(0, marketVisibleLimit).map((row, index, visible) => {
+            const done = stockMarketChecked(row, marketChecked);
+            const group = index === 0 || visible[index - 1]?.category !== row.category;
+            return <div key={row.id}>
+              {group && <p className="px-2 pb-1 pt-2 text-[9px] font-black uppercase tracking-widest text-emerald-400/75">{row.category}</p>}
+              <button type="button" disabled={busy} aria-pressed={done} onClick={() => { setMarketChecked(current => ({ ...current, [row.id]: done ? '' : row.signature })); marketHaptic(); }} className={`flex min-h-12 w-full items-center gap-3 rounded-xl border px-3 py-2 text-left ${done ? 'border-emerald-500/20 bg-emerald-500/[.065]' : 'border-zinc-800/80 bg-zinc-900/55'}`}>
+                <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${done ? 'border-emerald-500 bg-emerald-500 text-zinc-950' : 'border-zinc-600 text-zinc-600'}`}>{done && <Check size={15} />}</span>
+                <span className="min-w-0 flex-1"><span className={`block text-[11px] font-bold ${done ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>{row.name}</span><span className="block text-[10px] text-zinc-500">{row.purchaseText}</span></span>
+              </button>
+            </div>;
+          })}
+          {marketPreview.rows.length > marketVisibleLimit && <button type="button" onClick={() => setMarketVisibleLimit(value => value + 20)} className="min-h-11 w-full rounded-xl border border-zinc-700 text-[11px] font-bold text-zinc-300">Ver mais {Math.min(20, marketPreview.rows.length - marketVisibleLimit)} itens da lista</button>}
+        </div>}
+        {!marketPreview.rows.length && <p className="mt-3 text-[11px] text-zinc-500">Escolha produtos abaixo para montar a lista do mercado. Não é necessário salvar uma compra antes de exportar.</p>}
+      </section>
+
+      <StockPurchaseIntelligencePanel
+        rows={marketPreview.rows}
+        checked={marketChecked}
+        invalid={marketPreview.invalid.length > 0 || invalidSelected.length > 0}
+      />
 
       <div className="mb-4 grid grid-cols-2 gap-2">
         <button

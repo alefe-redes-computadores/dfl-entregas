@@ -239,6 +239,29 @@ export function StockSupplyForm({
     items,
   }), [occurredAt, status, supplierId, supplierText, purchaserName, purchaserId, transport, otherCosts, payment, observation, items]);
 
+  const currentFormDraftRef = useRef(formDraft);
+  currentFormDraftRef.current = formDraft;
+  const isDirtyRef = useRef(dirty);
+  isDirtyRef.current = dirty;
+  const remotePurchaseSavedRef = useRef(false);
+
+  useEffect(() => {
+    const flush = () => {
+      if (!isDirtyRef.current || remotePurchaseSavedRef.current) return;
+      try { writeStockSupplyDraft(draftKey, currentFormDraftRef.current); }
+      catch { /* a edicao em memoria nao deve ser interrompida */ }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [draftKey]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const saved = readStockSupplyDraft<PersistedFormDraft>(draftKey);
@@ -315,6 +338,7 @@ export function StockSupplyForm({
   }, [dirty]);
 
   const leaveForm = (discard: boolean) => {
+    if (discard) remotePurchaseSavedRef.current = true;
     try {
       if (discard) removeStockSupplyDraft(draftKey);
       else writeStockSupplyDraft(draftKey, formDraft);
@@ -613,7 +637,8 @@ export function StockSupplyForm({
           ? initial?.checked_at || now
           : undefined,
     });
-      try { removeStockSupplyDraft(draftKey); } catch { /* gravação remota já foi confirmada */ }
+      remotePurchaseSavedRef.current = true;
+      try { removeStockSupplyDraft(draftKey); } catch { /* gravacao remota ja foi confirmada */ }
       allowLeaveRef.current = true;
       setDirty(false);
     } catch {

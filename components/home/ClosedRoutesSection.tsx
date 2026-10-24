@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Bike, CheckCircle2, ChevronDown, UserRound, Users } from 'lucide-react';
 import type { Motoboy, Route } from '@/types';
-import { RouteAccordion } from '@/components/home/RouteAccordion';
+import { LazyClosedRouteCard } from '@/components/home/LazyClosedRouteCard';
 import { firstValidTimestamp } from '@/lib/reports/time';
 
 /**
@@ -63,10 +63,10 @@ export function ClosedRoutesSection({
         return (
           <div key={name} className="space-y-1.5">
             <div className="flex items-center gap-1.5 px-1.5 text-zinc-500"><Icon size={13} /><span className="text-[10px] font-bold">{name}</span><span className="ml-auto text-[10px] tabular-nums">{groupedRoutes.length}{expanded ? '' : ' recente(s)'}</span></div>
-            {groupedRoutes.map(route => <RouteAccordion key={route.id} route={route} />)}
+            {groupedRoutes.map(route => <LazyClosedRouteCard key={route.id} route={route} />)}
           </div>
         );
-      }) : visibleRoutes.map(route => <RouteAccordion key={route.id} route={route} />)}
+      }) : visibleRoutes.map(route => <LazyClosedRouteCard key={route.id} route={route} />)}
       {moreCount > 0 && (
         <button type="button" onClick={() => setVisibleLimit(limit => limit + 10)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 text-xs font-bold text-zinc-300 active:bg-zinc-800">
           Ver mais {moreCount} rota{moreCount === 1 ? '' : 's'} · {visibleRoutes.length} de {routes.length}

@@ -331,6 +331,12 @@ export default function ConfirmacoesPage() {
     [confirmationIndexes, ifoodPendingConfirmations, requestedRouteId],
   );
 
+  // R99: informação local, não equivale a confirmação externa no portal.
+  const readyForPortalCount = useMemo(() => pendingManualConfirmations.filter((item) =>
+    (item.ifood_id || '').replace(/\D/g, '').length === 8 &&
+    (item.confirmation_code || '').replace(/\D/g, '').length === 4,
+  ).length, [pendingManualConfirmations]);
+
   const pendingOperationalCounts = useMemo(() => {
     const counts = { street: 0, prep: 0, post: 0, manual: 0 };
 
@@ -789,8 +795,9 @@ export default function ConfirmacoesPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar pedido, cliente, ID ou código"
-          className="dfl-search pl-11 pr-4 focus:border-red-500/50"
+          className="dfl-search pl-11 pr-16 focus:border-red-500/50"
         />
+        {query && <button type="button" onClick={() => setQuery('')} aria-label="Limpar busca de confirmações" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-2 text-[10px] font-bold text-red-300">Limpar</button>}
       </div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
@@ -831,7 +838,7 @@ export default function ConfirmacoesPage() {
               </p>
             </div>
             <span className="shrink-0 rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] font-black text-zinc-400">
-              {pendingManualConfirmations.length} pendente{pendingManualConfirmations.length === 1 ? '' : 's'}
+              {readyForPortalCount} pronto{readyForPortalCount === 1 ? '' : 's'} para abrir · {pendingManualConfirmations.length} pendente{pendingManualConfirmations.length === 1 ? '' : 's'}
             </span>
           </div>
 

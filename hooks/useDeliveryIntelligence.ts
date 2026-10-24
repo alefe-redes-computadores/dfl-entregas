@@ -10,10 +10,8 @@
 
 import { useMemo } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import {
-  buildOperationalIntelligence,
-  selectOperationalHighlights,
-} from '@/lib/delivery-intelligence';
+import { selectOperationalHighlights } from '@/lib/delivery-intelligence';
+import { cachedOperationalIntelligence } from '@/lib/delivery-intelligence/cachedOperationalIntelligence';
 
 export function useDeliveryIntelligence(options?: {
   lookbackDays?: number;
@@ -31,7 +29,7 @@ export function useDeliveryIntelligence(options?: {
   const highlightLimit = options?.highlightLimit ?? 2;
 
   return useMemo(() => {
-    const snapshot = buildOperationalIntelligence({
+    const snapshot = cachedOperationalIntelligence({
       deliveries,
       routes,
       customers,

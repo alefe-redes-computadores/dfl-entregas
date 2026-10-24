@@ -31,7 +31,7 @@ export function SiteOrderNotificationWatcher() {
         const notifications: Array<{ id: string; customerName?: string }> = [];
 
         for (const change of snapshot.docChanges()) {
-          if (change.type === 'removed') continue;
+          if (change.type === 'removed' || change.doc.metadata?.hasPendingWrites) continue;
           const delivery = change.doc.data() as Delivery;
           const id = delivery.id || change.doc.id;
           const pending = (delivery.site_order_status || '')
@@ -50,7 +50,7 @@ export function SiteOrderNotificationWatcher() {
           }
         }
 
-        markUnreadSiteOrders(newUnreadIds);
+        if (newUnreadIds.length) markUnreadSiteOrders(newUnreadIds);
         for (const item of notifications) {
           void notifyNewSiteOrder(
             item.id,

@@ -136,6 +136,23 @@ export function sameCustomerAddress(
   );
 }
 
+/** Identidade nao usa overlap de tokens: rua, numero, bairro e complemento precisam coincidir. */
+export function sameCustomerIdentityAddress(a?: string, b?: string): boolean {
+  const rawA = String(a || '').trim();
+  const rawB = String(b || '').trim();
+  const complete = (value: string) =>
+    /\b(?:rua|r|avenida|av|travessa|alameda|praca|praça|rodovia|estrada)\b/i.test(value) &&
+    Boolean(extractHouseNumber(value));
+  if (!complete(rawA) || !complete(rawB)) return false;
+  // Desconsiderar somente abreviacao de Numero (Nº 12 = 12); nunca bairro, lote ou complemento.
+  const comparable = (value: string) => normalizeCustomerAddress(
+    value.replace(/\br\.(?=\s)/gi, 'rua').replace(/\bav\.(?=\s)/gi, 'avenida')
+  ).replace(/\b(?:n|no|num|numero)\s+(?=\d)/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  return comparable(rawA) === comparable(rawB) &&
+    extractHouseNumber(rawA) === extractHouseNumber(rawB);
+}
+
 const nameTokens = (value?: string) =>
   normalizeCustomerName(value)
     .split(' ')
@@ -240,12 +257,11 @@ export function customerIdentityEvidence(
   // informado precisa conter rua E número reais para reutilização automática.
   // Endereço incompleto continua útil na entrega, mas não identifica cliente.
   const hasCompleteStreet = (value: string) =>
-    /\b(?:rua|r\.|avenida|av\.|travessa|alameda|praca|praça|rodovia|estrada)\b/i.test(value) &&
+    /\b(?:rua|r|avenida|av|travessa|alameda|praca|praça|rodovia|estrada)\b/i.test(value) &&
     Boolean(extractHouseNumber(value));
   const sameAddress =
-    Boolean(storedAddress && wantedAddress) &&
-    hasCompleteStreet(storedAddress) && hasCompleteStreet(wantedAddress) &&
-    knownAddresses.some(value=>hasCompleteStreet(value)&&sameCustomerAddress(value,wantedAddress));
+    Boolean(wantedAddress && hasCompleteStreet(wantedAddress)) &&
+    knownAddresses.some(value => sameCustomerIdentityAddress(value, wantedAddress));
 
   const storedNumber = extractHouseNumber(storedAddress);
   const wantedNumber = extractHouseNumber(wantedAddress);
@@ -310,13 +326,6 @@ export function customerIdentityEvidence(
     conflicts.push('Número do endereço diferente');
   }
 
-  const incomingHasIdentity =
-    Boolean(wantedPhone || wantedAddress);
-
-  const storedMissingIncomingIdentity =
-    Boolean(wantedPhone && !storedPhone) ||
-    Boolean(wantedAddress && !storedAddress);
-
   /*
    * Reutilização automática é diferente de sugestão de merge.
    *
@@ -328,25 +337,17 @@ export function customerIdentityEvidence(
    */
   // Maria e Maria R. são pessoas distintas até prova forte deliberada.
   // Similaridade serve para sugestão, jamais para vínculo automático.
-  const compatibleName = exactName;
-
   /*
    * O telefone confirmado pode unir uma variação pequena de nome, mas
    * nunca vence um endereço conhecido diferente. Já o nome exato pode
    * enriquecer um cadastro antigo incompleto sem criar um "Nome (2)".
    */
+  // Autoridade de cadastro: nome e endereco completos. Telefone nunca e identidade suficiente.
   const reusable =
+    exactName &&
+    sameAddress &&
     !addressConflict &&
-    !phoneConflict &&
-    (
-      (sameAddress && compatibleName) ||
-      (samePhone && compatibleName) ||
-      (
-        exactName &&
-        incomingHasIdentity &&
-        storedMissingIncomingIdentity
-      )
-    );
+    !phoneConflict;
 
   return {
     score: Math.max(0, Math.min(100, score)),
@@ -388,7 +389,8 @@ export function findExistingCustomer(
           Number(a.evidence.exactName),
     );
 
-  return ranked[0]?.customer;
+  // Identidades duplicadas igualmente validas precisam de escolha humana.
+  return ranked.length === 1 ? ranked[0].customer : undefined;
 }
 
 export function nextCustomerName(

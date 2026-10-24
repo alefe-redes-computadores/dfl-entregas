@@ -9,8 +9,10 @@ import {
   Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, UsersRound
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
+import { firstRequiredDeliveryIssue, focusDeliveryIssue, type DeliveryFormIssue, type DeliveryFormField } from '@/lib/operation/delivery-form-feedback';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
+import { normalizeCustomerName, sameCustomerIdentityAddress } from '@/lib/customer-identity';
 import { CustomerDestinationSheet } from '@/components/customers/CustomerDestinationSheet';
 import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
 import type { CustomerPhone, CustomerAddress } from '@/types';
@@ -83,6 +85,8 @@ const [routeId, setRouteId] = useState('');
   const [observation, setObservation] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
+  const [formIssue, setFormIssue] = useState<DeliveryFormIssue | null>(null);
+  useEffect(() => { setFormIssue(null); }, [fulfillmentMode, origin]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moveWholeStop, setMoveWholeStop] = useState(true);
@@ -426,6 +430,13 @@ const [routeId, setRouteId] = useState('');
     applyCustomerSelection(c);
   };
   const applyCustomerSelection = (c:Customer,chosenPhone?:CustomerPhone,chosenAddress?:CustomerAddress) => {
+    if (origin === 'ifood' && (
+      normalizeCustomerName(c.name) !== normalizeCustomerName(customerName) ||
+      !sameCustomerIdentityAddress(chosenAddress?.address || c.address, streetAddress)
+    )) {
+      toast.warning('Cliente diferente do pedido iFood. Nome e endereço devem coincidir.');
+      return;
+    }
     setCustomerName(c.name);
     const address=chosenAddress?.address||c.address;
     if (address) setStreetAddress(address);
@@ -492,20 +503,24 @@ const [routeId, setRouteId] = useState('');
     }
   }, [deliveryId, deliveries, router, getCustomerById, routes]);
 
+  const showFormIssue = (field: DeliveryFormField, message: string) => {
+    setFormIssue({ field, message });
+    if (field === 'route') setIsRouteDropdownOpen(true);
+    // O toast operacional já faz a vibração de erro no Android: não duplicar.
+    toast.error(message, { description: 'Campo destacado. Seus dados não foram apagados.' });
+    window.requestAnimationFrame(() => focusDeliveryIssue(field));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (currentDelivery && isCancelledSiteDelivery(currentDelivery)) {
       toast.error('Pedido cancelado: edição bloqueada.');
       return;
     }
-    if (!deliveryId || !value || (fulfillmentMode === 'delivery' && (!routeId || !streetAddress))) {
-      toast.error(
-        fulfillmentMode === 'delivery'
-          ? 'Preencha os campos obrigatórios (Rota, Valor e Rua)'
-          : 'Informe o valor do pedido',
-      );
-      return;
-    }
+    if (!deliveryId) { toast.error('Entrega não encontrada para edição.'); return; }
+    const requiredIssue = firstRequiredDeliveryIssue({ fulfillmentMode, routeId, address: streetAddress, value });
+    if (requiredIssue) { showFormIssue(requiredIssue.field, requiredIssue.message); return; }
+    setFormIssue(null);
 
     if (currentDelivery?.completed && operationalAssignmentChanged) {
       toast.error('Desfaça a baixa antes de alterar a logística deste pedido.', {
@@ -526,10 +541,7 @@ const [routeId, setRouteId] = useState('');
       if (!keepsExistingValidRoute) {
         const selectedRoute = selectableRoutes.find((route) => route.id === routeId);
         if (!selectedRoute) {
-          toast.error('Escolha uma rota aberta do mesmo dia deste pedido.', {
-            description:
-              'Rotas fechadas ou de outra data não podem receber novas associações.',
-          });
+          showFormIssue('route', 'Escolha uma rota aberta do mesmo dia deste pedido.');
           return;
         }
       }
@@ -537,20 +549,20 @@ const [routeId, setRouteId] = useState('');
 
     if (origin === 'ifood') {
       if (!orderId) {
-        toast.error('Pedidos do iFood exigem o Número do Pedido.');
+        showFormIssue('order','Pedidos do iFood exigem o Número do Pedido.');
         return;
       }
       if (confirmationCode && confirmationCode.length !== 4) {
-        toast.error('Código Inválido', { description: 'Deve conter exatamente 4 dígitos.' });
+        showFormIssue('order','Código iFood inválido: use exatamente 4 dígitos.');
         return;
       }
       if (ifoodId && ifoodId.length !== 8) {
-        toast.error('ID Inválido', { description: 'Deve conter exatamente 8 dígitos.' });
+        showFormIssue('order','ID iFood inválido: use exatamente 8 dígitos.');
         return;
       }
     }
     if (origin === 'food99' && !/^\d{6}$/.test(orderId)) {
-      toast.error('O pedido 99Food precisa ter seis dígitos.');
+      showFormIssue('order', 'O pedido 99Food precisa ter seis dígitos.');
       return;
     }
 
@@ -836,7 +848,17 @@ const [routeId, setRouteId] = useState('');
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+        {formIssue && (
+          <div role="alert" aria-live="assertive" className="flex items-start gap-3 rounded-2xl border border-red-500/55 bg-red-500/[.105] p-3.5 shadow-[0_8px_26px_rgba(127,29,29,0.14)]">
+            <AlertTriangle size={19} className="mt-0.5 shrink-0 text-red-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black text-red-200">{formIssue.message}</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-300">Corrija o campo destacado para continuar. Nenhuma informação foi descartada.</p>
+            </div>
+            <button type="button" onClick={() => focusDeliveryIssue(formIssue.field)} className="min-h-10 shrink-0 rounded-xl border border-red-400/35 bg-red-500/15 px-3 text-[11px] font-black text-red-100 active:scale-95">Corrigir</button>
+          </div>
+        )}
 
         {fulfillmentMode === 'delivery' && (
           <>
@@ -855,7 +877,7 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}
 
-        <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+        <section id="dfl-delivery-route" className={`rounded-[24px] border bg-zinc-900/35 p-4 transition-colors ${formIssue?.field === 'route' ? 'border-red-500/70 ring-1 ring-red-500/25' : 'border-zinc-800'}`}>
           <div className="mb-3">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-500">03 · Logística</p>
             <p className="mt-1 text-sm font-black text-zinc-200">Rota responsável</p>
@@ -864,11 +886,13 @@ const [routeId, setRouteId] = useState('');
             </p>
           </div>
         <div className="relative flex flex-col gap-2">
-          <label className="text-xs font-bold text-zinc-500">Selecionar rota</label>
+          <label className="text-xs font-bold text-zinc-400">Selecionar rota</label>
           <button
             type="button"
+            aria-invalid={formIssue?.field === 'route'}
+            aria-describedby={formIssue?.field === 'route' ? 'dfl-delivery-route-error' : undefined}
             onClick={() => setIsRouteDropdownOpen(!isRouteDropdownOpen)}
-            className={`flex h-14 w-full items-center justify-between rounded-2xl border bg-zinc-900/50 px-4 text-left transition-colors ${isRouteDropdownOpen ? 'border-emerald-500' : 'border-zinc-800'}`}
+            className={`flex h-14 w-full items-center justify-between rounded-2xl border bg-zinc-900/50 px-4 text-left transition-colors ${formIssue?.field === 'route' ? 'border-red-400 text-red-100' : isRouteDropdownOpen ? 'border-emerald-500' : 'border-zinc-800'}`}
           >
             <span className={routeId ? 'text-zinc-100' : 'text-zinc-500'}>
               {routeId ? (
@@ -883,6 +907,7 @@ const [routeId, setRouteId] = useState('');
             </span>
             <ChevronDown size={20} className={`text-zinc-500 transition-transform ${isRouteDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
+          {formIssue?.field === 'route' && <p id="dfl-delivery-route-error" className="text-xs font-semibold text-red-300">{formIssue.message}</p>}
 
           {currentRoute?.status === 'fechada' && !routeChanged && (
             <p className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-[11px] leading-relaxed text-zinc-500">
@@ -912,7 +937,7 @@ const [routeId, setRouteId] = useState('');
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => { setRouteId(r.id); setIsRouteDropdownOpen(false); }}
+                  onClick={() => { setRouteId(r.id); setFormIssue(null); setIsRouteDropdownOpen(false); if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined); }}
                   className="flex items-center justify-between px-4 py-4 text-left text-sm active:bg-zinc-800 border-b border-zinc-800/50 last:border-0"
                 >
                   <span className={`font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>
@@ -952,7 +977,7 @@ const [routeId, setRouteId] = useState('');
         )}
         {/* IDENTIFICADORES DO IFOOD */}
         {origin === 'ifood' && (
-          <section className="rounded-[24px] border border-red-500/15 bg-red-500/[.035] p-4 animate-in fade-in">
+          <section id="dfl-delivery-order" className="rounded-[24px] border border-red-500/15 bg-red-500/[.035] p-4 animate-in fade-in">
             <div className="mb-3"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">04 · Identificadores iFood</p><p className="mt-1 text-[11px] text-zinc-600">Revise os códigos vinculados ao pedido.</p></div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
@@ -1001,7 +1026,7 @@ const [routeId, setRouteId] = useState('');
           </div></section>
         )}
         {origin === 'food99' && (
-          <section className="rounded-[24px] border border-amber-400/25 bg-amber-400/[.055] p-4">
+          <section id="dfl-delivery-order" className="rounded-[24px] border border-amber-400/25 bg-amber-400/[.055] p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-300">04 · Pedido 99Food</p>
             <p className="mb-3 mt-1 text-[11px] text-zinc-500">Entrega externa: não participa de rota ou acerto DFL.</p>
             <input type="text" inputMode="numeric" maxLength={6} value={orderId} onChange={event=>setOrderId(event.target.value.replace(/\D/g,'').slice(0,6))} placeholder="Número de 6 dígitos" className="h-12 w-full rounded-xl border-2 border-amber-400/40 bg-zinc-900/80 px-3 font-black tracking-wider text-zinc-50 outline-none focus:border-amber-300" />
@@ -1011,7 +1036,7 @@ const [routeId, setRouteId] = useState('');
         {/* CLIENTE E WHATSAPP */}
         <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">05 · Cliente</p><p className="mt-1 text-sm font-black text-zinc-200">Contato e identificação</p></div>
-          <CustomerAutocomplete value={customerName} onChange={setCustomerName} onSelect={handleCustomerSelect} customers={customers} />
+          <CustomerAutocomplete value={customerName} onChange={setCustomerName} onSelect={handleCustomerSelect} customers={customers} addressContext={streetAddress} strictMatch={origin === 'ifood'} />
 
           <div className="grid grid-cols-1 gap-2">
             <div className="flex items-center gap-2">
@@ -1047,15 +1072,16 @@ const [routeId, setRouteId] = useState('');
         {fulfillmentMode === 'delivery' && (
           <>
         {/* ENDEREÇO E LINK MAPS */}
-        <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+        <section id="dfl-delivery-address" className={`flex flex-col gap-3 rounded-[24px] border bg-zinc-900/35 p-4 transition-colors ${formIssue?.field === 'address' ? 'border-red-500/70 ring-1 ring-red-500/25' : 'border-zinc-800'}`}>
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">06 · Destino</p><p className="mt-1 text-sm font-black text-zinc-200">Endereço da entrega</p></div>
           <AddressAutocomplete
             value={streetAddress}
-            onChange={setStreetAddress}
+            onChange={(next) => { setStreetAddress(next); if (formIssue?.field === 'address') setFormIssue(null); }}
             placeholder="Ex: Rua Major Gote, 100, Bairro"
             label="Endereço da Entrega*"
           />
 
+          {formIssue?.field === 'address' && <p role="status" className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">{formIssue.message}</p>}
           {addressAudit && (
             <div className={`p-3 rounded-xl border transition-all flex items-start gap-2.5 ${
               addressAudit.status === 'precise'
@@ -1099,7 +1125,7 @@ const [routeId, setRouteId] = useState('');
         )}
         {/* FINANCEIRO, CARGA E OBS */}
         <section className="flex flex-col gap-4 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
-          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400">07 · Financeiro</p><p className="mt-1 text-sm font-black text-zinc-200">Valor, pagamento e observações</p></div>
+          <div id="dfl-delivery-value"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400">07 · Financeiro</p><p className="mt-1 text-sm font-black text-zinc-200">Valor, pagamento e observações</p></div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-zinc-300">{origin==='ifood'&&hasIfoodSubsidy?'Cliente paga (R$)*':'Valor (R$)*'}</label>
@@ -1107,10 +1133,11 @@ const [routeId, setRouteId] = useState('');
                 type="text"
                 inputMode="numeric"
                 placeholder="0,00"
+                id="dfl-delivery-value-input"
                 value={value}
-                onChange={(e) => setValue(formatCurrencyInput(e.target.value))}
-                className="h-14 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xl font-bold text-zinc-50 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
-                required
+                aria-invalid={formIssue?.field === 'value'}
+                onChange={(e) => { setValue(formatCurrencyInput(e.target.value)); if (formIssue?.field === 'value') setFormIssue(null); }}
+                className={`h-14 rounded-xl border bg-zinc-900/50 px-4 text-xl font-bold text-zinc-50 placeholder:text-zinc-600 focus:outline-none ${formIssue?.field === 'value' ? 'border-red-500/70 focus:border-red-400' : 'border-zinc-800 focus:border-emerald-500'}`}
               />
             </div>
 

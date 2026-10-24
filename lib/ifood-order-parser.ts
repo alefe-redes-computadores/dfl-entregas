@@ -819,11 +819,10 @@ export function parseIfoodOrderText(
     }
 
     if (!result.customerName && looksLikeCustomerNameLine(line)) {
-      const known = longestKnownMatch(line, context.knownCustomerNames);
       const cleanedCandidate = line.replace(/^[-•*]\s*/, '').trim();
-      // Nome explícito conhecido ganha prioridade; nome literal continua
-      // preservado mesmo quando aparece antes ou várias linhas após o ID.
-      result.customerName = known || cleanedCandidate;
+      // O nome copiado do iFood e autoridade textual, nunca o nome mais proximo
+      // de cadastros antigos; preservado mesmo quando aparece antes ou várias linhas após o ID.
+      result.customerName = cleanedCandidate;
       return;
     }
 

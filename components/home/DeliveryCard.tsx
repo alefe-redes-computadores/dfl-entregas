@@ -18,6 +18,7 @@ import { appendDeliveryAttempt, deliveryAttemptLabel, DELIVERY_ATTEMPT_REASONS }
 import type { DeliveryAttemptReason } from '@/lib/delivery-attempts';
 import { buildNavigationLinks } from '@/lib/navigation-links';
 import { useAppStore } from '@/store/useAppStore';
+import { firstActionableCardIssue } from '@/lib/operation/operational-card-issues';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -64,7 +65,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
-  const ifoodConfirmationMode = useAppStore((state) => state.motoboys.find(item => item.id === route.motoboy_id)?.ifood_confirmation_mode || 'store');
+  const ifoodConfirmationMode = useAppStore((state) => (state.motoboys.find(item => item.id === route.motoboy_id) || state.motoboys.find(item => item.name === route.motoboy_name))?.ifood_confirmation_mode || 'store');
   const isExpanded = useAppStore((state) => isDeliveryExpanded(state.deliveries, delivery.id));
   const groupedDeliveries = stopDeliveries?.length ? stopDeliveries : [delivery];
   const navigationLinks = useMemo(() => buildNavigationLinks(delivery.address_string, delivery.maps_link), [delivery.address_string, delivery.maps_link]);
@@ -100,6 +101,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   // Movimentar o cartão via ref evita renderizar ~1.000 linhas de JSX a cada pixel.
   const swipeSurfaceRef = useRef<HTMLDivElement | null>(null);
   const swipeOffsetRef = useRef(0);
+  const swipeFrameRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (swipeFrameRef.current !== null) {
+      window.cancelAnimationFrame(swipeFrameRef.current);
+      swipeFrameRef.current = null;
+    }
+  }, []);
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [isSwiping, setIsSwiping] = useState(false);
   const reorderBusyRef = useRef(false);
@@ -156,16 +164,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isDeveloperTest = delivery.developer_test === true || delivery.owner_order_context === 'owner_provisional';
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
   const isUrgent = groupedDeliveries.some((item) => item.is_urgent);
-  // Uma única leitura da lista e um único cálculo por card/versão, evitando
-  // três varreduras completas do histórico em cada renderização.
-  const recurrenceDeliveries = useAppStore((state) => state.deliveries);
-  const recurrence = useMemo(
-    () => customerRecurrence(recurrenceDeliveries, delivery.customer_id, delivery),
-    [recurrenceDeliveries, delivery.customer_id, delivery.id, delivery.completed],
-  );
-  const customerTier = recurrence.tier;
-  const isVIP = Boolean(customerTier);
-
   const shortAddress = compactAddressForCard(delivery.address_string, customer?.address, customer?.neighborhood);
   const mapTarget = delivery.maps_link || customer?.maps_link || (shortAddress && shortAddress !== 'Endereço pendente' ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shortAddress)}` : '');
   const hasCoordinatesOrLink = !!(customer?.maps_link || delivery.maps_link);
@@ -183,6 +181,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       ? `55${whatsappDigits}`
       : '';
 
+  const cardIssue = useMemo(
+    () => firstActionableCardIssue(groupedDeliveries, route.id, (id) => getCustomerById(id)?.address),
+    [stopDeliveries, delivery, route.id, getCustomerById],
+  );
   const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
   const isAwaitingRoute = route.id === 'rota-aguardando-vinculo';
   const canDismissFromOperation =
@@ -272,7 +274,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     copyBusyRef.current = true;
     setCopyBusy(true);
     try {
-      const copied = await copyDeliveryToClipboard(delivery, customer?.name, isIfood ? delivery.confirmation_code : customer?.last_confirmation_code, groupedDeliveries, typeof delivery.order_index === 'number' ? delivery.order_index + 1 : undefined);
+      const copied = await copyDeliveryToClipboard(delivery, customer?.name, isIfood ? delivery.confirmation_code : customer?.last_confirmation_code, groupedDeliveries, typeof delivery.order_index === 'number' ? delivery.order_index + 1 : undefined, ifoodConfirmationMode);
       if (copied) toast.success('Entrega copiada!');
       else toast.error('Não foi possível copiar a entrega.', { description: 'Tente novamente. Nenhum pedido foi alterado.' });
     } finally {
@@ -560,10 +562,15 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   };
 
   const resetCardSwipe = () => {
+    if (swipeFrameRef.current !== null) {
+      window.cancelAnimationFrame(swipeFrameRef.current);
+      swipeFrameRef.current = null;
+    }
     const element = swipeSurfaceRef.current;
     if (element) {
       element.style.transition = 'transform 180ms ease-out';
-      element.style.transform = 'translateX(0px)';
+      element.style.transform = 'translate3d(0px,0,0)';
+      element.style.willChange = 'auto';
     }
     swipeOffsetRef.current = 0;
     setSwipeDirection(null);
@@ -603,12 +610,21 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         return;
       }
       swipeAxis.current = 'horizontal';
+      if (swipeSurfaceRef.current) swipeSurfaceRef.current.style.willChange = 'transform';
       setIsSwiping(true);
     }
     if (swipeAxis.current !== 'horizontal') return;
     const offset = Math.max(-112, Math.min(112, dx * 0.82));
     swipeOffsetRef.current = offset;
-    if (swipeSurfaceRef.current) swipeSurfaceRef.current.style.transform = `translateX(${offset}px)`;
+    // Não escrever transform centenas de vezes num só frame em aparelhos Android.
+    if (swipeFrameRef.current === null) {
+      swipeFrameRef.current = window.requestAnimationFrame(() => {
+        swipeFrameRef.current = null;
+        if (swipeAxis.current === 'horizontal' && swipeSurfaceRef.current) {
+          swipeSurfaceRef.current.style.transform = `translate3d(${swipeOffsetRef.current}px,0,0)`;
+        }
+      });
+    }
     const direction = offset > 55 ? 'right' : offset < -55 ? 'left' : null;
     // Só dois possíveis re-renders durante o gesto: armar/desarmar a ação.
     setSwipeDirection((previous) => previous === direction ? previous : direction);
@@ -635,7 +651,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   return (
     <>
       <div data-dfl-route-id={route.id} data-dfl-stop-index={canReorder ? position : undefined} className={clsx(
-          "relative overflow-hidden rounded-[18px] transition-all duration-200",
+          "relative overflow-hidden rounded-[18px] transition-colors duration-150",
           stopCompleted ? "opacity-80" : "shadow-sm",
           isUrgent && !stopCompleted && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
           isNeighbor && !stopCompleted && "border-amber-500/30",
@@ -651,11 +667,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           "absolute inset-0 flex items-center justify-between px-6 transition-colors duration-150",
           isDraggingRight ? "bg-sky-500/40" : isDraggingLeft ? "bg-emerald-500/50" : "bg-zinc-950"
         )}>
-          <div className={clsx("flex items-center gap-2 font-bold transition-all", isDraggingRight ? "opacity-100 text-sky-200 scale-110" : "opacity-40 text-zinc-400")}>
+          <div className={clsx("flex items-center gap-2 font-bold transition-[opacity,color,transform] duration-150", isDraggingRight ? "opacity-100 text-sky-200 scale-110" : "opacity-40 text-zinc-400")}>
             {isExpanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
             <span className="text-xs">{isExpanded ? 'Minimizar' : 'Expandir'}</span>
           </div>
-          <div className={clsx("flex items-center gap-2 font-bold transition-all", isDraggingLeft ? "opacity-100 text-emerald-200 scale-110" : "opacity-40 text-zinc-400")}>
+          <div className={clsx("flex items-center gap-2 font-bold transition-[opacity,color,transform] duration-150", isDraggingLeft ? "opacity-100 text-emerald-200 scale-110" : "opacity-40 text-zinc-400")}>
             <span className="text-xs">{isRecoveryRoute ? 'Corrigir rota' : 'Dar Baixa'}</span>
             <CheckCircle2 size={20} />
           </div>
@@ -675,10 +691,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           style={{ touchAction: 'pan-y' }}
           className={clsx("relative z-10 flex w-full flex-col bg-zinc-900", !isSwiping && "transition-transform duration-200")}
         >
-          <div className={clsx("flex flex-col", isExpanded ? "p-3.5 sm:p-4" : "px-3 py-2.5")}>
+          <div className={clsx("flex flex-col", isExpanded ? "p-3 sm:p-3.5" : "px-2.5 py-2")}>
             <div className="flex items-start gap-3">
-              <div className="relative mt-0.5 flex w-10 shrink-0 self-stretch flex-col items-center">
-                <span className={clsx('flex shrink-0 items-center justify-center rounded-xl border', isExpanded ? 'h-10 w-10' : 'h-9 w-9', channelStyle.shell)}>
+              <div className="relative mt-0.5 flex w-9 shrink-0 self-start flex-col items-center">
+                <span className={clsx('flex shrink-0 items-center justify-center rounded-lg border', isExpanded ? 'h-9 w-9' : 'h-9 w-9', channelStyle.shell)}>
                   <ChannelIcon size={19} aria-hidden="true" />
                 </span>
                 {position !== undefined && (
@@ -688,7 +704,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 )}
                 <span
                   aria-label={`Origem ${channelStyle.label}`}
-                  className={clsx('mt-2 flex w-7 min-h-16 flex-1 items-center justify-center rounded-xl border py-3 font-heading text-[10px] font-black uppercase tracking-[.18em]', channelStyle.badge)}
+                  className={clsx('mt-1.5 flex h-[65px] w-7 shrink-0 items-center justify-center rounded-lg border py-1 font-heading text-[9px] font-black uppercase tracking-[.10em]', channelStyle.badge)}
                   style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
                 >
                   {channelStyle.label}
@@ -700,9 +716,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   <div className="flex min-w-0 max-w-[54%] flex-col items-start gap-1">
                     <p className="max-w-full break-words font-heading text-[13px] font-black leading-snug tracking-tight text-zinc-50 [overflow-wrap:anywhere]">
                       {isGroupedStop
-                        ? `${groupedDeliveries.length} pedidos nesta parada`
+                        ? groupedDeliveries.every(item => item.customer_id === delivery.customer_id)
+                          ? `${customer?.name || delivery.customer_name || 'Cliente'} (${groupedDeliveries.length})`
+                          : `${groupedDeliveries.length} pedidos nesta parada`
                         : customer?.name || delivery.customer_name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
-                      {!isGroupedStop && isVIP && <Crown size={12} className="ml-1 inline align-middle text-amber-500" />}
                     </p>
                   </div>
                   <div className="min-w-0 max-w-[43%] shrink-0 flex flex-col items-end">
@@ -726,11 +743,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {!isGroupedStop && visualOrigin === 'food99' && delivery.order_id && <span className="rounded-md border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-300">#{delivery.order_id}</span>}
                   {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
-                  {isGroupedStop && !isExpanded && groupedFinance.collectCount > 0 && <span className="rounded-md border border-amber-500/25 bg-amber-500/[.07] px-2 py-0.5 text-[9px] font-bold text-amber-300">{groupedFinance.collectCount} cobrar</span>}
-                  {isGroupedStop && !isExpanded && groupedFinance.pendingCount > 0 && <span className="rounded-md border border-violet-500/25 bg-violet-500/[.07] px-2 py-0.5 text-[9px] font-bold text-violet-300">{groupedFinance.pendingCount} Pix/pendência</span>}
                   {!isGroupedStop && operationalContextLabel && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black text-sky-300">{operationalContextLabel}</span>}
-                  {!isGroupedStop && !isDeveloperTest && customerTier && <span className="rounded-md border border-amber-500/20 bg-amber-500/[.08] px-2 py-0.5 text-[9px] font-black text-amber-300">{customerTier === 'super' ? 'Supercliente' : 'Frequente'} · {recurrence.completedOrders} concluídos</span>}
-                  {!isGroupedStop && recurrence.milestoneLabel && <button type="button" onClick={(event) => { event.stopPropagation(); toast.info('Marco de cliente direto', { description: recurrence.milestoneLabel || undefined }); }} className="rounded-md border border-violet-500/25 bg-violet-500/[.08] px-2 py-0.5 text-[9px] font-black text-violet-300">{recurrence.milestoneLabel}</button>}
                   {isGroupedStop ? (
                     <span className="bg-violet-500/15 border border-violet-500/30 text-violet-300 px-2 py-0.5 rounded-md text-[10px] font-black shrink-0">
                       {groupedPending === 0 ? 'Todos concluídos' : `${groupedPending} pendente${groupedPending === 1 ? '' : 's'}`}
@@ -816,7 +829,26 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   {isUrgent && <span className="ml-1 rounded bg-red-500/20 text-red-400 text-[9px] px-1 font-bold uppercase">Urgente</span>}
                 </div>
 
-                {!delivery.completed && addressQuality.needsReview && (
+                {cardIssue && (
+                  <div role="alert" aria-label="Pendência da parada" className="mt-2 flex min-w-0 items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/[.07] px-2.5 py-2.5">
+                    <AlertTriangle size={15} className="shrink-0 text-red-400" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-black text-red-200">{cardIssue.label}</p>
+                      <p className="mt-0.5 text-[10px] leading-snug text-zinc-400">{cardIssue.detail}</p>
+                    </div>
+                    <Link
+                      data-no-card-swipe="true"
+                      href={`/entregas/editar?id=${encodeURIComponent(cardIssue.deliveryId)}${operationalDateQuery}`}
+                      onClick={(event) => { event.stopPropagation(); impact(ImpactStyle.Light); }}
+                      aria-label={`Corrigir ${cardIssue.label.toLowerCase()} do pedido`}
+                      className="flex min-h-10 shrink-0 items-center gap-1 rounded-lg border border-red-400/35 bg-red-500/15 px-2.5 text-[10px] font-black text-red-100 active:scale-[.98]"
+                    >
+                      <Pencil size={12} /> Corrigir
+                    </Link>
+                  </div>
+                )}
+
+                {!delivery.completed && !cardIssue && addressQuality.needsReview && (
                   <button
                     type="button"
                     data-no-card-swipe="true"
@@ -836,134 +868,37 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   </button>
                 )}
 
-                {/* VISUALIZAÇÃO COMPACTA */}
+                {/* VISUALIZAÇÃO COMPACTA — operação em duas linhas, sem iframe/mapa */}
                 {!isExpanded && (
-                  <div className="mt-1.5 flex w-full flex-col gap-1.5 border-t border-zinc-800/50 pt-1.5">
-
-                    <LocationEvidencePreview address={delivery.address_string} mapsLink={delivery.maps_link} compact />
-                    <div className="flex items-center gap-2.5">
-                      <a
-                        href={mapTarget || '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="relative h-10 w-10 shrink-0 rounded-xl overflow-hidden border border-emerald-500/20 bg-emerald-500/[0.07] flex items-center justify-center active:scale-95 transition-all group"
-                        onClick={event=>{if(!mapTarget){event.preventDefault();toast.warning('Confira o endereço antes de abrir o mapa.');}}}
-                        aria-label={mapTarget ? 'Abrir localização no Google Maps' : 'Endereço sem mapa válido'}
-                        title={mapTarget ? 'Ver no Google Maps' : 'Revisar endereço'}
-                      >
-                        <div className="absolute inset-0 bg-emerald-500/10 opacity-60 group-hover:opacity-100" />
-                        <MapIcon size={17} className="text-emerald-400 relative z-10" />
-                      </a>
-
-                      <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {isGroupedStop ? (
-                            <>
-                              {groupedToCollect.length > 0 && <span className="inline-flex items-center gap-1 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[10px] font-black text-amber-300"><Banknote size={11}/> {groupedToCollect.length} cobrar · {isPrivacyMode ? 'R$ •••' : `R$ ${groupedCollectValue.toFixed(2).replace('.', ',')}`}</span>}
-                              {groupedPixPending.length > 0 && <span className="inline-flex items-center gap-1 rounded-lg border border-violet-500/25 bg-violet-500/10 px-2 py-1 text-[10px] font-black text-violet-300"><QrCode size={11}/> {groupedPixPending.length} pagamento{groupedPixPending.length===1?'':'s'} pendente{groupedPixPending.length===1?'':'s'}</span>}
-                              {groupedToCollect.length === 0 && groupedPixPending.length === 0 && <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] font-black text-emerald-300"><CheckCircle2 size={11}/> Todos pagos</span>}
-                            </>
-                          ) : paymentState === 'paid' ? (
-                            <span className="flex items-center gap-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1.5 py-0.5 text-[10px] font-black shrink-0">
-                              <CheckCircle2 size={10} /> Pago
-                            </span>
-                          ) : (
-                            <span className={clsx("flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-black shrink-0", payment.className)}>
-                              <PaymentIcon size={10} />
-                              {paymentState === 'pending' ? 'Pix pendente' : payment.label === 'Dinheiro'
-                                ? `Cobrar dinheiro ${delivery.change_for ? `(Troco p/ ${isPrivacyMode ? '•••' : `R$ ${delivery.change_for.toFixed(2).replace('.', ',')}`})` : ''}`
-                                : 'Cobrar cartão'}
-                            </span>
-                          )}
-
-                          {!isGroupedStop && delivery.drinks && (
-                            <span className="flex items-center gap-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 px-1.5 py-0.5 text-[10px] font-black shrink-0 truncate max-w-[100px]">
-                              <CupSoda size={10} /> {delivery.drinks}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {delivery.notify_whatsapp && (
-                            <span className="flex items-center gap-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 text-[9px] font-black shrink-0">
-                              <MessageCircle size={9} /> Avisar no Portão
-                            </span>
-                          )}
-
-                          {isNeighbor && (
-                            <span className="rounded bg-sky-500/15 border border-sky-500/30 text-sky-400 px-1.5 py-0.5 text-[9px] font-extrabold uppercase shrink-0">
-                              Vizinhas {neighborPosition || 1}/{neighborTotal || 2}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2 border-t border-zinc-800/40 pt-2">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            await copyStop();
-                          }}
-                          disabled={copyBusy}
-                          aria-busy={copyBusy}
-                          className="flex min-w-0 items-center gap-1.5 h-9 px-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/40 active:scale-95 text-[11px] font-bold transition-all shadow-sm disabled:opacity-50"
-                        >
-                          {copyBusy ? <LoaderCircle size={13} className="animate-spin text-emerald-400" /> : <Copy size={13} className="text-emerald-500" />} {copyBusy ? 'Copiando…' : 'Copiar dados'}
-                        </button>
-
-                        {!isGroupedStop && normalizedWhatsappPhone && (
-                          <a
-                            href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 active:scale-90 transition-transform"
-                            title="Chamar cliente no WhatsApp"
-                      aria-label="Chamar cliente no WhatsApp"
-                          >
-                            <MessageCircle size={14} />
-                          </a>
-                        )}
-                      </div>
-
-                      {!isExpanded && canManageStop && (
-                        <div className="flex w-full flex-wrap items-center justify-start gap-2" aria-label="Reordenar parada">
-                          <button type="button" disabled={reorderBusy} onClick={(e)=>void toggleStopLock(e)} className={`flex h-9 items-center rounded-xl border px-2 text-[9px] font-black disabled:opacity-40 ${orderLocked?'border-amber-500/30 bg-amber-500/10 text-amber-300':'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{manualLocked?'Destravar':smartLocked?'Inteligente':'Fixar'}</button>
-                          <button type="button" data-no-card-swipe="true" onClick={(event) => {event.stopPropagation();setMoveSheetOpen(true);}} className="flex h-10 min-w-0 items-center justify-center gap-1 rounded-xl border border-sky-500/25 bg-sky-500/[.08] px-3 text-[11px] font-bold text-sky-200"><ArrowUp size={13}/><ArrowDown size={13}/>Mover</button>
-                          {canReorder && <div role="group" aria-label="Subir ou descer parada" className="flex shrink-0 items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]">
-                            <button
-                              type="button"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await moveStop(Math.max(0, (position || 1) - 2));
-                              }}
-                              className="flex h-10 w-10 items-center justify-center text-sky-200 active:bg-sky-500/15 disabled:text-zinc-600 disabled:opacity-40"
-                              disabled={reorderBusy || orderLocked || (position || 1) <= 1}
-                              aria-label="Mover uma posição para cima"
-                            >
-                              <ArrowUp size={13} />
-                            </button>
-                            <div className="h-4 w-px bg-zinc-800" />
-                            <button
-                              type="button"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await moveStop(position || 1);
-                              }}
-                              className="flex h-10 w-10 items-center justify-center text-sky-200 active:bg-sky-500/15 disabled:text-zinc-600 disabled:opacity-40"
-                              disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount}
-                              aria-label="Mover uma posição para baixo"
-                            >
-                              <ArrowDown size={13} />
-                            </button>
-                          </div>}
-
-                        </div>
+                  <div className="mt-1.5 flex flex-col gap-1.5 border-t border-zinc-800/50 pt-1.5">
+                    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                      {isGroupedStop ? (
+                        groupedFinance.collectCount > 0
+                          ? <span className="truncate rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-300">{groupedFinance.collectCount} cobrar · {isPrivacyMode ? 'R$ •••' : `R$ ${groupedCollectValue.toFixed(2).replace('.', ',')}`}</span>
+                          : groupedFinance.pendingCount > 0
+                            ? <span className="truncate rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] font-bold text-violet-300">{groupedFinance.pendingCount} Pix pendente</span>
+                            : <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">Pago</span>
+                      ) : paymentState === 'paid' ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300"><CheckCircle2 size={11}/> Pago</span>
+                      ) : (
+                        <span className={clsx('inline-flex min-w-0 items-center gap-1 truncate rounded-md border px-2 py-0.5 text-[10px] font-bold', payment.className)}><PaymentIcon size={11} className="shrink-0"/>{paymentState === 'pending' ? 'Pix pendente' : payment.label === 'Dinheiro' ? 'Cobrar dinheiro' : 'Cobrar cartão'}</span>
                       )}
+                      {!isGroupedStop && delivery.drinks && <span className="truncate text-[10px] text-sky-300"><CupSoda size={11} className="mr-1 inline"/>{delivery.drinks}</span>}
+                      {isNeighbor && <span className="ml-auto shrink-0 text-[9px] font-bold text-sky-400">Vizinha {neighborPosition || 1}/{neighborTotal || 2}</span>}
                     </div>
-
+                    <div className="flex min-w-0 items-center gap-1.5" aria-label="Ações rápidas da parada">
+                      {canManageStop && Boolean(routeStartedAt(route)) ? (
+                        <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();void handleTriggerAction('complete');}} className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-1.5 text-[11px] font-black text-emerald-300"><CheckCircle2 size={14}/>Dar baixa</button>
+                      ) : (
+                        <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();toggleDeliveryExpansion(delivery.id,true);}} className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border border-zinc-700 bg-zinc-950 px-1.5 text-[11px] font-bold text-zinc-300">Ver detalhes</button>
+                      )}
+                      {normalizedWhatsappPhone && <a href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`} target="_blank" rel="noreferrer" aria-label="Chamar cliente no WhatsApp" onClick={event=>event.stopPropagation()} className="grid h-10 w-9 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] text-emerald-300"><MessageCircle size={15}/></a>}
+                      {canReorder && <div role="group" aria-label="Subir ou descer parada" className="flex shrink-0 items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]">
+                        <button type="button" aria-label="Mover uma posição para cima" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={event=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-8 place-items-center text-sky-200 disabled:opacity-30"><ArrowUp size={14}/></button>
+                        <button type="button" aria-label="Mover uma posição para baixo" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={event=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 w-8 place-items-center text-sky-200 disabled:opacity-30"><ArrowDown size={14}/></button>
+                      </div>}
+                      <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();toggleDeliveryExpansion(delivery.id,true);}} aria-label="Expandir detalhes da parada" className="grid h-10 w-9 shrink-0 place-items-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-300"><Maximize2 size={15}/></button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -994,10 +929,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(0);}} className="min-h-10 rounded-xl border border-emerald-500/25 bg-emerald-500/[.07] px-3 text-[11px] font-black text-emerald-300 disabled:opacity-35">Ir primeiro</button>}
                     {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(pendingCount-1);}} className="min-h-10 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 text-[11px] font-black text-amber-300 disabled:opacity-35">Deixar por último</button>}
                   </div>}
-                  <p className="mt-2 break-words text-xs font-semibold leading-relaxed text-zinc-200">{shortAddress || 'Endereço não informado'}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
-                    {!isGroupedStop && position !== undefined && <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">Parada {position}</span>}
-                    <span className="rounded-lg bg-zinc-900 px-2 py-1 text-zinc-300">{isGroupedStop ? 'Vários pedidos na parada' : visualOrigin === 'site' ? 'Pedido do Site' : visualOrigin === 'ifood' ? 'Pedido iFood' : visualOrigin === 'food99' ? 'Pedido 99Food' : 'Pedido direto'}</span>
                     {!delivery.completed && groupedCodeDeliveries.length > 0 && <span className="rounded-lg bg-amber-500/10 px-2 py-1 font-bold text-amber-300">{groupedCodeDeliveries.length} código{groupedCodeDeliveries.length===1?'':'s'} para conferir</span>}
                     {activePhone && <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-300">Contato disponível</span>}
                   </div>
@@ -1062,6 +994,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       )}
 
       <SiteOrderSnapshot delivery={delivery} privacy={isPrivacyMode} />
+              <details className="mx-3 mb-2 rounded-xl border border-sky-500/15 bg-sky-500/[.035] p-2.5 text-[11px] text-zinc-300">
+                <summary className="cursor-pointer font-semibold text-sky-300">Mais sobre a localização</summary>
+                <div className="mt-2"><LocationEvidencePreview address={delivery.address_string} mapsLink={delivery.maps_link} compact /></div>
+              </details>
+              {isExpanded && !isGroupedStop && <RecurrenceDetails delivery={delivery} />}
 
               {delivery.observation && (
                 <div className="ml-14 mr-4 mb-3 rounded-2xl bg-amber-500/5 border border-amber-500/15 px-3.5 py-2.5">
@@ -1365,4 +1302,18 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       )}
     </>
   );
+}
+
+// Isolated subscription: compact stops must not all recalculate customer history
+// when unrelated deliveries change in Zustand.
+function RecurrenceDetails({ delivery }: { delivery: Delivery }) {
+  const recurrenceDeliveries = useAppStore((state) => state.deliveries);
+  const recurrence = useMemo(() => customerRecurrence(recurrenceDeliveries, delivery.customer_id, delivery),
+    [recurrenceDeliveries, delivery.customer_id, delivery.id, delivery.completed]);
+  const isTest = delivery.developer_test === true || delivery.owner_order_context === 'owner_provisional';
+  if (isTest || (!recurrence.tier && !recurrence.milestoneLabel)) return null;
+  return <div className="flex flex-wrap items-center gap-1.5 text-[10px]" aria-label="Histórico do cliente">
+    {recurrence.tier && <span className="rounded-lg bg-amber-500/10 px-2 py-1 font-bold text-amber-300"><Crown size={12} className="mr-1 inline"/>{recurrence.tier === 'super' ? 'Supercliente' : 'Frequente'} · {recurrence.completedOrders} concluídos</span>}
+    {recurrence.milestoneLabel && <button type="button" onClick={() => toast.info('Marco de cliente direto', { description: recurrence.milestoneLabel || undefined })} className="rounded-lg bg-violet-500/10 px-2 py-1 font-bold text-violet-300">{recurrence.milestoneLabel}</button>}
+  </div>;
 }

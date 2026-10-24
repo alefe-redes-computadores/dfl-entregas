@@ -89,6 +89,11 @@ export function latestSyncDiagnostic() {
   return readSyncDiagnostics()[0] || null;
 }
 
+/** Falhas recentes nunca devem virar o rótulo 'Atualizado agora'. */
+export function latestSuccessfulSyncDiagnostic() {
+  return readSyncDiagnostics().find((item) => item.status === 'success') || null;
+}
+
 export function clearSyncDiagnostics() {
   if (typeof window === 'undefined') return;
   try {

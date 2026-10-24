@@ -1,0 +1,36 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+const read=p=>fs.readFileSync(p,'utf8');
+const card=read('components/home/DeliveryCard.tsx'),route=read('components/home/RouteAccordion.tsx'),inbox=read('app/loja/caixa-de-entrada/page.tsx');
+const ok=(p,c)=>{assert.ok(c,p); console.log('OK R82-R4: '+p)};
+for(const p of ['components/home/DeliveryCard.tsx','components/home/RouteAccordion.tsx','app/loja/caixa-de-entrada/page.tsx']){
+ const ast=ts.createSourceFile(p,read(p),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+ assert.equal(ast.parseDiagnostics.length,0,'JSX '+p);
+ console.log('JSX OK: '+p);
+}
+const compact=card.split('{/* VISUALIZAÇÃO COMPACTA —')[1]?.split('{/* VISUALIZAÇÃO EXPANDIDA */}')[0]||'';
+const expanded=card.split('{/* VISUALIZAÇÃO EXPANDIDA */}')[1]||'';
+ok('compacto não renderiza componente de mapa',!compact.includes('LocationEvidencePreview')&&!compact.includes('<MiniMap'));
+ok('origem vertical limitada',card.includes('self-start')&&card.includes('h-[65px]'));
+ok('baixa executa handler e não pagamento fictício',compact.includes("handleTriggerAction('complete')")&&card.includes('executeCompletion('));
+ok('contato só abre número normalizado',compact.includes('normalizedWhatsappPhone')&&compact.includes('https://wa.me/'));
+ok('subir bloqueado por posição e trava',compact.includes('disabled={reorderBusy || orderLocked || (position || 1) <= 1}'));
+ok('descer bloqueado por posição e trava',compact.includes('disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount}'));
+ok('grupo possui nome e quantidade',card.includes('pedidos nesta parada')&&card.includes('groupedPending'));
+ok('tentativas permanecem independentes da baixa',card.includes('Registrar tentativa (sem dar baixa)'));
+ok('código iFood permanece por pedido',card.includes('orderConfirmationCode(suppliedCode || storedConfirmationCode(item))'));
+ok('histórico de cliente só na expansão',card.includes('function RecurrenceDetails')&&card.includes('<RecurrenceDetails delivery={delivery} />')&&card.indexOf('function RecurrenceDetails')>card.indexOf('export function DeliveryCard'));
+ok('recorrência memoizada em um único ponto',(card.match(/customerRecurrence\(/g)||[]).length===1&&card.includes('const recurrence = useMemo('));
+ok('expandido inclui conferência de localização',expanded.includes('LocationEvidencePreview'));
+ok('perfis comerciais mantidos',['IFOOD','99FOOD','SITE','LOJA','MISTO'].every(v=>card.includes(`label: '${v}'`)));
+ok('sequência oculta com única parada',route.includes('routePreviewStops.length > 0 && routePreviewStops.length > 1'));
+ok('planejamento sob demanda',route.includes('{showPlanning && <div')&&route.includes('<PreRouteIntelligence')&&route.includes('<RouteSequenceAdvisor'));
+ok('Inbox com duas abas simples',inbox.includes('>Site</button>')&&inbox.includes('>Importar</button>'));
+ok('contadores só nos filtros',inbox.includes('aria-label="Filtrar rascunhos da Caixa de Entrada"')&&inbox.includes('active.length')&&inbox.includes('review.length')&&inbox.includes('ready.length')&&!inbox.includes('<Stat'));
+ok('nenhuma integração removida',inbox.includes('SiteInboxPanel')&&inbox.includes('parseIfoodOrdersText')&&inbox.includes('normalizeFood99Order'));
+ok('nenhum listener remoto extra',!/(?:onSnapshot|getDocs|runTransaction)\(/.test([card,route,inbox].join('\n')));
+const suite=read('scripts/test-v112-r82-inbox-mobile.cjs');
+ok('contrato R82 local verifica a caixa sem duplicação',suite.includes('filtros e contadores operacionais preservados')&&suite.includes("ui.includes('>Site</button>')"));
+const run=read('scripts/pre-apk.cjs');
+ok('PRE-APK preserva testes R81 e R82',run.includes('scripts/test-v112-r81-interaction-attempt.cjs')&&run.includes('scripts/test-v112-r82-inbox-mobile.cjs'));
+console.log('R82-R4: contratos independentes de UX, rota e caixa aprovados');

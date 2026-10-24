@@ -8,6 +8,7 @@ import {
   MessageCircle, Info, Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, Trash2, UsersRound, TicketPercent,
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
+import { firstRequiredDeliveryIssue, focusDeliveryIssue, type DeliveryFormIssue, type DeliveryFormField } from '@/lib/operation/delivery-form-feedback';
 import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { paymentStateForInput } from '@/lib/delivery-finance';
 import { firstMultiOrderIssue } from '@/lib/operation/multiOrderDraft';
@@ -25,7 +26,7 @@ import { assessIfoodParseQuality, buildIfoodParseGuide, buildIfoodRecognitionSum
 import { loadInboxDay, markInboxDraft } from '@/lib/delivery-inbox';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
-import { customerIdentityEvidence, sameCustomerAddress } from '@/lib/customer-identity';
+import { customerIdentityEvidence, sameCustomerAddress, sameCustomerIdentityAddress, normalizeCustomerName } from '@/lib/customer-identity';
 import {
   auditOperationalAddress,
   knownOperationalNeighborhoods,
@@ -143,6 +144,8 @@ const [routeId, setRouteId] = useState('');
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [formIssue, setFormIssue] = useState<DeliveryFormIssue | null>(null);
+  useEffect(() => { setFormIssue(null); }, [fulfillmentMode, origin]);
   const [extraIfoodOrders, setExtraIfoodOrders] = useState<ExtraIfoodOrderDraft[]>([]);
   const [activeDraftId, setActiveDraftId] = useState('primary');
   const activeExtra = origin === 'ifood' ? extraIfoodOrders.find((draft) => draft.id === activeDraftId) : undefined;
@@ -165,6 +168,7 @@ const [routeId, setRouteId] = useState('');
   const activeDrinks = activeExtra?.drinks ?? drinks;
   const activeObservation = activeExtra?.observation ?? observation;
   const activeNotifyWhatsapp = activeExtra?.notifyWhatsapp ?? notifyWhatsapp;
+  useEffect(() => { if (formIssue?.field === 'address' && activeAddress.trim()) setFormIssue(null); }, [activeAddress, formIssue]);
   const setActiveOrderId = (next: string) => activeExtra ? updateActiveExtra({orderId:next}) : setOrderId(next);
   const setActiveIfoodId = (next: string) => activeExtra ? updateActiveExtra({ifoodId:next}) : setIfoodId(next);
   const setActiveConfirmationCode = (next: string) => activeExtra ? updateActiveExtra({confirmationCode:next}) : setConfirmationCode(next);
@@ -194,10 +198,14 @@ const [routeId, setRouteId] = useState('');
     const query = normalizeIdentity(activeCustomerName);
     if (!query) return null;
     const identityDetails = { address: activeAddress || undefined, phone: activePhone || undefined };
-    const reusable = customers.map((customer) => ({ customer, evidence: customerIdentityEvidence(customer, activeCustomerName, identityDetails) })).filter((item) => item.evidence.reusable).sort((a,b) => b.evidence.score - a.evidence.score);
+    // So avaliar evidencias custosas de nomes completos iguais, sem varrer contatos de homonimos em toda tecla.
+    const reusable = customers.filter((customer) => normalizeCustomerName(customer.name) === query)
+      .map((customer) => ({ customer, evidence: customerIdentityEvidence(customer, activeCustomerName, identityDetails) }))
+      .filter((item) => item.evidence.reusable).sort((a,b) => b.evidence.score - a.evidence.score);
     if (reusable.length === 1) return { kind: 'existing' as const, customer: reusable[0].customer, count: 1 };
     if (reusable.length > 1) return { kind: 'multiple' as const, count: reusable.length };
-    const sameAddressCandidates = customers.filter((customer) => Boolean(activeAddress && customer.address && sameCustomerAddress(customer.address, activeAddress)));
+    const sameAddressCandidates = customers.filter((customer) =>
+      Boolean(activeAddress) && customerAddresses(customer).some((entry) => sameCustomerIdentityAddress(entry.address, activeAddress)));
     if (sameAddressCandidates.length) return { kind: 'same_address' as const, count: sameAddressCandidates.length };
     return { kind: 'new' as const, count: 0 };
   }, [activeCustomerName, customers, activePhone, selectedCustomerId, activeAddress]);
@@ -469,6 +477,14 @@ const [routeId, setRouteId] = useState('');
     applyCustomerSelection(c,undefined,undefined,typedQuery);
   };
   const applyCustomerSelection = (c:Customer, chosenPhone?:CustomerPhone, chosenAddress?:CustomerAddress, typedQuery?:string) => {
+    // Escolha no autocomplete nao autoriza sobrescrever rua, telefone ou nome copiados do iFood.
+    if (origin === 'ifood' && (
+      normalizeCustomerName(c.name) !== normalizeCustomerName(activeCustomerName) ||
+      !sameCustomerIdentityAddress(chosenAddress?.address || c.address, activeAddress)
+    )) {
+      toast.warning('Cliente diferente do pedido iFood. Nome e endereço completos devem coincidir.');
+      return;
+    }
     previousCustomerDraft.current = {
       name: typedQuery || typedCustomerBeforeSelection.current || activeCustomerName,
       phone: activePhone, address: activeAddress, mapsLink: activeMapsLink,
@@ -490,14 +506,24 @@ const [routeId, setRouteId] = useState('');
 
   const parseMoney = (input:string) => { const parsed=Number(input.replace(/\./g,'').replace(',','.')); return Number.isFinite(parsed)?parsed:0; };
 
+  const showFormIssue = (field: DeliveryFormField, message: string) => {
+    setFormIssue({ field, message });
+    if (field === 'route') setIsRouteDropdownOpen(true);
+    // O toast operacional já faz a vibração de erro no Android: não duplicar.
+    toast.error(message, { description: 'Campo destacado. Seus dados não foram apagados.' });
+    window.requestAnimationFrame(() => focusDeliveryIssue(field));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if(isSyncing && !hasHydrated){toast.info('Aguarde a atualização dos clientes terminar.',{description:'Aguarde a hidratação inicial dos cadastros antes de salvar.'});return}
     // Com dados locais hidratados, sync em segundo plano nao deve bloquear o cadastro.
     // A identidade ainda e revalidada em findOrCreateCustomer antes do Firestore.
-    if(!value||(fulfillmentMode==='delivery'&&(!routeId||!streetAddress))){toast.error(fulfillmentMode==='delivery'?'Preencha os campos obrigatórios (Rota, Valor e Rua)':'Informe o valor do pedido');return}
-    if(origin==='food99'&&!/^\d{6}$/.test(orderId)){toast.error('Informe o número de 6 dígitos do pedido 99Food.');return}
-    if(fulfillmentMode==='delivery'&&!openRoutes.some(route=>route.id===routeId)){toast.error('Selecione uma rota aberta da operação de hoje.');return}
+    const requiredIssue = firstRequiredDeliveryIssue({ fulfillmentMode, routeId, address: activeAddress, value: activeValue });
+    if (requiredIssue) { showFormIssue(requiredIssue.field, requiredIssue.message); return; }
+    setFormIssue(null);
+    if(origin==='food99'&&!/^\d{6}$/.test(orderId)){showFormIssue('order', 'Informe o número de 6 dígitos do pedido 99Food.');return}
+    if(fulfillmentMode==='delivery'&&!openRoutes.some(route=>route.id===routeId)){showFormIssue('route','Selecione uma rota aberta da operação de hoje.');return}
     const drafts=origin==='ifood'?[{id:'primary',orderId,ifoodId,confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:'',paymentMethod,isPaid,changeFor,address:streetAddress,phone,mapsLink,drinks,observation,notifyWhatsapp},...extraIfoodOrders]:[];
     if (origin === 'ifood') {
       const issue = firstMultiOrderIssue(drafts);
@@ -511,7 +537,7 @@ const [routeId, setRouteId] = useState('');
           invalid_confirmation: 'O código de confirmação precisa ter quatro dígitos.',
           charge_required: 'Informe o valor individual deste pedido.',
         } as const;
-        toast.error(messages[issue.kind], {description:'Aba selecionada para revisão. Nenhum pedido foi salvo.'});
+        showFormIssue(issue.kind === 'charge_required' ? 'value' : 'order', messages[issue.kind]);
         return;
       }
     }
@@ -784,7 +810,17 @@ const [routeId, setRouteId] = useState('');
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+        {formIssue && (
+          <div role="alert" aria-live="assertive" className="flex items-start gap-3 rounded-2xl border border-red-500/55 bg-red-500/[.105] p-3.5 shadow-[0_8px_26px_rgba(127,29,29,0.14)]">
+            <AlertTriangle size={19} className="mt-0.5 shrink-0 text-red-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black text-red-200">{formIssue.message}</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-300">Corrija o campo destacado para continuar. Nenhuma informação foi descartada.</p>
+            </div>
+            <button type="button" onClick={() => focusDeliveryIssue(formIssue.field)} className="min-h-10 shrink-0 rounded-xl border border-red-400/35 bg-red-500/15 px-3 text-[11px] font-black text-red-100 active:scale-95">Corrigir</button>
+          </div>
+        )}
 
         {fulfillmentMode === 'delivery' && (
           <>
@@ -805,7 +841,7 @@ const [routeId, setRouteId] = useState('');
               </button>
             )}
         {/* ROTA */}
-        <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+        <section id="dfl-delivery-route" className={`rounded-[24px] border bg-zinc-900/35 p-4 transition-colors ${formIssue?.field === 'route' ? 'border-red-500/70 ring-1 ring-red-500/25' : 'border-zinc-800'}`}>
           <div className="mb-3">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-500">03 · Logística</p>
             <p className="mt-1 text-sm font-black text-zinc-200">Rota responsável</p>
@@ -814,11 +850,13 @@ const [routeId, setRouteId] = useState('');
             </p>
           </div>
         <div className="relative flex flex-col gap-2">
-          <label className="text-xs font-bold text-zinc-500">Selecionar rota</label>
+          <label className="text-xs font-bold text-zinc-400">Selecionar rota</label>
           <button
             type="button"
+            aria-invalid={formIssue?.field === 'route'}
+            aria-describedby={formIssue?.field === 'route' ? 'dfl-delivery-route-error' : undefined}
             onClick={() => setIsRouteDropdownOpen(!isRouteDropdownOpen)}
-            className={`flex h-14 w-full items-center justify-between rounded-2xl border bg-zinc-900/50 px-4 text-left transition-colors ${isRouteDropdownOpen ? 'border-emerald-500' : 'border-zinc-800'}`}
+            className={`flex h-14 w-full items-center justify-between rounded-2xl border bg-zinc-900/50 px-4 text-left transition-colors ${formIssue?.field === 'route' ? 'border-red-400 text-red-100' : isRouteDropdownOpen ? 'border-emerald-500' : 'border-zinc-800'}`}
           >
             <span className={routeId ? 'text-zinc-100' : 'text-zinc-500'}>
               {routeId ? (
@@ -838,7 +876,7 @@ const [routeId, setRouteId] = useState('');
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => { routeSelectionTouched.current = true; setRouteId(r.id); rememberActiveOperationalRouteId(r.id); setIsRouteDropdownOpen(false); }}
+                  onClick={() => { routeSelectionTouched.current = true; setRouteId(r.id); rememberActiveOperationalRouteId(r.id); setFormIssue(null); setIsRouteDropdownOpen(false); if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined); }}
                   className="flex items-center justify-between px-4 py-4 text-left text-sm active:bg-zinc-800 border-b border-zinc-800/50 last:border-0"
                 >
                   <span className={`font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>
@@ -853,6 +891,7 @@ const [routeId, setRouteId] = useState('');
               ))}
             </div>
           )}
+          {formIssue?.field === 'route' && <p id="dfl-delivery-route-error" className="text-xs font-semibold text-red-300">{formIssue.message}</p>}
         </div>
         </section>
 
@@ -877,7 +916,7 @@ const [routeId, setRouteId] = useState('');
         )}
         {/* IDENTIFICADORES DO IFOOD */}
         {origin === 'ifood' && (
-          <section className="rounded-[24px] border border-red-500/15 bg-red-500/[.035] p-4 animate-in fade-in"><div className="mb-3"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">04 · Identificadores iFood</p><p className="mt-1 text-[11px] text-zinc-600">Número do pedido, ID e código de confirmação.</p></div><div className="grid grid-cols-2 gap-3">
+          <section id="dfl-delivery-order" className="rounded-[24px] border border-red-500/15 bg-red-500/[.035] p-4 animate-in fade-in"><div className="mb-3"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">04 · Identificadores iFood</p><p className="mt-1 text-[11px] text-zinc-600">Número do pedido, ID e código de confirmação.</p></div><div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-emerald-400">Nº Pedido*</label>
               <input
@@ -935,7 +974,7 @@ const [routeId, setRouteId] = useState('');
         )}
 
         {origin === 'food99' && (
-          <section className="rounded-[24px] border border-amber-400/25 bg-amber-400/[.055] p-4 animate-in fade-in">
+          <section id="dfl-delivery-order" className="rounded-[24px] border border-amber-400/25 bg-amber-400/[.055] p-4 animate-in fade-in">
             <div className="mb-3"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-300">04 · Identificador 99Food</p><p className="mt-1 text-[11px] text-zinc-500">Somente o número comercial de seis dígitos. Não existe código iFood.</p></div>
             <label className="flex flex-col gap-1.5">
               <span className="text-xs font-bold text-amber-200">Nº do pedido*</span>
@@ -960,6 +999,8 @@ const [routeId, setRouteId] = useState('');
             }}
             onSelect={handleCustomerSelect}
             customers={customers}
+            addressContext={activeAddress}
+            strictMatch={origin === 'ifood'}
           />
           {selectedCustomerLabel && !activeExtra && (
             <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 py-2">
@@ -1020,7 +1061,7 @@ const [routeId, setRouteId] = useState('');
         {fulfillmentMode === 'delivery' && (
           <>
         {/* ENDEREÇO E LINK MAPS */}
-        <section className="flex flex-col gap-3 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
+        <section id="dfl-delivery-address" className={`flex flex-col gap-3 rounded-[24px] border bg-zinc-900/35 p-4 transition-colors ${formIssue?.field === 'address' ? 'border-red-500/70 ring-1 ring-red-500/25' : 'border-zinc-800'}`}>
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">06 · Destino</p>
             <p className="mt-1 text-sm font-black text-zinc-200">Endereço da entrega</p>
@@ -1034,6 +1075,7 @@ const [routeId, setRouteId] = useState('');
             localityHint="Patos de Minas · MG"
           />
 
+          {formIssue?.field === 'address' && <p role="status" className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">{formIssue.message}</p>}
           {addressAudit && (
             <div className={`p-3 rounded-xl border transition-all flex items-start gap-2.5 ${
               addressAudit.status === 'precise'
@@ -1077,7 +1119,7 @@ const [routeId, setRouteId] = useState('');
         )}
         {/* FINANCEIRO E PRODUTOS */}
         <section className="flex flex-col gap-4 rounded-[24px] border border-zinc-800 bg-zinc-900/35 p-4">
-          <div>
+          <div id="dfl-delivery-value">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400">07 · Financeiro</p>
             <p className="mt-1 text-sm font-black text-zinc-200">Valor, pagamento e observações</p>
           </div>
@@ -1088,10 +1130,11 @@ const [routeId, setRouteId] = useState('');
                 type="text"
                 inputMode="numeric"
                 placeholder="0,00"
+                id="dfl-delivery-value-input"
                 value={activeValue}
-                onChange={(e) => setActiveValue(formatCurrencyInput(e.target.value))}
-                className="h-14 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xl font-bold text-zinc-50 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
-                required
+                aria-invalid={formIssue?.field === 'value'}
+                onChange={(e) => { setActiveValue(formatCurrencyInput(e.target.value)); if (formIssue?.field === 'value') setFormIssue(null); }}
+                className={`h-14 rounded-xl border bg-zinc-900/50 px-4 text-xl font-bold text-zinc-50 placeholder:text-zinc-600 focus:outline-none ${formIssue?.field === 'value' ? 'border-red-500/70 focus:border-red-400' : 'border-zinc-800 focus:border-emerald-500'}`}
               />
             </div>
 
