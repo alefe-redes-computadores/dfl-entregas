@@ -43,6 +43,23 @@ export function StockPurchaseIntelligencePanel({ rows, checked, invalid }: Props
   const unpricedForSelection = chosenValid ? forecast.totalItems - selectedLines.length : forecast.unpriced.length;
   const budgetIncomplete = unpricedForSelection > 0;
   const summaryIsEmpty = forecast.totalItems === 0;
+  // R105: risco de cotacao e potencial de economia sao SOMENTE indicadores.
+  // O orcamento, o fornecedor escolhido e a confirmacao da compra nao mudam.
+  const buyingInsight = useMemo(() => {
+    let aged = 0, withoutQuote = 0, comparable = 0, possibleSavings = 0, staleAlternatives = 0;
+    for (const line of forecast.lines) {
+      if (!line.best) { withoutQuote++; continue; }
+      if (line.best.stale) aged++;
+      const eligible = line.quotes.filter(quote => !quote.unlinked && !quote.stale && Number.isFinite(quote.estimatedTotal) && quote.estimatedTotal > 0);
+      if (!eligible.length) { staleAlternatives++; continue; }
+      if (eligible.length < 2) continue;
+      comparable++;
+      const min = Math.min(...eligible.map(quote => quote.estimatedTotal));
+      const max = Math.max(...eligible.map(quote => quote.estimatedTotal));
+      possibleSavings += Math.max(0, max - min);
+    }
+    return { aged, withoutQuote, comparable, staleAlternatives, possibleSavings };
+  }, [forecast.lines]);
 
   const text = () => stockSupplierPurchaseText(forecast, checked, new Date(), chosenValid);
   const run = async (kind: 'share' | 'copy' | 'pdf') => {
@@ -109,6 +126,24 @@ export function StockPurchaseIntelligencePanel({ rows, checked, invalid }: Props
         </div>
         <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-relaxed text-zinc-500"><Info size={13} className="mt-0.5 shrink-0" />Preços anteriores não garantem oferta atual. Total parcial não é o custo final da compra.</p>
         {forecast.lines.some(line => line.best?.stale) && <p className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/[.065] px-3 py-2 text-[10px] text-amber-200">Alguns preços têm mais de 45 dias. Confirme antes de comprar.</p>}
+        {!summaryIsEmpty && <div data-r105-buying-insight className="mt-2 grid grid-cols-2 gap-2" aria-label="Qualidade do historico de compras">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-2.5">
+            <p className="text-[9px] font-bold text-zinc-500">Precos antigos (45+ dias)</p>
+            <p className={`mt-1 text-base font-black ${buyingInsight.aged ? 'text-amber-300' : 'text-emerald-300'}`}>{buyingInsight.aged}</p>
+            <p className="text-[9px] text-zinc-600">Confirmar antes de comprar</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-2.5">
+            <p className="text-[9px] font-bold text-zinc-500">Sem preco confiavel</p>
+            <p className={`mt-1 text-base font-black ${buyingInsight.withoutQuote ? 'text-amber-300' : 'text-emerald-300'}`}>{buyingInsight.withoutQuote}</p>
+            <p className="text-[9px] text-zinc-600">Pesquisar e cotar</p>
+          </div>
+          {buyingInsight.comparable > 0 && <div className="col-span-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[.045] p-3">
+            <p className="text-[9px] font-black uppercase tracking-wider text-emerald-300">Comparacao de precos recentes</p>
+            <p className="mt-1 text-sm font-black text-zinc-100">Ate {money(buyingInsight.possibleSavings)} de diferenca historica</p>
+            <p className="mt-1 text-[9px] leading-relaxed text-zinc-400">{buyingInsight.comparable} item(ns) com 2 ou mais fornecedores recentes. Diferenca entre maior e menor historico, nao economia garantida e nao inclui itens sem cotacao.</p>
+          </div>}
+          {buyingInsight.staleAlternatives > 0 && <p className="col-span-2 text-[9px] text-amber-300">{buyingInsight.staleAlternatives} produto(s) tem preco registrado, mas nenhum preco recente e confiavel.</p>}
+        </div>}
         {summaryIsEmpty ? (
           <p className="mt-3 text-xs text-zinc-500">Selecione produtos para comparar os custos históricos e montar seu roteiro por fornecedor.</p>
         ) : (
@@ -140,6 +175,7 @@ export function StockPurchaseIntelligencePanel({ rows, checked, invalid }: Props
                 <p className="truncate text-[11px] font-bold text-zinc-100">{line.row.name}</p>
                 <p className="mt-0.5 text-[9px] text-zinc-500">{line.row.purchaseText}</p>
                 <p className="mt-1 truncate text-[9px] text-zinc-400">{quote ? `${quote.supplierName} · ${quote.ageDays} dia(s) atrás${quote.stale ? ' · antigo' : ''}` : 'Sem preço no histórico'}</p>
+                {line.quotes.filter(q => !q.unlinked && !q.stale).length >= 2 && <p className="mt-1 text-[9px] font-semibold text-emerald-300">{line.quotes.filter(q => !q.unlinked && !q.stale).length} opcoes recentes · menor {money(Math.min(...line.quotes.filter(q => !q.unlinked && !q.stale).map(q => q.estimatedTotal)))}</p>}
               </div>
               <span className="shrink-0 text-right text-[11px] font-black text-zinc-200">{quote ? money(quote.estimatedTotal) : 'A cotar'}</span>
             </div>;

@@ -387,6 +387,8 @@ export interface Delivery {
   value: number;
   is_paid: boolean;
   payment_method: PaymentMethod;
+  /** Partes de pagamento validadas em centavos. Ausente nos pedidos legados. */
+  payment_splits?: import('@/lib/delivery-payment-split').DeliveryPaymentPart[];
   /**
    * Estado financeiro operacional explícito.
    * Registros legados continuam válidos: a camada financeira deriva o estado

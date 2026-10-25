@@ -11,6 +11,7 @@ import { toast } from '@/lib/operational-toast';
 import { firstRequiredDeliveryIssue, focusDeliveryIssue, type DeliveryFormIssue, type DeliveryFormField } from '@/lib/operation/delivery-form-feedback';
 import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { paymentStateForInput } from '@/lib/delivery-finance';
+import { reviewDeliveryPaymentSplit, toPaymentCents, type DeliveryPaymentPart } from '@/lib/delivery-payment-split';
 import { firstMultiOrderIssue } from '@/lib/operation/multiOrderDraft';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
@@ -64,6 +65,7 @@ export default function NovaEntregaPage() {
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const deliveries = useAppStore((state) => state.deliveries);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
+  const updateCustomer = useAppStore((state) => state.updateCustomer);
 
   const openRoutes = useMemo(
     () =>
@@ -137,6 +139,11 @@ const [routeId, setRouteId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<Delivery['payment_method']>('dinheiro');
   const [isPaid, setIsPaid] = useState(false);
   const [changeFor, setChangeFor] = useState('');
+  // R110 P3: pedido individual, sem alterar a regra dos multiplos iFood.
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitCash, setSplitCash] = useState('');
+  const [splitOther, setSplitOther] = useState('');
+  const [splitOtherMethod, setSplitOtherMethod] = useState<'pix' | 'cartao'>('cartao');
   const [ifoodSubsidy, setIfoodSubsidy] = useState('');
   const [hasIfoodSubsidy, setHasIfoodSubsidy] = useState(false);
   const [fulfillmentOptionsOpen, setFulfillmentOptionsOpen] = useState(false);
@@ -473,7 +480,7 @@ const [routeId, setRouteId] = useState('');
   }, [activeAddress, activeMapsLink, knownNeighborhoods]);
 
   const handleCustomerSelect = (c: Customer, typedQuery?: string) => {
-    if (customerPhones(c).length>1 || customerAddresses(c).length>1) { setPendingContactCustomer(c); return; }
+    if (origin !== 'ifood' || customerPhones(c).length>1 || customerAddresses(c).length>1) { setPendingContactCustomer(c); return; }
     applyCustomerSelection(c,undefined,undefined,typedQuery);
   };
   const applyCustomerSelection = (c:Customer, chosenPhone?:CustomerPhone, chosenAddress?:CustomerAddress, typedQuery?:string) => {
@@ -514,6 +521,13 @@ const [routeId, setRouteId] = useState('');
     window.requestAnimationFrame(() => focusDeliveryIssue(field));
   };
 
+  const splitParts = (): DeliveryPaymentPart[] => [
+    { method: 'dinheiro', amountCents: toPaymentCents(parseMoney(splitCash)) ?? -1 },
+    { method: splitOtherMethod, amountCents: toPaymentCents(parseMoney(splitOther)) ?? -1 },
+  ];
+  const splitReview = () => reviewDeliveryPaymentSplit(parseMoney(value), splitParts());
+  const splitAllowed = !activeExtra && extraIfoodOrders.length === 0;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if(isSyncing && !hasHydrated){toast.info('Aguarde a atualização dos clientes terminar.',{description:'Aguarde a hidratação inicial dos cadastros antes de salvar.'});return}
@@ -522,6 +536,11 @@ const [routeId, setRouteId] = useState('');
     const requiredIssue = firstRequiredDeliveryIssue({ fulfillmentMode, routeId, address: activeAddress, value: activeValue });
     if (requiredIssue) { showFormIssue(requiredIssue.field, requiredIssue.message); return; }
     setFormIssue(null);
+    if (splitEnabled) {
+      if (!splitAllowed) { toast.error('Pagamento dividido exige um pedido por vez. Separe os pedidos iFood para cadastrar.'); return; }
+      const review = splitReview();
+      if (!review.valid) { showFormIssue('value', review.errors[0] || 'Revise a divisao do pagamento.'); return; }
+    }
     if(origin==='food99'&&!/^\d{6}$/.test(orderId)){showFormIssue('order', 'Informe o número de 6 dígitos do pedido 99Food.');return}
     if(fulfillmentMode==='delivery'&&!openRoutes.some(route=>route.id===routeId)){showFormIssue('route','Selecione uma rota aberta da operação de hoje.');return}
     const drafts=origin==='ifood'?[{id:'primary',orderId,ifoodId,confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:'',paymentMethod,isPaid,changeFor,address:streetAddress,phone,mapsLink,drinks,observation,notifyWhatsapp},...extraIfoodOrders]:[];
@@ -587,14 +606,14 @@ const [routeId, setRouteId] = useState('');
         const deliveriesToCreate:Delivery[]=[];
         const stopGroups=new Map<string,string>();
         for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));const draftNormalized=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(draft.address||streetAddress):{address:'',phone:undefined};const draftAddress=draftNormalized.address||cleanStreet;const draftPhone=normalizeBrazilPhone(draft.phone)||draftNormalized.phone||'';const draftMaps=(draft.mapsLink||'').trim()||(index===0?resolvedMapsLink:'');const addressKey=canonicalizeOperationalAddress(draftAddress).address.toLocaleLowerCase('pt-BR');let draftStopGroupId=stopSource&&sameCustomerAddress(stopSource.address_string,draftAddress)?stopGroupId:undefined;if(fulfillmentMode==='delivery'&&drafts.length>1){const sameAddressCount=drafts.filter(item=>sameCustomerAddress(item.address||streetAddress,draftAddress)).length;if(sameAddressCount>1){draftStopGroupId=stopGroups.get(addressKey)||draftStopGroupId||`stop-${Date.now()}-${stopGroups.size}-${Math.random().toString(36).slice(2,7)}`;stopGroups.set(addressKey,draftStopGroupId)}}let customerId='';if(draftName){customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?draftAddress:undefined,phone:draftPhone||undefined,mapsLink:fulfillmentMode==='delivery'?draftMaps:undefined,confirmationCode:draft.confirmationCode||undefined,observation:draft.observation.trim()||cleanObservation||undefined,origin,preferredCustomerId:index===0?selectedCustomerId||undefined:undefined})}
-          deliveriesToCreate.push({id:index===0?Date.now().toString():`${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='external_delivery'?'ifood':'dfl',stop_group_id:draftStopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:draft.paymentMethod,payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid),change_for:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?draftAddress:'',maps_link:fulfillmentMode==='delivery'?draftMaps:'',phone:draftPhone||undefined,notify_whatsapp:draft.notifyWhatsapp,observation:(index===0?cleanObservation:draft.observation.trim()||cleanObservation)||undefined,drinks:draft.drinks,createdAt:now,created_at:now,updated_at:now});
+          deliveriesToCreate.push({id:index===0?Date.now().toString():`${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='external_delivery'?'ifood':'dfl',stop_group_id:draftStopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:splitEnabled?'dinheiro':draft.paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?draftAddress:'',maps_link:fulfillmentMode==='delivery'?draftMaps:'',phone:draftPhone||undefined,notify_whatsapp:draft.notifyWhatsapp,observation:(index===0?cleanObservation:draft.observation.trim()||cleanObservation)||undefined,drinks:draft.drinks,createdAt:now,created_at:now,updated_at:now});
           if(ownerOrderContext && hasOwnerIdentity({name:draftName,phone:draftPhone})) Object.assign(deliveriesToCreate[deliveriesToCreate.length-1],ownerContextFlags(ownerOrderContext));
         }
         await addDeliveries(deliveriesToCreate);toast.success(drafts.length>1?`${drafts.length} pedidos cadastrados nos endereços conferidos.`:'Entrega cadastrada com sucesso!');
       }else{
         const customerAddress=fulfillmentMode==='delivery'?cleanStreet:streetAddress.trim();
         let customerId='';if(customerName.trim())customerId=await findOrCreateCustomer(customerName,{address:customerAddress||undefined,phone:rawPhone||undefined,mapsLink:mapsLink.trim()||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});
-        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='food99'?'food99':'dfl',stop_group_id:stopGroupId,origin,order_id:origin==='food99'?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:paymentMethod,payment_state:paymentStateForInput(paymentMethod,isPaid),change_for:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success(origin==='food99'?'Pedido 99Food cadastrado sem criar rota DFL.':stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='food99'?'food99':'dfl',stop_group_id:stopGroupId,origin,order_id:origin==='food99'?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success(origin==='food99'?'Pedido 99Food cadastrado sem criar rota DFL.':stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
       }
       if (inboxDraftId && inboxDay) {
         markInboxDraft(inboxDay, inboxDraftId, 'launched');
@@ -1180,7 +1199,7 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}</div>)}
 
-          <div className={`flex flex-col gap-2 transition-all duration-300 ${activeIsPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+          <div className={`flex flex-col gap-2 transition-all duration-300 ${activeIsPaid || splitEnabled ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
             <label className="text-xs font-semibold text-zinc-400">Forma de Pagamento</label>
             <div className="grid grid-cols-3 gap-2">
               <button type="button" onClick={() => { setActivePaymentMethod('dinheiro'); setActiveIsPaid(false); }} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${activePaymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
@@ -1198,7 +1217,28 @@ const [routeId, setRouteId] = useState('');
             </div>
           </div>
 
-          {activePaymentMethod === 'pix' && (
+          {!activeExtra && extraIfoodOrders.length === 0 && !activeIsPaid && (
+            <section className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[.045] p-3.5">
+              <button type="button" aria-pressed={splitEnabled} onClick={() => setSplitEnabled(current => !current)} className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-xs font-black text-emerald-300">
+                <span>Dividir pagamento em dinheiro + cartão/Pix</span><span>{splitEnabled ? 'Ativado' : 'Ativar'}</span>
+              </button>
+              {splitEnabled && <div className="mt-2 space-y-2">
+                <label className="block text-[11px] text-zinc-300">Parcela em dinheiro (R$)
+                  <input type="text" inputMode="decimal" value={splitCash} onChange={event => setSplitCash(event.target.value.replace(/[^0-9,.]/g, ''))} placeholder="Ex.: 20,00" className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100" />
+                </label>
+                <label className="block text-[11px] text-zinc-300">Segunda forma
+                  <select value={splitOtherMethod} onChange={event => setSplitOtherMethod(event.target.value as 'pix' | 'cartao')} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100"><option value="cartao">Cartão</option><option value="pix">Pix</option></select>
+                </label>
+                <label className="block text-[11px] text-zinc-300">Parcela {splitOtherMethod === 'pix' ? 'no Pix' : 'no cartão'} (R$)
+                  <input type="text" inputMode="decimal" value={splitOther} onChange={event => setSplitOther(event.target.value.replace(/[^0-9,.]/g, ''))} placeholder="Ex.: 28,00" className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100" />
+                </label>
+                <p role="status" className={`text-[10px] font-bold ${splitReview().valid ? 'text-emerald-300' : 'text-amber-300'}`}>{splitReview().valid ? 'Parcelas conferidas: total exato, sem divergencia de centavos.' : splitReview().errors[0] || 'Preencha as parcelas para conferir o total.'}</p>
+                <p className="text-[10px] leading-relaxed text-zinc-500">A entrega permanece pendente ate a confirmacao do recebimento. O acerto misto sera habilitado em etapa propria.</p>
+              </div>}
+            </section>
+          )}
+
+          {activePaymentMethod === 'pix' && !splitEnabled && (
             <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800">
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-zinc-200">Pago antecipado?</span>
@@ -1210,7 +1250,7 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}
 
-          {activePaymentMethod === 'dinheiro' && !activeIsPaid && (
+          {activePaymentMethod === 'dinheiro' && !activeIsPaid && !splitEnabled && (
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-zinc-400">Troco para (R$)</label>
               <input type="text" inputMode="numeric" placeholder="Ex: 50,00" value={activeChangeFor} onChange={(e) => setActiveChangeFor(formatCurrencyInput(e.target.value))} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />
@@ -1247,7 +1287,20 @@ const [routeId, setRouteId] = useState('');
           {isSaving ? 'Salvando...' : extraIfoodOrders.length ? `Salvar ${extraIfoodOrders.length + 1} pedidos` : 'Salvar entrega'}
         </button>
       </form>
-      {pendingContactCustomer&&<CustomerDestinationSheet customer={pendingContactCustomer} onClose={()=>setPendingContactCustomer(null)} onConfirm={(phone,address)=>{applyCustomerSelection(pendingContactCustomer,phone,address);setPendingContactCustomer(null);}}/>}
+      {pendingContactCustomer&&<CustomerDestinationSheet customer={pendingContactCustomer} onClose={()=>setPendingContactCustomer(null)} onConfirm={(phone,address)=>{applyCustomerSelection(pendingContactCustomer,phone,address);setPendingContactCustomer(null);}} onAddAddress={origin==='ifood'?undefined:async(address)=>{
+        const customer=pendingContactCustomer;
+        if(!customer)return undefined;
+        const existing=customerAddresses(customer);
+        const key=(s:string)=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+        if(existing.some(item=>key(item.address)===key(address))){toast.warning('Endereço já está cadastrado neste cliente.');return undefined;}
+        const entry:CustomerAddress={id:`addr-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,address,primary:false,label:'Outro endereço'};
+        try{
+          await updateCustomer(customer.id,{addresses:[...existing,entry]});
+          setPendingContactCustomer({...customer,addresses:[...existing,entry]});
+          toast.success('Novo endereço salvo no cliente existente.');
+          return entry;
+        }catch{toast.error('Não foi possível salvar o endereço.');return undefined;}
+      }}/> }
     </div>
   );
 }

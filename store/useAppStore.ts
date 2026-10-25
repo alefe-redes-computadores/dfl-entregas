@@ -49,6 +49,7 @@ import {
   normalizeCustomerName,
   normalizeCustomerPhone,
 } from '@/lib/customer-identity';
+import { customerPhones, customerAddresses, customerContactPayload } from '@/lib/customer-contact-book';
 import { stockProductCategory, suggestStockCategory } from '@/lib/stock-categories';
 import { deliveryStopKey, expandStopOrder, groupDeliveriesByStop, keepPinnedStopPositions, moveStopToIndex, stopDeliveryIds } from '@/lib/route-stops';
 import { rollbackRouteOrderFields, withRouteOrderWriteLock } from '@/lib/route-order-write-guard';
@@ -3238,12 +3239,20 @@ export const useAppStore = create<AppState>()(
         const prefer = (primary?: string, fallback?: string) =>
           primary?.trim() || fallback?.trim() || undefined;
 
+        // Mesclar colecoes sem apagar endereco principal nem telefones antigos.
+        // A normalizacao remove contatos/endereco duplicados mantendo a ordem.
+        const mergedContacts = customerContactPayload(
+          [...customerPhones(target), ...customerPhones(source).map(p => ({ ...p, primary: false }))],
+          [...customerAddresses(target), ...customerAddresses(source).map(a => ({ ...a, primary: false }))],
+        );
         const mergedTarget: Customer = {
           ...target,
-          phone: prefer(target.phone, source.phone),
-          address: prefer(target.address, source.address),
-          neighborhood: prefer(target.neighborhood, source.neighborhood),
-          maps_link: prefer(target.maps_link, source.maps_link),
+          ...mergedContacts,
+          phone: mergedContacts.phone || prefer(target.phone, source.phone) || '',
+          address: mergedContacts.address || prefer(target.address, source.address) || '',
+          neighborhood: mergedContacts.neighborhood || prefer(target.neighborhood, source.neighborhood) || '',
+          maps_link: mergedContacts.maps_link || prefer(target.maps_link, source.maps_link) || '',
+
           observation: prefer(target.observation, source.observation),
           last_confirmation_code: prefer(
             target.last_confirmation_code,

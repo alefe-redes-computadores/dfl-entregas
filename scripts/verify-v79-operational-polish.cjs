@@ -82,7 +82,8 @@ async function run() {
   assert.match(copied, /https:\/\//);
   assert.match(copied, /CÓDIGO DE 4 DÍGITOS/);
   assert.equal(await copyDeliveryToClipboard(first, 'Maria', '', [first, { ...second, is_paid: false, payment_method: 'dinheiro', customer_charge: 30 }]), true);
-  assert.match(copied, /Pagamento misto/);
+  assert.match(copied, /Alguns pedidos pagos · cobrar R\$ 30,00 dos pendentes/);
+  assert.doesNotMatch(copied, /Pagamento misto/);
   assert.match(copied, /30,00/);
   assert.match(copied, /https:\/\//);
   clipboardFails = true;

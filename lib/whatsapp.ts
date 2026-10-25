@@ -9,6 +9,7 @@ import { routeCashFlow } from '@/lib/route-cash-flow';
 import { buildRouteChangePlan } from '@/lib/route-change-plan';
 import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
+import { deliverySplitStatus } from '@/lib/delivery-payment-split';
 
 /** Endereco publico unico do iFood; abrir o link nunca confirma pedido no DFL. */
 export const IFOOD_DRIVER_CONFIRMATION_URL = 'https://confirmacao-entrega-propria.ifood.com.br/';
@@ -75,6 +76,8 @@ export async function copyDeliveryToClipboard(
     const isIfood = delivery.origin === 'ifood';
     const driverConfirmsIfood = ifoodConfirmationMode === 'motoboy';
     const valueStr = formatMoney(deliveryCharge(delivery));
+    // R110 P4: mensagem financeira segmentada; nunca presumir quitacao de parcelas.
+    const paymentSplit = deliverySplitStatus(delivery);
     const isUrgent = delivery.is_urgent;
     // `savedCustomerCode` é mantido na assinatura por compatibilidade dos chamadores,
     // mas nunca confirma um pedido diferente do histórico do cliente.
@@ -92,7 +95,7 @@ export async function copyDeliveryToClipboard(
       const groupedPending = groupedOrders.filter(item => !deliveryPaid(item));
       const groupedTotal = groupedPending.reduce((sum, item) => sum + deliveryCharge(item), 0);
       parts.push(`📦 *${groupedOrders.length} PEDIDOS · 1 PARADA*`);
-      parts.push(groupedPending.length===0?'✅ *Todos os pedidos estão pagos*':groupedPending.length===groupedOrders.length?`💵 *Cobrar na parada: R$ ${formatMoney(groupedTotal)}*`:`⚠️ *Pagamento misto · cobrar R$ ${formatMoney(groupedTotal)}*`);
+      parts.push(groupedPending.length===0?'✅ *Todos os pedidos estão pagos*':groupedPending.length===groupedOrders.length?`💵 *Cobrar na parada: R$ ${formatMoney(groupedTotal)}*`:`⚠️ *Alguns pedidos pagos · cobrar R$ ${formatMoney(groupedTotal)} dos pendentes*`);
       groupedOrders.forEach((item, index) => {
         const itemName = item.customer_name || (item.id === delivery.id ? customerName : '') || 'Cliente';
         const itemOrigin = item.source_system === 'dfl_site' ? 'Site' : item.origin === 'ifood' ? 'iFood' : 'Loja';
@@ -100,15 +103,24 @@ export async function copyDeliveryToClipboard(
           ? `ID *${item.ifood_id}*`
           : item.order_id ? `pedido *#${item.order_id}*` : 'sem identificador';
         const itemCode = orderConfirmationCode(item.confirmation_code);
+        const itemSplit = deliverySplitStatus(item);
         const payment = deliveryPaid(item)
           ? 'Pago ✅'
-          : `Cobrar R$ ${formatMoney(deliveryCharge(item))} · ${(item.payment_method||'dinheiro').replace(/_/g,' ')}`;
+          : itemSplit?.valid
+            ? `Cobrar R$ ${formatMoney(deliveryCharge(item))} · dividido (detalhes abaixo)`
+            : `Cobrar R$ ${formatMoney(deliveryCharge(item))} · ${(item.payment_method||'dinheiro').replace(/_/g,' ')}`;
         parts.push(`${index + 1}. *${itemName}* · ${itemOrigin} · ${itemReference}`);
         if (item.origin === 'ifood') parts.push(driverConfirmsIfood
           ? itemCode ? `   🔑 Código: *${itemCode}* · confirmar no portal` : '   🚨 *PEDIR O CÓDIGO DE 4 DÍGITOS E CONFIRMAR NO PORTAL*'
           : itemCode ? `   🔑 Código: *${itemCode}*` : '   🚨 *PEDIR O CÓDIGO DE 4 DÍGITOS*');
         if (driverConfirmsIfood && item.origin === 'ifood' && !item.ifood_id) parts.push('   ⚠️ *ID iFood ausente — solicitar à loja*');
         parts.push(`   ${deliveryPaid(item)?'✅':'💵'} ${payment}`);
+        if (itemSplit?.valid && !deliveryPaid(item)) {
+          if (itemSplit.cashCents) parts.push(`   💵 Dinheiro: R$ ${formatMoney(itemSplit.cashCents / 100)}`);
+          if (itemSplit.cardCents) parts.push(`   💳 Cartão: R$ ${formatMoney(itemSplit.cardCents / 100)} · levar maquininha`);
+          if (itemSplit.pixCents) parts.push(`   📱 Pix: R$ ${formatMoney(itemSplit.pixCents / 100)} · conferir recebimento`);
+          if (itemSplit.changeCents) parts.push(`   🔁 Troco: R$ ${formatMoney(itemSplit.changeCents / 100)}`);
+        }
       });
       parts.push('📍 *Uma parada física · entregar cada pedido separadamente*');
       const address = routeAddressParts(delivery.address_string);
@@ -145,11 +157,17 @@ export async function copyDeliveryToClipboard(
     if (clientPhone) {
       const gateMsg = encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.');
       parts.push(`📲 *Contato:* *${clientPhone}*`);
-      if (delivery.notify_whatsapp) parts.push(`↳ https://wa.me/55${clientPhone}?text=${gateMsg}`);
+      if (delivery.notify_whatsapp) parts.push(`↳ https://wa.me/${clientPhone.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '').replace(/^(?=\d{10,11}$)/, '55')}?text=${gateMsg}`);
     }
 
     if (deliveryPaid(delivery)) {
       parts.push(`✅ *Pagamento:* Pago`);
+    } else if (paymentSplit?.valid) {
+      parts.push(`💰 *Pagamento dividido · cobrar R$ ${valueStr}*`);
+      if (paymentSplit.cashCents) parts.push(`💵 *Dinheiro:* R$ ${formatMoney(paymentSplit.cashCents / 100)}`);
+      if (paymentSplit.cardCents) parts.push(`💳 *Cartão:* R$ ${formatMoney(paymentSplit.cardCents / 100)} · *levar maquininha*`);
+      if (paymentSplit.pixCents) parts.push(`📱 *Pix:* R$ ${formatMoney(paymentSplit.pixCents / 100)} · *conferir recebimento*`);
+      if (paymentSplit.changeCents) parts.push(`🔁 *Troco:* R$ ${formatMoney(paymentSplit.changeCents / 100)}`);
     } else {
       const pMethod = delivery.payment_method?.toUpperCase().replace('_', ' ') || 'PAGAMENTO';
       if (delivery.payment_method === 'dinheiro') {
@@ -471,7 +489,7 @@ export async function generateRouteMessages(
         if (stopGroup.deliveries.some((item) => item.notify_whatsapp)) msg1.push(`↳ https://wa.me/55${clientPhone}?text=${gateMsg}`);
       }
       if (driverConfirmsIfood && ifoodOrders.length > 0) {
-        msg1.push(`🔴 *Confirmar iFood desta parada:* ${IFOOD_DRIVER_CONFIRMATION_URL}`);
+        msg1.push('🔴 *IDs e códigos acima: confirmação individual no portal ao fim da mensagem.*');
         if (ifoodOrders.some(item => !item.ifood_id)) msg1.push('⚠️ ID iFood ausente: peça à loja antes de confirmar.');
       }
       msg1.push(`──────────────`);
@@ -584,7 +602,7 @@ export async function generateRouteMessages(
         const groupedTotal=groupedDeliveries.filter(item=>!deliveryPaid(item)).reduce((sum,item)=>sum+deliveryCharge(item),0);
         if(groupedTotal>0)msg2.push(`   💰 Total da parada a cobrar: *R$ ${formatMoney(groupedTotal)}*`);
         if (driverConfirmsIfood && groupedDeliveries.some(item => item.origin === 'ifood')) {
-          msg2.push(`   ↳ 🔴 *Confirmar IDs desta parada:* ${IFOOD_DRIVER_CONFIRMATION_URL}`);
+          msg2.push('   ↳ 🔴 Confirmar cada ID e código no portal ao fim do checklist.');
         }
         msg2.push('   📍 *1 parada física · pedidos e códigos separados*');
       }else{
@@ -593,7 +611,7 @@ export async function generateRouteMessages(
         if (driverConfirmsIfood && single?.origin === 'ifood') {
           const code = orderConfirmationCode(single.confirmation_code);
           msg2.push(`   ↳ ID iFood *${single.ifood_id || 'AUSENTE'}* · ${code ? `código *${code}*` : 'pedir código ao cliente'}`);
-          msg2.push(`   ↳ 🔴 *Portal:* ${IFOOD_DRIVER_CONFIRMATION_URL}`);
+          msg2.push('   ↳ 🔴 Confirmar pelo portal ao fim do checklist.');
         }
       }
     });

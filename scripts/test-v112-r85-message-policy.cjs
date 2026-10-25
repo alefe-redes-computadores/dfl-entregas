@@ -42,6 +42,7 @@ const deps={
  '@/lib/route-cash-flow':{routeCashFlow:()=>({cashOrders:[],initialCash:0})},
  '@/lib/route-change-plan':{buildRouteChangePlan:()=>({lines:[],flow:{initialCash:0,tenderedCash:0,plannedCashChange:0,plannedPixChange:0,expectedPhysicalReturn:0}})},
  '@/lib/delivery-finance':{deriveDeliveryPaymentState:d=>d.is_paid?'paid':'pending'},
+ '@/lib/delivery-payment-split':{deliverySplitStatus:d=>{if(d.payment_splits?.length) throw Error('Legacy iFood fixture unexpectedly contains split payments');return null;}},
  '@/lib/operation/ifoodOrderCode':codeApi,
 };
 const msg=loadTs('lib/whatsapp.ts',deps);

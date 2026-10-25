@@ -26,6 +26,7 @@ import { getFulfillmentMode } from '@/lib/delivery-mode';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { dateKey, deliveryDate, routeDate } from '@/lib/operational-time';
 import { paymentStateForInput } from '@/lib/delivery-finance';
+import { reviewDeliveryPaymentSplit, toPaymentCents, type DeliveryPaymentPart } from '@/lib/delivery-payment-split';
 import { deliveryStopKey } from '@/lib/route-stops';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -78,6 +79,16 @@ const [routeId, setRouteId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<Delivery['payment_method']>('dinheiro');
   const [isPaid, setIsPaid] = useState(false);
   const [changeFor, setChangeFor] = useState('');
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitCash, setSplitCash] = useState('');
+  const [splitOther, setSplitOther] = useState('');
+  const [splitOtherMethod, setSplitOtherMethod] = useState<'pix'|'cartao'|'cartao_credito'|'cartao_debito'>('cartao');
+  const splitMoney = (raw: string) => Number(raw.replace(/\./g,'').replace(',','.'));
+  const splitParts = (): DeliveryPaymentPart[] => [
+    {method:'dinheiro',amountCents:toPaymentCents(splitMoney(splitCash)) ?? -1},
+    {method:splitOtherMethod,amountCents:toPaymentCents(splitMoney(splitOther)) ?? -1},
+  ];
+  const splitReview = () => reviewDeliveryPaymentSplit(splitMoney(value),splitParts());
   const [ifoodSubsidy, setIfoodSubsidy] = useState('');
   const [hasIfoodSubsidy, setHasIfoodSubsidy] = useState(false);
   const [isUrgent, setIsUrgent] = useState(false);
@@ -485,6 +496,16 @@ const [routeId, setRouteId] = useState('');
       setPaymentMethod(method as any);
 
       setIsPaid(delivery.is_paid);
+      const savedParts = delivery.payment_splits || [];
+      const cashPart = savedParts.find(part => part.method === 'dinheiro');
+      const otherPart = savedParts.find(part => part.method !== 'dinheiro');
+      // A UI suporta duas parcelas com dinheiro; outras combinacoes sao preservadas
+      // e protegidas contra edicao acidental.
+      setSplitEnabled(savedParts.length === 2 && Boolean(cashPart && otherPart));
+      if (savedParts.length === 2 && cashPart && otherPart) setPaymentMethod('dinheiro');
+      setSplitCash(cashPart ? (cashPart.amountCents/100).toFixed(2).replace('.',',') : '');
+      setSplitOther(otherPart ? (otherPart.amountCents/100).toFixed(2).replace('.',',') : '');
+      setSplitOtherMethod(otherPart && otherPart.method !== 'dinheiro' ? otherPart.method as 'pix'|'cartao'|'cartao_credito'|'cartao_debito' : 'cartao');
       setIsUrgent(delivery.is_urgent || false);
       setChangeFor(delivery.change_for ? delivery.change_for.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
       setDrinks(delivery.drinks || '');
@@ -521,6 +542,16 @@ const [routeId, setRouteId] = useState('');
     const requiredIssue = firstRequiredDeliveryIssue({ fulfillmentMode, routeId, address: streetAddress, value });
     if (requiredIssue) { showFormIssue(requiredIssue.field, requiredIssue.message); return; }
     setFormIssue(null);
+    if (currentDelivery?.payment_splits?.length && !splitEnabled) {
+      toast.error('Pagamento dividido registrado: mantenha as parcelas habilitadas para editar.'); return;
+    }
+    if (splitEnabled) {
+      if (isPaid || currentDelivery?.is_paid || currentDelivery?.completed) {
+        toast.error('Pagamento dividido quitado ou entrega concluida: edicao financeira bloqueada.'); return;
+      }
+      const review = splitReview();
+      if (!review.valid) { showFormIssue('value',review.errors[0] || 'Revise as parcelas.'); return; }
+    }
 
     if (currentDelivery?.completed && operationalAssignmentChanged) {
       toast.error('Desfaça a baixa antes de alterar a logística deste pedido.', {
@@ -624,9 +655,10 @@ const [routeId, setRouteId] = useState('');
         ifood_subsidy: subsidy > 0 ? subsidy : undefined,
         is_paid: isPaid,
         is_urgent: isUrgent,
-        payment_method: paymentMethod,
+        payment_method: splitEnabled ? 'dinheiro' : paymentMethod,
         payment_state: paymentStateForInput(paymentMethod, isPaid),
-        change_for: cleanChangeFor,
+        ...(splitEnabled ? { payment_splits: splitParts() } : { payment_splits: undefined }),
+        change_for: splitEnabled ? undefined : cleanChangeFor,
         address_string: customerAddress,
         maps_link: mapsLink.trim() || resolvedMapsLink,
         phone: rawPhone || undefined,
@@ -1213,7 +1245,7 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}
 
-          <div className={`flex flex-col gap-2 transition-all duration-300 ${isPaid ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+          <div className={`flex flex-col gap-2 transition-all duration-300 ${isPaid || splitEnabled ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
             <label className="text-xs font-semibold text-zinc-400">Forma de Pagamento</label>
             <div className="grid grid-cols-3 gap-2">
               <button type="button" onClick={() => { setPaymentMethod('dinheiro'); setIsPaid(false); }} className={`flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all ${paymentMethod === 'dinheiro' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>
@@ -1231,7 +1263,22 @@ const [routeId, setRouteId] = useState('');
             </div>
           </div>
 
-          {paymentMethod === 'pix' && (
+          {(!currentDelivery?.payment_splits?.length || splitEnabled) && !isPaid && !currentDelivery?.completed && (
+            <section className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[.045] p-3.5">
+              <button type="button" aria-pressed={splitEnabled} onClick={() => { setPaymentMethod('dinheiro'); setIsPaid(false); setSplitEnabled(current=>currentDelivery?.payment_splits?.length ? true : !current); }} className="flex min-h-11 w-full items-center justify-between text-left text-xs font-bold text-emerald-300">
+                <span>Pagamento dividido · dinheiro + cartão/Pix</span><span>{splitEnabled?'Ativado':'Ativar'}</span>
+              </button>
+              {splitEnabled && <div className="mt-2 space-y-2">
+                <label className="block text-xs text-zinc-300">Dinheiro (R$)<input type="text" inputMode="decimal" value={splitCash} onChange={e=>setSplitCash(e.target.value.replace(/[^0-9,.]/g,''))} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100" /></label>
+                <label className="block text-xs text-zinc-300">Segunda forma<select value={splitOtherMethod} onChange={e=>setSplitOtherMethod(e.target.value as 'pix'|'cartao'|'cartao_credito'|'cartao_debito')} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100"><option value="cartao">Cartão</option><option value="cartao_credito">Crédito</option><option value="cartao_debito">Débito</option><option value="pix">Pix</option></select></label>
+                <label className="block text-xs text-zinc-300">Outra parcela (R$)<input type="text" inputMode="decimal" value={splitOther} onChange={e=>setSplitOther(e.target.value.replace(/[^0-9,.]/g,''))} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100" /></label>
+                <p role="status" className={`text-xs ${splitReview().valid?'text-emerald-300':'text-amber-300'}`}>{splitReview().valid?'Parcelas conferidas com o total':splitReview().errors[0]}</p>
+              </div>}
+            </section>
+          )}
+          {Boolean(currentDelivery?.payment_splits?.length) && !splitEnabled && <p className="rounded-xl border border-amber-500/30 p-3 text-xs text-amber-300">Este pagamento tem parcelas registradas em formato não suportado pelo editor. Nenhuma alteração financeira será permitida.</p>}
+
+          {paymentMethod === 'pix' && !splitEnabled && (
             <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800">
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-zinc-200">Pago antecipado?</span>
@@ -1243,7 +1290,7 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}
 
-          {paymentMethod === 'dinheiro' && !isPaid && (
+          {paymentMethod === 'dinheiro' && !isPaid && !splitEnabled && (
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-zinc-400">Troco para (R$)</label>
               <input type="text" inputMode="numeric" placeholder="Ex: 50,00" value={changeFor} onChange={(e) => setChangeFor(formatCurrencyInput(e.target.value))} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />

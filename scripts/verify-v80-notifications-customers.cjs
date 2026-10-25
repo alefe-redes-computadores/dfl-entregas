@@ -71,21 +71,27 @@ async function run() {
   }));
   const expected = [];
   for (let i = 0; i < customers.length; i++) for (let j = i + 1; j < customers.length; j++) {
-    const left = customers[i], right = customers[j];
-    const a = identity.normalizeCustomerName(left.name), b = identity.normalizeCustomerName(right.name);
-    if (!a || !b) continue;
-    const sameName = a === b;
-    const lp = left.phone.replace(/\D/g, ''), rp = right.phone.replace(/\D/g, '');
-    const samePhone = lp.length >= 10 && lp === rp;
-    if (!sameName && !samePhone) continue;
-    const sameAddress = Boolean(left.address.trim() && right.address.trim() && identity.sameCustomerAddress(left.address, right.address));
-    if (!sameAddress && !samePhone) continue;
-    if (!sameName && identity.customerNameSimilarity(left.name, right.name) < .72) continue;
-    expected.push({ left: left.id, right: right.id, score: samePhone && sameAddress ? 99 : samePhone ? 97 : 95 });
+    const left=customers[i], right=customers[j];
+    if (!identity.normalizeCustomerName(left.name) || identity.normalizeCustomerName(left.name) !== identity.normalizeCustomerName(right.name)) continue;
+    const lp=identity.normalizeCustomerPhone(left.phone), rp=identity.normalizeCustomerPhone(right.phone);
+    if (lp.length < 10 || lp !== rp) continue;
+    const sameAddress=identity.sameCustomerAddress(left.address,right.address);
+    expected.push({left:left.id,right:right.id,score:sameAddress?99:97});
   }
-  expected.sort((a, b) => b.score - a.score);
-  const actual = customerDuplicateCandidates(customers, []).map(({ left, right, score }) => ({ left: left.id, right: right.id, score }));
-  assert.equal(JSON.stringify(actual), JSON.stringify(expected));
+  expected.sort((a,b)=>b.score-a.score);
+  const actual=customerDuplicateCandidates(customers, []).map(({left,right,score})=>({left:left.id,right:right.id,score}));
+  assert.equal(JSON.stringify(actual),JSON.stringify(expected),'V80: identidade estrita exige nome-base e telefone compartilhado');
+  const fixtures=[
+    {id:'a',name:'Wesley Silva',phone:'34998887766',address:'Rua Central 10'},
+    {id:'b',name:'Wesley Silva (2)',phone:'(34) 99888-7766',address:'Rua Central 50'},
+    {id:'c',name:'Wesley Silva',phone:'34990001122',address:'Rua Central 10'},
+    {id:'d',name:'Maria Silva',phone:'34998887766',address:'Rua Central 10'},
+  ];
+  const fixturePairs=customerDuplicateCandidates(fixtures, []);
+  assert.equal(fixturePairs.length,1,'V80: somente nome e telefone iguais podem sugerir');
+  assert.equal(fixturePairs[0].left.id,'a');
+  assert.equal(fixturePairs[0].right.id,'b');
+  assert.equal(fixturePairs[0].score,97,'V80: endereco distinto preserva sugestao, sem fusao automatica');
   const store = fs.readFileSync('store/useAppStore.ts', 'utf8');
   assert.match(store, /notifyIfoodRoutePending\([\s\S]{0,180}get\(\)\.storeSettings.notificationPreferences/);
   const page = fs.readFileSync('app/mais/notificacoes/page.tsx', 'utf8');

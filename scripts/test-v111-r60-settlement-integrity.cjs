@@ -17,6 +17,7 @@ const ready=load('lib/motoboy-settlement-tasks.ts',{
  '@/lib/route-closure-eligibility':{activeRouteDeliveries:active},
 }).buildPendingMotoboySettlements;
 const analytics=load('lib/motoboy-analytics.ts',{
+ '@/lib/route-cash-flow':{routeCashFlow:(deliveries)=>{const cashOrders=deliveries.filter(d=>d.payment_method==='dinheiro'&&!d.is_paid);const customerCharges=cashOrders.reduce((sum,d)=>sum+Math.max(0,Number(d.customer_charge??d.value)||0),0);const tenderedCash=cashOrders.reduce((sum,d)=>{const charge=Math.max(0,Number(d.customer_charge??d.value)||0);return sum+Math.max(charge,Number(d.change_for)||0)},0);return {cashOrders,customerCharges,tenderedCash}}},
  '@/lib/route-stops':{groupDeliveriesByStop:groups},
  '@/lib/route-closure-eligibility':{activeRouteDeliveries:active},
 });

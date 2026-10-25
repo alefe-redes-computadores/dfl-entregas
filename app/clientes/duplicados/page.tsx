@@ -16,6 +16,7 @@ import {
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { customerDuplicateCandidates } from '@/lib/customer-duplicates';
+import { customerAddresses, customerPhones } from '@/lib/customer-contact-book';
 import type { Customer } from '@/types';
 
 const address = (customer: Customer) =>
@@ -100,6 +101,7 @@ export default function CustomerDuplicatesPage() {
             </p>
             <p className="mt-1 text-xs leading-relaxed text-zinc-500">
               O app apenas sugere pares. Você escolhe qual cadastro permanece.
+              O nome e o telefone precisam conferir. Endereços diferentes serão preservados como destinos do mesmo cliente.
               As entregas são repontadas antes da remoção do duplicado.
             </p>
           </div>
@@ -149,11 +151,11 @@ export default function CustomerDuplicatesPage() {
                       </p>
                       <p className="mt-2 flex items-center gap-1 truncate text-[10px] text-zinc-500">
                         <MapPin size={10} />
-                        {address(customer)}
+                        {address(customer)} · {customerAddresses(customer).length} endereço(s)
                       </p>
                       <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-zinc-500">
                         <Phone size={10} />
-                        {customer.phone || 'Sem telefone'}
+                        {customer.phone || 'Sem telefone'} · {customerPhones(customer).length} contato(s)
                       </p>
                       <p className="mt-1 flex items-center gap-1 text-[10px] font-bold text-zinc-400">
                         <PackageOpen size={10} />
@@ -267,6 +269,7 @@ export default function CustomerDuplicatesPage() {
 
             <div className="mt-4 space-y-2 text-xs leading-relaxed text-zinc-500">
               <p>• Todas as entregas serão transferidas para o cadastro mantido.</p>
+              <p>• Todos os endereços e telefones válidos serão preservados, sem substituir o endereço principal.</p>
               <p>• Histórico e totais serão recalculados.</p>
               <p>• O duplicado só será removido no mesmo lote após atualizar as referências.</p>
             </div>

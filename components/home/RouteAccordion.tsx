@@ -194,9 +194,14 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     const rememberedExists = remembered && allRoutes.some((item) => item.id === remembered && item.status !== 'fechada');
     const assembling = allRoutes.filter((item) => item.status === 'aberta' && !routeStartedAt(item));
     const running = allRoutes.filter((item) => item.status === 'aberta' && Boolean(routeStartedAt(item)));
-    const preferred = rememberedExists
-      ? remembered
-      : assembling[0]?.id || running[0]?.id || null;
+    // A montagem mais recente prevalece sobre uma rota que já saiu.
+    // Preferência manual só prevalece enquanto ainda está em montagem.
+    const assemblingNewest = [...assembling].sort((a, b) => {
+      const aTime = Date.parse(String(a.created_at || '')) || 0;
+      const bTime = Date.parse(String(b.created_at || '')) || 0;
+      return bTime - aTime || b.id.localeCompare(a.id);
+    });
+    const preferred = assemblingNewest[0]?.id || (rememberedExists ? remembered : running[0]?.id) || null;
     setIsOpen(defaultOpen || preferred === route.id);
     // Este é o estado inicial. Atualizações da lista durante a operação não
     // devem reabrir um card que o operador recolheu manualmente.

@@ -2,6 +2,32 @@ import type { Delivery } from '@/types';
 import { deliveryCustomerCharge, deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 
+/** R110 P5: apenas uma divisao integralmente validada pode determinar o dinheiro fisico. */
+function cashPaymentPart(delivery: Delivery): { charge: number; tendered: number } | null {
+  const parts = delivery.payment_splits;
+  if (!parts?.length) return null;
+  const chargeCents = Math.round(deliveryCustomerCharge(delivery) * 100);
+  if (!Number.isSafeInteger(chargeCents) || chargeCents < 0 || parts.length < 2 || parts.length > 5) return null;
+  const seen = new Set<string>();
+  let total = 0;
+  let cash = 0;
+  let tendered = 0;
+  for (const part of parts) {
+    if (!part || !['dinheiro', 'pix', 'cartao', 'cartao_credito', 'cartao_debito'].includes(part.method) ||
+      seen.has(part.method) || !Number.isSafeInteger(part.amountCents) || part.amountCents <= 0) return null;
+    seen.add(part.method);
+    total += part.amountCents;
+    if (part.method === 'dinheiro') {
+      cash = part.amountCents;
+      if (part.tenderedCents !== undefined && (!Number.isSafeInteger(part.tenderedCents) || part.tenderedCents < cash)) return null;
+      tendered = part.tenderedCents ?? cash;
+    } else if (part.tenderedCents !== undefined) return null;
+  }
+  if (total !== chargeCents) return null;
+  return { charge: cash / 100, tendered: tendered / 100 };
+}
+
+
 const safeMoney = (value: unknown) => {
   const number = Number(value || 0);
   return Number.isFinite(number) ? Math.max(0, number) : 0;
@@ -27,11 +53,12 @@ export function routeCashFlow(deliveries: Delivery[], initialCashInput = 0) {
       (delivery) =>
         !isCancelledSiteDelivery(delivery) &&
         deriveDeliveryPaymentState(delivery) === 'collect_on_delivery' &&
-        delivery.payment_method === 'dinheiro',
+        (delivery.payment_splits?.length ? (cashPaymentPart(delivery)?.charge ?? 0) > 0 : delivery.payment_method === 'dinheiro'),
     )
     .map((delivery) => {
-      const customerCharge = deliveryCustomerCharge(delivery);
-      const informedTender = safeMoney(delivery.change_for);
+      const splitCash = delivery.payment_splits?.length ? cashPaymentPart(delivery) : null;
+      const customerCharge = splitCash ? splitCash.charge : deliveryCustomerCharge(delivery);
+      const informedTender = splitCash ? splitCash.tendered : safeMoney(delivery.change_for);
       const tenderedCash =
         informedTender > customerCharge ? informedTender : customerCharge;
       const requestedChange = Math.max(0, tenderedCash - customerCharge);

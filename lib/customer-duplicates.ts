@@ -1,13 +1,14 @@
 // lib/customer-duplicates.ts
 import type { Customer, Delivery } from '@/types';
+import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
 
 import {
-  customerNameSimilarity,
   normalizeCustomerName,
   sameCustomerAddress,
 } from '@/lib/customer-identity';
 
-const phoneDigits = (value?: string) => (value || '').replace(/\D/g, '');
+const phoneDigits = (value?: string) => { const digits=(value || '').replace(/\D/g, ''); return digits.startsWith('55') && digits.length > 11 ? digits.slice(2) : digits; };
+const validPhones = (customer: Customer) => new Set(customerPhones(customer).map(p=>phoneDigits(p.number)).filter(p=>p.length>=10));
 
 export interface CustomerDuplicateCandidate {
   left: Customer;
@@ -48,87 +49,48 @@ export function customerDuplicateCandidates(
 
   const result: CustomerDuplicateCandidate[] = [];
 
-  // Indexar candidatos evita comparar clientes sem nome/telefone em comum.
-  // A régua de identidade abaixo e a ordem dos resultados continuam iguais.
+  // Apenas nome-base igual E telefone confirmado em comum justificam a sugestao.
+  // Endereco diferente e um destino adicional, nao evidencia de outra pessoa.
+  // Os indexes evitam comparar todos os clientes entre si.
   const names = customers.map(customer => normalizeCustomerName(customer.name));
-  const phones = customers.map(customer => phoneDigits(customer.phone));
-  const byName = new Map<string, number[]>();
+  const phones = customers.map(validPhones);
   const byPhone = new Map<string, number[]>();
   customers.forEach((_, index) => {
     if (!names[index]) return;
-    const nameBucket = byName.get(names[index]) || [];
-    nameBucket.push(index);
-    byName.set(names[index], nameBucket);
-    if (phones[index].length >= 10) {
-      const phoneBucket = byPhone.get(phones[index]) || [];
-      phoneBucket.push(index);
-      byPhone.set(phones[index], phoneBucket);
+    for (const phone of phones[index]) {
+      const bucket = byPhone.get(phone) || [];
+      bucket.push(index);
+      byPhone.set(phone, bucket);
     }
   });
-
+  const visited = new Set<string>();
   for (let i = 0; i < customers.length; i += 1) {
-    const candidates = new Set([
-      ...(byName.get(names[i]) || []),
-      ...(byPhone.get(phones[i]) || []),
-    ]);
-    for (const j of Array.from(candidates).filter(index => index > i).sort((a, b) => a - b)) {
-      const left = customers[i];
-      const right = customers[j];
-
-      const leftName = names[i];
-      const rightName = names[j];
-
-      if (!leftName || !rightName) continue;
-
-      /*
-       * Nome-base precisa representar a mesma identidade textual.
-       * Isso já trata "Maria" e "Maria (2)" como o mesmo nome-base.
-       */
-      const sameBaseName = leftName === rightName;
-      const leftPhone = phones[i];
-      const rightPhone = phones[j];
-      const samePhone = leftPhone.length >= 10 && leftPhone === rightPhone;
-
-      if (!sameBaseName && !samePhone) continue;
-
-      /*
-       * Na tela de possíveis duplicados exigimos endereço dos dois
-       * lados e correspondência canônica do endereço.
-       *
-       * Mesmo nome em endereços diferentes NÃO entra na lista.
-       */
-      const sameAddress = Boolean(
-        left.address?.trim() && right.address?.trim() &&
-        sameCustomerAddress(left.address, right.address),
-      );
-
-      if (!sameAddress && !samePhone) continue;
-
-      const similarity = customerNameSimilarity(
-        left.name,
-        right.name,
-      );
-
-      if (!sameBaseName && similarity < 0.72) continue;
-
-      const reasons = [
-        sameBaseName ? 'Mesmo nome-base' : '',
-        samePhone ? 'Mesmo telefone' : '',
-        sameAddress ? 'Mesmo endereço' : '',
-      ].filter(Boolean);
-
-      /*
-       * 95 significa "candidato muito forte", mas a tela continua
-       * exigindo confirmação humana. Nenhum merge é automático.
-       */
-      result.push({
-        left,
-        right,
-        score: samePhone && sameAddress ? 99 : samePhone ? 97 : 95,
-        reasons,
-        leftOrders: orderCounts.get(left.id) || 0,
-        rightOrders: orderCounts.get(right.id) || 0,
-      });
+    const indexes = new Set<number>();
+    for (const phone of phones[i]) for (const index of byPhone.get(phone) || []) indexes.add(index);
+    for (const j of [...indexes].filter(index => index > i).sort((a,b)=>a-b)) {
+      const key = `${i}:${j}`;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      if (!names[i] || names[i] !== names[j]) continue;
+      const left = customers[i], right = customers[j];
+      const matchingPhones = [...phones[i]].filter(phone => phones[j].has(phone));
+      if (!matchingPhones.length) continue;
+      // Telefones validos conflitantes bloqueiam sugestao: usuario pediu
+      // nao sugerir quando sao telefones diferentes.
+      const distinctLeft = [...phones[i]].filter(phone => !phones[j].has(phone));
+      const distinctRight = [...phones[j]].filter(phone => !phones[i].has(phone));
+      if (distinctLeft.length && distinctRight.length) continue;
+      const leftAddresses = customerAddresses(left);
+      const rightAddresses = customerAddresses(right);
+      const sameAddress = leftAddresses.some(a => rightAddresses.some(b => sameCustomerAddress(a.address,b.address)));
+      const samePhone = matchingPhones.length > 0;
+      result.push({left,right,score:samePhone && sameAddress ? 99 : 97,
+        reasons:[
+          'Mesmo nome-base',
+          'Mesmo telefone confirmado',
+          sameAddress?'Endereco compartilhado':'Enderecos diferentes: preservar ambos',
+        ],
+        leftOrders:orderCounts.get(left.id)||0,rightOrders:orderCounts.get(right.id)||0});
     }
   }
 

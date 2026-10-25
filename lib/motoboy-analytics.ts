@@ -2,6 +2,7 @@
 import type { Delivery, Motoboy, MotoboyPaymentRule, MotoboySettlementAdjustment, Route } from '@/types';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
 import { activeRouteDeliveries } from '@/lib/route-closure-eligibility';
+import { routeCashFlow } from '@/lib/route-cash-flow';
 
 export type ValeInput = MotoboySettlementAdjustment;
 export const normalizeName=(value?:string)=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLocaleLowerCase('pt-BR');
@@ -29,9 +30,11 @@ export function calculateMotoboyFee(rule:MotoboyPaymentRule|undefined,deliveryCo
 }
 
 export function deliveryCashCollected(delivery:Delivery){
-  if(delivery.payment_method!=='dinheiro'||delivery.is_paid)return 0;
-  // `change_for` é quanto o cliente entregou antes do troco, não quanto ficou
-  // com o motoboy. O caixa retido corresponde ao valor do pedido.
+  if(delivery.is_paid)return 0;
+  // Para pagamento dividido, o valor economico nao equivale ao dinheiro fisico.
+  if(delivery.payment_splits?.length) return routeCashFlow([delivery]).customerCharges;
+  if(delivery.payment_method!=='dinheiro')return 0;
+  // Legado: preservar o calculo de cobranças antigas sem parcelas.
   return Math.max(0,Number(delivery.value)||0);
 }
 
@@ -70,9 +73,10 @@ export function getMotoboyDayData(
       groupedOrderCount:Math.max(0,routeDeliveries.length-routeStops.length),
     };
   }).filter(item=>item.orderCount>0);
-  const cashDeliveries=completedDeliveries.filter(delivery=>delivery.payment_method==='dinheiro'&&!delivery.is_paid);
+  const cashDeliveries=completedDeliveries.filter(delivery=>!delivery.is_paid && (delivery.payment_splits?.length ? routeCashFlow([delivery]).cashOrders.length > 0 : delivery.payment_method==='dinheiro'));
   const cashCollected=cashDeliveries.reduce((sum,delivery)=>sum+deliveryCashCollected(delivery),0);
   const cashTendered=cashDeliveries.reduce((sum,delivery)=>{
+    if (delivery.payment_splits?.length) return sum + routeCashFlow([delivery]).tenderedCash;
     const charge=deliveryCashCollected(delivery);
     return sum+Math.max(charge,Number(delivery.change_for)||0);
   },0);

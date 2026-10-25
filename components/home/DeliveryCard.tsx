@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  Share2, Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, Globe2, Bike, UtensilsCrossed, Layers3, ArrowUp, ArrowDown, MapPin, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle
+  Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
+  Smartphone, Store, Globe2, Bike, UtensilsCrossed, Layers3, ArrowUp, ArrowDown, MapPin, ChevronDown, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import clsx from 'clsx';
@@ -277,6 +277,26 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       const copied = await copyDeliveryToClipboard(delivery, customer?.name, isIfood ? delivery.confirmation_code : customer?.last_confirmation_code, groupedDeliveries, typeof delivery.order_index === 'number' ? delivery.order_index + 1 : undefined, ifoodConfirmationMode);
       if (copied) toast.success('Entrega copiada!');
       else toast.error('Não foi possível copiar a entrega.', { description: 'Tente novamente. Nenhum pedido foi alterado.' });
+    } finally {
+      copyBusyRef.current = false;
+      setCopyBusy(false);
+    }
+  };
+
+  const copyIndividualOrder = async (item: Delivery, name?: string) => {
+    if (copyBusyRef.current) return;
+    copyBusyRef.current = true;
+    setCopyBusy(true);
+    try {
+      const copied = await copyDeliveryToClipboard(
+        item, name, item.origin === 'ifood' ? item.confirmation_code : undefined,
+        [item], typeof item.order_index === 'number' ? item.order_index + 1 : undefined,
+        ifoodConfirmationMode,
+      );
+      if (copied) toast.success('Pedido individual copiado!');
+      else toast.error('Não foi possível copiar este pedido.');
+    } catch {
+      toast.error('Não foi possível copiar este pedido.');
     } finally {
       copyBusyRef.current = false;
       setCopyBusy(false);
@@ -810,6 +830,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                               </p>
                             </div>
                             <span className="shrink-0 text-[10px] font-black text-emerald-400">{isPrivacyMode ? 'R$ •••' : `R$ ${charge.toFixed(2).replace('.', ',')}`}</span>
+                            <button type="button" data-no-card-swipe="true" disabled={copyBusy} aria-label={`Copiar pedido individual de ${itemCustomer?.name || item.customer_name || 'cliente'}`} title="Copiar somente este pedido" onClick={(event)=>{event.stopPropagation();void copyIndividualOrder(item,itemCustomer?.name || item.customer_name);}} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-emerald-500/25 bg-emerald-500/[.07] text-emerald-300 disabled:opacity-35"><Copy size={13}/></button>
                             <Link href={`/entregas/editar?id=${item.id}${operationalDateQuery}`} onClick={(event) => event.stopPropagation()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400" title="Editar este pedido">
                               <Pencil size={11} />
                             </Link>
@@ -890,7 +911,32 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       {canManageStop && Boolean(routeStartedAt(route)) ? (
                         <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();void handleTriggerAction('complete');}} className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-1.5 text-[11px] font-black text-emerald-300"><CheckCircle2 size={14}/>Dar baixa</button>
                       ) : (
-                        <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();toggleDeliveryExpansion(delivery.id,true);}} className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border border-zinc-700 bg-zinc-950 px-1.5 text-[11px] font-bold text-zinc-300">Ver detalhes</button>
+                        <button
+                          type="button"
+                          data-no-card-swipe="true"
+                          onClick={event => { event.stopPropagation(); void copyStop(); }}
+                          disabled={copyBusy}
+                          aria-busy={copyBusy}
+                          aria-label={copyBusy ? 'Copiando mensagem' : isGroupedStop ? 'Copiar mensagem da parada' : 'Copiar mensagem do pedido'}
+                          className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/[.065] px-2 text-[11px] font-black text-emerald-300 disabled:opacity-40 active:bg-emerald-500/15"
+                        >
+                          {copyBusy ? <LoaderCircle size={15} className="shrink-0 animate-spin" /> : <Copy size={15} className="shrink-0" />}
+                          <span className="truncate">{copyBusy ? 'Copiando...' : isGroupedStop ? 'Copiar parada' : 'Copiar pedido'}</span>
+                        </button>
+                      )}
+                      {canManageStop && Boolean(routeStartedAt(route)) && (
+                        <button
+                          type="button"
+                          data-no-card-swipe="true"
+                          onClick={event => { event.stopPropagation(); void copyStop(); }}
+                          disabled={copyBusy}
+                          aria-busy={copyBusy}
+                          aria-label={copyBusy ? 'Copiando mensagem' : isGroupedStop ? 'Copiar mensagem da parada' : 'Copiar mensagem do pedido'}
+                          title={isGroupedStop ? 'Copiar todos os pedidos desta parada' : 'Copiar mensagem deste pedido'}
+                          className="grid h-10 w-9 shrink-0 place-items-center rounded-xl border border-emerald-500/25 bg-emerald-500/[.065] text-emerald-300 disabled:opacity-40 active:bg-emerald-500/15"
+                        >
+                          {copyBusy ? <LoaderCircle size={15} className="animate-spin" /> : <Copy size={15} />}
+                        </button>
                       )}
                       {normalizedWhatsappPhone && <a href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`} target="_blank" rel="noreferrer" aria-label="Chamar cliente no WhatsApp" onClick={event=>event.stopPropagation()} className="grid h-10 w-9 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] text-emerald-300"><MessageCircle size={15}/></a>}
                       {canReorder && <div role="group" aria-label="Subir ou descer parada" className="flex shrink-0 items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]">
@@ -914,11 +960,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     <span className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Detalhes da parada</span>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
                       <button type="button" data-no-card-swipe="true" onClick={(event)=>{event.stopPropagation();toggleDeliveryExpansion(delivery.id,false);}} aria-label="Minimizar esta parada" className="flex min-h-9 items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-[10px] font-black text-zinc-200"><Minimize2 size={13}/>Minimizar</button>
-                      {canManageStop && <button type="button" onClick={(event)=>void toggleStopLock(event)} disabled={reorderBusy} className={`rounded-lg border px-2 py-1 text-[10px] font-black ${orderLocked ? 'border-amber-500/35 bg-amber-500/10 text-amber-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}>{orderLocked ? 'Destravar' : 'Fixar'}</button>}
                       <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${stopCompleted ? 'bg-emerald-500/10 text-emerald-300' : 'bg-sky-500/10 text-sky-300'}`}>{stopCompleted ? 'Concluída' : isGroupedStop ? `${groupedPending} pedidos pendentes` : 'Pendente'}</span>
                     </div>
                   </div>
-                  {canManageStop && <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Organizar parada expandida">
+                  {canManageStop && <details className="mt-3 rounded-xl border border-zinc-800/85 bg-zinc-950/50 p-2.5">
+                    <summary className="flex min-h-9 cursor-pointer items-center justify-between gap-2 text-[11px] font-black text-sky-300"><span>Organizar sequência {position ? `· parada ${position}` : ''}</span><ChevronDown size={15}/></summary>
+                    <div className="mt-2 flex flex-wrap items-center gap-2" aria-label="Organizar parada expandida">
+                      {canManageStop && <button type="button" onClick={(event)=>void toggleStopLock(event)} disabled={reorderBusy} className={`rounded-lg border px-2 py-1 text-[10px] font-black ${orderLocked ? 'border-amber-500/35 bg-amber-500/10 text-amber-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}>{orderLocked ? 'Destravar' : 'Fixar'}</button>}
                     <span className="mr-auto text-[10px] font-semibold text-zinc-400">{orderLocked ? 'Parada fixada · destrave para mover' : canReorder ? `Parada ${position} de ${pendingCount}` : 'Sequência de parada'}</span>
                     {canReorder && <div className="flex items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]" role="group" aria-label="Mover parada expandida">
                       <button type="button" data-no-card-swipe="true" aria-label="Subir parada expandida" title="Subir uma parada" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowUp size={15}/></button>
@@ -928,7 +976,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     {canReorder && <button type="button" data-no-card-swipe="true" onClick={(event)=>{event.stopPropagation();setMoveSheetOpen(true);}} className="min-h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-bold text-zinc-200">Mover para…</button>}
                     {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(0);}} className="min-h-10 rounded-xl border border-emerald-500/25 bg-emerald-500/[.07] px-3 text-[11px] font-black text-emerald-300 disabled:opacity-35">Ir primeiro</button>}
                     {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(pendingCount-1);}} className="min-h-10 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 text-[11px] font-black text-amber-300 disabled:opacity-35">Deixar por último</button>}
-                  </div>}
+                  </div></details>}
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
                     {!delivery.completed && groupedCodeDeliveries.length > 0 && <span className="rounded-lg bg-amber-500/10 px-2 py-1 font-bold text-amber-300">{groupedCodeDeliveries.length} código{groupedCodeDeliveries.length===1?'':'s'} para conferir</span>}
                     {activePhone && <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-300">Contato disponível</span>}
@@ -939,6 +987,24 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     {stopCompleted ? 'Parada concluída · reordenação indisponível' : 'Rota fechada · ordem preservada'}
                   </div>
                 )}
+                <section className="rounded-2xl border border-sky-500/20 bg-sky-500/[.045] p-3" aria-label="Próxima ação operacional">
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-sky-500/10 text-sky-300"><CheckSquare size={16}/></span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[9px] font-black uppercase tracking-[.14em] text-sky-300">Próximo passo</p>
+                      <p className="mt-1 text-[12px] font-black leading-snug text-zinc-100">{
+                        stopCompleted ? 'Entrega concluída — confira o histórico' :
+                        cardIssue ? cardIssue.label :
+                        groupedCodeDeliveries.some(item=>!orderConfirmationCode(item.confirmation_code)) ? 'Solicitar código iFood do pedido pendente' :
+                        groupedToCollect.length > 0 ? 'Receber o pagamento na entrega' :
+                        groupedPixPending.length > 0 ? 'Conferir se o Pix foi recebido' :
+                        !routeStartedAt(route) ? 'Aguardar início da rota' : 'Entregar e registrar a baixa'
+                      }</p>
+                      {isGroupedStop && <p className="mt-1 text-[10px] text-zinc-400">{groupedPending} pendente{groupedPending === 1 ? '' : 's'} · {groupedDeliveries.length} pedidos no mesmo endereço</p>}
+                      {!isGroupedStop && delivery.observation && <p className="mt-1 line-clamp-2 text-[10px] text-amber-300">Observação: {delivery.observation}</p>}
+                    </div>
+                  </div>
+                </section>
                 <div className="flex items-center gap-2 pl-1 flex-wrap">
                   {hasCoordinatesOrLink ? (
                     <span className="flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
@@ -952,6 +1018,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 </div>
 
                 <div className="mt-1">
+                  {navigationLinks && <div className="mb-2 grid min-w-0 grid-cols-2 gap-2" aria-label="Navegação sem abrir o mapa">
+                    <a href={navigationLinks.maps} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/[.08] px-2 text-[11px] font-black text-sky-200"><Navigation size={13} className="mr-1"/> Navegar com Maps</a>
+                    <a href={navigationLinks.waze} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/[.08] px-2 text-[11px] font-black text-violet-200"><Navigation size={13} className="mr-1"/> Navegar com Waze</a>
+                  </div>}
+
                   <button
                     type="button"
                     data-no-card-swipe="true"
@@ -971,10 +1042,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         address={delivery.address_string}
                         mapsLink={delivery.maps_link}
                       />
-                      {navigationLinks && <div className="mt-2 grid min-w-0 grid-cols-2 gap-2" role="group" aria-label="Navegação para esta parada">
-                        <a href={navigationLinks.maps} target="_blank" rel="noopener noreferrer" className="flex min-h-10 min-w-0 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/[.07] px-2 text-center text-[11px] font-black text-sky-200">Navegar com Maps</a>
-                        <a href={navigationLinks.waze} target="_blank" rel="noopener noreferrer" className="flex min-h-10 min-w-0 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/[.07] px-2 text-center text-[11px] font-black text-violet-200">Navegar com Waze</a>
-                      </div>}
+
                     </div>
                   )}
                 </div>
@@ -993,6 +1061,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         </button>
       )}
 
+              <details className="mx-3 mb-3 rounded-2xl border border-zinc-800/85 bg-zinc-950/40 px-3 py-2.5">
+                <summary className="cursor-pointer text-[11px] font-black text-zinc-300">Mais informações · Site, histórico e localização</summary>
+                <div className="mt-3 space-y-2">
       <SiteOrderSnapshot delivery={delivery} privacy={isPrivacyMode} />
               <details className="mx-3 mb-2 rounded-xl border border-sky-500/15 bg-sky-500/[.035] p-2.5 text-[11px] text-zinc-300">
                 <summary className="cursor-pointer font-semibold text-sky-300">Mais sobre a localização</summary>
@@ -1000,6 +1071,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
               </details>
               {isExpanded && !isGroupedStop && <RecurrenceDetails delivery={delivery} />}
 
+                </div>
+              </details>
               {delivery.observation && (
                 <div className="ml-14 mr-4 mb-3 rounded-2xl bg-amber-500/5 border border-amber-500/15 px-3.5 py-2.5">
                   <p className="text-xs text-zinc-300">
@@ -1014,6 +1087,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 isExpanded ? "gap-2.5 rounded-[18px] px-3 py-3" : "gap-2 rounded-[16px] px-3 py-2.5",
                 delivery.completed && !isExpanded && "bg-emerald-500/[.025] border-emerald-500/10"
               )}>
+                <p className="text-[9px] font-black uppercase tracking-[.15em] text-zinc-500">Pagamento e finalização</p>
                 <div className="flex items-center gap-2 flex-wrap">
                   {paymentState === 'paid' ? (
                     <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-500">
@@ -1092,13 +1166,15 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   </Link>
 
                   <button
-                    onClick={() => { void copyStop(); }}
+                    type="button"
+                    data-no-card-swipe="true"
+                    onClick={(event) => { event.stopPropagation(); void copyStop(); }}
                     disabled={copyBusy}
                     aria-busy={copyBusy}
                     aria-label={copyBusy ? "Copiando mensagem da entrega" : "Copiar mensagem da entrega"}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 active:scale-90 transition-all"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/[.08] text-emerald-300 active:scale-90 transition-all"
                   >
-                    {copyBusy ? <LoaderCircle size={16} className="animate-spin" /> : <Share2 size={16} strokeWidth={2.5} />}
+                    {copyBusy ? <LoaderCircle size={16} className="animate-spin" /> : <Copy size={16} strokeWidth={2.5} />}
                   </button>
 
                   {!delivery.completed && !isRecoveryRoute && (
