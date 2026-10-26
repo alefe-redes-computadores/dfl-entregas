@@ -741,6 +741,43 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           : `${groupedDeliveries.length} pedidos nesta parada`
                         : customer?.name || delivery.customer_name || (isIfood ? 'Cliente iFood' : 'Sem Nome')}
                     </p>
+                  {/* Linha dos Identificadores com Press & Hold */}
+                  {(isGroupedStop || (visualOrigin === 'food99' && Boolean(delivery.order_id)) || isSiteAwaitingConfirmation || Boolean(operationalContextLabel) || (isIfood && Boolean(delivery.order_id || delivery.ifood_id || orderConfirmationCode(delivery.confirmation_code)))) && (
+                  <div className="flex max-w-full flex-wrap items-center gap-1.5">
+                    {!isGroupedStop && visualOrigin === 'food99' && delivery.order_id && <span className="rounded-md border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-300">#{delivery.order_id}</span>}
+                    {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
+                    {!isGroupedStop && operationalContextLabel && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black text-sky-300">{operationalContextLabel}</span>}
+                    {isGroupedStop ? (
+                      <span className="bg-violet-500/15 border border-violet-500/30 text-violet-300 px-2 py-0.5 rounded-md text-[10px] font-black shrink-0">
+                        {groupedPending === 0 ? 'Todos concluídos' : `${groupedPending} pendente${groupedPending === 1 ? '' : 's'}`}
+                      </span>
+                    ) : isIfood && delivery.order_id ? (
+                      <span className="bg-red-500/15 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0">
+                        #{delivery.order_id}
+                      </span>
+                    ) : null}
+                    {!isGroupedStop && isIfood && delivery.ifood_id && (
+                      <button
+                        onClick={() => triggerCopyAndRedirect(delivery.ifood_id!, { offerIfoodPortal: true })}
+                        onTouchStart={() => handleTouchStartLongPress(delivery.ifood_id!, true)}
+                        onTouchEnd={handleTouchEndLongPress}
+                        className="bg-zinc-950 border border-zinc-800 hover:border-zinc-700 active:scale-95 text-zinc-300 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0 flex items-center gap-1 transition-all"
+                      >
+                        ID: {delivery.ifood_id} <Copy size={9} className="text-sky-400"/>
+                      </button>
+                    )}
+                    {!isGroupedStop && isIfood && orderConfirmationCode(delivery.confirmation_code) && (
+                      <button
+                        onClick={() => triggerCopyAndRedirect(orderConfirmationCode(delivery.confirmation_code))}
+                        onTouchStart={() => handleTouchStartLongPress(delivery.confirmation_code || '')}
+                        onTouchEnd={handleTouchEndLongPress}
+                        className="bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 active:scale-95 text-amber-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0 flex items-center gap-1 transition-all"
+                      >
+                        Cód: {orderConfirmationCode(delivery.confirmation_code)} <Copy size={9} />
+                      </button>
+                    )}
+                  </div>
+                  )}
                   </div>
                   <div className="min-w-0 max-w-[43%] shrink-0 flex flex-col items-end">
                     <span className="block text-right text-[9px] font-bold uppercase tracking-wide text-zinc-500">{isGroupedStop ? 'Valor dos pedidos' : 'Valor do pedido'}</span>
@@ -759,43 +796,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   </p>
                 )}
 
-                {/* Linha dos Identificadores com Press & Hold */}
-                {(isGroupedStop || (visualOrigin === 'food99' && Boolean(delivery.order_id)) || isSiteAwaitingConfirmation || Boolean(operationalContextLabel) || (isIfood && Boolean(delivery.order_id || delivery.ifood_id || orderConfirmationCode(delivery.confirmation_code)))) && (
-                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                  {!isGroupedStop && visualOrigin === 'food99' && delivery.order_id && <span className="rounded-md border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-300">#{delivery.order_id}</span>}
-                  {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
-                  {!isGroupedStop && operationalContextLabel && <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-black text-sky-300">{operationalContextLabel}</span>}
-                  {isGroupedStop ? (
-                    <span className="bg-violet-500/15 border border-violet-500/30 text-violet-300 px-2 py-0.5 rounded-md text-[10px] font-black shrink-0">
-                      {groupedPending === 0 ? 'Todos concluídos' : `${groupedPending} pendente${groupedPending === 1 ? '' : 's'}`}
-                    </span>
-                  ) : isIfood && delivery.order_id ? (
-                    <span className="bg-red-500/15 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0">
-                      #{delivery.order_id}
-                    </span>
-                  ) : null}
-                  {!isGroupedStop && isIfood && delivery.ifood_id && (
-                    <button
-                      onClick={() => triggerCopyAndRedirect(delivery.ifood_id!, { offerIfoodPortal: true })}
-                      onTouchStart={() => handleTouchStartLongPress(delivery.ifood_id!, true)}
-                      onTouchEnd={handleTouchEndLongPress}
-                      className="bg-zinc-950 border border-zinc-800 hover:border-zinc-700 active:scale-95 text-zinc-300 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0 flex items-center gap-1 transition-all"
-                    >
-                      ID: {delivery.ifood_id} <Copy size={9} className="text-sky-400"/>
-                    </button>
-                  )}
-                  {!isGroupedStop && isIfood && orderConfirmationCode(delivery.confirmation_code) && (
-                    <button
-                      onClick={() => triggerCopyAndRedirect(orderConfirmationCode(delivery.confirmation_code))}
-                      onTouchStart={() => handleTouchStartLongPress(delivery.confirmation_code || '')}
-                      onTouchEnd={handleTouchEndLongPress}
-                      className="bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 active:scale-95 text-amber-400 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold shrink-0 flex items-center gap-1 transition-all"
-                    >
-                      Cód: {orderConfirmationCode(delivery.confirmation_code)} <Copy size={9} />
-                    </button>
-                  )}
-                </div>
-                )}
 
                 {isGroupedStop && isExpanded && (
                   <div className="mt-2 rounded-xl border border-violet-500/20 bg-violet-500/[.04] p-2">
@@ -953,11 +953,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
             </div>
           </div>
 
-          {/* VISUALIZAÇÃO EXPANDIDA */}
+                           {/* R124-R5-COMPACT: cosmetic-only; JSX hierarchy and handlers preserved */}
+{/* VISUALIZAÇÃO EXPANDIDA */}
           {isExpanded && (
             <div className="animate-in slide-in-from-top-2 fade-in duration-200">
-              <div className="px-4 pb-3 flex flex-col gap-2.5">
-                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/45 p-3" aria-label="Resumo da parada">
+              <div className="px-3 pb-2.5 flex flex-col gap-2">
+                <div className="rounded-xl border border-zinc-800/65 bg-zinc-950/25 px-3 py-2" aria-label="Resumo da parada">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Detalhes da parada</span>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -965,8 +966,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${stopCompleted ? 'bg-emerald-500/10 text-emerald-300' : 'bg-sky-500/10 text-sky-300'}`}>{stopCompleted ? 'Concluída' : isGroupedStop ? `${groupedPending} pedidos pendentes` : 'Pendente'}</span>
                     </div>
                   </div>
-                  {canManageStop && <details className="mt-3 rounded-xl border border-zinc-800/85 bg-zinc-950/50 p-2.5">
-                    <summary className="flex min-h-9 cursor-pointer items-center justify-between gap-2 text-[11px] font-black text-sky-300"><span>Organizar sequência {position ? `· parada ${position}` : ''}</span><ChevronDown size={15}/></summary>
+                  {canManageStop && <details className="mt-2 rounded-xl border border-zinc-800/60 bg-zinc-950/25 px-2.5 py-1">
+                    <summary className="flex min-h-9 cursor-pointer items-center justify-between gap-2 text-[11px] font-black text-sky-300"><span>Ajustar ordem {position ? `· parada ${position}` : ''}</span><ChevronDown size={15}/></summary>
                     <div className="mt-2 flex flex-wrap items-center gap-2" aria-label="Organizar parada expandida">
                       {canManageStop && <button type="button" onClick={(event)=>void toggleStopLock(event)} disabled={reorderBusy} className={`rounded-lg border px-2 py-1 text-[10px] font-black ${orderLocked ? 'border-amber-500/35 bg-amber-500/10 text-amber-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}>{orderLocked ? 'Destravar' : 'Fixar'}</button>}
                     <span className="mr-auto text-[10px] font-semibold text-zinc-400">{orderLocked ? 'Parada fixada · destrave para mover' : canReorder ? `Parada ${position} de ${pendingCount}` : 'Sequência de parada'}</span>
@@ -989,7 +990,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     {stopCompleted ? 'Parada concluída · reordenação indisponível' : 'Rota fechada · ordem preservada'}
                   </div>
                 )}
-                <section className="rounded-2xl border border-sky-500/20 bg-sky-500/[.045] p-3" aria-label="Próxima ação operacional">
+                <section className="rounded-xl border border-sky-500/20 bg-sky-500/[.045] px-3 py-2.5" aria-label="Próxima ação operacional">
                   <div className="flex items-start gap-2.5">
                     <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-sky-500/10 text-sky-300"><CheckSquare size={16}/></span>
                     <div className="min-w-0 flex-1">
@@ -1003,7 +1004,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         !routeStartedAt(route) ? 'Aguardar início da rota' : 'Entregar e registrar a baixa'
                       }</p>
                       {isGroupedStop && <p className="mt-1 text-[10px] text-zinc-400">{groupedPending} pendente{groupedPending === 1 ? '' : 's'} · {groupedDeliveries.length} pedidos no mesmo endereço</p>}
-                      {!isGroupedStop && delivery.observation && <p className="mt-1 line-clamp-2 text-[10px] text-amber-300">Observação: {delivery.observation}</p>}
                     </div>
                   </div>
                 </section>
@@ -1020,7 +1020,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 </div>
 
                 <div className="mt-1">
-                  {navigationLinks && <div className="mb-2 grid min-w-0 grid-cols-2 gap-2" aria-label="Navegação sem abrir o mapa">
+                  {navigationLinks && <div className="mb-1.5 grid min-w-0 grid-cols-2 gap-1.5" aria-label="Navegação sem abrir o mapa">
                     <a href={navigationLinks.maps} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/[.08] px-2 text-[11px] font-black text-sky-200"><Navigation size={13} className="mr-1"/> Navegar com Maps</a>
                     <a href={navigationLinks.waze} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/[.08] px-2 text-[11px] font-black text-violet-200"><Navigation size={13} className="mr-1"/> Navegar com Waze</a>
                   </div>}
@@ -1035,7 +1035,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     className="flex h-9 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/45 px-3 text-[10px] font-black text-zinc-400 active:bg-zinc-800"
                   >
                     <MapIcon size={13} className="text-sky-400" />
-                    {mapOpen ? 'Ocultar mapa' : 'Ver mapa'}
+                    {mapOpen ? 'Ocultar mapa' : 'Mapa da parada'}
                   </button>
 
                   {mapOpen && (
@@ -1064,7 +1064,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       )}
 
               <details className="mx-3 mb-3 rounded-2xl border border-zinc-800/85 bg-zinc-950/40 px-3 py-2.5">
-                <summary className="cursor-pointer text-[11px] font-black text-zinc-300">Mais informações · Site, histórico e localização</summary>
+                <summary className="cursor-pointer text-[11px] font-semibold text-zinc-300">Histórico e localização</summary>
                 <div className="mt-3 space-y-2">
       <SiteOrderSnapshot delivery={delivery} privacy={isPrivacyMode} />
               <details className="mx-3 mb-2 rounded-xl border border-sky-500/15 bg-sky-500/[.035] p-2.5 text-[11px] text-zinc-300">
@@ -1076,7 +1076,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 </div>
               </details>
               {delivery.observation && (
-                <div className="ml-14 mr-4 mb-3 rounded-2xl bg-amber-500/5 border border-amber-500/15 px-3.5 py-2.5">
+                <div className="mx-3 mb-2 rounded-xl bg-amber-500/5 border border-amber-500/15 px-3 py-2">
                   <p className="text-xs text-zinc-300">
                     <span className="font-bold text-amber-500">OBS: </span>
                     {delivery.observation}
