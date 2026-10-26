@@ -760,6 +760,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 )}
 
                 {/* Linha dos Identificadores com Press & Hold */}
+                {(isGroupedStop || (visualOrigin === 'food99' && Boolean(delivery.order_id)) || isSiteAwaitingConfirmation || Boolean(operationalContextLabel) || (isIfood && Boolean(delivery.order_id || delivery.ifood_id || orderConfirmationCode(delivery.confirmation_code)))) && (
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {!isGroupedStop && visualOrigin === 'food99' && delivery.order_id && <span className="rounded-md border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-300">#{delivery.order_id}</span>}
                   {isSiteAwaitingConfirmation && <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">Aguardando confirmação</span>}
@@ -794,6 +795,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     </button>
                   )}
                 </div>
+                )}
 
                 {isGroupedStop && isExpanded && (
                   <div className="mt-2 rounded-xl border border-violet-500/20 bg-violet-500/[.04] p-2">

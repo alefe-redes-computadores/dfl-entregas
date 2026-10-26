@@ -1,5 +1,6 @@
 // app/entregas/editar/page.tsx
 'use client';
+import { NavigationLinkAssistance } from '@/components/deliveries/NavigationLinkAssistance';
 import { formatBrazilPhone, normalizeBrazilPhone } from '@/lib/phone';
 
 import {
@@ -1151,6 +1152,7 @@ const [routeId, setRouteId] = useState('');
             />
           </div>
           <LocationEvidencePreview address={streetAddress} mapsLink={mapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':'Loja'}/>
+          <NavigationLinkAssistance address={streetAddress} mapsLink={mapsLink} />
         </section>
 
           </>
@@ -1264,16 +1266,42 @@ const [routeId, setRouteId] = useState('');
           </div>
 
           {(!currentDelivery?.payment_splits?.length || splitEnabled) && !isPaid && !currentDelivery?.completed && (
-            <section className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[.045] p-3.5">
-              <button type="button" aria-pressed={splitEnabled} onClick={() => { setPaymentMethod('dinheiro'); setIsPaid(false); setSplitEnabled(current=>currentDelivery?.payment_splits?.length ? true : !current); }} className="flex min-h-11 w-full items-center justify-between text-left text-xs font-bold text-emerald-300">
-                <span>Pagamento dividido · dinheiro + cartão/Pix</span><span>{splitEnabled?'Ativado':'Ativar'}</span>
-              </button>
-              {splitEnabled && <div className="mt-2 space-y-2">
-                <label className="block text-xs text-zinc-300">Dinheiro (R$)<input type="text" inputMode="decimal" value={splitCash} onChange={e=>setSplitCash(e.target.value.replace(/[^0-9,.]/g,''))} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100" /></label>
-                <label className="block text-xs text-zinc-300">Segunda forma<select value={splitOtherMethod} onChange={e=>setSplitOtherMethod(e.target.value as 'pix'|'cartao'|'cartao_credito'|'cartao_debito')} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100"><option value="cartao">Cartão</option><option value="cartao_credito">Crédito</option><option value="cartao_debito">Débito</option><option value="pix">Pix</option></select></label>
-                <label className="block text-xs text-zinc-300">Outra parcela (R$)<input type="text" inputMode="decimal" value={splitOther} onChange={e=>setSplitOther(e.target.value.replace(/[^0-9,.]/g,''))} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100" /></label>
-                <p role="status" className={`text-xs ${splitReview().valid?'text-emerald-300':'text-amber-300'}`}>{splitReview().valid?'Parcelas conferidas com o total':splitReview().errors[0]}</p>
-              </div>}
+            <section className={`rounded-2xl border p-3.5 transition-colors ${splitEnabled ? 'border-emerald-500/40 bg-emerald-500/[.06]' : 'border-zinc-800 bg-zinc-950/35'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-zinc-100">Pagamento dividido</p>
+                  <p className="mt-1 text-[10px] text-zinc-400">Dinheiro + Pix ou cartão</p>
+                </div>
+                <button type="button" aria-pressed={splitEnabled} aria-label={splitEnabled ? 'Desativar pagamento dividido' : 'Ativar pagamento dividido'} disabled={Boolean(currentDelivery?.payment_splits?.length)}
+                  onClick={() => { setSplitEnabled(current => currentDelivery?.payment_splits?.length ? true : !current); }}
+                  className={`flex min-h-11 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-black transition-colors ${splitEnabled ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} disabled:opacity-50`}>
+                  <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${splitEnabled ? 'bg-emerald-500' : 'bg-zinc-700'}`}><span className={`h-3.5 w-3.5 rounded-full bg-white transition-transform ${splitEnabled ? 'translate-x-4' : 'translate-x-1'}`}/></span>
+                  {splitEnabled ? 'Desativar' : 'Ativar'}
+                </button>
+              </div>
+              {splitEnabled && (
+                <div className="mt-4 space-y-3 border-t border-zinc-800 pt-3">
+                  <label className="block text-[11px] font-bold text-zinc-300">Valor em dinheiro
+                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700 bg-zinc-950 px-3 focus-within:border-amber-400"><Banknote size={17} className="mr-2 shrink-0 text-amber-400"/><span className="mr-1 text-xs text-zinc-500">R$</span><input inputMode="numeric" type="text" value={splitCash} onChange={e => setSplitCash(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 bg-transparent text-base font-black tabular-nums text-zinc-100 outline-none"/></span>
+                  </label>
+                  <div>
+                    <p className="mb-2 text-[11px] font-bold text-zinc-300">Segunda forma de pagamento</p>
+                    <div className="grid grid-cols-2 gap-2" role="group" aria-label="Segunda forma de pagamento">
+                      <button type="button" aria-pressed={splitOtherMethod === 'cartao'} onClick={() => setSplitOtherMethod('cartao')} className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border text-xs font-bold ${splitOtherMethod === 'cartao' ? 'border-sky-400/60 bg-sky-500/15 text-sky-300' : 'border-zinc-800 bg-zinc-900 text-zinc-400'}`}><CreditCard size={17}/> Cartão</button>
+                      <button type="button" aria-pressed={splitOtherMethod === 'pix'} onClick={() => setSplitOtherMethod('pix')} className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border text-xs font-bold ${splitOtherMethod === 'pix' ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-300' : 'border-zinc-800 bg-zinc-900 text-zinc-400'}`}><QrCode size={17}/> Pix</button>
+                    </div>
+                  </div>
+                  <label className="block text-[11px] font-bold text-zinc-300">Valor no {splitOtherMethod === 'pix' ? 'Pix' : 'cartão'}
+                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700 bg-zinc-950 px-3 focus-within:border-emerald-400"><span className="mr-1 text-xs text-zinc-500">R$</span><input type="text" inputMode="numeric" value={splitOther} onChange={e => setSplitOther(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 bg-transparent text-base font-black tabular-nums text-zinc-100 outline-none"/></span>
+                  </label>
+                  <div role="status" className={`rounded-xl border p-3 text-[11px] font-bold ${splitReview().valid ? 'border-emerald-500/25 bg-emerald-500/[.08] text-emerald-300' : 'border-amber-500/25 bg-amber-500/[.06] text-amber-200'}`}>
+                    <p>{splitReview().valid ? 'Valores conferidos: divisão exata.' : splitReview().errors[0] || 'Informe os valores de cada parte.'}</p>
+                    <p className="mt-1 text-[10px] font-medium text-zinc-400">Total: {splitMoney(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</p>
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-zinc-500">O pagamento fica pendente até o recebimento e o acerto da entrega.</p>
+                  {Boolean(currentDelivery?.payment_splits?.length) && <p className="text-[10px] text-amber-300">Divisão já registrada: não pode ser removida nesta edição para evitar perda financeira.</p>}
+                </div>
+              )}
             </section>
           )}
           {Boolean(currentDelivery?.payment_splits?.length) && !splitEnabled && <p className="rounded-xl border border-amber-500/30 p-3 text-xs text-amber-300">Este pagamento tem parcelas registradas em formato não suportado pelo editor. Nenhuma alteração financeira será permitida.</p>}

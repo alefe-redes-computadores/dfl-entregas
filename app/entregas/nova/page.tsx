@@ -1,4 +1,5 @@
 'use client';
+import { NavigationLinkAssistance } from '@/components/deliveries/NavigationLinkAssistance';
 import { readActiveOperationalRouteId, rememberActiveOperationalRouteId } from '@/lib/route-ui-storage';
 import { formatBrazilPhone, normalizeBrazilPhone } from '@/lib/phone';
 
@@ -1132,6 +1133,7 @@ const [routeId, setRouteId] = useState('');
             />
           </div>
           <LocationEvidencePreview address={activeAddress} mapsLink={activeMapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':'Loja'}/>
+          <NavigationLinkAssistance address={activeAddress} mapsLink={activeMapsLink} />
         </section>
 
           </>
@@ -1218,26 +1220,44 @@ const [routeId, setRouteId] = useState('');
           </div>
 
           {!activeExtra && extraIfoodOrders.length === 0 && !activeIsPaid && (
-            <section className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[.045] p-3.5">
-              <button type="button" aria-pressed={splitEnabled} onClick={() => setSplitEnabled(current => !current)} className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-xs font-black text-emerald-300">
-                <span>Dividir pagamento em dinheiro + cartão/Pix</span><span>{splitEnabled ? 'Ativado' : 'Ativar'}</span>
-              </button>
-              {splitEnabled && <div className="mt-2 space-y-2">
-                <label className="block text-[11px] text-zinc-300">Parcela em dinheiro (R$)
-                  <input type="text" inputMode="decimal" value={splitCash} onChange={event => setSplitCash(event.target.value.replace(/[^0-9,.]/g, ''))} placeholder="Ex.: 20,00" className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100" />
-                </label>
-                <label className="block text-[11px] text-zinc-300">Segunda forma
-                  <select value={splitOtherMethod} onChange={event => setSplitOtherMethod(event.target.value as 'pix' | 'cartao')} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100"><option value="cartao">Cartão</option><option value="pix">Pix</option></select>
-                </label>
-                <label className="block text-[11px] text-zinc-300">Parcela {splitOtherMethod === 'pix' ? 'no Pix' : 'no cartão'} (R$)
-                  <input type="text" inputMode="decimal" value={splitOther} onChange={event => setSplitOther(event.target.value.replace(/[^0-9,.]/g, ''))} placeholder="Ex.: 28,00" className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-zinc-100" />
-                </label>
-                <p role="status" className={`text-[10px] font-bold ${splitReview().valid ? 'text-emerald-300' : 'text-amber-300'}`}>{splitReview().valid ? 'Parcelas conferidas: total exato, sem divergencia de centavos.' : splitReview().errors[0] || 'Preencha as parcelas para conferir o total.'}</p>
-                <p className="text-[10px] leading-relaxed text-zinc-500">A entrega permanece pendente ate a confirmacao do recebimento. O acerto misto sera habilitado em etapa propria.</p>
-              </div>}
+            <section className={`rounded-2xl border p-3.5 transition-colors ${splitEnabled ? 'border-emerald-500/40 bg-emerald-500/[.06]' : 'border-zinc-800 bg-zinc-950/35'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-zinc-100">Pagamento dividido</p>
+                  <p className="mt-1 text-[10px] text-zinc-400">Dinheiro + Pix ou cartão</p>
+                </div>
+                <button type="button" aria-pressed={splitEnabled} aria-label={splitEnabled ? 'Desativar pagamento dividido' : 'Ativar pagamento dividido'} disabled={false}
+                  onClick={() => { setSplitEnabled(current => !current); }}
+                  className={`flex min-h-11 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-black transition-colors ${splitEnabled ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} disabled:opacity-50`}>
+                  <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${splitEnabled ? 'bg-emerald-500' : 'bg-zinc-700'}`}><span className={`h-3.5 w-3.5 rounded-full bg-white transition-transform ${splitEnabled ? 'translate-x-4' : 'translate-x-1'}`}/></span>
+                  {splitEnabled ? 'Desativar' : 'Ativar'}
+                </button>
+              </div>
+              {splitEnabled && (
+                <div className="mt-4 space-y-3 border-t border-zinc-800 pt-3">
+                  <label className="block text-[11px] font-bold text-zinc-300">Valor em dinheiro
+                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700 bg-zinc-950 px-3 focus-within:border-amber-400"><Banknote size={17} className="mr-2 shrink-0 text-amber-400"/><span className="mr-1 text-xs text-zinc-500">R$</span><input inputMode="numeric" type="text" value={splitCash} onChange={e => setSplitCash(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 bg-transparent text-base font-black tabular-nums text-zinc-100 outline-none"/></span>
+                  </label>
+                  <div>
+                    <p className="mb-2 text-[11px] font-bold text-zinc-300">Segunda forma de pagamento</p>
+                    <div className="grid grid-cols-2 gap-2" role="group" aria-label="Segunda forma de pagamento">
+                      <button type="button" aria-pressed={splitOtherMethod === 'cartao'} onClick={() => setSplitOtherMethod('cartao')} className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border text-xs font-bold ${splitOtherMethod === 'cartao' ? 'border-sky-400/60 bg-sky-500/15 text-sky-300' : 'border-zinc-800 bg-zinc-900 text-zinc-400'}`}><CreditCard size={17}/> Cartão</button>
+                      <button type="button" aria-pressed={splitOtherMethod === 'pix'} onClick={() => setSplitOtherMethod('pix')} className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border text-xs font-bold ${splitOtherMethod === 'pix' ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-300' : 'border-zinc-800 bg-zinc-900 text-zinc-400'}`}><QrCode size={17}/> Pix</button>
+                    </div>
+                  </div>
+                  <label className="block text-[11px] font-bold text-zinc-300">Valor no {splitOtherMethod === 'pix' ? 'Pix' : 'cartão'}
+                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700 bg-zinc-950 px-3 focus-within:border-emerald-400"><span className="mr-1 text-xs text-zinc-500">R$</span><input type="text" inputMode="numeric" value={splitOther} onChange={e => setSplitOther(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 bg-transparent text-base font-black tabular-nums text-zinc-100 outline-none"/></span>
+                  </label>
+                  <div role="status" className={`rounded-xl border p-3 text-[11px] font-bold ${splitReview().valid ? 'border-emerald-500/25 bg-emerald-500/[.08] text-emerald-300' : 'border-amber-500/25 bg-amber-500/[.06] text-amber-200'}`}>
+                    <p>{splitReview().valid ? 'Valores conferidos: divisão exata.' : splitReview().errors[0] || 'Informe os valores de cada parte.'}</p>
+                    <p className="mt-1 text-[10px] font-medium text-zinc-400">Total: {parseMoney(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</p>
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-zinc-500">O pagamento fica pendente até o recebimento e o acerto da entrega.</p>
+                  {false && <p className="text-[10px] text-amber-300">Divisão já registrada: não pode ser removida nesta edição para evitar perda financeira.</p>}
+                </div>
+              )}
             </section>
           )}
-
           {activePaymentMethod === 'pix' && !splitEnabled && (
             <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800">
               <div className="flex flex-col">
