@@ -37,6 +37,16 @@ export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [showAddSheet, setShowAddSheet] = useState(false);
+  // A folha não fica aberta após navegação; Escape fecha sem trocar de tela.
+  useEffect(() => { setShowAddSheet(false); }, [pathname]);
+  useEffect(() => {
+    if (!showAddSheet) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowAddSheet(false);
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [showAddSheet]);
   // Backlog persistido nas Deliveries; badge nao depende de memoria de aviso local.
   const deliveries = useAppStore(state => state.deliveries);
   const siteUnread = useMemo(() => siteInboxProjection(deliveries).total, [deliveries]);
@@ -151,6 +161,7 @@ export function BottomNav() {
               return (
                 <div key={item.label} className="flex flex-1 justify-center">
                   <button
+                    type="button"
                     onClick={handleAdd}
                     aria-label={addMode?.label || 'Adicionar'}
                     className="-mt-6 flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[18px] border border-amber-300/40 bg-gradient-to-br from-amber-300 to-amber-500 text-zinc-950 shadow-[0_10px_26px_rgba(245,158,11,.28)] transition-transform active:scale-90"
@@ -164,7 +175,9 @@ export function BottomNav() {
             return (
               <button
                 key={item.label}
+                type="button"
                 onClick={() => router.push(item.href)}
+                aria-current={isActive ? 'page' : undefined}
                 className={clsx(
                   'mx-0.5 flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-[14px] py-1.5 text-[9px] font-black transition',
                   isActive ? 'bg-emerald-500/10 text-emerald-400' : 'text-zinc-600 active:bg-zinc-900',
@@ -188,16 +201,21 @@ export function BottomNav() {
       {showAddSheet && addMode?.kind === 'sheet' && (
         <div
           className="fixed inset-0 z-[100] flex items-end bg-black/75 backdrop-blur-sm"
+          role="presentation"
           onClick={() => setShowAddSheet(false)}
         >
           <div
-            className="dfl-bottom-sheet safe-bottom mx-auto w-full max-w-md p-5 pb-7"
+            className="dfl-bottom-sheet safe-bottom mx-auto w-full max-w-md max-h-[min(85dvh,720px)] overflow-y-auto overscroll-contain rounded-t-[28px] p-5 pb-7"
+            role="dialog"
+            aria-modal="true"
+            aria-label={addMode.label}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-700" />
-            <h2 className="font-heading text-lg font-black text-zinc-100">
-              {addMode.label}
-            </h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-heading text-lg font-black text-zinc-100">{addMode.label}</h2>
+              <button type="button" onClick={() => setShowAddSheet(false)} aria-label="Fechar opções" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-zinc-700 bg-zinc-800 text-zinc-200 active:scale-95">×</button>
+            </div>
 
             <div className="mt-4 space-y-2">
               {addMode.options.map((option) => {

@@ -1,7 +1,10 @@
 import type { LatLngPoint } from '@/lib/maps';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 
-const addressCache = new Map<string, LatLngPoint>();
+const GEO_CACHE_TTL_MS = 10 * 60 * 1000;
+const GEO_CACHE_MAX_ENTRIES = 80;
+const addressCache = new Map<string, { point: LatLngPoint; expiresAt: number }>();
+const pendingGeocodes = new Map<string, Promise<LatLngPoint>>();
 let mapsLoader: Promise<void> | null = null;
 
 const PATOS_CENTER = {
@@ -51,7 +54,7 @@ export function loadGoogleMaps() {
       existing.addEventListener('load', () => resolve(), { once: true });
       existing.addEventListener(
         'error',
-        () => reject(new Error('Falha ao carregar o serviço do Google Maps.')),
+        () => { mapsLoader = null; existing.remove(); reject(new Error('Falha ao carregar o serviço do Google Maps.')); },
         { once: true },
       );
       return;
@@ -65,8 +68,11 @@ export function loadGoogleMaps() {
       '&language=pt-BR&region=BR&v=weekly&loading=async';
 
     script.onload = () => resolve();
-    script.onerror = () =>
+    script.onerror = () => {
+      mapsLoader = null;
+      script.remove();
       reject(new Error('Falha ao carregar o serviço do Google Maps.'));
+    };
     document.head.appendChild(script);
   });
 
@@ -167,16 +173,12 @@ async function geocodeWithGoogle(query: string): Promise<LatLngPoint | null> {
   return inPatosBounds(point) ? point : null;
 }
 
-export async function geocodeAddress(address: string): Promise<LatLngPoint> {
+async function resolveGeocodeAddress(address: string, key: string): Promise<LatLngPoint> {
   const canonical = canonicalizeOperationalAddress(address).address;
 
   if (!canonical) {
     throw new Error('Endereço vazio ou inválido.');
   }
-
-  const key = canonical.toLocaleLowerCase('pt-BR').trim();
-  const cached = addressCache.get(key);
-  if (cached) return cached;
 
   const candidates = queryCandidates(address);
   const failures: string[] = [];
@@ -187,7 +189,12 @@ export async function geocodeAddress(address: string): Promise<LatLngPoint> {
     try {
       const point = await geocodeWithGeoapify(query);
       if (point) {
-        addressCache.set(key, point);
+        addressCache.delete(key);
+        addressCache.set(key, { point, expiresAt: Date.now() + GEO_CACHE_TTL_MS });
+        if (addressCache.size > GEO_CACHE_MAX_ENTRIES) {
+          const oldestKey = addressCache.keys().next().value;
+          if (oldestKey) addressCache.delete(oldestKey);
+        }
         return point;
       }
       failures.push(`Geoapify sem resultado: ${query}`);
@@ -203,7 +210,12 @@ export async function geocodeAddress(address: string): Promise<LatLngPoint> {
     try {
       const point = await geocodeWithGoogle(query);
       if (point) {
-        addressCache.set(key, point);
+        addressCache.delete(key);
+        addressCache.set(key, { point, expiresAt: Date.now() + GEO_CACHE_TTL_MS });
+        if (addressCache.size > GEO_CACHE_MAX_ENTRIES) {
+          const oldestKey = addressCache.keys().next().value;
+          if (oldestKey) addressCache.delete(oldestKey);
+        }
         return point;
       }
       failures.push(`Google sem resultado: ${query}`);
@@ -220,6 +232,25 @@ export async function geocodeAddress(address: string): Promise<LatLngPoint> {
       ? `Endereço não localizado. ${reason}`
       : 'Endereço não localizado pelas fontes disponíveis.',
   );
+}
+
+export async function geocodeAddress(address: string): Promise<LatLngPoint> {
+  const canonical = canonicalizeOperationalAddress(address).address;
+  if (!canonical) throw new Error('Endereço vazio ou inválido.');
+  const key = canonical.toLocaleLowerCase('pt-BR').trim();
+  const cached = addressCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.point;
+  if (cached) addressCache.delete(key);
+
+  const running = pendingGeocodes.get(key);
+  if (running) return running;
+  const request = resolveGeocodeAddress(address, key);
+  pendingGeocodes.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (pendingGeocodes.get(key) === request) pendingGeocodes.delete(key);
+  }
 }
 
 export const geocodeStoreAddress = geocodeAddress;

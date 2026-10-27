@@ -1,0 +1,42 @@
+#!/usr/bin/env node
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const ts=require('typescript');
+const runtimePath='lib/access/staffRuntime.ts';
+const repoPath='lib/access/staffPortalRepository.ts';
+const src=fs.readFileSync(runtimePath,'utf8');
+const repo=fs.readFileSync(repoPath,'utf8');
+const rolesSrc=fs.readFileSync('lib/access/roles.ts','utf8');
+function load(file, stubs={}){
+  const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{fileName:file,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}});
+  const mod={exports:{}};
+  vm.runInNewContext(js.outputText,{module:mod,exports:mod.exports,require:(p)=>{if(p in stubs)return stubs[p];throw Error('Unexpected dependency '+p)},Set,Map,Array,Object,String,Number,Date,Error,Boolean},{filename:file});
+  return mod.exports;
+}
+const roles=load('lib/access/roles.ts');
+const runtime=load(runtimePath,{'./roles':roles});
+let count=0;
+const check=(v,m)=>{assert.ok(v,m);count++};
+check(repo.includes('STAFF_AREAS.includes(area)'), 'Boundary: only known staff areas accepted');
+check(repo.includes('getDocsFromServer') && repo.includes('limit(40)'), 'Server-only bounded reads');
+check(repo.includes('assertIdentity(uid);') && repo.includes('account.uid !== uid'),'Identity verified');
+check(!/collection\(db,\s*['"](?:routes|deliveries|customers|stock_products)['"]/.test(repo),'No root collection');
+check(src.includes('STAFF_AREAS.includes(area)'), 'Runtime area whitelist');
+const base={uid:'staff-12345678',displayName:'Motorista',role:'motoboy',status:'active',permissions:['home','routes_read','deliveries_read','finance','stock_read'],linkedMotoboyId:'motoboy123'};
+const account=runtime.parseStaffAccount(base,base.uid);
+check(!!account,'Account parses');
+check(!account.permissions.includes('finance'),'Sensitive permission stripped');
+check(runtime.mayReadStaffArea(account,'routes'),'Assigned route allowed');
+check(!runtime.mayReadStaffArea(account,'stock'),'Stock denied for motoboy');
+check(!runtime.mayReadStaffArea(account,'invalid-section'),'Forged section denied');
+check(!runtime.mayReadStaffArea({...account,linkedMotoboyId:'   '},'routes'),'Whitespace binding denied');
+check(!runtime.mayReadStaffArea({...account,status:'suspended'},'routes'),'Revoked account denied');
+check(!runtime.mayReadStaffArea({...account,uid:'another-user',linkedMotoboyId:''},'deliveries'),'Missing binding denied');
+const clean=runtime.decodeStaffRow({title:'A',subtitle:'B',phone:'9999',price:999},'rowid');
+check(!JSON.stringify(clean).includes('9999')&&!JSON.stringify(clean).includes('phone'),'Projected row excludes PII');
+const guard=fs.readFileSync('components/auth/AuthGuard.tsx','utf8');
+check(guard.includes("NEXT_PUBLIC_DFL_STAFF_PORTAL_ENABLED === 'true'"),'Portal stays opt-in');
+check(guard.includes('!Capacitor.isNativePlatform()'),'Native portal remains closed');
+console.log('R126 ETAPA3:',count,'behavioral and structural checks OK');

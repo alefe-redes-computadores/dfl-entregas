@@ -42,6 +42,15 @@ export function sanitizePermissions(values: unknown): AccessPermission[] {
   if (!Array.isArray(values)) return [];
   return [...new Set(values.filter((p): p is AccessPermission => typeof p === 'string' && valid.has(p)))];
 }
+/** R126 E2: nenhum rascunho de perfil fixo armazena poderes fora do papel. Nao habilita login. */
+export function restrictStaffDraftPermissions(role: StaffRole, values: unknown): AccessPermission[] {
+  const requested = sanitizePermissions(values);
+  if (!Object.prototype.hasOwnProperty.call(rolePermissions, role)) return [];
+  const allowed = role === 'personalizado'
+    ? new Set<AccessPermission>(ACCESS_AREAS.map(area => area.id).filter(id => id !== 'staff_admin'))
+    : new Set<AccessPermission>(rolePermissions[role]);
+  return requested.filter(permission => allowed.has(permission));
+}
 export function roleLabel(role: StaffRole): string {
   return STAFF_ROLES.find((item) => item.id === role)?.label || 'Personalizado';
 }

@@ -1,0 +1,21 @@
+#!/usr/bin/env node
+'use strict';
+const fs=require('node:fs');const assert=require('node:assert/strict');const ts=require('typescript');
+let count=0;const check=(ok,label)=>{assert.ok(ok,`R126 E7: ${label}`);count++;console.log('OK:',label)};
+const h=fs.readFileSync('components/layout/Header.tsx','utf8');
+const parsed=ts.createSourceFile('Header.tsx',h,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+check(parsed.parseDiagnostics.length===0,'Header TSX valido');
+check(h.includes('setGreeting(getGreeting());'),'saudacao atualiza sem timer adicional');
+check(h.includes("if (event.key === 'Escape') setIsProfileOpen(false);"),'perfil fecha por Escape');
+check(h.includes("window.addEventListener('keydown', onEscape)")&&h.includes("window.removeEventListener('keydown', onEscape)"),'listener do modal tem cleanup');
+check(h.includes('if (!isProfileOpen) return;'),'listener so existe durante perfil aberto');
+check(h.includes('max-h-[calc(100dvh-2rem)]')&&h.includes('overflow-y-auto overscroll-contain'),'perfil cabe na tela compacta');
+check(h.includes('role="dialog"')&&h.includes('aria-modal="true"'),'acessibilidade do modal mantida');
+check(h.includes('latestSuccessfulSyncDiagnostic()?.finishedAt')&&h.includes('shouldRefreshOnForeground('),'sync existente preservado');
+check(h.includes("window.addEventListener('dfl:app-foreground', refreshOnForeground)")&&h.includes("window.removeEventListener('dfl:app-foreground', refreshOnForeground)"),'eventos de retorno sem vazamento');
+check(h.includes('120_000')&&h.includes('refreshInFlightRef.current'),'cooldown e trava de concorrencia intactos');
+check(!h.includes('setInterval('),'nenhum polling novo');
+const p=fs.readFileSync('scripts/pre-apk.cjs','utf8');
+check(p.includes("'scripts/test-r126-e7-header.cjs'"),'gate no pre-apk');
+check(p.includes("'scripts/test-v112-r91-sync-resilience.cjs'"),'regressao de sync preservada');
+console.log('R126 E7 HEADER PREMIUM:',count,'contratos aprovados');

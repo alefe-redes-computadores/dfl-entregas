@@ -76,6 +76,7 @@ const PATOS_BOUNDS = {
 };
 
 let activeController: AbortController | null = null;
+let searchEpoch = 0;
 const suggestionCache = new Map<string, { expiresAt: number; items: AddressSuggestion[] }>();
 const SUGGESTION_CACHE_MS = 10 * 60 * 1000;
 
@@ -234,6 +235,9 @@ export async function fetchAddressSuggestions(
 ): Promise<AddressSuggestion[]> {
   const query = normalizeAddressText(input).trim();
 
+  const epoch = ++searchEpoch;
+  activeController?.abort();
+  activeController = null;
   if (query.length < 3) return [];
 
   // A API responde melhor quando a cidade/UF fazem parte da intenção textual.
@@ -247,8 +251,8 @@ export async function fetchAddressSuggestions(
   const cached = suggestionCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.items;
 
-  activeController?.abort();
-  activeController = new AbortController();
+  const controller = new AbortController();
+  activeController = controller;
 
   const params = new URLSearchParams({
     text: localizedQuery,
@@ -260,6 +264,7 @@ export async function fetchAddressSuggestions(
     bias: `proximity:${PATOS_CENTER.longitude},${PATOS_CENTER.latitude}`,
   });
 
+  try {
   const response = await fetch(
     `${GEOAPIFY_ENDPOINT}?${params.toString()}`,
     {
@@ -267,7 +272,7 @@ export async function fetchAddressSuggestions(
       headers: {
         Accept: 'application/json',
       },
-      signal: activeController.signal,
+      signal: controller.signal,
       cache: 'no-store',
     },
   );
@@ -293,13 +298,19 @@ export async function fetchAddressSuggestions(
   const data =
     (await response.json()) as GeoapifyResponse;
 
+  if (controller.signal.aborted || searchEpoch !== epoch) return [];
+
   const items = (data.features || [])
     .filter((feature) => {
       const props = feature.properties || {};
       const countryCode =
         props.country_code?.toLowerCase();
 
-      return !countryCode || countryCode === 'br';
+      const coordinates = featureCoordinates(feature);
+      const hasCoords = Number.isFinite(coordinates.latitude) && Number.isFinite(coordinates.longitude);
+      const withinBounds = !hasCoords || (coordinates.latitude! >= PATOS_BOUNDS.lat1 && coordinates.latitude! <= PATOS_BOUNDS.lat2 && coordinates.longitude! >= PATOS_BOUNDS.lon1 && coordinates.longitude! <= PATOS_BOUNDS.lon2);
+      const city = String(props.city || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      return (!countryCode || countryCode === 'br') && (!city || city === 'patos de minas') && withinBounds;
     })
     .map((feature, index) => {
       const compact = compactSuggestionParts(feature);
@@ -315,12 +326,19 @@ export async function fetchAddressSuggestions(
     .filter((item) => item.label)
     .slice(0, 6);
 
+  if (controller.signal.aborted || searchEpoch !== epoch) return [];
   suggestionCache.set(cacheKey, { expiresAt: Date.now() + SUGGESTION_CACHE_MS, items });
   if (suggestionCache.size > 60) {
     const oldest = suggestionCache.keys().next().value;
     if (oldest) suggestionCache.delete(oldest);
   }
   return items;
+  } catch (error) {
+    if (controller.signal.aborted || searchEpoch !== epoch) return [];
+    throw error;
+  } finally {
+    if (activeController === controller) activeController = null;
+  }
 }
 
 export async function resolveAddressSuggestion(
@@ -367,6 +385,7 @@ export async function resolveAddressSuggestion(
 }
 
 export function cancelAddressAutocompleteSession() {
+  searchEpoch++;
   activeController?.abort();
   activeController = null;
 }

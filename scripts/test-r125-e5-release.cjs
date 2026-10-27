@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const cp=require('node:child_process');
+const script='scripts/audit-r125-e5-release.cjs';
+const source=fs.readFileSync(script,'utf8');
+let total=0;const check=(condition,message)=>{assert.ok(condition,message);total++};
+check(!/firebase-admin|firebase\/firestore|fetch\(|https\.request|http\.request/.test(source),'auditoria sem rede nem Firebase');
+check(!/writeFileSync|unlinkSync|rmSync|mkdirSync|execSync\([^)]*firebase/.test(source),'auditoria sem gravação');
+const pre=fs.readFileSync('scripts/pre-apk.cjs','utf8');
+const gates=[...pre.matchAll(/^\s*'([^']+\.cjs)'\s*,?/gm)].map(m=>m[1]);
+check(gates.includes('scripts/test-r125-e5-release.cjs'),'R125 E5 integrado');
+check(gates.length===new Set(gates).size,'sem testes repetidos');
+const child=cp.spawnSync(process.execPath,[script],{encoding:'utf8'});
+check(child.status===0,'auditoria executa');
+const data=JSON.parse(child.stdout);
+check(data.release.codeGatesOk===true,'contratos críticos presentes');
+check(data.release.productionRulesVerified===false,'sem declaração indevida de regras remotas');
+check(data.release.staffPilotAuthorized===false,'motoboys permanecem bloqueados');
+check(data.firestore.productionRulesStatus==='UNVERIFIED','status de Firestore explícito');
+check(data.inventory.integration.length>=3,'inventário da integração');
+check(data.inventory.performance.length>=2,'inventário de performance');
+check(data.inventory.geocoding.length>=3,'inventário de geocodificação');
+check(data.issues.length===0,'nenhum problema crítico');
+console.log(`R125 E5: ${total} verificações OK`);

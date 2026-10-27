@@ -2,6 +2,27 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/test-r126-e15-selective.cjs',
+  'scripts/test-r126-e14-plan.cjs',
+  'scripts/test-r126-e13-release.cjs',
+  'scripts/test-r126-e12-ifood-index.cjs',
+  'scripts/test-r126-e11-route-metrics.cjs',
+  'scripts/test-r126-e10-route-card-accessibility.cjs',
+  'scripts/test-r126-e9-home-actions.cjs',
+
+  'scripts/test-r126-e8-route-ux.cjs',
+  'scripts/test-r126-e7-header.cjs',
+  'scripts/test-r126-e6-bottom-nav.cjs',
+  'scripts/test-r126-e5-address-autocomplete.cjs',
+  'scripts/test-r126-e4-integration-gate.cjs',
+  'scripts/test-r126-e3-staff-boundary.cjs',
+  'scripts/test-r126-e2-least-privilege.cjs',
+  'scripts/test-r126-e1-identity.cjs',
+  'scripts/test-r125-e5-release.cjs',
+  'scripts/test-r125-e4-readiness.cjs',
+  'scripts/test-r125-e3-resilience.cjs',
+  'scripts/test-r125-geocode-cache.cjs',
+  'scripts/test-r125-staff-safety.cjs',
   'scripts/test-v112-r98-dual-units-barcode.cjs',
   'scripts/test-v112-r97-supplier-planning.cjs',
   'scripts/test-v112-r96-market-list.cjs',

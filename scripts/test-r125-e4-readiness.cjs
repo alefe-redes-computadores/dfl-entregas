@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const cp=require('node:child_process');
+let passed=0;
+const ok=(condition,label)=>{assert.ok(condition,'R125 E4: '+label);console.log('OK:',label);passed++};
+const files=['scripts/audit-r125-e4-security.cjs','scripts/test-r125-staff-safety.cjs','scripts/test-r125-geocode-cache.cjs','scripts/test-r125-e3-resilience.cjs'];
+files.forEach(f=>ok(fs.existsSync(f),f+' existe'));
+const audit=fs.readFileSync(files[0],'utf8');
+ok(!audit.includes('firebase-admin'), 'auditoria nao utiliza credenciais Firebase Admin');
+ok(!audit.includes('getFirestore('), 'auditoria nao consulta Firestore remoto');
+ok(audit.includes('approved:false'), 'ativacao nao pode ser declarada pronta');
+ok(audit.includes('verified:false'), 'regras implantadas nao podem ser presumidas');
+const pre=fs.readFileSync('scripts/pre-apk.cjs','utf8');
+const names=[...pre.matchAll(/['"](scripts\/[^'"\n]+\.cjs)['"]/g)].map(m=>m[1]);
+ok(names.includes('scripts/test-r125-e4-readiness.cjs'),'gate E4 integrado pre-APK');
+ok(new Set(names).size===names.length,'sem testes duplicados no pre-APK');
+const roles=fs.readFileSync('lib/access/roles.ts','utf8');
+ok(roles.includes("activation: 'not_enabled'"),'tipo de ativacao continua bloqueado');
+const result=cp.spawnSync(process.execPath,[files[0]],{encoding:'utf8'});
+ok(result.status===0,'auditoria read-only executada sem falhas');
+const report=JSON.parse(result.stdout);
+ok(report.production_rules.verified===false,'nenhuma afirmacao de deploy Firestore');
+ok(report.staff_activation.approved===false,'nenhuma ativacao por acidente');
+console.log('R125 E4:',passed,'contratos aprovados');

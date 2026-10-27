@@ -179,9 +179,10 @@ export default function RoutesPage() {
     </header>
 
     <div className="flex items-center gap-2 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-2">
-      <button onClick={() => setSelectedDate(value => shiftOperationalDateKey(value, -1))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"><ChevronLeft size={21}/></button>
-      <button onClick={() => { setCalendarMonth(operationalDateFromKey(selectedDate)); setCalendarOpen(true); }} className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-800/75 px-3"><CalendarDays size={17} className="text-emerald-400"/><span className="truncate text-sm font-black capitalize text-zinc-100">{operationalDayLabel(selectedDate)}</span></button>
-      <button onClick={() => setSelectedDate(value => shiftOperationalDateKey(value, 1))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"><ChevronRight size={21}/></button>
+      <button type="button" aria-label="Dia anterior" onClick={() => setSelectedDate(value => shiftOperationalDateKey(value, -1))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"><ChevronLeft size={21}/></button>
+      <button type="button" aria-label="Escolher data das rotas" onClick={() => { setCalendarMonth(operationalDateFromKey(selectedDate)); setCalendarOpen(true); }} className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-800/75 px-3"><CalendarDays size={17} className="text-emerald-400"/><span className="truncate text-sm font-black capitalize text-zinc-100">{operationalDayLabel(selectedDate)}</span></button>
+      <button type="button" aria-label="Próximo dia" onClick={() => setSelectedDate(value => shiftOperationalDateKey(value, 1))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-zinc-500 active:bg-zinc-800"><ChevronRight size={21}/></button>
+      {selectedDate !== today && <button type="button" onClick={() => selectDate(today)} aria-label="Voltar para hoje" className="h-11 shrink-0 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 text-[11px] font-black text-emerald-300 active:bg-emerald-500/20">Hoje</button>}
     </div>
 
     <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 px-3.5 py-3">
@@ -194,7 +195,7 @@ export default function RoutesPage() {
     </section>
 
     <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar rota ou entregador" className="dfl-search pl-11 pr-16"/>{query && <button type="button" onClick={() => setQuery('')} aria-label="Limpar busca de rotas" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-2 text-[10px] font-bold text-emerald-300">Limpar</button>}</div>
-    <div className="dfl-filter-row">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label}</button>)}</div>
+    <div className="dfl-filter-row" role="group" aria-label="Filtrar rotas por situação">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => { const count = value === 'todas' ? dayRoutes.length : value === 'na-rua' ? counts.rua : counts[value]; return <button type="button" key={value} aria-pressed={filter === value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-3.5 py-2.5 text-xs font-bold transition-colors ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label} <span className="ml-1 text-[10px] tabular-nums opacity-70">{count}</span></button>; })}</div>
 
     <p aria-live="polite" className="px-1 text-[10px] text-zinc-500">{rows.length} rota{rows.length === 1 ? '' : 's'} neste filtro · {renderedRows.length} exibida{renderedRows.length === 1 ? '' : 's'}</p>
     <div className="flex flex-col gap-3">

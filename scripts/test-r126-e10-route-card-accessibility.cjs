@@ -1,0 +1,13 @@
+'use strict';
+const fs=require('fs'),assert=require('assert'),ts=require('typescript');
+const path='components/home/RouteAccordion.tsx';const s=fs.readFileSync(path,'utf8');
+const check=(v,label)=>{assert(v,label);console.log('OK:',label)};
+const source=ts.createSourceFile(path,s,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+check(source.parseDiagnostics.length===0,'TSX sem erros sintaticos');
+check(s.includes('onClick={toggleRouteOpen} aria-expanded={isOpen}'),'Expansao preservada');
+check(s.includes('min-h-14 w-full grid-cols-'),'Alvo tactil minimo');
+check(s.includes('focus-visible:outline-emerald-400'),'Foco visivel');
+check(s.includes('motion-reduce:transition-none'),'Movimento reduzido');
+for(const needle of ['rememberOpenRouteId(route.id)','groupDeliveriesByStop','hasPhysicalCashForRoute','deliveryEconomicValue','deriveDeliveryPaymentState','isCancelledSiteDelivery'])check(s.includes(needle),'Contrato preservado: '+needle);
+check(fs.readFileSync('scripts/pre-apk.cjs','utf8').includes("'scripts/test-r126-e10-route-card-accessibility.cjs'"),'Gate pre-apk instalado');
+console.log('R126 E10 CONTRATOS OK');

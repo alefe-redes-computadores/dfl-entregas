@@ -69,6 +69,7 @@ import { geocodeAddress, geocodeStoreAddress } from '@/lib/store-geocoding';
 import { bestOperationalAddress } from '@/lib/operational-address';
 import { deliveryStopKey, groupDeliveriesByStop } from '@/lib/route-stops';
 import { routeDeliveryRevision as indexedRouteDeliveryRevision } from '@/lib/route-card-revision';
+import { routeCardMetrics } from '@/lib/operation/route-card-metrics';
 import { buildRouteShareCard } from '@/lib/route-share-card';
 import { calculateMotoboyFee } from '@/lib/motoboy-analytics';
 import { deliveryEconomicValue, deriveDeliveryPaymentState } from '@/lib/delivery-finance';
@@ -166,13 +167,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress, neighborMeta, stopMeta, allStopGroups, pendingStopGroups } = useOptimizedDeliveries(deliveries, getCustomerById, customers);
   // Derived operational figures share one snapshot instead of regrouping per JSX render.
   const { totalDeliveries, pendingDeliveriesCount, totalStops, pendingStopsCount, progressPercent } = useMemo(() => {
-    const totalDeliveries = deliveries.length;
-    const pending = deliveries.filter((delivery) => !delivery.completed);
-    const pendingDeliveriesCount = pending.length;
     const totalStops = allStopGroups.length;
     const pendingStopsCount = pendingStopGroups.length;
-    const progressPercent = totalDeliveries ? ((totalDeliveries - pendingDeliveriesCount) / totalDeliveries) * 100 : 0;
-    return { totalDeliveries, pendingDeliveriesCount, totalStops, pendingStopsCount, progressPercent };
+    const metrics = routeCardMetrics(deliveries, totalStops, pendingStopsCount);
+    return metrics;
   }, [deliveries, allStopGroups, pendingStopGroups]);
   const operationalRouteDate = routeDate(route);
   const operationalRouteDateKey = operationalRouteDate ? dateKey(operationalRouteDate) : '';
@@ -876,7 +874,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
           <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
         </div>
       )}
-      <button type="button" onClick={toggleRouteOpen} aria-expanded={isOpen} aria-label={`${route.name} · ${route.motoboy_name} · ${isOpen ? 'Recolher' : 'Expandir'} detalhes da rota`} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-3 pt-3.5 text-left active:scale-[0.99] transition-transform">
+      <button type="button" onClick={toggleRouteOpen} aria-expanded={isOpen} aria-label={`${route.name} · ${route.motoboy_name} · ${isOpen ? 'Recolher' : 'Expandir'} detalhes da rota`} className="grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-3 pt-3.5 text-left transition-transform active:scale-[0.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-400 motion-reduce:transition-none">
         <div className="flex min-w-0 items-center gap-2.5">
           <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl transition-colors shrink-0', isNotStarted ? 'bg-zinc-800 text-zinc-400' : isInProgress ? 'bg-sky-500/20 text-sky-400' : 'bg-emerald-500/20 text-emerald-500')}>
             <Bike size={22} />

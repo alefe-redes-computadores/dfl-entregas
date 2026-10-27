@@ -55,6 +55,7 @@ export function Header() {
     const tick = () => {
       timer = window.setTimeout(() => {
         setClock((value) => value + 1);
+        setGreeting(getGreeting());
         tick();
       }, 60_000);
     };
@@ -133,6 +134,15 @@ export function Header() {
       window.removeEventListener('offline', onNetworkOffline);
     };
   }, [refreshNow]);
+
+  useEffect(() => {
+    if (!isProfileOpen) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsProfileOpen(false);
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [isProfileOpen]);
 
   const firstName = user?.displayName?.trim().split(/\s+/)[0] || 'Usuário';
 
@@ -216,7 +226,7 @@ export function Header() {
       {/* Modal de Edição / Visualização de Perfil */}
       {isProfileOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain bg-black/80 px-4 py-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Perfil da conta"
@@ -224,7 +234,7 @@ export function Header() {
             if (event.target === event.currentTarget) setIsProfileOpen(false);
           }}
         >
-          <div className="w-full max-w-sm rounded-[28px] border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
+          <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto overscroll-contain rounded-[28px] border border-zinc-800 bg-zinc-900 p-5 shadow-2xl sm:p-6">
             <div className="flex flex-col items-center text-center">
               <div className="relative h-20 w-20 overflow-hidden rounded-full ring-4 ring-emerald-500/20">
                 <UserAvatar photoURL={user?.photoURL} name={user?.displayName} fallbackClassName="text-xl" />

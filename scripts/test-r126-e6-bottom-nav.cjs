@@ -1,0 +1,21 @@
+#!/usr/bin/env node
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const ts=require('typescript');let count=0;
+const nav=fs.readFileSync('components/layout/BottomNav.tsx','utf8');
+const ok=(v,label)=>{assert.ok(v,'R126 E6: '+label);++count;console.log('OK: '+label)};
+const ast=ts.createSourceFile('BottomNav.tsx',nav,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+ok(ast.parseDiagnostics.length===0,'TSX valido');
+ok(nav.includes('siteInboxProjection(deliveries).total'),'badge da Inbox preservado');
+ok(nav.includes("href: '/loja/caixa-de-entrada'"),'atalho Caixa de Entrada preservado');
+ok(nav.includes("href: '/entregas/nova?returnTo=%2Floja'"),'pedido manual preservado');
+ok(nav.includes('setShowAddSheet(false); }, [pathname]'),'fecha folha ao trocar tela');
+ok(nav.includes("event.key === 'Escape'")&&nav.includes("removeEventListener('keydown', onEscape)"),'Escape com cleanup');
+ok(nav.includes('role="dialog"')&&nav.includes('aria-modal="true"')&&nav.includes('aria-label={addMode.label}'),'folha acessivel');
+ok(nav.includes('aria-label="Fechar opções"'),'botao fechar acessivel');
+ok(nav.includes('max-h-[min(85dvh,720px)]')&&nav.includes('overflow-y-auto'),'folha rolavel em tela Android pequena');
+ok(nav.includes("aria-current={isActive ? 'page' : undefined}"),'destino ativo anunciado');
+ok(!nav.includes('setInterval(')&&!nav.includes('onSnapshot('),'sem leituras ou polling novos');
+ok(fs.readFileSync('scripts/pre-apk.cjs','utf8').includes("'scripts/test-r126-e6-bottom-nav.cjs'"),'gate integrado');
+for(const path of ['scripts/test-v112-r82-inbox-mobile.cjs','scripts/test-v112-r90-home-card-performance.cjs','scripts/test-v112-r91-sync-resilience.cjs'])ok(fs.existsSync(path),'contrato anterior preservado '+path);
+console.log('R126 E6:',count,'contratos OK');

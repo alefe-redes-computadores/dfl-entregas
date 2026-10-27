@@ -15,6 +15,8 @@ export type ClaimDraft = {
 };
 export function claimableDraft(value: ClaimDraft, verifiedEmail: string): boolean {
   if (!SAFE_ID.test(value.id) || value.status !== 'rascunho' || value.activation !== 'not_enabled') return false;
+  if (typeof value.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email.trim()) || value.email.trim().length > 160) return false;
+  if (typeof verifiedEmail !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(verifiedEmail.trim()) || verifiedEmail.trim().length > 160) return false;
   if (!['motoboy', 'compras', 'operacao', 'personalizado'].includes(String(value.role as StaffRole))) return false;
   if (requiresMotoboyBinding(value.role as StaffRole, value.permissions) && !validMotoboyBinding(value.linkedMotoboyId)) return false;
   return typeof value.email === 'string' && value.email.trim().toLowerCase() === verifiedEmail.trim().toLowerCase();

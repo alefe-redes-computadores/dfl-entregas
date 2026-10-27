@@ -15,6 +15,7 @@ import { extractLatLngFromMapsUrl } from '@/lib/maps';
 import { useAppStore } from '@/store/useAppStore';
 import { buildPendingMotoboySettlements } from '@/lib/motoboy-settlement-tasks';
 import { siteInboxSummary } from '@/lib/operation/siteInboxSummary';
+import { ifoodSelfConfirmRouteIds } from '@/lib/operation/ifood-self-confirm-route';
 import { siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
 import { classifyHomeExceptions } from '@/lib/operation/home-exceptions';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
@@ -50,6 +51,8 @@ export function OperationalCommandCenter({
   const motoboys = useAppStore((state) => state.motoboys);
   const operationalExpenses = useAppStore((state) => state.operationalExpenses);
 
+  // A politica ifood_confirmation_mode do motoboy e indexada uma vez no helper.
+  const selfConfirmRouteIds = useMemo(() => ifoodSelfConfirmRouteIds(routes, motoboys), [routes, motoboys]);
   const openRoutes = routes.filter((route) => route.status === 'aberta');
   const pending = deliveries.filter((delivery) => !delivery.completed && !isCancelledSiteDelivery(delivery) && isDeliveryFulfillment(delivery));
 
@@ -84,23 +87,19 @@ export function OperationalCommandCenter({
     item?.id ? `/entregas/editar?id=${encodeURIComponent(item.id)}` : '/entregas';
   const firstMissingIfoodCode = pending.find((item) =>
     item.origin === 'ifood' && Boolean(item.route_id) &&
-    !routes.some(route => route.id === item.route_id && motoboys.some(motoboy => motoboy.id === route.motoboy_id && motoboy.ifood_confirmation_mode === 'motoboy')) &&
+    !selfConfirmRouteIds.has(String(item.route_id || '')) &&
     !String(item.confirmation_code || '').replace(/\D/g, '').match(/^\d{4}$/));
 
   const openRouteIds = new Set(openRoutes.map((route) => route.id));
   const routeCodes = useMemo(() => {
     const original = routeIfoodCodeProgress(deliveries, openRouteIds);
-    const selfConfirmRouteIds = new Set(routes.filter(route =>
-      motoboys.some(motoboy => motoboy.id === route.motoboy_id && motoboy.ifood_confirmation_mode === 'motoboy'))
-      .map(route => route.id));
     if (!selfConfirmRouteIds.size) return original;
     return routeIfoodCodeProgress(deliveries.filter(item =>
       !item.route_id || !selfConfirmRouteIds.has(item.route_id)), openRouteIds);
-  }, [deliveries, routes, motoboys]);
+  }, [deliveries, routes, selfConfirmRouteIds]);
 
-  const selfConfirmPendingRoutes = new Set(routes.filter(route => motoboys.some(motoboy => motoboy.id === route.motoboy_id && motoboy.ifood_confirmation_mode === 'motoboy')).map(route => route.id));
   const externalPending = confirmationBacklog.filter(
-    (item) => (item.status || 'pending') === 'pending' && (!item.route_id || !selfConfirmPendingRoutes.has(item.route_id)),
+    (item) => (item.status || 'pending') === 'pending' && (!item.route_id || !selfConfirmRouteIds.has(item.route_id)),
   );
 
   const routeSpecificPending = externalPending.filter((item) => item.route_id);
@@ -291,7 +290,8 @@ export function OperationalCommandCenter({
               key={item.key}
               type="button"
               onClick={() => router.push(item.href)}
-              className={`flex w-full items-center gap-3 rounded-[16px] border px-3 py-2.5 text-left active:scale-[0.99] ${style}`}
+              aria-label={`${item.label}: ${item.count} pendência${item.count === 1 ? '' : 's'}. ${item.description}`}
+              className={`flex min-h-14 w-full items-center gap-3 rounded-[16px] border px-3 py-2.5 text-left transition active:scale-[0.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 ${style}`}
             >
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-black/10">
                 <Icon size={14} />
@@ -301,12 +301,12 @@ export function OperationalCommandCenter({
                 <p className="truncate text-[11px] font-black text-zinc-200">
                   {item.label}
                 </p>
-                <p className="mt-0.5 truncate text-[10px] text-zinc-400">
+                <p className="mt-0.5 line-clamp-2 break-words text-[10px] leading-relaxed text-zinc-400">
                   {item.description}
                 </p>
               </div>
 
-              <span className="shrink-0 text-xs font-black">{item.badge ?? item.count}</span>
+              <span aria-hidden="true" className="shrink-0 rounded-lg bg-zinc-950/30 px-1.5 py-1 text-xs font-black tabular-nums">{item.badge ?? item.count}</span>
               <ChevronRight size={14} className="shrink-0 opacity-60" />
             </button>
           );
