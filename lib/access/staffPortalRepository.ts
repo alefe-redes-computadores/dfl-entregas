@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import {
-  decodeStaffRow, mayReadStaffArea, parseStaffAccount,
+  STAFF_AREAS, decodeStaffRow, mayReadStaffArea, parseStaffAccount,
   type StaffAccount, type StaffArea, type StaffRow,
 } from './staffRuntime';
 import { isSuperadminUid } from './roles';
@@ -24,7 +24,7 @@ export async function fetchStaffAccount(uid: string): Promise<StaffAccount | nul
 }
 export async function fetchStaffRows(uid: string, area: StaffArea, account: StaffAccount): Promise<StaffRow[]> {
   assertIdentity(uid);
-  if (account.uid !== uid || !mayReadStaffArea(account, area)) throw new Error('Acesso não autorizado para esta área.');
+  if (!STAFF_AREAS.includes(area) || account.uid !== uid || !mayReadStaffArea(account, area)) throw new Error('Acesso não autorizado para esta área.');
   const snap = await getDocsFromServer(query(collection(db, 'staff_workspaces', uid, area), limit(40)));
   assertIdentity(uid);
   return snap.docs.map((item) => decodeStaffRow(item.data(), item.id));

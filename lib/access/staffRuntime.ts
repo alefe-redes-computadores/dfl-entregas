@@ -43,11 +43,12 @@ export function parseStaffAccount(value: unknown, uid: string): StaffAccount | n
   };
 }
 export function mayReadStaffArea(account: StaffAccount | null, area: StaffArea): boolean {
+  if (!STAFF_AREAS.includes(area)) return false;
   if (!account || account.status !== 'active') return false;
   if (account.role === 'motoboy' && (area === 'stock' || area === 'purchases')) return false;
   if (account.role === 'compras' && (area === 'routes' || area === 'deliveries')) return false;
   if (area === 'routes' || area === 'deliveries') {
-    if ((account.role === 'motoboy' || account.role === 'personalizado') && !account.linkedMotoboyId) return false;
+    if ((account.role === 'motoboy' || account.role === 'personalizado') && !account.linkedMotoboyId?.trim()) return false;
   }
   return account.permissions.includes(STAFF_AREA_PERMISSION[area]);
 }

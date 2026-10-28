@@ -22,6 +22,18 @@ export async function commitSuspendedStaffRefresh(db:Firestore,req:RefreshCommit
   const next=await buildFreshStaffSnapshot(db,account,read);
   const before=await readCurrentStaffSnapshot(db,req.uid,read);
   if(staffRefreshProof(req.uid,account.updatedAt,before,next)!==req.expectedDigest)throw new Error('R36_PREVIEW_STALE');
+  // R127 E14: equivalencia experimental, desligada por padrao; antes de QUALQUER escrita.
+  if(process.env.DFL_STAFF_R127_SHADOW_VERIFY_ENABLED==='true'){
+   const {readShadowStaffSnapshotInTransaction}=await import('./staffRefreshTransactionAdapter');
+   const shadow=await readShadowStaffSnapshotInTransaction(db,tx,req.uid);
+   const canonical=(value:unknown):string=>JSON.stringify(
+    Object.fromEntries(REFRESH_SECTIONS.map(area=>[area,
+     (value as Record<string,Array<{id:string;value:Record<string,string>}>>)[area]
+      .map(row=>({id:row.id,value:{title:row.value.title,subtitle:row.value.subtitle,status:row.value.status}}))
+      .sort((a,b)=>a.id.localeCompare(b.id))])));
+   if(canonical(before)!==canonical(shadow))throw new Error('R127_SHADOW_DIVERGENCE');
+  }
+
   const plan=compareRefreshSnapshot(before,next);
   const now=new Date().toISOString();
   if(plan.totalChanges===0)return {suspended:true as const,syncedAt:now,applied:false,totalNew:plan.totalNew,totalChanges:0};

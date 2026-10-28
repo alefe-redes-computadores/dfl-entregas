@@ -1,0 +1,24 @@
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict'),ts=require('typescript'),vm=require('node:vm');
+const path='lib/access/staffProjectionPager.ts';
+const source=fs.readFileSync(path,'utf8');
+const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
+const loaded={exports:{}};vm.runInNewContext(code,{module:loaded,exports:loaded.exports,Error,Set,Number,Array});
+const {collectProjectionPages}=loaded.exports;
+const row=id=>({id});
+const checkReject=async(fn,re)=>await assert.rejects(fn,err=>re.test(String(err.message)));
+(async()=>{
+ const all=Array.from({length:19},(_,i)=>row(String(i).padStart(3,'0')));
+ const fetch=async(after,size)=>{const next=all.filter(r=>after===undefined||r.id>after).slice(0,size);return {rows:next,nextCursor:next.length===size?next.at(-1).id:undefined};};
+ assert.equal((await collectProjectionPages(fetch)).length,19);
+ assert.equal((await collectProjectionPages(async()=>({rows:[]}))).length,0);
+ await checkReject(()=>collectProjectionPages(async()=>({rows:[row('a'),row('a')]})),/DUPLICATE/);
+ await checkReject(()=>collectProjectionPages(async()=>({rows:[row('z'),row('a')]})),/NON_MONOTONIC/);
+ await checkReject(()=>collectProjectionPages(async()=>({rows:[row('a')],nextCursor:'b'})),/INVALID_CURSOR/);
+ let n=0;
+ await checkReject(()=>collectProjectionPages(async()=>{const id=String(n++).padStart(3,'0');return {rows:[row(id)],nextCursor:id};},{pageSize:1,maxRows:1}),/TOO_MANY/);
+ await checkReject(()=>collectProjectionPages(async()=>({rows:[row('a')]}),{pageSize:1}),/AMBIGUOUS/);
+ const snap=fs.readFileSync('lib/access/staffRefreshSnapshot.ts','utf8');
+ assert(snap.includes('.limit(41)')&&snap.includes('const snapshot=await read(snap)'),'R35/R36 transacional preservado');
+ console.log('R127 E7 R3: pager isolado, cenarios de cursor e limites OK');
+})().catch(e=>{console.error(e);process.exitCode=1});
