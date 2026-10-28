@@ -552,7 +552,8 @@ export const useAppStore = create<AppState>()(
       },
 
       initData: async () => {
-        if (!get().hasHydrated) return;
+        // Sessão sem UID confirmado jamais deve iniciar leitura global de dados.
+        if (!get().hasHydrated || !get().authLoaded || !get().user?.uid) return;
 
         // AuthGuard já inicializa uma única vez por montagem/login.
         // Chamadas explícitas posteriores são permitidas, mas nunca concorrentes.
@@ -926,6 +927,11 @@ export const useAppStore = create<AppState>()(
             collections: syncCollections,
           });
         } catch (error) {
+          // Resultado atrasado de outra conta não contamina a sessão atual.
+          if (!syncOwnerStillCurrent(syncOwnerUid, get().user?.uid)) {
+            set({ isSyncing: false });
+            return;
+          }
           console.error('Erro ao sincronizar:', error);
           set({ isSyncing: false, syncError: true });
           recordSyncDiagnostic({

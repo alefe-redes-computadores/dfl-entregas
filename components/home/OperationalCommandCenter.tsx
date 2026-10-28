@@ -14,11 +14,13 @@ import type { Delivery, Route } from '@/types';
 import { extractLatLngFromMapsUrl } from '@/lib/maps';
 import { useAppStore } from '@/store/useAppStore';
 import { buildPendingMotoboySettlements } from '@/lib/motoboy-settlement-tasks';
+import { settlementQueueSummary } from '@/lib/operation/settlement-queue-summary';
 import { siteInboxSummary } from '@/lib/operation/siteInboxSummary';
 import { ifoodSelfConfirmRouteIds } from '@/lib/operation/ifood-self-confirm-route';
 import { siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
 import { classifyHomeExceptions } from '@/lib/operation/home-exceptions';
 import { homeActionQueue } from '@/lib/operation/home-action-queue';
+import { RouteCashPulse } from '@/components/home/RouteCashPulse';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { Inbox } from 'lucide-react';
@@ -134,6 +136,9 @@ export function OperationalCommandCenter({
     expenses: operationalExpenses,
   }), [motoboys, routes, deliveries, operationalExpenses]);
   const firstSettlementTask = settlementTasks[0];
+  const settlementPulse = useMemo(() => settlementQueueSummary(settlementTasks), [settlementTasks]);
+  const [showSettlementQueue, setShowSettlementQueue] = useState(false);
+  const cashPulseRoutes = useMemo(() => routes.filter((route) => route.status === 'aberta'), [routes]);
 
   const rows = [
     {
@@ -289,6 +294,8 @@ export function OperationalCommandCenter({
         </span>
       </div>
 
+      <RouteCashPulse routes={cashPulseRoutes} deliveries={deliveries} />
+
       <div className="space-y-1.5">
         {visibleRows.map((item) => {
           const queue = homeActionQueue(actionQueues[item.key] || []);
@@ -360,6 +367,31 @@ export function OperationalCommandCenter({
           );
         })}
       </div>
+      {settlementTasks.length > 1 && (
+        <div className="mt-2 rounded-2xl border border-amber-500/20 bg-zinc-950/60 p-2">
+          <button type="button" aria-expanded={showSettlementQueue}
+            onClick={() => setShowSettlementQueue((value) => !value)}
+            className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2 text-left text-xs font-black text-amber-200">
+            <span>Acertos: {settlementPulse.people} motoboys · {settlementPulse.routes} rotas</span>
+            <ChevronRight size={16} aria-hidden="true" className={showSettlementQueue ? 'rotate-90' : ''} />
+          </button>
+          {showSettlementQueue && (
+            <div className="max-h-64 space-y-1 overflow-y-auto">
+              {settlementTasks.map((task) => (
+                <button key={task.sourceId} type="button"
+                  onClick={() => router.push(`/motoboys/acerto?id=${encodeURIComponent(task.motoboy.id)}&date=${encodeURIComponent(task.date)}`)}
+                  className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-left active:bg-zinc-800">
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-bold text-zinc-100">{task.motoboy.name}</span>
+                    <span className="block text-[10px] text-zinc-500">{task.routes} rota{task.routes === 1 ? '' : 's'} · {task.deliveries} pedido{task.deliveries === 1 ? '' : 's'}</span>
+                  </span>
+                  <ChevronRight size={15} className="shrink-0 text-amber-400" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {visibleActionRows.length > 2 && (
         <button
           type="button"

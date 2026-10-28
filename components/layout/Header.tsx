@@ -83,11 +83,20 @@ export function Header() {
     refreshInFlightRef.current = true;
     lastForegroundSyncRef.current = Date.now();
     const toastId = showFeedback ? toast.loading('Buscando pedidos novos...', { id: 'operation-sync' }) : undefined;
+    const previousDiagnosticId = latestSyncDiagnostic()?.id;
+    const ownerUid = snapshot.user.uid;
     try {
       await initData();
-      const failed = useAppStore.getState().syncError;
+      const current = useAppStore.getState();
+      // Resposta de outra sessão, execução ignorada ou tentativa sem registro
+      // não pode produzir o falso feedback de sincronização concluída.
+      if (current.user?.uid !== ownerUid) return;
+      const latest = latestSyncDiagnostic();
+      const completed = Boolean(latest && latest.id !== previousDiagnosticId);
+      const failed = current.syncError || latest?.status === 'error';
       if (showFeedback && toastId !== undefined) {
-        if (failed) toast.error('Não foi possível atualizar agora.', { id: toastId });
+        if (!completed) toast.warning('Sincronização não iniciada.', { id: toastId });
+        else if (failed) toast.error('Não foi possível atualizar agora.', { id: toastId });
         else toast.success('Operação atualizada.', { id: toastId, duration: 1400 });
       }
     } catch (error) {

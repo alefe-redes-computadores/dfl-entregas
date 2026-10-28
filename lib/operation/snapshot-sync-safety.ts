@@ -50,7 +50,9 @@ export function preserveInFlightLocalEdits<T extends SyncRecord>(
 ): T[] {
   const current = new Map(currentLocal.map(item => [item.id, item] as const));
   const result: T[] = [];
+  const seen = new Set<string>();
   for (const remoteOrLocal of cloudFirstMerged) {
+    seen.add(remoteOrLocal.id);
     const before = baseline.get(remoteOrLocal.id);
     const existsBefore = baseline.has(remoteOrLocal.id);
     const currentItem = current.get(remoteOrLocal.id);
@@ -61,6 +63,14 @@ export function preserveInFlightLocalEdits<T extends SyncRecord>(
       result.push(currentItem);
     } else {
       result.push(remoteOrLocal);
+    }
+  }
+  // Um cadastro feito depois da captura do baseline pode ainda nao constar
+  // no snapshot remoto nem na mesclagem. Preservar apenas esse cadastro novo,
+  // sem ressuscitar registros antigos removidos da nuvem.
+  for (const [id, item] of current) {
+    if (!baseline.has(id) && !seen.has(id)) {
+      result.push(item);
     }
   }
   return result;

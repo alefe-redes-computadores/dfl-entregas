@@ -11,6 +11,49 @@ export type SyncDiagnostic = {
 
 const STORAGE_KEY = 'dfl-sync-diagnostics-v1';
 const MAX_ENTRIES = 30;
+
+/** Diagnósticos são compartilháveis: nunca registrar URLs, emails, tokens ou IDs pessoais. */
+export function safeSyncErrorMessage(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const raw = value.trim();
+  if (!raw) return undefined;
+  // Os códigos do Firebase são suficientes para triagem sem salvar dados sensíveis.
+  const code = raw.match(/(?:firebase\/)?(?:auth|firestore)\/[a-z][a-z0-9-]{1,70}|\b(?:permission-denied|unavailable|deadline-exceeded|failed-precondition|unauthenticated|resource-exhausted|cancelled)\b/i);
+  if (code) return `Falha operacional: ${code[0].toLowerCase()}`;
+  if (/offline|network|rede|internet|conex[aã]o|timeout|temporarily unavailable/i.test(raw)) return 'Falha operacional: conexão ou tempo limite';
+  return 'Falha operacional: detalhes privados omitidos';
+}
+
+export type SyncHealthSummary = {
+  attempts: number;
+  successes: number;
+  errors: number;
+  latestFailed: boolean;
+  consecutiveFailures: number;
+  latestSuccessAt: string | null;
+  recentHighVolume: boolean;
+  averageReturnedDocuments: number;
+  slowestDurationMs: number;
+};
+
+/** Apenas dados locais, sem listeners ou leituras Firebase. Quantidade de documentos não é custo faturado. */
+export function summarizeSyncHealth(entries: readonly SyncDiagnostic[]): SyncHealthSummary {
+  const recent = sanitizeSyncDiagnostics(entries).slice(0, 10);
+  const successes = recent.filter(entry => entry.status === 'success');
+  const errors = recent.length - successes.length;
+  return {
+    attempts: recent.length,
+    successes: successes.length,
+    errors,
+    latestFailed: recent[0]?.status === 'error',
+    consecutiveFailures: recent.findIndex(entry => entry.status === 'success') === -1
+      ? recent.length : recent.findIndex(entry => entry.status === 'success'),
+    latestSuccessAt: successes[0]?.finishedAt ?? null,
+    recentHighVolume: successes.slice(0, 3).filter(entry => entry.totalDocuments >= 300).length >= 2,
+    averageReturnedDocuments: successes.length ? Math.round(successes.reduce((sum, entry) => sum + entry.totalDocuments, 0) / successes.length) : 0,
+    slowestDurationMs: recent.reduce((max, entry) => Math.max(max, entry.durationMs), 0),
+  };
+}
 export const SYNC_DIAGNOSTIC_EVENT = 'dfl:sync-diagnostic-recorded';
 
 function validDate(value: unknown): value is string {
@@ -49,7 +92,7 @@ export function sanitizeSyncDiagnostics(value: unknown): SyncDiagnostic[] {
       durationMs: nonNegative(item.durationMs),
       status: item.status, totalDocuments: nonNegative(item.totalDocuments),
       collections,
-      ...(typeof item.message === 'string' ? { message: item.message.slice(0, 500) } : {}),
+      ...(safeSyncErrorMessage(item.message) ? { message: safeSyncErrorMessage(item.message) } : {}),
     });
     ids.add(item.id);
     if (result.length >= MAX_ENTRIES) break;
@@ -72,6 +115,8 @@ export function recordSyncDiagnostic(
   if (typeof window === 'undefined') return;
   const next: SyncDiagnostic = {
     ...entry,
+    // Nunca manter a mensagem original por spread quando o sanitizador a omite.
+    message: safeSyncErrorMessage(entry.message),
     id: `${entry.startedAt}-${Math.random().toString(36).slice(2, 8)}`,
   };
   try {

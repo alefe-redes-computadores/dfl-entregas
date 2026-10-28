@@ -380,14 +380,25 @@ export async function generateRouteMessages(
 
     msg1.push(`──────────────`);
     msg1.push(`📍 *PARADAS · ORDEM DE ENTREGA*`);
-    const ifoodCount = deliveries.filter((delivery) => delivery.origin === 'ifood').length;
-    const storeCount = deliveries.filter((delivery) => delivery.origin === 'loja').length;
-    const unknownOriginCount = deliveries.length - ifoodCount - storeCount;
-
+    // R148 R2: classificar canais sem introduzir dependencias no gerador,
+    // preservando os contratos legados de mensagens e de codigo individual iFood.
+    const channelCounts = { ifood: 0, food99: 0, site: 0, store: 0, unknown: 0 };
+    for (const delivery of deliveries) {
+      const origin = String(delivery.origin || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+      const source = String(delivery.source_system || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+      if (origin === 'ifood' || source === 'ifood') channelCounts.ifood++;
+      else if (origin === '99food' || origin === 'food99' || source === '99food' || source === 'food99') channelCounts.food99++;
+      else if (source === 'dflsite' || origin === 'dflsite' || origin === 'site') channelCounts.site++;
+      else if (origin === 'loja' || origin === 'manual') channelCounts.store++;
+      else channelCounts.unknown++;
+    }
+    const ifoodCount = channelCounts.ifood;
     const originSummaryParts: string[] = [];
-    if (ifoodCount > 0) originSummaryParts.push(`${ifoodCount} iFood`);
-    if (storeCount > 0) originSummaryParts.push(`${storeCount} Loja`);
-    if (unknownOriginCount > 0) originSummaryParts.push(`${unknownOriginCount} sem origem`);
+    if (channelCounts.ifood > 0) originSummaryParts.push(`${channelCounts.ifood} iFood`);
+    if (channelCounts.food99 > 0) originSummaryParts.push(`${channelCounts.food99} 99Food`);
+    if (channelCounts.site > 0) originSummaryParts.push(`${channelCounts.site} Site DFL`);
+    if (channelCounts.store > 0) originSummaryParts.push(`${channelCounts.store} Loja`);
+    if (channelCounts.unknown > 0) originSummaryParts.push(`${channelCounts.unknown} origem não identificada`);
 
     if (originSummaryParts.length > 0) {
       msg1.push(`🧾 *Origem:* ${originSummaryParts.join(' · ')}`);

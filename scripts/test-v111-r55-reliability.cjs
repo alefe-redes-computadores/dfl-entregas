@@ -40,7 +40,7 @@ function watcherScenario({initialUnread=[],source='dfl_site',status='pendente',u
  const unread=new Set(initialUnread),marked=[],notified=[];
  let receive=()=>{};let subscriptions=0;
  const useStore=(select)=>select({user:user?{uid:'owner'}:null,authLoaded:true,hasHydrated:true});
- useStore.getState=()=>({customers:[{id:'c',name:'Cliente'}],storeSettings:{notificationPreferences:{}}});
+ useStore.getState=()=>({user:user?{uid:'owner'}:null,authLoaded:true,hasHydrated:true,customers:[{id:'c',name:'Cliente'}],storeSettings:{notificationPreferences:{}}});
  const React={useEffect:(callback)=>{const clean=callback();if(typeof clean==='function'){} }};
  const exports=compile(watcherSource,{
   react:React,'firebase/firestore':{collection:()=>({}),query:()=>({}),where:()=>({}),onSnapshot:(q,cb)=>{subscriptions++;receive=cb;return ()=>{};}},

@@ -9,12 +9,13 @@ import { notifyNewSiteOrder } from '@/lib/native/notifications';
 import type { Delivery } from '@/types';
 
 export function SiteOrderNotificationWatcher() {
-  const user = useAppStore((state) => state.user);
+  // UID primitivo evita reassinar o listener quando o objeto User muda sem troca de conta.
+  const uid = useAppStore((state) => state.user?.uid);
   const authLoaded = useAppStore((state) => state.authLoaded);
   const hasHydrated = useAppStore((state) => state.hasHydrated);
 
   useEffect(() => {
-    if (!user || !authLoaded || !hasHydrated) return;
+    if (!uid || !authLoaded || !hasHydrated) return;
 
     const mountedAt = new Date(Date.now() - 5_000).toISOString();
     const seen = new Set<string>();
@@ -22,6 +23,8 @@ export function SiteOrderNotificationWatcher() {
     return onSnapshot(
       query(collection(db, 'deliveries'), where('updated_at', '>', mountedAt)),
       (snapshot) => {
+        // Um callback antigo de outra conta jamais cria alerta na sessão atual.
+        if (useAppStore.getState().user?.uid !== uid) return;
         // Uma leitura local e um índice de clientes por lote. O listener continua
         // único, mas um lote grande do Site deixa de fazer trabalho N x M.
         const unreadBefore = new Set(readUnreadSiteOrderIds());
@@ -61,7 +64,7 @@ export function SiteOrderNotificationWatcher() {
       },
       (error) => console.warn('[SITE ORDER WATCHER] fallback initData preservado', error),
     );
-  }, [authLoaded, hasHydrated, user]);
+  }, [authLoaded, hasHydrated, uid]);
 
   return null;
 }

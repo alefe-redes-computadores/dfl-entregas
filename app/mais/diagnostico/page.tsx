@@ -12,6 +12,7 @@ import {
   clearSyncDiagnostics,
   readSyncDiagnostics,
   syncDiagnosticText,
+  summarizeSyncHealth,
   type SyncDiagnostic,
 } from '@/lib/sync-diagnostics';
 import { auth } from '@/lib/firebase';
@@ -92,6 +93,8 @@ export default function OperationalDiagnosticsPage() {
       repeatedHighVolume,
     };
   }, [entries]);
+
+  const localHealth = useMemo(() => summarizeSyncHealth(entries), [entries]);
 
   const recoveryUrl = Capacitor.isNativePlatform()
     ? `${SERVER_ORIGIN}/api/integration/diagnostics`
@@ -227,6 +230,26 @@ export default function OperationalDiagnosticsPage() {
           <p className="mt-3 text-2xl font-black text-zinc-100">{pendingNotifications ?? '—'}</p>
           <p className="text-[10px] text-zinc-500">notificações locais pendentes neste aparelho</p>
         </div>
+      </section>
+
+      <section aria-label="Resumo local da sincronização" className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3">
+        <p className="text-xs font-bold text-zinc-200">Confiabilidade · últimas {localHealth.attempts} tentativas</p>
+        <div className="mt-2 grid grid-cols-3 gap-2 text-center text-[11px]">
+          <div className="rounded-xl bg-zinc-950/70 p-2"><b className="block text-emerald-400">{localHealth.successes}</b><span className="text-zinc-500">Sucessos</span></div>
+          <div className="rounded-xl bg-zinc-950/70 p-2"><b className="block text-rose-400">{localHealth.errors}</b><span className="text-zinc-500">Falhas</span></div>
+          <div className="rounded-xl bg-zinc-950/70 p-2"><b className="block text-cyan-400">{localHealth.averageReturnedDocuments}</b><span className="text-zinc-500">Docs/média</span></div>
+        </div>
+        {localHealth.recentHighVolume && <p className="mt-2 text-[11px] text-amber-300">Retornos altos recorrentes. Conferir intervalo e volume de dados; isto não mede o faturamento do Firestore.</p>}
+        {localHealth.latestFailed && <p className="mt-2 text-[11px] text-rose-300">Última tentativa falhou. Dados locais podem estar desatualizados.</p>}
+        {localHealth.consecutiveFailures > 1 && (
+          <p role="status" className="mt-2 text-[11px] text-amber-300">
+            {localHealth.consecutiveFailures} falhas consecutivas registradas. Verifique a conexão antes de tentar novamente.
+          </p>
+        )}
+        {localHealth.latestSuccessAt && (
+          <p className="mt-2 text-[10px] text-zinc-500">Último sucesso da amostra: {dateTime(localHealth.latestSuccessAt)}.</p>
+        )}
+        <p className="mt-2 text-[10px] text-zinc-500">Amostra do histórico local; sem novas consultas à nuvem. Detalhes privados são omitidos ao copiar.</p>
       </section>
 
       <button type="button" disabled={isSyncing || syncChecking} onClick={handleSync} className="mt-3 flex h-13 w-full items-center justify-center gap-2 rounded-2xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-3.5 text-sm font-black text-cyan-300 active:scale-[.98] disabled:opacity-50">

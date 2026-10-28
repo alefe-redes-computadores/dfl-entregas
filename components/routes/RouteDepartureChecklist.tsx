@@ -8,6 +8,7 @@ import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { routeCashFlow } from '@/lib/route-cash-flow';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
+import { departureStopSummary } from '@/lib/operation/departure-stop-summary';
 
 type Props = {
   route: Route;
@@ -53,10 +54,12 @@ export function RouteDepartureChecklist({
     return () => { document.body.style.overflow = previous; };
   }, []);
 
-  const physicalStops = useMemo(
-    () => groupDeliveriesByStop(deliveries).length,
+  const stopSummary = useMemo(
+    () => departureStopSummary(groupDeliveriesByStop(deliveries)),
     [deliveries],
   );
+  const physicalStops = stopSummary.length;
+  const groupedStops = stopSummary.filter((item) => item.orderIds.length > 1);
   const checklist = useMemo(() => deliveries.map((delivery) => {
     const customer = getCustomerById(delivery.customer_id);
     return {
@@ -142,6 +145,28 @@ export function RouteDepartureChecklist({
             <p className="text-[9px] font-bold uppercase text-zinc-500">Trocos</p>
           </div>
         </div>
+
+        {stopSummary.length > 0 && (
+          <section className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-3" aria-label="Conferência por parada física">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Conferência por parada</p>
+              <span className="text-[10px] font-bold text-sky-300">{groupedStops.length} com múltiplos pedidos</span>
+            </div>
+            <div className="mt-2 max-h-64 space-y-2 overflow-y-auto">
+              {stopSummary.map((stop, index) => (
+                <article key={stop.key} className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="min-w-0 text-xs font-black text-zinc-200">Parada {index + 1} · {stop.orderIds.length} pedido{stop.orderIds.length === 1 ? '' : 's'}</p>
+                    {stop.warnings.length > 0 && <span className="shrink-0 text-[10px] font-bold text-amber-300">Revisar</span>}
+                  </div>
+                  <p className="mt-1 break-words text-[11px] text-zinc-400">{stop.orderIds.join(' · ')}</p>
+                  {stop.warnings.length > 0 && <p className="mt-1 text-[10px] text-amber-300">{stop.warnings.join(' · ')}</p>}
+                </article>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Cada código iFood e pagamento continua individual, mesmo quando vários pedidos usam a mesma parada.</p>
+          </section>
+        )}
 
         {drinks.length > 0 && (
           <section className="mt-4 rounded-2xl border border-sky-500/20 bg-sky-500/[.06] p-4">

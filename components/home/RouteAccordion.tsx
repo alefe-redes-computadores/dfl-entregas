@@ -1,5 +1,6 @@
 'use client';
 
+import { RouteStopBriefing } from '@/components/home/RouteStopBriefing';
 import { PreRouteIntelligence } from '@/components/home/PreRouteIntelligence';
 import { RouteSequenceAdvisor } from '@/components/home/RouteSequenceAdvisor';
 
@@ -965,6 +966,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         </div>
       )}
 
+      {isOpen && !isVirtualRoute && <div className="px-3 pt-2"><RouteStopBriefing deliveries={sortedDeliveries} routeName={route.name} /></div>}
       {isOpen && (
         <div className="flex flex-col gap-2.5 border-t border-zinc-800/80 p-3.5 pt-3 pb-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
