@@ -6,6 +6,7 @@ import { AlertCircle, CalendarClock, ChevronDown, CheckCircle2, Inbox, MapPin, P
 import { useAppStore } from '@/store/useAppStore';
 import { dateKey, routeOperationalDateKey } from '@/lib/operational-time';
 import { siteInboxProjection, type SiteInboxState } from '@/lib/operation/siteInboxPolicy';
+import { searchSiteInboxRows, openRouteWorkload, siteAllocationPreflight } from '@/lib/operation/site-inbox-triage';
 import { acknowledgeSiteOrders } from '@/lib/site-order-inbox';
 import { toast } from '@/lib/operational-toast';
 import { OPERATION_FIRST_BATCH, nextProgressiveCount } from '@/lib/operation/progressiveWindow';
@@ -36,6 +37,9 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   },[]);
   const projection = useMemo(()=>siteInboxProjection(deliveries,clock),[deliveries,clock]);
   const [filter,setFilter]=useState<'all'|'pronto'|'confirmar'|'aguardar_agenda'|'revisar'>('all');
+  const [search,setSearch]=useState('');
+  const [saveError,setSaveError]=useState('');
+  const focusedOnce=useRef<string|null>(null);
   const [limit,setLimit]=useState(OPERATION_FIRST_BATCH);
   const [editing,setEditing]=useState<string|null>(null);
   const [selection,setSelection]=useState('');
@@ -53,33 +57,46 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   const availableRoutes=useMemo(()=>routes.filter(route =>
     route.status==='aberta' && !route.started_at && !route.end_time && routeOperationalDateKey(route)===today),[routes,today]);
   const activeMotoboys=useMemo(()=>motoboys.filter(item=>item.active),[motoboys]);
-  const displayed=useMemo(()=>{
-    const filtered=projection.rows.filter(row=>filter==='all'||row.state===filter);
-    if(!focusedId)return filtered;
-    // Deep link from Android: focused request first; do not hide other actionable orders.
-    return [...filtered].sort((a,b)=>Number(b.delivery.id===focusedId)-Number(a.delivery.id===focusedId));
-  },[projection,filter,focusedId]);
+  const routeLoads=useMemo(()=>openRouteWorkload(deliveries,availableRoutes),[deliveries,availableRoutes]);
+  const availableRouteIds=useMemo(()=>availableRoutes.map(item=>item.id),[availableRoutes]);
+  const activeMotoboyIds=useMemo(()=>activeMotoboys.map(item=>item.id),[activeMotoboys]);
+  // R136_SITE_LAUNCH_GATE: busca e foco sao somente apresentacao; nunca alteram a projecao canonica.
+  const displayed=useMemo(()=>searchSiteInboxRows(
+    projection.rows.filter(row=>filter==='all'||row.state===filter),search,focusedId,
+  ),[projection,filter,search,focusedId]);
   const shown=displayed.slice(0,limit);
-  useEffect(()=>setLimit(OPERATION_FIRST_BATCH),[filter]);
-  useEffect(()=>{if(focusedId && projection.rows.some(row=>row.delivery.id===focusedId)){
-    setFilter('all');setEditing(focusedId);
-  }},[focusedId,projection.rows]);
+  useEffect(()=>setLimit(OPERATION_FIRST_BATCH),[filter,search]);
+  useEffect(()=>{
+    if (!focusedId) { focusedOnce.current=null; return; }
+    if (focusedOnce.current===focusedId) return;
+    if (projection.rows.some(row=>row.delivery.id===focusedId)) {
+      focusedOnce.current=focusedId;
+      setSearch('');setFilter('all');setEditing(focusedId);
+    }
+  },[focusedId,projection.rows]);
+  // Revalidacoes de horario nao disparam escritas locais repetidas para os mesmos IDs.
+  const acknowledgmentKey=useMemo(()=>projection.rows.map(row=>row.delivery.id).join('\u001f'),[projection.rows]);
   useEffect(()=>{
     // Leitura nao descarta a pendencia: apenas marca o aviso local como visto.
-    acknowledgeSiteOrders(projection.rows.map(row=>row.delivery.id));
-  },[projection.rows]);
+    if (acknowledgmentKey) acknowledgeSiteOrders(projection.rows.map(row=>row.delivery.id));
+  },[acknowledgmentKey]);
   const begin=(delivery:Delivery)=>{
     setEditing(current=>current===delivery.id?null:delivery.id);
     setSelection('');setNewMode(false);setRouteName('');setMotoboyId('');
-    setReviewOpen(false);
+    setReviewOpen(false);setSaveError('');
     setReviewAddress(delivery.address_string || '');setReviewPhone(delivery.phone || '');
     setReviewObservation(delivery.observation || '');setReviewPayment(delivery.payment_method || 'dinheiro');
   };
   const submit=async(delivery:Delivery)=>{
     if(lock.current)return;
-    if(!newMode&&!selection){toast.warning('Escolha uma rota aberta.');return;}
-    if(newMode&&(!routeName.trim()||!motoboyId)){toast.warning('Informe nome da nova rota e motoboy.');return;}
-    lock.current=true;setSaving(true);
+    const issue=siteAllocationPreflight({
+      row:projection.rows.find(row=>row.delivery.id===delivery.id),
+      selectedRouteId:selection,existingRouteIds:availableRouteIds,
+      newMode,routeName,motoboyId,activeMotoboyIds,
+      address:reviewOpen?reviewAddress:(delivery.address_string || ''),
+    });
+    if(issue){setSaveError(issue);toast.warning(issue);return;}
+    lock.current=true;setSaving(true);setSaveError('');
     try{
       const operational = reviewOpen ? {address_string:reviewAddress,phone:reviewPhone,observation:reviewObservation,payment_method:reviewPayment} : undefined;
       const routeId=await allocate(delivery.id,newMode?{newRoute:{name:routeName.trim(),motoboyId},operational}:{routeId:selection,operational});
@@ -88,6 +105,7 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
       router.push(`/rotas/details?id=${encodeURIComponent(routeId)}&date=${encodeURIComponent(today)}`);
     }catch(error){
       const message=error instanceof Error?error.message:'Não foi possível vincular o pedido.';
+      setSaveError(message);
       toast.error('Não foi possível alocar.',{description:message});
     }finally{lock.current=false;setSaving(false);}
   };
@@ -103,6 +121,15 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
     <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Filtrar pedidos do Site">
       {([['all','Todos',projection.total],['pronto','Prontos',projection.ready],['confirmar','Comercial',projection.commercial],['aguardar_agenda','Agendados',projection.scheduled],['revisar','Revisar',projection.review]] as const).map(([key,label,count])=><button key={key} type="button" aria-pressed={filter===key} onClick={()=>setFilter(key)} className={`min-h-10 shrink-0 rounded-xl border px-3 text-[11px] font-bold ${filter===key?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label} · {count}</button>)}
     </div>
+    <section aria-label="Busca dos pedidos do Site" className="space-y-1.5 rounded-2xl border border-zinc-800/80 bg-zinc-900/35 p-2.5">
+      <div className="flex gap-2">
+        <input type="search" aria-label="Buscar pedido do Site por nome, telefone, endereco ou numero" value={search}
+          onChange={event=>setSearch(event.target.value)} placeholder="Cliente, número, telefone ou endereço"
+          className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-[12px] text-zinc-100 outline-none focus:border-emerald-500/50" />
+        {search&&<button type="button" className="min-h-11 rounded-xl border border-zinc-700 px-3 text-[11px] font-bold text-zinc-300" onClick={()=>setSearch('')}>Limpar</button>}
+      </div>
+      <p className="px-1 text-[10px] text-zinc-500" role="status">{displayed.length} pedido{displayed.length===1?'':'s'} nesta seleção. Busca local, sem nova consulta.</p>
+    </section>
     {!shown.length?<div className="rounded-2xl border border-dashed border-zinc-800 p-7 text-center"><CheckCircle2 size={24} className="mx-auto text-emerald-400"/><p className="mt-2 text-xs font-bold text-zinc-300">Nenhum pedido nesta seleção</p><p className="mt-1 text-[10px] text-zinc-500">Novos pedidos entram automaticamente quando a sincronização chegar.</p></div>:null}
     {shown.map(({delivery,state,duplicate}:SiteRow)=>{
       const expanded=editing===delivery.id;
@@ -117,6 +144,9 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
         {state==='pronto'?<button type="button" onClick={()=>begin(delivery)} aria-expanded={expanded} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-xs font-black text-emerald-200"><RouteIcon size={16}/>{expanded?'Fechar escolha de rota':'Escolher rota'}<ChevronDown size={15}/></button>:
         <button type="button" onClick={()=>router.push('/loja?site=pending')} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/50 text-xs font-bold text-zinc-200"><ShoppingBag size={15}/>Conferir no Admin do Site</button>}
         {expanded&&state==='pronto'&&<div className="mt-3 space-y-3 rounded-2xl border border-zinc-700/60 bg-zinc-950/75 p-3">
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[.045] px-3 py-2.5 text-[11px] leading-relaxed text-zinc-300">
+            <span className="font-bold text-emerald-200">Pedido conferido?</span> Escolha uma rota ainda não iniciada. A confirmação é transacional e não avisa saída ao cliente.
+          </div>
           <button type="button" aria-expanded={reviewOpen} onClick={()=>setReviewOpen(v=>!v)} className="w-full rounded-xl border border-sky-500/25 bg-sky-500/[.06] px-3 py-3 text-left text-xs font-bold text-sky-200">{reviewOpen?'Fechar revisão':'Revisar pedido · endereço, contato e cobrança'}</button>
           {reviewOpen&&<div className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
             <p className="text-[10px] leading-relaxed text-zinc-400">Dados operacionais desta entrega. Valores e status comerciais permanecem sob autoridade do Site.</p>
@@ -127,9 +157,10 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
             <div className="grid grid-cols-3 gap-2">{([['dinheiro','Dinheiro'],['pix','Pix'],['cartao','Cartão']] as const).map(([method,label])=><button key={method} type="button" onClick={()=>setReviewPayment(method)} className={`min-h-11 rounded-xl border text-[11px] font-bold ${reviewPayment===method?'border-emerald-400/50 bg-emerald-500/10 text-emerald-200':'border-zinc-700 text-zinc-400'}`}>{label}</button>)}</div>
           </div>}
           <div className="flex gap-2"><button type="button" aria-pressed={!newMode} onClick={()=>setNewMode(false)} className={`min-h-10 flex-1 rounded-xl border text-[11px] font-bold ${!newMode?'border-emerald-500/40 bg-emerald-500/10':'border-zinc-800 text-zinc-400'}`}>Rota existente</button><button type="button" aria-pressed={newMode} onClick={()=>setNewMode(true)} className={`min-h-10 flex-1 rounded-xl border text-[11px] font-bold ${newMode?'border-emerald-500/40 bg-emerald-500/10':'border-zinc-800 text-zinc-400'}`}><Plus size={13} className="inline"/> Nova rota</button></div>
-          {!newMode?<div className="max-h-48 space-y-1.5 overflow-y-auto">{availableRoutes.length?availableRoutes.map(route=><button type="button" key={route.id} onClick={()=>setSelection(route.id)} aria-pressed={selection===route.id} className={`flex min-h-11 w-full items-center gap-2 rounded-xl border px-3 text-left text-xs ${selection===route.id?'border-emerald-400 bg-emerald-400/10 text-emerald-200':'border-zinc-800 bg-zinc-900/60 text-zinc-300'}`}><RouteIcon size={14}/><span className="min-w-0 flex-1 truncate">{route.name} · {route.motoboy_name}</span>{selection===route.id&&<CheckCircle2 size={14}/>}</button>):<p className="rounded-xl bg-zinc-900 p-3 text-[11px] text-zinc-400">Nenhuma rota aberta de hoje sem saída. Use Nova rota.</p>}</div>:<div className="space-y-2"><label className="block text-[11px] font-semibold text-zinc-300">Nome da rota<input value={routeName} onChange={event=>setRouteName(event.target.value)} placeholder="Ex.: Centro 2" maxLength={80} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm outline-none focus:border-emerald-500"/></label><p className="text-[11px] font-semibold text-zinc-300">Motoboy responsável</p><div className="grid grid-cols-2 gap-1.5">{activeMotoboys.map(motoboy=><button type="button" key={motoboy.id} onClick={()=>setMotoboyId(motoboy.id)} aria-pressed={motoboyId===motoboy.id} className={`min-h-11 rounded-xl border px-2 text-[11px] font-bold ${motoboyId===motoboy.id?'border-emerald-500/40 bg-emerald-500/10':'border-zinc-800 text-zinc-400'}`}>{motoboy.name}</button>)}</div>{!activeMotoboys.length&&<p className="text-[10px] text-amber-300">Cadastre um motoboy ativo antes de criar uma rota.</p>}</div>}
+          {!newMode?<div className="max-h-48 space-y-1.5 overflow-y-auto">{availableRoutes.length?availableRoutes.map(route=><button type="button" key={route.id} onClick={()=>setSelection(route.id)} aria-pressed={selection===route.id} className={`flex min-h-11 w-full items-center gap-2 rounded-xl border px-3 text-left text-xs ${selection===route.id?'border-emerald-400 bg-emerald-400/10 text-emerald-200':'border-zinc-800 bg-zinc-900/60 text-zinc-300'}`}><RouteIcon size={14}/><span className="min-w-0 flex-1 truncate">{route.name} · {route.motoboy_name} · {routeLoads.get(route.id)||0} pendente{(routeLoads.get(route.id)||0)===1?'':'s'}</span>{selection===route.id&&<CheckCircle2 size={14}/>}</button>):<p className="rounded-xl bg-zinc-900 p-3 text-[11px] text-zinc-400">Nenhuma rota aberta de hoje sem saída. Use Nova rota.</p>}</div>:<div className="space-y-2"><label className="block text-[11px] font-semibold text-zinc-300">Nome da rota<input value={routeName} onChange={event=>setRouteName(event.target.value)} placeholder="Ex.: Centro 2" maxLength={80} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm outline-none focus:border-emerald-500"/></label><p className="text-[11px] font-semibold text-zinc-300">Motoboy responsável</p><div className="grid grid-cols-2 gap-1.5">{activeMotoboys.map(motoboy=><button type="button" key={motoboy.id} onClick={()=>setMotoboyId(motoboy.id)} aria-pressed={motoboyId===motoboy.id} className={`min-h-11 rounded-xl border px-2 text-[11px] font-bold ${motoboyId===motoboy.id?'border-emerald-500/40 bg-emerald-500/10':'border-zinc-800 text-zinc-400'}`}>{motoboy.name}</button>)}</div>{!activeMotoboys.length&&<p className="text-[10px] text-amber-300">Cadastre um motoboy ativo antes de criar uma rota.</p>}</div>}
+          {saveError&&<p role="alert" className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-200">{saveError}</p>}
           <p className="flex items-start gap-2 text-[10px] leading-relaxed text-zinc-400"><ShieldCheck size={15} className="shrink-0 text-emerald-400"/>O Firestore revalida o pedido e a rota antes de salvar. Nenhuma mensagem de saída será enviada apenas pela alocação.</p>
-          <button type="button" disabled={saving||(!newMode&&!selection)||(newMode&&(!routeName.trim()||!motoboyId))} onClick={()=>void submit(delivery)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white disabled:opacity-40">{saving?'Salvando...':'Confirmar vínculo à rota'}<CheckCircle2 size={15}/></button>
+          <button type="button" disabled={saving||Boolean(siteAllocationPreflight({row:{state,duplicate},selectedRouteId:selection,existingRouteIds:availableRouteIds,newMode,routeName,motoboyId,activeMotoboyIds,address:reviewOpen?reviewAddress:(delivery.address_string||'')}))} onClick={()=>void submit(delivery)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white disabled:opacity-40">{saving?'Salvando...':'Confirmar vínculo à rota'}<CheckCircle2 size={15}/></button>
         </div>}
       </article>;
     })}

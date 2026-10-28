@@ -2,6 +2,7 @@
 'use client';
 
 import { commercialMovementPreview, commercialPresentationEquation, humanPresentation } from '@/lib/stock-commercial-display-v2';
+import { stockPackageBreakdown } from '@/lib/stock-package-insights';
 import { committedStockQuantityMap } from '@/lib/stock-shopping';
 import { dualStockView, looseMovementPresentation, stockMovementBaseQuantity } from '@/lib/stock-dual-unit';
 
@@ -706,6 +707,63 @@ function Content() {
               </span>
             )}
         </label>
+
+
+
+        {/* R129_ESTOQUE_PREMIUM — detalhamento sem alterar movimento financeiro. */}
+        {(() => {
+          const view=dualStockView(product);
+          if(!view)return null;
+          const baseFactor=view.mode==='base_units'?view.countPerPackage:1;
+          const currentBase=view.mode==='base_units'?product.current_quantity:product.current_quantity*view.countPerPackage;
+          const finalBase=view.mode==='base_units'?resultingBalance:resultingBalance*view.countPerPackage;
+          const present=stockPackageBreakdown(currentBase,baseFactor);
+          const future=stockPackageBreakdown(finalBase,baseFactor);
+          if(!present||!future)return null;
+          const pack=view.packageLabel;
+          const fmt=(x:number)=>x.toLocaleString('pt-BR',{maximumFractionDigits:3});
+          return <section aria-label="Equivalencia por embalagem" className="rounded-2xl border border-sky-500/20 bg-sky-500/[.045] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-sky-300">Equivalência de embalagem</p>
+              <p className="text-[10px] text-zinc-500">1 {pack} ≈ {fmt(view.countPerPackage)} un.</p>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-zinc-950/60 p-3"><p className="text-[10px] text-zinc-500">Em estoque</p><p className="mt-1 text-lg font-black text-zinc-100">{fmt(present.full)} completas</p><p className="text-[11px] text-zinc-400">+ {fmt(present.loose)} avulsas</p></div>
+              <div className="rounded-xl bg-zinc-950/60 p-3"><p className="text-[10px] text-zinc-500">Após operação</p><p className="mt-1 text-lg font-black text-emerald-300">{quantityInvalid?'—':fmt(future.full)+' completas'}</p><p className="text-[11px] text-zinc-400">{quantityInvalid?'Confira a quantidade':'+ '+fmt(future.loose)+' avulsas'}</p></div>
+            </div>
+          </section>;
+        })()}
+
+        {/* R128_ATALHOS_DE_QUANTIDADE — unidade selecionada sempre governa a conversao. */}
+        <section aria-label="Atalhos de quantidade" className="rounded-2xl border border-zinc-800 bg-zinc-900/35 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Quantidade rápida</p>
+            <p className="text-[10px] text-zinc-500">{selectedPresentation ? humanPresentation(selectedPresentation, product.unit) : quantityLabel(product.unit)}</p>
+          </div>
+          <div className="mt-2 grid grid-cols-4 gap-2">
+            {(selectedPresentation ? [0.25, 0.5, 1, 2] : [1, 2, 5, 10]).map((preset) => {
+              const base = stockMovementBaseQuantity(preset, conversion, product.current_quantity, {
+                loose: selectedPresentation?.id === '__loose-unit',
+                direction: canUseRemaining && mode === 'moved' ? 'remove' : canUseRemaining ? 'set' : 'add',
+              });
+              const disallow = !Number.isFinite(base) || (canUseRemaining && mode === 'moved' && stockExitExceeds(base, product.current_quantity, product.unit));
+              return <button key={preset} type="button" disabled={busy || disallow} onClick={() => {setQuantity(String(preset).replace('.', ','));setAttempted(false);}}
+                aria-label={`Informar ${preset.toLocaleString('pt-BR')} na unidade selecionada`}
+                className="min-h-11 rounded-xl border border-zinc-700 bg-zinc-800/60 px-1 text-xs font-black text-zinc-200 transition active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-30">
+                {preset.toLocaleString('pt-BR')}
+              </button>;
+            })}
+          </div>
+          {quantity.trim() && Number.isFinite(typed) && typed >= 0 && Number.isFinite(baseTyped) && !quantityInvalid && (
+            <div aria-live="polite" className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[.06] p-3">
+              <p className="text-[10px] font-black text-emerald-300">Prévia — nenhuma movimentação registrada ainda</p>
+              <p className="mt-1 text-xs text-zinc-200">
+                {type === 'entrada' ? 'Entrada' : canUseRemaining ? 'Retirada' : 'Novo saldo'}: <b>{formatStockQuantity(amount, product.unit)}</b>
+              </p>
+              <p className="mt-1 text-xs text-zinc-400">Saldo após confirmar: <b className="text-zinc-100">{formatStockQuantity(resultingBalance, product.unit)}</b></p>
+            </div>
+          )}
+        </section>
 
         {quantity.trim() && insufficientStock && (
           <section className="rounded-2xl border border-red-500/25 bg-red-500/[.055] p-4">

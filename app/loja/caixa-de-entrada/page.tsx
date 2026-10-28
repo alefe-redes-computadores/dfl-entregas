@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { SiteInboxPanel } from "@/components/store/SiteInboxPanel";
 import { OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 import { classifyInboxDrafts, inboxViewDrafts, type InboxView } from '@/lib/operation/inboxPresentation';
+import { searchInboxDrafts, inboxAttentionCounts } from '@/lib/operation/inbox-command-search';
 import {
   ArrowLeft,
   ClipboardPaste,
@@ -63,6 +64,7 @@ export default function DeliveryInboxPage() {
   const [processing, setProcessing] = useState(false);
   const importLock = useRef(false);
   const [view, setView] = useState<InboxView>('todos');
+  const [inboxSearch,setInboxSearch] = useState('');
   const [visibleLimit, setVisibleLimit] = useState(OPERATION_FIRST_BATCH);
   useEffect(() => setVisibleLimit(OPERATION_FIRST_BATCH), [view, today]);
 
@@ -100,10 +102,13 @@ export default function DeliveryInboxPage() {
   const { active, ready, review, launched, discarded } = useMemo(
     () => classifyInboxDrafts(drafts), [drafts],
   );
-  const filteredDrafts = useMemo(
+  const viewFilteredDrafts = useMemo(
     () => inboxViewDrafts({ active, ready, review, launched, discarded }, view),
     [active, ready, review, launched, discarded, view],
   );
+  const filteredDrafts = useMemo(() => searchInboxDrafts(viewFilteredDrafts,inboxSearch), [viewFilteredDrafts,inboxSearch]);
+  const attentionCounts = useMemo(() => inboxAttentionCounts(active), [active]);
+  useEffect(()=>setVisibleLimit(OPERATION_FIRST_BATCH),[inboxSearch]);
   const renderedDrafts = useMemo(
     () => filteredDrafts.slice(0, progressiveCount(filteredDrafts.length, visibleLimit)),
     [filteredDrafts, visibleLimit],
@@ -318,7 +323,24 @@ export default function DeliveryInboxPage() {
           <button type="button" onClick={()=>setChannel('site')} aria-pressed={channel==='site'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='site'?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}>Site</button>
           <button type="button" onClick={()=>setChannel('manual')} aria-pressed={channel==='manual'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='manual'?'border-violet-500/40 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}>Importar</button>
         </nav>
+
         {channel==='site'?<SiteInboxPanel focusedId={focusedSiteOrder}/>:<div className="space-y-4">
+        {/* R133_TRIAGEM_CAIXA: UI nao altera rascunhos nem importacao. */}
+        <section aria-label="Triagem de pedidos importados" className="rounded-[20px] border border-sky-500/20 bg-sky-500/[.04] p-3">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-zinc-950/60 p-2"><p className="text-lg font-black text-amber-300">{attentionCounts.review}</p><p className="text-[9px] text-zinc-400">Revisar</p></div>
+            <div className="rounded-xl bg-zinc-950/60 p-2"><p className="text-lg font-black text-emerald-300">{attentionCounts.ready}</p><p className="text-[9px] text-zinc-400">Prontos</p></div>
+            <div className="rounded-xl bg-zinc-950/60 p-2"><p className="text-lg font-black text-red-300">{attentionCounts.duplicates}</p><p className="text-[9px] text-zinc-400">Duplicados</p></div>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <input type="search" aria-label="Buscar rascunhos por cliente pedido ou endereco" value={inboxSearch}
+              onChange={event=>setInboxSearch(event.target.value)}
+              placeholder="Cliente, pedido, telefone, endereço..."
+              className="min-h-12 min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950/70 px-3 text-sm text-zinc-100 outline-none focus:border-sky-500/50"/>
+            {inboxSearch&&<button type="button" onClick={()=>setInboxSearch('')} className="min-h-12 rounded-xl border border-zinc-700 px-3 text-xs font-bold text-zinc-300">Limpar</button>}
+          </div>
+          <p className="mt-2 text-[10px] text-zinc-500">Busca local nesta seleção. Nenhum pedido é alterado.</p>
+        </section>
         <section className="overflow-hidden rounded-[24px] border border-violet-500/20 bg-gradient-to-br from-violet-500/[.10] via-zinc-900/70 to-zinc-950 p-4">
           <div className="flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-violet-500/10 text-violet-300">

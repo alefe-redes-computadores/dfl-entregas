@@ -9,12 +9,8 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { nativeBackTarget } from '@/lib/native/navigation';
 import { deliveryDeepLinkToHref } from '@/lib/native/admin-bridge';
-
-function safeInternalHref(value: unknown) {
-  return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')
-    ? value
-    : null;
-}
+import { notificationTargetHref } from '@/lib/native/notification-target';
+// R135_NOTIFICATION_TARGET: toque resolvido em funcao pura.
 
 async function configureStatusBar() {
   try {
@@ -77,7 +73,7 @@ export function NativeRuntime() {
         const notificationListener = await LocalNotifications.addListener(
           'localNotificationActionPerformed',
           (event) => {
-            const href = safeInternalHref(event.notification.extra?.href);
+            const href = notificationTargetHref(event.notification.extra);
             if (href) navigate(href, 'notification');
           },
         );

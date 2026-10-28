@@ -2,6 +2,8 @@
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { routeReminderHref, stockThresholdHref } from '@/lib/native/notification-target';
+// R135_NOTIFICATION_TARGET: aviso individual direciona ao item, grupo fica na lista.
 import type {
   DaySchedule,
   HolidayOverride,
@@ -542,7 +544,9 @@ export async function syncOpenRouteReminderNotifications(
               : `Ainda estão abertas: ${names}${remaining}.`,
           schedule: { at, allowWhileIdle: true },
           extra: ownerExtra('route-reminder', {
-            href: '/rotas',
+            href: routeReminderHref(active),
+            dflTargetType: active.length === 1 ? 'route' : undefined,
+            dflEntityId: active.length === 1 ? active[0].id : undefined,
             dflPreferenceKey: 'routeOpenReminder',
           }),
         },
@@ -569,6 +573,8 @@ export const notifyNewSiteOrder = (
       cooldownMs: 30 * 60_000,
       extra: {
         href: `/loja/caixa-de-entrada?aba=site&pedido=${encodeURIComponent(deliveryId)}`,
+        dflTargetType: 'site-order',
+        dflEntityId: deliveryId,
       },
       preferences,
       preferenceKey: 'siteOrderNew',
@@ -882,7 +888,12 @@ export async function notifyStockThresholdChanges(
       .sort().join('|')}`;
     const sent = await notifyOperational(key, title, body, {
       cooldownMs: 30 * 60_000,
-      extra: { href: '/estoque/compras', dflGroupedStockAlert: true },
+      extra: {
+        href: stockThresholdHref(alertable.map((item) => item.product)),
+        dflGroupedStockAlert: alertable.length > 1,
+        dflTargetType: alertable.length === 1 ? 'stock-product' : undefined,
+        dflEntityId: alertable.length === 1 ? alertable[0].product.id : undefined,
+      },
     });
     if (sent) {
       for (const item of alertable) rememberSent(`stock-product:${item.product.id}:${item.level}`, now);

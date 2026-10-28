@@ -9,7 +9,11 @@ export function classifyHomeExceptions(pending: readonly Delivery[], customers: 
   const noAddress: Delivery[] = [];
   const addressOnly: Delivery[] = [];
   for (const item of pending) {
-    if (!item.route_id) { unassigned.push(item); continue; }
+    // R136_SITE_HOME_OWNER: pedidos do Site sem rota pertencem a Caixa; nao sao erro generico da Home.
+    if (!item.route_id) {
+      if (item.source_system === 'dfl_site') continue;
+      unassigned.push(item); continue;
+    }
     if (!routeIds.has(item.route_id)) { corruptLinks.push(item); continue; }
     const customer = item.customer_id ? customerById.get(item.customer_id) : undefined;
     const address = item.address_string?.trim() || customer?.address?.trim() || '';

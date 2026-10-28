@@ -18,6 +18,7 @@ import { siteInboxSummary } from '@/lib/operation/siteInboxSummary';
 import { ifoodSelfConfirmRouteIds } from '@/lib/operation/ifood-self-confirm-route';
 import { siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
 import { classifyHomeExceptions } from '@/lib/operation/home-exceptions';
+import { homeActionQueue } from '@/lib/operation/home-action-queue';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { Inbox } from 'lucide-react';
@@ -43,6 +44,7 @@ export function OperationalCommandCenter({
 }) {
   const router = useRouter();
   const [showAllActions, setShowAllActions] = useState(false);
+  const [expandedQueue, setExpandedQueue] = useState<string | null>(null);
   const confirmationBacklog = useAppStore(
     (state) => state.ifoodPendingConfirmations,
   );
@@ -229,6 +231,18 @@ export function OperationalCommandCenter({
     },
   ] satisfies ActionRow[];
 
+
+  // R134_ACTION_QUEUE — apenas dados ja carregados. Nao consulta Firestore.
+  const actionQueues: Record<string, Delivery[]> = {
+    'unassigned-route': unassigned,
+    'broken-route-link': corruptLinks,
+    'address': noAddress,
+    'location': addressOnly,
+    'ifood-code': pending.filter((item) =>
+      item.origin === 'ifood' && Boolean(item.route_id) &&
+      !selfConfirmRouteIds.has(String(item.route_id || '')) &&
+      !String(item.confirmation_code || '').replace(/\D/g, '').match(/^\d{4}$/)),
+  };
   const visibleActionRows = rows
     .filter((item) => item.count > 0)
     .sort((a, b) => b.priority - a.priority);
@@ -277,6 +291,7 @@ export function OperationalCommandCenter({
 
       <div className="space-y-1.5">
         {visibleRows.map((item) => {
+          const queue = homeActionQueue(actionQueues[item.key] || []);
           const Icon = item.icon;
           const style =
             item.tone === 'red'
@@ -286,6 +301,7 @@ export function OperationalCommandCenter({
                 : 'border-sky-500/20 bg-sky-500/[0.05] text-sky-400';
 
           return (
+            <div key={item.key} className="space-y-1">
             <button
               key={item.key}
               type="button"
@@ -309,6 +325,38 @@ export function OperationalCommandCenter({
               <span aria-hidden="true" className="shrink-0 rounded-lg bg-zinc-950/30 px-1.5 py-1 text-xs font-black tabular-nums">{item.badge ?? item.count}</span>
               <ChevronRight size={14} className="shrink-0 opacity-60" />
             </button>
+            {queue.total > 1 && (
+              <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/35 p-1.5">
+                <button type="button" aria-expanded={expandedQueue === item.key}
+                  aria-controls={`dfl-action-queue-${item.key}`}
+                  onClick={() => setExpandedQueue((current) => current === item.key ? null : item.key)}
+                  className="flex min-h-10 w-full items-center justify-between rounded-lg px-2.5 text-[11px] font-bold text-sky-300 transition active:bg-zinc-900">
+                  <span>Escolher entrega específica ({queue.total})</span>
+                  <ChevronRight size={14} aria-hidden="true"
+                    className={expandedQueue === item.key ? 'rotate-90 transition-transform' : 'transition-transform'} />
+                </button>
+                {expandedQueue === item.key && (
+                  <div id={`dfl-action-queue-${item.key}`} className="max-h-80 space-y-1 overflow-y-auto px-1 pb-1">
+                    {queue.entries.map((entry) => (
+                      <button key={entry.id} type="button" onClick={() => router.push(entry.href)}
+                        aria-label={`Abrir ${entry.title} para corrigir ${item.label.toLowerCase()}`}
+                        className="flex min-h-12 w-full items-center justify-between gap-2 rounded-lg border border-zinc-800/70 bg-zinc-900/50 px-3 py-2 text-left transition active:bg-zinc-800">
+                        <span className="min-w-0"><span className="block truncate text-[11px] font-black text-zinc-200">{entry.title}</span>
+                          <span className="mt-0.5 block truncate text-[10px] text-zinc-500">{entry.subtitle}</span></span>
+                        <ChevronRight size={14} className="shrink-0 text-sky-400" aria-hidden="true" />
+                      </button>
+                    ))}
+                    {queue.omitted > 0 && (
+                      <p className="px-2 py-2 text-[10px] text-zinc-500">
+                        Mais {queue.omitted} pendência{queue.omitted === 1 ? '' : 's'}.
+                        Exibindo primeiro os {queue.entries.length} casos desta fila.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            </div>
           );
         })}
       </div>
