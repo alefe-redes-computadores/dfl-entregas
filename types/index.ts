@@ -440,6 +440,9 @@ export interface Delivery {
   operational_dismissal_source?: 'manual';
   operational_completion_source?: 'dfl_site' | 'dfl_entregas';
   operational_completion_pending_route?: boolean;
+  /** Reserva de planejamento; nunca indica saida nem vinculo operacional. */
+  planned_route_id?: string | null;
+  planned_route_at?: string | null;
   scheduled_for?: string | null;
   scheduled_label?: string | null;
   schedule_window_minutes?: number | null;

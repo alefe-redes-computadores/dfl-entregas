@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SiteInboxPanel } from "@/components/store/SiteInboxPanel";
+import { ReservationAuditPanel } from "@/components/store/ReservationAuditPanel";
+import { FutureRoutePlanPanel } from "@/components/store/FutureRoutePlanPanel";
+import { SitePlanningPreview } from "@/components/store/SitePlanningPreview";
 import { OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 import { classifyInboxDrafts, inboxViewDrafts, type InboxView } from '@/lib/operation/inboxPresentation';
 import { searchInboxDrafts, inboxAttentionCounts } from '@/lib/operation/inbox-command-search';
@@ -324,7 +327,9 @@ export default function DeliveryInboxPage() {
           <button type="button" onClick={()=>setChannel('manual')} aria-pressed={channel==='manual'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='manual'?'border-violet-500/40 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}>Importar</button>
         </nav>
 
-        {channel==='site'?<SiteInboxPanel focusedId={focusedSiteOrder}/>:<div className="space-y-4">
+        {channel==='site'?<>
+          <SitePlanningPreview />
+          <div className="space-y-3"><FutureRoutePlanPanel/><ReservationAuditPanel/><SiteInboxPanel focusedId={focusedSiteOrder}/></div></>:<div className="space-y-4">
         {/* R133_TRIAGEM_CAIXA: UI nao altera rascunhos nem importacao. */}
         <section aria-label="Triagem de pedidos importados" className="rounded-[20px] border border-sky-500/20 bg-sky-500/[.04] p-3">
           <div className="grid grid-cols-3 gap-2 text-center">

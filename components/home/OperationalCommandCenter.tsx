@@ -59,7 +59,8 @@ export function OperationalCommandCenter({
   // A politica ifood_confirmation_mode do motoboy e indexada uma vez no helper.
   const selfConfirmRouteIds = useMemo(() => ifoodSelfConfirmRouteIds(routes, motoboys), [routes, motoboys]);
   const openRoutes = routes.filter((route) => route.status === 'aberta');
-  const pending = deliveries.filter((delivery) => !delivery.completed && !isCancelledSiteDelivery(delivery) && isDeliveryFulfillment(delivery));
+  // R166_HOME_ARCHIVED: encerramentos operacionais nao retornam como alertas ativos.
+  const pending = deliveries.filter((delivery) => !delivery.completed && !delivery.operational_dismissed_at && !isCancelledSiteDelivery(delivery) && isDeliveryFulfillment(delivery));
 
   // Backlog comercial global: não depende do dia nem da rota.
   // A regra canônica também exige pedido operacionalmente não concluído:

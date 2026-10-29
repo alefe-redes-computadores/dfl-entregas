@@ -117,11 +117,14 @@ function OperationalRadarActive({
   });
   const routes = useAppStore((state) => state.routes);
   const routeIds = useMemo(() => new Set(routes.map((route) => route.id)), [routes]);
+  const activeRouteIds = useMemo(() => new Set(routes.filter(route => route.status === 'aberta').map(route => route.id)), [routes]);
   // Home is for actionable signals. Positive/info insights remain in Reports;
   // do not spend a full card on a generic tip outside operating hours.
   const visibleHighlights = intelligence.highlights.filter(
     (insight) => !hiddenIds.has(insight.id) &&
-      (insight.severity === 'warning' || insight.severity === 'attention'),
+      (insight.severity === 'warning' || insight.severity === 'attention') &&
+      // Leitura de rotas passadas não vira alerta operacional do dia.
+      (insight.category !== 'routes' || Boolean(insight.entityIds?.some(id => activeRouteIds.has(id)))),
   );
   const signal = chooseHomeSignal(visibleHighlights);
   if (!signal) return null;
@@ -180,7 +183,7 @@ function OperationalRadarActive({
               {signal.summary}
             </p>
             <p className="mt-2 text-[9px] font-bold text-zinc-700">
-              Base: {signal.sampleSize} · {confidenceLabel(signal.confidence)} · abrir leitura completa
+              Histórico analisado: até 30 dias · base {signal.sampleSize} · {confidenceLabel(signal.confidence)}
             </p>
           </button>
 

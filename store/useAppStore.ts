@@ -1,3 +1,4 @@
+import { futureRoutePlan } from '@/lib/operation/future-route-planning';
 import { create } from 'zustand';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
 import { toast } from '@/lib/operational-toast';
@@ -238,7 +239,10 @@ interface AppState {
   addDelivery: (delivery: Delivery) => Promise<void>;
   addDeliveries: (deliveries: Delivery[]) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
-  allocateSiteDelivery: (deliveryId: string, target: ({routeId: string} | {newRoute: {name: string; motoboyId: string}}) & {operational?: {address_string?:string;phone?:string;observation?:string;payment_method?:Delivery['payment_method']}}) => Promise<string>;
+  allocateSiteDelivery: (deliveryId: string, target: ({routeId: string} | {newRoute: {name: string; motoboyId: string}}) & {operational?: {address_string?:string;phone?:string;observation?:string;payment_method?:Delivery['payment_method']}; expectedPlannedRouteId?: string}) => Promise<string>;
+  /** Arquivamento operacional do Site; nao cancela comercialmente nem conclui entrega. */
+  archiveSiteDelivery: (id: string, reason: string) => Promise<void>;
+  reserveFutureSiteRoute: (deliveryId: string, routeId: string | null) => Promise<void>;
   deleteDelivery: (id: string) => Promise<void>;
   closeRoute: (routeId: string, options?: { effectiveEndTime?: string; autoClosedAt?: string }) => Promise<void>;
   reopenRoute: (routeId: string) => Promise<void>;
@@ -1900,6 +1904,14 @@ export const useAppStore = create<AppState>()(
               if (!routeSnap.exists()) throw new Error('A rota selecionada não existe mais.');
               route = { ...routeSnap.data(), id: routeSnap.id } as Route;
             }
+            // R171: conversao de reserva exige CAS remoto no mesmo transaction.
+            // Alocacoes comuns (sem expectedPlannedRouteId) preservam o fluxo atual.
+            if (target.expectedPlannedRouteId !== undefined) {
+              const expected = target.expectedPlannedRouteId.trim();
+              if (!expected || expected !== routeId || remoteDelivery.planned_route_id?.trim() !== expected) {
+                throw new Error('A reserva mudou no servidor. Sincronize e confira antes de confirmar.');
+              }
+            }
             // Endereco revisado no mesmo ato de alocacao tambem pode
             // corrigir pedido recebido sem rua completa, sem criar clone.
             assertSiteRouteAllocation({
@@ -1924,6 +1936,7 @@ export const useAppStore = create<AppState>()(
                 patch.site_operational_payment_override = true;
               }
             }
+            if (target.expectedPlannedRouteId !== undefined) Object.assign(patch, { planned_route_id: null, planned_route_at: null });
             transaction.update(deliveryRef, { route_id: routeId, ...patch, updated_at: nowIso });
             if ('newRoute' in target) transaction.set(routeRef, sanitizeForFirebase(route));
             return { remoteDelivery, route, operational: patch };
@@ -1932,7 +1945,7 @@ export const useAppStore = create<AppState>()(
             routes: 'newRoute' in target && !state.routes.some(item => item.id === routeId)
               ? [saved.route, ...state.routes] : state.routes,
             deliveries: state.deliveries.map(item => item.id === deliveryId
-              ? { ...item, ...saved.operational, route_id: routeId, updated_at: nowIso } as Delivery : item),
+              ? { ...item, ...saved.operational, route_id: routeId, ...(target.expectedPlannedRouteId !== undefined ? { planned_route_id: null, planned_route_at: null } : {}), updated_at: nowIso } as Delivery : item),
           }));
           return routeId;
         } finally {
@@ -2299,6 +2312,78 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      // R164: transacao dedicada. Nunca chamar deleteDoc nem converter em entrega concluida.
+      archiveSiteDelivery: async (id, reason) => {
+        const normalizedReason = reason.trim().slice(0, 240);
+        if (normalizedReason.length < 8) throw new Error('Informe um motivo com ao menos 8 caracteres.');
+        const key = `site-archive:${id}`;
+        if (deliveryMutationLocks.has(key)) throw new Error('Este pedido ja esta sendo arquivado.');
+        deliveryMutationLocks.add(key);
+        try {
+          const ref = doc(db, 'deliveries', id);
+          const archived = await runTransaction(db, async (transaction) => {
+            const snapshot = await transaction.get(ref);
+            if (!snapshot.exists()) throw new Error('Pedido nao encontrado no servidor. Sincronize.');
+            const remote = { ...snapshot.data(), id: snapshot.id } as Delivery;
+            if (remote.source_system !== 'dfl_site') throw new Error('Apenas pedidos do Site aceitam este arquivamento.');
+            if (isCancelledSiteDelivery(remote)) throw new Error('Pedido cancelado: preservar o historico comercial.');
+            if (remote.completed || remote.operational_completion_pending_route) throw new Error('Pedido concluido: arquivamento bloqueado.');
+            if (remote.route_id?.trim()) throw new Error('Pedido ja vinculado: revise a rota antes de arquivar.');
+            if (remote.operational_dismissed_at) return remote;
+            const now = new Date().toISOString();
+            transaction.update(ref, {
+              operational_dismissed_at: now,
+              operational_dismissal_reason: normalizedReason,
+              operational_dismissal_source: 'manual',
+              updated_at: now,
+            });
+            return { ...remote, operational_dismissed_at: now,
+              operational_dismissal_reason: normalizedReason,
+              operational_dismissal_source: 'manual' as const, updated_at: now };
+          });
+          set((state) => ({ deliveries: state.deliveries.map((item) =>
+            item.id === id ? { ...item, ...archived } : item), }));
+        } catch (error) {
+          set({ syncError: true });
+          throw error;
+        } finally {
+          deliveryMutationLocks.delete(key);
+        }
+      },
+
+      // R169: reserva de planejamento nao altera route_id, horario nem status comercial.
+      reserveFutureSiteRoute: async (deliveryId, routeId) => {
+        const lockKey = `site-future-plan:${deliveryId}`;
+        if (deliveryMutationLocks.has(lockKey)) throw new Error('Planejamento em andamento neste pedido.');
+        deliveryMutationLocks.add(lockKey);
+        try {
+          const local = get().deliveries.find(item => item.id === deliveryId);
+          if (!local || local.source_system !== 'dfl_site') throw new Error('Pedido do Site nao encontrado.');
+          const duplicate = local.external_order_id?.trim() && get().deliveries.filter(item => item.source_system === 'dfl_site' && item.external_order_id?.trim() === local.external_order_id?.trim()).length > 1;
+          if (duplicate) throw new Error('Identidade duplicada: confira o Site antes de planejar.');
+          if (routeId && !get().routes.some(route => route.id === routeId)) throw new Error('Rota nao encontrada. Sincronize.');
+          const now = Date.now();
+          const deliveryRef = doc(db, 'deliveries', deliveryId);
+          const result = await runTransaction(db, async transaction => {
+            const remoteSnap = await transaction.get(deliveryRef);
+            if (!remoteSnap.exists()) throw new Error('Pedido nao existe no servidor.');
+            const remote = { ...remoteSnap.data(), id: remoteSnap.id } as Delivery;
+            const routeSnap = routeId ? await transaction.get(doc(db, 'routes', routeId)) : null;
+            if (remote.source_system !== 'dfl_site' || isCancelledSiteDelivery(remote) || remote.completed || remote.operational_dismissed_at || remote.route_id?.trim()) throw new Error('Pedido cancelado, encerrado ou ja vinculado. Revise no Site.');
+            if (routeId) {
+              const approved = futureRoutePlan([remote], routeSnap?.exists() ? [{ ...routeSnap.data(), id: routeSnap.id } as Route] : [], now);
+              if (!approved.length || approved[0].issue || !approved[0].candidates.some(route => route.id === routeId)) throw new Error('Pedido ou rota nao esta elegivel para reserva futura.');
+              if (!remote.address_string?.trim()) throw new Error('Endereco ausente. Revise no Site.');
+            }
+            const update = { planned_route_id: routeId || null, planned_route_at: routeId ? new Date(now).toISOString() : null };
+            transaction.update(deliveryRef, update);
+            return update;
+          });
+          set(state => ({ deliveries: state.deliveries.map(item => item.id === deliveryId ? { ...item, ...result } : item) }));
+        } catch (error) { set({ syncError: true }); throw error; }
+        finally { deliveryMutationLocks.delete(lockKey); }
+      },
+
       deleteDelivery: async (id) => {
         const state = get();
         const deliveryToDelete = state.deliveries.find((delivery) => delivery.id === id);
@@ -2309,6 +2394,16 @@ export const useAppStore = create<AppState>()(
             'Pedido cancelado: exclusão bloqueada para preservar o histórico.',
           );
         }
+
+        // R163_SITE_HISTORY_GUARD: pedidos integrados pertencem ao histórico
+        // comercial do Site. A exclusão física aqui não possui tombstone nem
+        // reconciliação de replay; bloquear até existir arquivamento auditável.
+        if (deliveryToDelete.source_system === 'dfl_site') {
+          throw new Error(
+            'Pedido do Site: exclusão definitiva bloqueada para preservar o histórico. Consulte o pedido e seu status comercial antes de encerrar a operação.',
+          );
+        }
+
 
         if (deliveryToDelete.completed === true) {
           throw new Error(

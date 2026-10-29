@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import type { Delivery, Route } from '@/types';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
+import { isFutureScheduledDelivery } from '@/lib/scheduled-delivery';
 
 interface Props { routes: Route[]; deliveries: Delivery[]; pendingSettlements: number; pendingSiteOrders: number; }
 
@@ -13,18 +14,20 @@ export function OperationReadiness({ routes, deliveries, pendingSettlements, pen
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const active = deliveries.filter((delivery) =>
-    !delivery.completed && !isCancelledSiteDelivery(delivery) && isDeliveryFulfillment(delivery),
+    !delivery.completed && !delivery.operational_dismissed_at &&
+    !isCancelledSiteDelivery(delivery) && isDeliveryFulfillment(delivery) &&
+    delivery.source_system !== 'dfl_site' && !isFutureScheduledDelivery(delivery),
   );
   const validRoutes = new Set(routes.map((route) => route.id));
   const withoutRoute = active.filter((delivery) => !delivery.route_id || !validRoutes.has(delivery.route_id));
   const withoutAddress = active.filter((delivery) => !String(delivery.address_string || '').trim());
   const openRoutes = routes.filter((route) => route.status === 'aberta').length;
   const issues = [
-    { key: 'site', label: 'Pedidos do Site na caixa de entrada', count: pendingSiteOrders, href: '/loja/caixa-de-entrada?aba=site' },
     { key: 'route', label: 'Entregas sem rota válida', count: withoutRoute.length, href: withoutRoute[0]?.id ? `/entregas/editar?id=${encodeURIComponent(withoutRoute[0].id)}` : '/entregas' },
     { key: 'address', label: 'Endereço ausente', count: withoutAddress.length, href: withoutAddress[0]?.id ? `/entregas/editar?id=${encodeURIComponent(withoutAddress[0].id)}` : '/entregas' },
     { key: 'settle', label: 'Acertos de motoboys pendentes', count: pendingSettlements, href: '/motoboys' },
   ].filter((item) => item.count > 0);
+  // Pedidos do Site têm autoridade e ação na própria Caixa de Entrada.
   const critical = issues.filter((item) => item.key !== 'settle').length;
   return (
     <section className="mb-2 rounded-[20px] border border-zinc-800 bg-zinc-900/65 p-3" aria-label="Prontidão da operação">
@@ -36,7 +39,7 @@ export function OperationReadiness({ routes, deliveries, pendingSettlements, pen
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-black text-zinc-100">Prontidão operacional</span>
           <span className="mt-0.5 block text-[10px] text-zinc-400">
-            {active.length} entrega{active.length === 1 ? '' : 's'} pendente{active.length === 1 ? '' : 's'} · {openRoutes} rota{openRoutes === 1 ? '' : 's'} aberta{openRoutes === 1 ? '' : 's'}
+            {active.length} entrega{active.length === 1 ? '' : 's'} em ação · {openRoutes} rota{openRoutes === 1 ? '' : 's'} aberta{openRoutes === 1 ? '' : 's'}{pendingSiteOrders > 0 ? ' · pedidos do Site na Caixa' : ''}
           </span>
         </span>
         <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${critical ? 'bg-amber-500/10 text-amber-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
