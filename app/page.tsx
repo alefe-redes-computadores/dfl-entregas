@@ -52,6 +52,8 @@ export default function HomePage() {
   const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
 
   const [globalMotoboy, setGlobalMotoboy] = useState<string | null>(null);
+  // R154_R2_ROUTE_FOCUS: compactacao voluntaria, nenhuma rota fica oculta sem acao explicita.
+  const [compactOpenRoutes, setCompactOpenRoutes] = useState(false);
   // R90: balcão/retirada/99Food não montam dezenas de cards numa só pintura.
   // Os totais e a contabilidade continuam usando TODOS os pedidos do período.
   const [storeOrdersVisibleLimit, setStoreOrdersVisibleLimit] = useState(8);
@@ -334,6 +336,7 @@ export default function HomePage() {
 
   useEffect(() => {
     setStoreOrdersVisibleLimit(8);
+    setCompactOpenRoutes(false);
   }, [selectedDateKey, globalMotoboy]);
 
   const hasOperationSummary =
@@ -544,11 +547,25 @@ export default function HomePage() {
         <section className="flex flex-col gap-3">
           <div className="flex items-end justify-between gap-3 px-1">
             <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Execução</p><h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">Rotas em andamento {globalMotoboy && `· ${globalMotoboy}`}</h2></div>
-            <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[9px] font-black text-emerald-400">{openRoutes.length} {openRoutes.length === 1 ? 'aberta' : 'abertas'}</span>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              {openRoutes.length > 3 && (
+                <button type="button" onClick={() => setCompactOpenRoutes((value) => !value)} aria-pressed={compactOpenRoutes} aria-label={compactOpenRoutes ? 'Mostrar todas as rotas abertas' : 'Mostrar apenas tres rotas abertas'} className="min-h-9 rounded-xl border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-[10px] font-bold text-zinc-200 transition active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+                  {compactOpenRoutes ? 'Mostrar todas' : 'Focar em 3'}
+                </button>
+              )}
+              <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[9px] font-black text-emerald-400">{openRoutes.length} {openRoutes.length === 1 ? 'aberta' : 'abertas'}</span>
+            </div>
           </div>
           {openRoutes.map((route, index) => (
-            <RouteAccordion key={route.id} route={route} defaultOpen={index === 0} />
+            !compactOpenRoutes || index < 3 ? (
+              <RouteAccordion key={route.id} route={route} defaultOpen={index === 0} />
+            ) : null
           ))}
+          {compactOpenRoutes && openRoutes.length > 3 && (
+            <button type="button" onClick={() => setCompactOpenRoutes(false)} className="min-h-11 rounded-2xl border border-zinc-700 bg-zinc-900/70 px-4 text-xs font-bold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400" aria-label={`Exibir todas as ${openRoutes.length} rotas abertas`}>
+              Exibir mais {openRoutes.length - 3} rotas abertas
+            </button>
+          )}
         </section>
       )}
 

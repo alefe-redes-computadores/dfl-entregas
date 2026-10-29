@@ -21,6 +21,7 @@ import { siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
 import { classifyHomeExceptions } from '@/lib/operation/home-exceptions';
 import { homeActionQueue } from '@/lib/operation/home-action-queue';
 import { RouteCashPulse } from '@/components/home/RouteCashPulse';
+import { OperationReadiness } from '@/components/home/OperationReadiness';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { Inbox } from 'lucide-react';
@@ -294,6 +295,7 @@ export function OperationalCommandCenter({
         </span>
       </div>
 
+      <OperationReadiness routes={routes} deliveries={deliveries} pendingSettlements={settlementTasks.length} pendingSiteOrders={siteInbox.total} />
       <RouteCashPulse routes={cashPulseRoutes} deliveries={deliveries} />
 
       <div className="space-y-1.5">
