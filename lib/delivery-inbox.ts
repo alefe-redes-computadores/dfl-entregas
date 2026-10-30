@@ -75,7 +75,8 @@ export function inferInboxSource(
   parsed: ParsedIfoodOrder,
 ): DeliveryInboxSource {
   if (/\b(?:99\s*food|food\s*99)\b/i.test(raw)) return 'food99';
-  if (parsed.ifoodId || parsed.orderId || /\bifood\b/i.test(raw)) return 'ifood';
+  // Identificador comercial sem marca nao identifica a plataforma: pode ser WhatsApp.
+  if (parsed.ifoodId || /\bifood\b/i.test(raw)) return 'ifood';
 
   if (
     /\b(?:whats?app|zap|wpp)\b/i.test(raw) ||
@@ -84,6 +85,8 @@ export function inferInboxSource(
     return 'whatsapp';
   }
 
+  // Compatibilidade com importacoes antigas que trazem apenas numero de pedido.
+  if (parsed.orderId) return 'ifood';
   return 'texto';
 }
 
@@ -347,6 +350,7 @@ export function cleanupDeliveryInbox(
   if (typeof window === 'undefined') return;
 
   const today = new Date(`${todayKey}T12:00:00`);
+  if (!Number.isFinite(today.getTime())) return;
 
   for (let index = localStorage.length - 1; index >= 0; index -= 1) {
     const key = localStorage.key(index);
@@ -358,6 +362,11 @@ export function cleanupDeliveryInbox(
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) continue;
 
     const date = new Date(`${dayKey}T12:00:00`);
+    // Datas malformadas ou normalizadas pelo JS nunca autorizam limpeza.
+    if (!Number.isFinite(date.getTime()) ||
+        date.getFullYear() !== Number(dayKey.slice(0, 4)) ||
+        date.getMonth() + 1 !== Number(dayKey.slice(5, 7)) ||
+        date.getDate() !== Number(dayKey.slice(8, 10))) continue;
     const ageDays = Math.floor(
       (today.getTime() - date.getTime()) / 86_400_000,
     );
