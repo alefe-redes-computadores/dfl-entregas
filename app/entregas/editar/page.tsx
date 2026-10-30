@@ -165,7 +165,7 @@ const [routeId, setRouteId] = useState('');
       return;
     }
 
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+    if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
 
     let foundOrderId = '';
     let foundIfoodId = '';
@@ -352,7 +352,7 @@ const [routeId, setRouteId] = useState('');
     }
 
     if (identified.length > 0) {
-      if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+      if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Heavy }).catch(() => undefined);
       toast.success('Campos atualizados pelo parser.', {
         description: `Detectados: ${identified.join(' • ')}`,
         duration: 4000
@@ -380,7 +380,7 @@ const [routeId, setRouteId] = useState('');
       toast.error('Cole o texto do pedido antes de processar.');
       return;
     }
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Medium });
+    if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
     const parsed = parseIfoodOrderText(magicText);
     const identified: string[] = [];
     if (parsed.orderId) { setOrderId(parsed.orderId); identified.push(`Nº #${parsed.orderId}`); }
@@ -407,7 +407,7 @@ const [routeId, setRouteId] = useState('');
       toast.error('Nenhum dado reconhecido no texto.');
       return;
     }
-    if (Capacitor.isNativePlatform()) await Haptics.impact({ style: ImpactStyle.Heavy });
+    if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Heavy }).catch(() => undefined);
     toast.success('Campos atualizados pelo parser.', { description: `Detectados: ${identified.join(' • ')}`, duration: 4000 });
     setMagicText('');
   };

@@ -968,19 +968,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 {/* VISUALIZAÇÃO COMPACTA — operação em duas linhas, sem iframe/mapa */}
                 {!isExpanded && (
                   <div className="mt-1.5 flex flex-col gap-1.5 border-t border-zinc-800/50 pt-1.5">
-                    {/* R178: ação frequente acessível sem expandir a parada. */}
-                    <div className="flex justify-end">
-                      <Link
-                        href={`/entregas/editar?id=${delivery.id}${operationalDateQuery}`}
-                        data-no-card-swipe="true"
-                        onClick={(event) => { event.stopPropagation(); impact(ImpactStyle.Light); }}
-                        aria-label="Editar entrega sem expandir o card"
-                        title="Editar entrega"
-                        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-bold text-zinc-200 active:scale-95"
-                      >
-                        <Pencil size={13} /> Editar
-                      </Link>
-                    </div>
                     <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                       {isGroupedStop ? (
                         groupedFinance.collectCount > 0
@@ -1027,6 +1014,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           {copyBusy ? <LoaderCircle size={15} className="animate-spin" /> : <Copy size={15} />}
                         </button>
                       )}
+                      <Link
+                         href={`/entregas/editar?id=${delivery.id}${operationalDateQuery}`}
+                         data-no-card-swipe="true"
+                         onClick={(event) => { event.stopPropagation(); impact(ImpactStyle.Light); }}
+                         aria-label="Editar pedido sem expandir o card"
+                         title="Editar pedido"
+                         className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-zinc-700 bg-zinc-950/80 text-zinc-300 active:bg-zinc-800"
+                       ><Pencil size={16} /></Link>
                       {normalizedWhatsappPhone && <a href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`} target="_blank" rel="noreferrer" aria-label="Chamar cliente no WhatsApp" onClick={event=>event.stopPropagation()} className="grid h-10 w-9 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] text-emerald-300"><MessageCircle size={15}/></a>}
                       {canReorder && <div role="group" aria-label="Subir ou descer parada" className="flex shrink-0 items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]">
                         <button type="button" aria-label="Mover uma posição para cima" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={event=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-8 place-items-center text-sky-200 disabled:opacity-30"><ArrowUp size={14}/></button>

@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle2, LoaderCircle, Wallet, X } from 'lucide-react';
 import type { Customer, Delivery, Route } from '@/types';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
@@ -32,6 +33,8 @@ export function RouteDepartureChecklist({
   onConfirm,
 }: Props) {
   const [busySeconds, setBusySeconds] = useState(0);
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => { setPortalReady(true); }, []);
   const hasIfoodOrders = deliveries.some(item => item.origin === 'ifood');
   const driverConfirmsIfood = hasIfoodOrders && ifoodConfirmationMode === 'motoboy';
 
@@ -93,9 +96,11 @@ export function RouteDepartureChecklist({
   const routeCash = cashFlow.initialCash;
   const routeCashShortage = cashFlow.plannedPixChange;
 
-  return (
+  if (!portalReady || typeof document === 'undefined') return null;
+  return createPortal(
     <div
-      className="fixed inset-0 z-[120] flex items-end bg-black/80 backdrop-blur-sm"
+      data-dfl-route-departure-dialog="true"
+      className="fixed inset-0 z-[500] flex items-end justify-center bg-black/85 backdrop-blur-sm"
       onClick={() => !busy && onClose()}
       role="dialog"
       aria-modal="true"
@@ -103,10 +108,11 @@ export function RouteDepartureChecklist({
       aria-labelledby="route-departure-title"
     >
       <div
-        className="max-h-[88vh] w-full overflow-y-auto rounded-t-[32px] border-t border-zinc-700 bg-[#151515] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]"
+        className="flex max-h-[calc(100dvh-12px)] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-t-[28px] border-t border-zinc-700 bg-[#151515]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-zinc-700" />
+        <div data-dfl-checklist-scroll="true" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-3 pt-4">
+        <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-zinc-700" />
 
         <div className="mb-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -152,7 +158,7 @@ export function RouteDepartureChecklist({
               <p className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Conferência por parada</p>
               <span className="text-[10px] font-bold text-sky-300">{groupedStops.length} com múltiplos pedidos</span>
             </div>
-            <div className="mt-2 max-h-64 space-y-2 overflow-y-auto">
+            <div className="mt-2 space-y-2">
               {stopSummary.map((stop, index) => (
                 <article key={stop.key} className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2">
@@ -253,6 +259,8 @@ export function RouteDepartureChecklist({
           </div>
         )}
 
+        </div>
+        <div data-dfl-checklist-footer="true" className="shrink-0 border-t border-zinc-800 bg-[#151515] px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
         <button
           type="button"
           disabled={busy}
@@ -262,7 +270,7 @@ export function RouteDepartureChecklist({
           {busy ? <LoaderCircle size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
           {busy
             ? busySeconds >= 4
-              ? 'Rota salva · sincronizando em segundo plano'
+              ? 'Conferindo gravação da rota…'
               : 'Registrando saída...'
             : 'Tudo conferido · Iniciar rota'}
         </button>
@@ -278,7 +286,9 @@ export function RouteDepartureChecklist({
             </p>
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

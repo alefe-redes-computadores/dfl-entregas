@@ -1,12 +1,11 @@
 // lib/ui-feedback.ts
 import { Haptics, NotificationType } from '@capacitor/haptics';
 
-async function notify(type: NotificationType) {
+function notify(type: NotificationType) {
+  // Efeito opcional: nunca segurar salvar, excluir ou abrir confirmacoes.
   try {
-    await Haptics.notification({ type });
-  } catch {
-    // PWA/browser sem implementação nativa: feedback visual continua funcionando.
-  }
+    void Haptics.notification({ type }).catch(() => undefined);
+  } catch { /* plugin indisponivel nao interrompe o fluxo */ }
 }
 
 export const feedbackSuccess = () => notify(NotificationType.Success);

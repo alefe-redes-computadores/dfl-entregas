@@ -120,8 +120,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const safeRouteHaptic = async (success = false) => {
     if (!Capacitor.isNativePlatform()) return;
     try {
-      if (success) await Haptics.notification({ type: NotificationType.Success });
-      else await Haptics.impact({ style: ImpactStyle.Light });
+      if (success) void Haptics.notification({ type: NotificationType.Success }).catch(() => undefined);
+      else void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined);
     } catch { /* feedback tátil é opcional */ }
   };
 
@@ -410,9 +410,9 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       await startRoute(route.id);
 
       if (Capacitor.isNativePlatform()) {
-        await Haptics.notification({
+        void Haptics.notification({
           type: NotificationType.Success,
-        });
+        }).catch(() => undefined);
       }
 
       toast.success('Site sincronizado.', {
@@ -809,7 +809,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       setOptimizerOpen(false);
 
       if (Capacitor.isNativePlatform()) {
-        await Haptics.notification({ type: NotificationType.Success });
+        void Haptics.notification({ type: NotificationType.Success }).catch(() => undefined);
       }
 
       toast.success(optimizerEdited ? 'Ordem manual aplicada.' : 'Ordem inteligente aplicada.', {
@@ -841,7 +841,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       setLastAppliedOrder(null);
 
       if (Capacitor.isNativePlatform()) {
-        await Haptics.impact({ style: ImpactStyle.Medium });
+        void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
       }
 
       toast.success('Ordem anterior restaurada.');
@@ -1209,7 +1209,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
       {optimizerOpen && (
         <div className="fixed inset-0 z-[110] flex flex-col justify-end bg-black/85 backdrop-blur-sm animate-in fade-in">
-          <div className="max-h-[90vh] overflow-hidden rounded-t-[28px] border-t border-zinc-700 bg-[#151515]">
+          <div className="flex max-h-[calc(100dvh-12px)] min-h-0 flex-col overflow-hidden rounded-t-[28px] border-t border-zinc-700 bg-[#151515]">
             <div className="flex items-start justify-between gap-3 border-b border-zinc-800 px-5 pb-4 pt-5">
               <div className="flex items-start gap-3">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-300">
@@ -1226,7 +1226,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </button>
             </div>
 
-            <div className="max-h-[calc(90vh-164px)] overflow-y-auto px-4 py-3">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-2xl border border-sky-500/20 bg-sky-500/[.07] p-3">
                   <p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-sky-400">
@@ -1345,7 +1345,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               </div>
             </div>
 
-            <div className="border-t border-zinc-800 bg-zinc-950/80 p-4 pb-7">
+            <div className="shrink-0 border-t border-zinc-800 bg-zinc-950/80 p-4 pb-[calc(12px+env(safe-area-inset-bottom))]">
               <button
                 onClick={applyOptimizerOrder}
                 disabled={optimizerBusy || optimizerOrder.length < 2 || !optimizerOrigin}
