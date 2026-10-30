@@ -165,8 +165,9 @@ export function findInboxDuplicate(
     ) {
       const incomingDay = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
       const existingDate = delivery.created_at || delivery.createdAt || delivery.updated_at || '';
-      const existingDay = existingDate
-        ? new Intl.DateTimeFormat('en-CA', { timeZone:'America/Sao_Paulo', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date(existingDate))
+      const existingTimestamp = existingDate ? new Date(existingDate) : null;
+      const existingDay = existingTimestamp && !Number.isNaN(existingTimestamp.getTime())
+        ? new Intl.DateTimeFormat('en-CA', { timeZone:'America/Sao_Paulo', year:'numeric', month:'2-digit', day:'2-digit' }).format(existingTimestamp)
         : '';
       if (existingDay === incomingDay) {
         return {
@@ -198,13 +199,15 @@ export function findInboxDuplicate(
         '';
 
       if (!existingDate) return false;
+      const existingTimestamp = new Date(existingDate);
+      if (Number.isNaN(existingTimestamp.getTime())) return false;
 
       const existingDay = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/Sao_Paulo',
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
-      }).format(new Date(existingDate));
+      }).format(existingTimestamp);
 
       if (existingDay !== incomingDay) return false;
 
@@ -380,11 +383,8 @@ export function cleanupDeliveryInbox(
         localStorage.removeItem(key);
       }
     } catch {
-      /*
-       * Entrada local corrompida e antiga não deve quebrar
-       * a operação atual.
-       */
-      localStorage.removeItem(key);
+      /* Entrada antiga ilegível fica preservada para recuperação manual.
+       * Nunca apagar dados locais incertos durante a limpeza automática. */
     }
   }
 }

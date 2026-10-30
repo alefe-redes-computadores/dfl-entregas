@@ -2,6 +2,7 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/test-r218-premium-closeout.cjs',
   'scripts/test-r206-release-preview.cjs',
   'scripts/test-r205-release-manifest.cjs',
   'scripts/test-r202-legacy-import-audit.cjs', // DFL_R202_LEGACY_AUDIT
