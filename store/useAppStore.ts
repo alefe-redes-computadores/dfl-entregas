@@ -6,6 +6,7 @@ import { persist } from 'zustand/middleware';
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField, runTransaction, query, where } from 'firebase/firestore';
 import { createSerializedWriteQueue } from '@/lib/store/serializedWriteQueue';
 import { queueDeliveryDocuments } from '@/lib/store/atomicDeliveryWriteQueue';
+import { deliveryImportDocumentId, assertFreshRemoteImportIds } from '@/lib/operation/delivery-import-identity'; // DFL_R201_ATOMIC_IMPORT
 import { createKeyedWriteQueue } from '@/lib/store/keyedWriteQueue';
 import { rollbackAddedEntity, rollbackUpdatedEntity, rollbackDeletedEntity, rollbackAddedEntities, rollbackUpdatedEntities } from '@/lib/operation/optimisticRollback';
 import { signInWithPopup, signOut, signInWithCredential, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
@@ -37,6 +38,8 @@ import {
   routeStartedAt,
 } from '@/lib/operational-time';
 import { isClosedSettlement, settlementDocumentId } from '@/lib/motoboy-settlement-authority';
+import { assertTemporaryCustomerBinding } from '@/lib/operation/temporary-customer-identity';
+import { assertAuthorizedReturnPayment, redeliveryAdjustmentDocumentId } from '@/lib/motoboy-redelivery-authorization';
 import { reconcileIfoodConfirmation } from '@/lib/ifood-confirmation-authority';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { fuelingDate } from '@/lib/fueling-analytics';
@@ -59,6 +62,7 @@ import { deliveryCustomerCharge, paymentStateForInput } from '@/lib/delivery-fin
 import { isSiteOrderAwaitingConfirmation, isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
 import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
 import { mergeCloudFirstById, mergeDeliveriesPreservingExpansion } from '@/lib/operation/snapshotMerge';
+import { deliveriesForRouteIndexed, findByIdIndexed } from '@/lib/operation/collection-lookup-index';
 import { assertRemoteDeliveryTransition, assertRouteClosureStable, assertRemoteSettlementAdjustment } from '@/lib/operation/remoteOperationGuards';
 import { captureOperationalBaseline, operationalDeliverySignature, operationalRouteSignature, preserveInFlightLocalEdits, trustedIncrementalCheckpoint, syncOwnerStillCurrent } from '@/lib/operation/snapshot-sync-safety';
 import { markUnreadSiteOrders } from '@/lib/site-order-inbox';
@@ -303,6 +307,8 @@ interface AppState {
       observation?: string;
       origin?: OrderOrigin;
       preferredCustomerId?: string;
+      /** Destino só deste pedido; nunca altera o cadastro do cliente escolhido. */
+      temporaryCustomerId?: string;
     },
   ) => Promise<string>;
 }
@@ -985,10 +991,10 @@ export const useAppStore = create<AppState>()(
             return Boolean(delivery.route_id) && !validRouteIds.has(delivery.route_id);
           });
         }
-        return state.deliveries.filter((d) => d.route_id === routeId);
+        return deliveriesForRouteIndexed(state.deliveries, routeId);
       },
 
-      getCustomerById: (customerId) => customerId ? get().customers.find((c) => c.id === customerId) : undefined,
+      getCustomerById: (customerId) => findByIdIndexed(get().customers, customerId),
 
       addRoute: async (route) => {
         const now = new Date().toISOString();
@@ -1754,8 +1760,15 @@ export const useAppStore = create<AppState>()(
 
       addDelivery: async (delivery) => {
         if (isCancelledSiteDelivery(delivery)) throw new Error('Pedido cancelado não pode ser importado como entrega ativa.');
+        // R201: todos os aparelhos calculam o MESMO documento para um pedido de plataforma.
+        // Site integrado nao passa aqui; registros da loja sem ID comercial preservam IDs atuais.
+        const canonicalId = deliveryImportDocumentId(delivery);
+        if (delivery.origin === 'food99' && delivery.source_system !== 'dfl_site' && !canonicalId) {
+          throw new Error('99Food precisa de numero comercial de seis digitos e data valida.');
+        }
+        if (canonicalId) delivery = { ...delivery, id: canonicalId };
         const mutationKey = `delivery:add:${delivery.id}`;
-        if (deliveryMutationLocks.has(mutationKey)) return;
+        if (deliveryMutationLocks.has(mutationKey)) throw new Error('Este pedido ja esta sendo registrado. Aguarde a confirmacao.');
         if (get().deliveries.some((current) => sameExternalDelivery(current, delivery))) {
           throw new Error('Este pedido já foi importado. Abra a entrega existente.');
         }
@@ -1782,7 +1795,18 @@ export const useAppStore = create<AppState>()(
 
         try {
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
-          await queueEntityWrite('deliveries', delivery.id, () => setDoc(doc(db, 'deliveries', delivery.id), safeData));
+          if (canonicalId) {
+            // Transacao no mesmo documento de deliveries: segunda criacao falha, nunca sobrescreve.
+            await queueEntityWrite('deliveries', delivery.id, () => runTransaction(db, async (transaction) => {
+              const ref = doc(db, 'deliveries', delivery.id);
+              const prior = await transaction.get(ref);
+              assertFreshRemoteImportIds([delivery.id], prior.exists() ? [prior.id] : []);
+              transaction.set(ref, safeData);
+            }));
+          } else {
+            // Fluxos historicos da loja e sem identificador forte continuam intactos.
+            await queueEntityWrite('deliveries', delivery.id, () => setDoc(doc(db, 'deliveries', delivery.id), safeData));
+          }
           if (deliveryWithTimestamp.route_id && !deliveryWithTimestamp.is_urgent) {
             try {
               await autoOrganizeLoadedRouteAfterInsert(deliveryWithTimestamp.route_id, get().deliveries, get().customers, get().storeSettings);
@@ -1802,6 +1826,14 @@ export const useAppStore = create<AppState>()(
       addDeliveries: async (items) => {
         if (!items.length) return;
         if (items.some(isCancelledSiteDelivery)) throw new Error('O lote contém pedido cancelado. Revise antes de importar.');
+        // R201: normalizar IDs ANTES de deduplicacao local, optimistic UI e fila de escrita.
+        items = items.map((item) => {
+          const canonical = deliveryImportDocumentId(item);
+          if (item.origin === 'food99' && item.source_system !== 'dfl_site' && !canonical) {
+            throw new Error('99Food exige ID comercial de seis digitos e data valida.');
+          }
+          return canonical ? { ...item, id: canonical } : item;
+        });
         const existing = get().deliveries;
         const duplicated = items.find((item, index) =>
           existing.some((current) => sameExternalDelivery(current, item)) ||
@@ -1837,12 +1869,25 @@ export const useAppStore = create<AppState>()(
         });
         set((state) => ({ deliveries: [...prepared, ...state.deliveries] }));
         try {
-          const batch = writeBatch(db);
-          prepared.forEach((delivery) => batch.set(
-            doc(db, 'deliveries', delivery.id),
-            sanitizeForFirebase(delivery),
-          ));
-          await queueDeliveryDocuments(queueEntityWrite, prepared.map((delivery) => delivery.id), () => batch.commit());
+          if (prepared.some((delivery) => Boolean(deliveryImportDocumentId(delivery)))) {
+            // Nenhum slot pode ser sobrescrito. A verificacao e o commit sao atomicos no Firestore.
+            // A transacao le todos os docs ANTES de criar qualquer um.
+            if (prepared.length > 250) throw new Error('Lote muito grande; separe em grupos menores.');
+            await queueDeliveryDocuments(queueEntityWrite, prepared.map((delivery) => delivery.id), () => runTransaction(db, async (transaction) => {
+              const refs = prepared.map((item) => doc(db, 'deliveries', item.id));
+              const previous = await Promise.all(refs.map((ref) => transaction.get(ref)));
+              assertFreshRemoteImportIds(prepared.map((item) => item.id), previous.filter((snapshot) => snapshot.exists()).map((snapshot) => snapshot.id));
+              prepared.forEach((item, index) => transaction.set(refs[index], sanitizeForFirebase(item)));
+            }));
+          } else {
+            // Lotes comuns continuam usando batch + fila existentes.
+            const batch = writeBatch(db);
+            prepared.forEach((delivery) => batch.set(
+              doc(db, 'deliveries', delivery.id),
+              sanitizeForFirebase(delivery),
+            ));
+            await queueDeliveryDocuments(queueEntityWrite, prepared.map((delivery) => delivery.id), () => batch.commit());
+          }
           const touchedRoutes = Array.from(new Set(prepared.map((delivery) => delivery.route_id).filter(Boolean)));
           for (const touchedRouteId of touchedRoutes) {
             // Não desfazer, no mesmo cadastro, a prioridade fixada de uma urgência.
@@ -2842,6 +2887,16 @@ export const useAppStore = create<AppState>()(
         if (!Number.isFinite(adjustment.amount) || adjustment.amount <= 0) {
           throw new Error('Informe um valor válido para o ajuste.');
         }
+        // R194: IDs determinísticos evitam dois lançamentos simultâneos para uma visita.
+        // O registro remoto da entrega e a tarifa são verificados na mesma transação.
+        const returnLinked = Boolean(adjustment.return_visit_id || adjustment.return_delivery_id || adjustment.return_attempt_id);
+        if (/\[retorno:/i.test(adjustment.description) && !returnLinked) {
+          throw new Error('Remuneração por retorno exige vínculo com visita física confirmada.');
+        }
+        if (returnLinked && (!adjustment.return_visit_id || !adjustment.return_delivery_id || !adjustment.return_attempt_id ||
+          adjustment.id !== redeliveryAdjustmentDocumentId(adjustment.return_delivery_id, adjustment.return_attempt_id))) {
+          throw new Error('Identificador financeiro do retorno inconsistente.');
+        }
         const adjustmentRef = doc(db, 'motoboy_adjustments', adjustment.id);
         const dailySettlementRef = doc(db, 'operational_expenses', settlementDocumentId(
           `motoboy:${adjustment.motoboy_id}:${adjustment.operational_date}`,
@@ -2850,7 +2905,20 @@ export const useAppStore = create<AppState>()(
           const closed = await transaction.get(dailySettlementRef);
           const existing = await transaction.get(adjustmentRef);
           if (closed.exists()) throw new Error('O acerto deste dia já foi fechado. Não é possível lançar ajustes.');
-          if (existing.exists()) throw new Error('Este ajuste já foi registrado.');
+          if (existing.exists()) throw new Error('Este retorno/ajuste já foi registrado, inclusive se cancelado. Revise o histórico.');
+          if (returnLinked) {
+            const deliveryRef = doc(db, 'deliveries', adjustment.return_delivery_id!);
+            const deliverySnap = await transaction.get(deliveryRef);
+            if (!deliverySnap.exists()) throw new Error('Pedido original não encontrado no servidor.');
+            const remoteDelivery = {...deliverySnap.data(),id:deliverySnap.id} as Delivery;
+            if (!remoteDelivery.route_id) throw new Error('Retorno sem rota vinculada.');
+            const routeSnap = await transaction.get(doc(db, 'routes', remoteDelivery.route_id));
+            const motoboySnap = await transaction.get(doc(db, 'motoboys', adjustment.motoboy_id));
+            if (!routeSnap.exists() || !motoboySnap.exists()) throw new Error('Rota ou motoboy não encontrado no servidor.');
+            assertAuthorizedReturnPayment({adjustment, delivery:remoteDelivery,
+              route:{...routeSnap.data(),id:routeSnap.id} as Route,
+              motoboy:{...motoboySnap.data(),id:motoboySnap.id} as Motoboy});
+          }
           transaction.set(adjustmentRef, sanitizeForFirebase(adjustment));
         });
         set((state) => ({
@@ -3451,6 +3519,22 @@ export const useAppStore = create<AppState>()(
         // Um item escolhido anteriormente no autocomplete não é autoridade.
         // Se nome, telefone ou endereço mudaram, a identidade deve ser
         // revalidada antes de reutilizar e enriquecer o cadastro antigo.
+        // R195: vínculo explícito para destino temporário. Confere identidade
+        // ANTES de qualquer enriquecimento/criação e não modifica customers.
+        if (details?.temporaryCustomerId) {
+          const chosen = previousCustomers.find(item => item.id === details.temporaryCustomerId);
+          assertTemporaryCustomerBinding({
+            origin: details.origin,
+            selectedId: details.temporaryCustomerId,
+            preferredId: details.preferredCustomerId,
+            persistedId: chosen?.id,
+            namesMatch: !!chosen && normalizeCustomerName(chosen.name) === normalizedName,
+            currentPhone: normalizedPhone,
+            allowedPhones: chosen ? customerPhones(chosen).map(item => normalizeCustomerPhone(item.number)) : [],
+          });
+          return chosen!.id;
+        }
+
         const preferredCustomer =
           preferredCandidate &&
           customerIdentityEvidence(

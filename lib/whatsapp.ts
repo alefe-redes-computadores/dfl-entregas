@@ -683,7 +683,10 @@ export async function generateRouteMessages(
     }
 
     if (driverConfirmsIfood && ifoodCount > 0) {
-      msg2.push(...ifoodPortalLines(deliveries));
+      // A mensagem logística já contém portal, IDs e códigos por pedido.
+      // Repetir a listagem completa na conferência cria uma segunda versão do mesmo checklist.
+      msg2.push(`🔴 *iFood:* confirmar ${ifoodCount} pedido${ifoodCount === 1 ? '' : 's'} individualmente no portal.`);
+      msg2.push(IFOOD_DRIVER_CONFIRMATION_URL);
       msg2.push(`──────────────`);
     }
 

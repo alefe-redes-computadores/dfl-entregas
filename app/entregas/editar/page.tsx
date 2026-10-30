@@ -52,6 +52,7 @@ function DeliveryDetailsForm() {
   const deleteDelivery = useAppStore((state) => state.deleteDelivery);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
+  const updateCustomer = useAppStore((state) => state.updateCustomer);
 
   // Parser Mágico de Texto para Edição
   const [magicText, setMagicText] = useState('');
@@ -70,6 +71,7 @@ const [routeId, setRouteId] = useState('');
   const [phone, setPhone] = useState('');
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
   const [pendingContactCustomer,setPendingContactCustomer]=useState<Customer|null>(null);
+  const [temporaryCustomerId,setTemporaryCustomerId]=useState<string|null>(null);
 
   // Bloco 3: Endereço e Satélite
   const [streetAddress, setStreetAddress] = useState('');
@@ -438,7 +440,7 @@ const [routeId, setRouteId] = useState('');
   }, [streetAddress, mapsLink]);
 
   const handleCustomerSelect = (c: Customer) => {
-    if (customerPhones(c).length>1 || customerAddresses(c).length>1){setPendingContactCustomer(c);return;}
+    if (origin==='loja' || customerPhones(c).length>1 || customerAddresses(c).length>1){setPendingContactCustomer(c);return;}
     applyCustomerSelection(c);
   };
   const applyCustomerSelection = (c:Customer,chosenPhone?:CustomerPhone,chosenAddress?:CustomerAddress) => {
@@ -455,8 +457,9 @@ const [routeId, setRouteId] = useState('');
     const phone=chosenPhone?.number||c.phone;
     if (phone) setPhone(formatPhoneInput(phone));
     if (c.observation) setObservation(c.observation);
-    const mapsLink=chosenAddress?.maps_link||c.maps_link;
-    if (mapsLink) setMapsLink(mapsLink);
+    // A escolha de outro destino nunca herda coordenadas do endereco padrao.
+    const mapsLink=chosenAddress ? (chosenAddress.maps_link || '') : (c.maps_link || '');
+    setMapsLink(mapsLink);
     // Histórico do cliente não é código do pedido que está sendo editado.
     // O código persistido no pedido continua disponível no carregamento da entrega.
     toast.success('Cliente carregado.');
@@ -636,7 +639,8 @@ const [routeId, setRouteId] = useState('');
           confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
           observation,
           origin,
-          preferredCustomerId: linkedCustomerId,
+          preferredCustomerId: temporaryCustomerId || linkedCustomerId,
+          temporaryCustomerId: temporaryCustomerId || undefined,
         });
       }
 
@@ -1282,7 +1286,7 @@ const [routeId, setRouteId] = useState('');
               {splitEnabled && (
                 <div className="mt-4 space-y-3 border-t border-zinc-800 pt-3">
                   <label className="block text-[11px] font-bold text-zinc-300">Valor em dinheiro
-                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700 bg-zinc-950 px-3 focus-within:border-amber-400"><Banknote size={17} className="mr-2 shrink-0 text-amber-400"/><span className="mr-1 text-xs text-zinc-500">R$</span><input inputMode="numeric" type="text" value={splitCash} onChange={e => setSplitCash(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 bg-transparent text-base font-black tabular-nums text-zinc-100 outline-none"/></span>
+                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700/65 bg-zinc-950/60 px-3 transition-colors focus-within:border-amber-400/80 focus-within:ring-1 focus-within:ring-amber-400/20"><Banknote size={17} className="mr-2 shrink-0 text-amber-400"/><span className="mr-1 text-xs text-zinc-500">R$</span><input inputMode="numeric" type="text" value={splitCash} onChange={e => setSplitCash(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 border-0 bg-transparent p-0 text-base font-black tabular-nums text-zinc-100 shadow-none outline-none focus:outline-none focus:ring-0"/></span>
                   </label>
                   <div>
                     <p className="mb-2 text-[11px] font-bold text-zinc-300">Segunda forma de pagamento</p>
@@ -1292,7 +1296,7 @@ const [routeId, setRouteId] = useState('');
                     </div>
                   </div>
                   <label className="block text-[11px] font-bold text-zinc-300">Valor no {splitOtherMethod === 'pix' ? 'Pix' : 'cartão'}
-                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700 bg-zinc-950 px-3 focus-within:border-emerald-400"><span className="mr-1 text-xs text-zinc-500">R$</span><input type="text" inputMode="numeric" value={splitOther} onChange={e => setSplitOther(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 bg-transparent text-base font-black tabular-nums text-zinc-100 outline-none"/></span>
+                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700/65 bg-zinc-950/60 px-3 transition-colors focus-within:border-emerald-400/80 focus-within:ring-1 focus-within:ring-emerald-400/20"><span className="mr-1 text-xs text-zinc-500">R$</span><input type="text" inputMode="numeric" value={splitOther} onChange={e => setSplitOther(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 border-0 bg-transparent p-0 text-base font-black tabular-nums text-zinc-100 shadow-none outline-none focus:outline-none focus:ring-0"/></span>
                   </label>
                   <div role="status" className={`rounded-xl border p-3 text-[11px] font-bold ${splitReview().valid ? 'border-emerald-500/25 bg-emerald-500/[.08] text-emerald-300' : 'border-amber-500/25 bg-amber-500/[.06] text-amber-200'}`}>
                     <p>{splitReview().valid ? 'Valores conferidos: divisão exata.' : splitReview().errors[0] || 'Informe os valores de cada parte.'}</p>
@@ -1396,7 +1400,29 @@ const [routeId, setRouteId] = useState('');
           </section>
         </div>
       )}
-      {pendingContactCustomer&&<CustomerDestinationSheet customer={pendingContactCustomer} onClose={()=>setPendingContactCustomer(null)} onConfirm={(phone,address)=>{applyCustomerSelection(pendingContactCustomer,phone,address);setPendingContactCustomer(null);}}/>}
+      {pendingContactCustomer&&<CustomerDestinationSheet customer={pendingContactCustomer} onUseTemporary={origin==='loja'?(chosenPhone,destination)=>{
+        const selected=pendingContactCustomer;
+        if(!selected)return;
+        applyCustomerSelection(selected,chosenPhone,{id:'temporary-delivery',address:destination,maps_link:''});
+        setMapsLink('');
+        setTemporaryCustomerId(selected.id);
+        setPendingContactCustomer(null);
+        toast.info('Destino temporário selecionado, sem alterar o cadastro.');
+      }:undefined} onClose={()=>setPendingContactCustomer(null)} onConfirm={(phone,address)=>{applyCustomerSelection(pendingContactCustomer,phone,address);setTemporaryCustomerId(null);setPendingContactCustomer(null);}} onAddAddress={origin==='ifood'?undefined:async(address,makePrimary)=>{
+        const customer=pendingContactCustomer;
+        if(!customer)return undefined;
+        const existing=customerAddresses(customer);
+        const key=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]/g,'');
+        if(existing.some(item=>key(item.address)===key(address))){toast.warning('Endereço já está cadastrado. Selecione-o na lista.');return undefined;}
+        const entry:CustomerAddress={id:`addr-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,address,primary:makePrimary,label:'Outro endereço'};
+        const next=makePrimary?[...existing.map(item=>({...item,primary:false})),entry]:[...existing,entry];
+        try{
+          await updateCustomer(customer.id,{addresses:next,...(makePrimary?{address:entry.address,neighborhood:'',maps_link:''}:{})});
+          setPendingContactCustomer({...customer,addresses:next,...(makePrimary?{address:entry.address,neighborhood:'',maps_link:''}:{})});
+          toast.success('Endereço vinculado ao cliente existente.');
+          return entry;
+        }catch{toast.error('Não foi possível salvar o endereço no cliente.');return undefined;}
+      }}/>}
     </div>
   );
 }

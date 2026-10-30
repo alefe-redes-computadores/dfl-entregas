@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SiteInboxPanel } from "@/components/store/SiteInboxPanel";
+import { siteInboxProjection } from "@/lib/operation/siteInboxPolicy";
 import { ReservationAuditPanel } from "@/components/store/ReservationAuditPanel";
 import { FutureRoutePlanPanel } from "@/components/store/FutureRoutePlanPanel";
 import { SitePlanningPreview } from "@/components/store/SitePlanningPreview";
@@ -37,6 +38,8 @@ import {
   cleanupDeliveryInbox,
   createInboxDraft,
   dedupeInboxImport,
+  findInboxDuplicate,
+  reconcileInboxDraftsWithDeliveries,
   loadInboxDay,
   recoverInterruptedInboxDrafts,
   saveInboxDay,
@@ -53,12 +56,13 @@ const sourceMeta = {
 export default function DeliveryInboxPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const [channel,setChannel]=useState<'site'|'manual'>(params.get('aba')==='site'?'site':'manual');
+  const [channel,setChannel]=useState<'site'|'manual'>(params.get('aba')==='manual'?'manual':'site');
   const focusedSiteOrder=params.get('pedido');
   useEffect(()=>{if(params.get('aba')==='site')setChannel('site');},[params]);
 
   const customers = useAppStore((state) => state.customers);
   const deliveries = useAppStore((state) => state.deliveries);
+  const siteBacklog = useMemo(()=>siteInboxProjection(deliveries),[deliveries]);
 
   const today = dateKey(new Date());
 
@@ -101,6 +105,16 @@ export default function DeliveryInboxPage() {
       drafts: next,
     });
   };
+
+  // R199: sincronizacao de outro dispositivo pode mudar a elegibilidade
+  // de rascunhos locais depois da importacao. Nao gera consultas extras.
+  useEffect(() => {
+    if (!deliveries.length || !drafts.length) return;
+    const next = reconcileInboxDraftsWithDeliveries(drafts, deliveries);
+    if (next === drafts) return;
+    setDrafts(next);
+    saveInboxDay({ version: 1, dayKey: today, drafts: next });
+  }, [deliveries, drafts, today]);
 
   const { active, ready, review, launched, discarded } = useMemo(
     () => classifyInboxDrafts(drafts), [drafts],
@@ -225,6 +239,19 @@ export default function DeliveryInboxPage() {
 
   const launch = (draft: DeliveryInboxDraft) => {
     if (draft.status === 'launching' || draft.status === 'launched' || draft.status === 'discarded') return;
+    // Ultima verificacao local: o efeito de reconciliacao pode nao ter
+    // renderizado ainda quando a entrega chegou da nuvem.
+    const freshDuplicate = findInboxDuplicate(draft.parsed, useAppStore.getState().deliveries, draft.source);
+    if (freshDuplicate && !draft.duplicateDeliveryId) {
+      persist(drafts.map((item) => item.id === draft.id ? {
+        ...item, status: 'review' as const,
+        duplicateDeliveryId: freshDuplicate.id,
+        duplicateReason: freshDuplicate.reason,
+        updatedAt: new Date().toISOString(),
+      } : item));
+      toast.warning('Pedido ja lancado. Revise antes de continuar.', { description: freshDuplicate.reason });
+      return;
+    }
     if (draft.duplicateDeliveryId) {
       toast.warning("Possível duplicado bloqueado.", {
         description: draft.duplicateReason,
@@ -243,7 +270,7 @@ export default function DeliveryInboxPage() {
     if (Capacitor.isNativePlatform()) {
       void Haptics.impact({
         style: ImpactStyle.Medium,
-      });
+      }).catch(() => undefined);
     }
 
     router.push(
@@ -322,6 +349,15 @@ export default function DeliveryInboxPage() {
       </header>
 
       <div className="mx-auto max-w-2xl space-y-3 p-3 sm:p-4">
+        {siteBacklog.total > 0 && channel !== 'site' && (
+          <button type="button" onClick={()=>setChannel('site')}
+            className="flex min-h-12 w-full items-center gap-3 rounded-2xl border border-emerald-500/35 bg-emerald-500/[.09] px-3 py-2.5 text-left text-emerald-100"
+            aria-label={`${siteBacklog.total} pedido(s) do Site aguardando organização. Abrir pedidos do Site.`}>
+            <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15"><Inbox size={18}/><span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-emerald-400 px-1 text-center text-[10px] font-black text-zinc-950">{siteBacklog.total}</span></span>
+            <span className="min-w-0 flex-1"><strong className="block text-xs">{siteBacklog.total} pedido{siteBacklog.total===1?'':'s'} do Site aguardando</strong><span className="block text-[10px] text-emerald-100/75">Toque para conferir e organizar na Caixa</span></span>
+            <ChevronRight size={17}/>
+          </button>
+        )}
         <nav aria-label="Fontes da Caixa de Entrada" className="grid grid-cols-2 gap-2">
           <button type="button" onClick={()=>setChannel('site')} aria-pressed={channel==='site'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='site'?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}>Site</button>
           <button type="button" onClick={()=>setChannel('manual')} aria-pressed={channel==='manual'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='manual'?'border-violet-500/40 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}>Importar</button>

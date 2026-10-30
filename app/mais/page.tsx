@@ -7,6 +7,8 @@ import { BellRing,
   ChevronRight,
   LogOut,
   ShieldCheck,
+  Store,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
@@ -20,6 +22,7 @@ export default function MaisPage() {
   const logout = useAppStore((state) => state.logout);
   const fullName = user?.displayName?.trim() || 'Usuário DFL';
   const isDiagnosticsAdmin = isSuperadminUid(user?.uid);
+  const operationalSettings = useAppStore((state) => state.storeSettings);
 
   const handleLogout = async () => {
     try {
@@ -58,6 +61,17 @@ export default function MaisPage() {
           </p>
         </div>
       </section>
+      {isDiagnosticsAdmin && (
+        <section aria-label="Resumo administrativo da operação" className="rounded-[22px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.07] to-zinc-950 p-3.5">
+          <div className="mb-3 flex items-center gap-2"><SlidersHorizontal size={17} className="text-sky-300"/><h2 className="text-sm font-black text-zinc-100">Preferências operacionais</h2></div>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <span className="rounded-xl border border-zinc-800/80 bg-zinc-900/70 px-3 py-2 text-zinc-300">Rotas: {operationalSettings.routeReminderEnabled !== false ? 'avisos ativos' : 'avisos pausados'}</span>
+            <span className="rounded-xl border border-zinc-800/80 bg-zinc-900/70 px-3 py-2 text-zinc-300">Fechamento: {operationalSettings.autoCloseCompletedRoutes !== false ? 'automático' : 'manual'}</span>
+          </div>
+          <button type="button" onClick={() => router.push('/loja')} className="mt-3 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 text-left text-xs font-black text-sky-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400"><span className="flex items-center gap-2"><Store size={15}/> Configurar na Minha Loja</span><ChevronRight size={16}/></button>
+          <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Somente administradores acessam os controles. O resumo não altera configurações.</p>
+        </section>
+      )}
 <section className="flex flex-col gap-2">
         <h2 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
           Sistema e dados

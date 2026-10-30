@@ -5,11 +5,13 @@ import { ArrowDownLeft,ArrowUpRight,Banknote,CalendarDays,ChevronLeft,ChevronRig
 import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
-import { getMotoboyDayData,operationalDateKey } from '@/lib/motoboy-analytics';
+import { getMotoboyDayData,operationalDateKey,getMotoboyRoutes } from '@/lib/motoboy-analytics';
+import { previewRedeliveryCompensation } from '@/lib/motoboy-redelivery-policy';
 import { settlementRouteOrder } from '@/lib/motoboy-route-order';
 import { moneyValueToDraft,normalizeMoneyDraft,parseMoneyDraft } from '@/lib/route-cash-flow';
 import type { MotoboySettlementAdjustment } from '@/types';
 import { pendingAdjustmentsForSettlement, settlementAdjustmentSnapshot, settlementSourceId } from '@/lib/motoboy-settlement-authority';
+import { redeliveryAdjustmentDocumentId } from '@/lib/motoboy-redelivery-authorization';
 import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
@@ -95,6 +97,29 @@ function Content(){
   const offsetReturn=baseData?Math.max(0,baseData.cashInHand-Math.min(baseData.cashCollected,Math.max(0,baseData.liquidFee+baseData.priorMotoboyCredit-baseData.priorStoreCredit))):0;
   const cashSettlementInput=settlementStrategy==='separate'?true:settlementStrategy==='offset'?offsetReturn:manualCashInput;
   const data=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,existing?.settlement_adjustments||adjustments,cashSettlementInput,priorCarry):null,[adjustments,cashSettlementInput,date,deliveries,existing,motoboy,priorCarry,routes]);
+  // R192: visitas confirmadas são eventos físicos, não novos pedidos ou vendas.
+  // A competência da prévia é a DATA da visita e a identidade vem do motoboy da rota.
+  // Eventos do mesmo ID são contados uma vez, independentemente do número de pedidos da parada.
+  const redeliveryCompensationPreview = useMemo(()=>{
+    if(!motoboy)return {visits:[] as {id:string;returnId:string;attemptId:string;deliveryId:string;order:string;at:string}[],rate:0,amount:0,automaticSettlement:false as const};
+    const linkedRoutes=new Set(getMotoboyRoutes(motoboy,routes).map(route=>route.id));
+    const seen=new Set<string>();
+    const visits:{id:string;returnId:string;attemptId:string;deliveryId:string;order:string;at:string}[]=[];
+    for(const item of deliveries){
+      if(!linkedRoutes.has(item.route_id))continue;
+      for(const visit of item.redelivery_visits||[]){
+        if(!visit.id||!visit.attempt_id||!Number.isFinite(Date.parse(visit.occurred_at)))continue;
+        if(operationalDateKey(visit.occurred_at)!==date)continue;
+        const key=`${item.id}:${visit.attempt_id}`;
+        if(seen.has(key))continue;
+        seen.add(key);
+        visits.push({id:key,returnId:visit.id,attemptId:visit.attempt_id,deliveryId:item.id,order:item.order_id||item.id,at:visit.occurred_at});
+      }
+    }
+    visits.sort((a,b)=>a.at.localeCompare(b.at));
+    const quoted=previewRedeliveryCompensation(motoboy.payment_rule,visits.length);
+    return {...quoted,visits};
+  },[motoboy,routes,deliveries,date]);
   const days=useMemo(()=>{const first=new Date(month.getFullYear(),month.getMonth(),1);const start=new Date(first.getFullYear(),first.getMonth(),1-first.getDay());return Array.from({length:42},(_,index)=>{const day=new Date(start);day.setDate(start.getDate()+index);return day;});},[month]);
 
   if(!motoboy||!data)return <div><PageHeader title="Acerto indisponível" to="/motoboys"/></div>;
@@ -142,10 +167,31 @@ function Content(){
     const description=adjustmentDescription.trim();
     if(description.length<2)return void toast.error('Informe o motivo do ajuste.');
     if(!Number.isFinite(amount)||amount<=0)return void toast.error('Informe um valor válido.');
+    // R193: trava de duplicidade para ajustes por retorno. O identificador de evento
+    // deve ser informado na descrição, no formato [retorno:<id>] para evitar duplicação
+    // inclusive entre dispositivos após a sincronização.
+    const returnToken=description.match(/\[retorno:([a-zA-Z0-9_-]{3,100})\]/i)?.[1];
+    if(adjustmentDirection==='addition' && /reentrega|retorno f[ií]sico/i.test(description) && !returnToken){
+      return void toast.error('Informe o identificador do retorno no formato [retorno:ID] antes de lançar remuneração.');
+    }
+    if(returnToken){
+      if(adjustmentDirection!=='addition')return void toast.error('Retorno físico deve ser um acréscimo.');
+      const duplicate=motoboyAdjustments.some(item=>item.motoboy_id===motoboy.id && item.operational_date===date && item.status!=='cancelled' && item.description.includes(`[retorno:${returnToken}]`));
+      if(duplicate)return void toast.error('Este retorno já possui remuneração lançada.');
+    }
+
+    // R194: somente retornos existentes na prévia podem receber acréscimo vinculado.
+    // O servidor revalida a visita, o motoboy e a tarifa dentro da transação.
+    const linkedReturn = returnToken ? redeliveryCompensationPreview.visits.find(item=>item.returnId===returnToken) : undefined;
+    if(returnToken && !linkedReturn)return void toast.error('Retorno não encontrado nesta data e motoboy. Atualize a conferência.');
+    if(linkedReturn && (redeliveryCompensationPreview.rate<=0 || Math.round(amount*100)!==Math.round(redeliveryCompensationPreview.rate*100))){
+      return void toast.error('Confira o valor: ele deve corresponder à tarifa configurada para o retorno.');
+    }
+    const financialId = linkedReturn ? redeliveryAdjustmentDocumentId(linkedReturn.deliveryId,linkedReturn.attemptId) : `adj-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
     const now=new Date().toISOString();
     adjustmentSubmitting.current=true;setAdjustmentBusy(true);
     try{
-      await addMotoboyAdjustment({id:`adj-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,kind:adjustmentDirection==='addition'?'addition':'custom',direction:adjustmentDirection,category_label:description,description,amount,motoboy_id:motoboy.id,motoboy_name:motoboy.name,operational_date:date,status:'pending',author_uid:user?.uid,author_name:user?.displayName||user?.email||undefined,created_at:now,updated_at:now});
+      await addMotoboyAdjustment({id:financialId,...(linkedReturn?{return_delivery_id:linkedReturn.deliveryId,return_visit_id:linkedReturn.returnId,return_attempt_id:linkedReturn.attemptId}:{}),kind:adjustmentDirection==='addition'?'addition':'custom',direction:adjustmentDirection,category_label:description,description,amount,motoboy_id:motoboy.id,motoboy_name:motoboy.name,operational_date:date,status:'pending',author_uid:user?.uid,author_name:user?.displayName||user?.email||undefined,created_at:now,updated_at:now});
       setAdjustmentDescription('');setAdjustmentValue('');toast.success('Ajuste sincronizado.',{description:'Ele entrará automaticamente neste acerto.'});
     }catch(error){toast.error(error instanceof Error?error.message:'Não foi possível salvar o ajuste.');}
     finally{adjustmentSubmitting.current=false;setAdjustmentBusy(false);}
@@ -168,6 +214,12 @@ function Content(){
       ...settlementRouteOrder(data.routeBreakdown).map((item,index)=>`*${String(index+1).padStart(2,'0')} · ${item.label}*  •  ${item.orderCount} pedido${item.orderCount===1?'':'s'}  →  ${item.physicalDeliveryCount} parada${item.physicalDeliveryCount===1?'':'s'}${item.groupedOrderCount>0?`  ·  ${item.groupedOrderCount} agrupado${item.groupedOrderCount===1?'':'s'}`:''}`),
       '',
       '──────────────────',
+      `↩️ *RETORNOS FÍSICOS · PRÉVIA NÃO LANÇADA*`,
+      `${redeliveryCompensationPreview.visits.length} retorno(s) confirmado(s) nesta data · tarifa R$ ${money(redeliveryCompensationPreview.rate)}`,
+      `Valor sugerido: *R$ ${money(redeliveryCompensationPreview.amount)}* · fora do acerto até ajuste explícito`,
+      ...redeliveryCompensationPreview.visits.slice(0,12).map((visit,index)=>`↳ ${index+1}. Pedido #${visit.order} · ${new Date(visit.at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`),
+      ...(redeliveryCompensationPreview.visits.length>12?[`↳ Mais ${redeliveryCompensationPreview.visits.length-12} retorno(s) no histórico operacional`]:[]),
+      '',
       `💰 *DIÁRIA*`,
       data.fee.description,
       `*Acerto bruto: R$ ${money(data.fee.amount)}*`,
@@ -186,22 +238,22 @@ function Content(){
       lines.push(
         '',
         `➖ *ABATIMENTOS: - R$ ${money(data.totalVales)}*`,
-        `_Composição do total:_`
+        `*Motivos dos abatimentos:*`
       );
       adjustments.filter(item=>item.direction!=='addition').forEach(item=>lines.push(`↳ - ${adjustmentKindLabel(item)} · ${item.description} · R$ ${money(item.amount)}`));
     }
     if(data.totalAdditions>0){
-      lines.push('',`➕ *ACRÉSCIMOS: + R$ ${money(data.totalAdditions)}*`,`_Composição do total:_`);
+      lines.push('',`➕ *ACRÉSCIMOS: + R$ ${money(data.totalAdditions)}*`,`*Motivos dos acréscimos:*`);
       adjustments.filter(item=>item.direction==='addition').forEach(item=>lines.push(`↳ + ${adjustmentKindLabel(item)} · ${item.description} · R$ ${money(item.amount)}`));
     }
     lines.push(
       '',
       `💵 *DINHEIRO EM MÃOS*`,
-      `Clientes entregaram em espécie: *R$ ${money(data.cashInHand)}*`,
-      `(-) Troco bancado pela loja: *R$ ${money(data.cashChange)}*`,
-      `(=) Vendas líquidas em dinheiro: *R$ ${money(data.cashCollected)}*`,
-      `Devolvido fisicamente à loja: *R$ ${money(data.cashHandedOverAmount)}*`,
-      `Modo: *${settlementStrategy==='separate'?'caixa separado':settlementStrategy==='offset'?'compensar diária':'ajuste manual'}*`,
+      `*Recebido em dinheiro:* R$ ${money(data.cashInHand)}`,
+      ...(data.cashChange>0?[`*Troco fornecido pela loja:* R$ ${money(data.cashChange)}`]:[]),
+      `*Líquido em espécie:* R$ ${money(data.cashCollected)}`,
+      `*Devolvido ao caixa:* R$ ${money(data.cashHandedOverAmount)}`,
+      `*Forma de acerto:* ${settlementStrategy==='separate'?'caixa separado':settlementStrategy==='offset'?'compensado na diária':'ajuste manual'}`,
       data.retainedCash>0 ? `↳ Com o motoboy: *R$ ${money(data.retainedCash)}*` : `↳ Caixa conferido integralmente na loja`,
       '',
       '──────────────────',
@@ -287,10 +339,10 @@ function Content(){
     if(imageBusy)return;
     setImageBusy(true);
     try{
-    const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1400;
+    const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1870;
     const ctx=canvas.getContext('2d');if(!ctx)return void toast.error('Não foi possível gerar a imagem.');
     const round=(x:number,y:number,w:number,h:number,r:number,fill:string,stroke?:string)=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}};
-    const gradient=ctx.createLinearGradient(0,0,1080,1400);gradient.addColorStop(0,'#09231f');gradient.addColorStop(.44,'#090e13');gradient.addColorStop(1,'#09090d');ctx.fillStyle=gradient;ctx.fillRect(0,0,1080,1400);
+    const gradient=ctx.createLinearGradient(0,0,1080,1870);gradient.addColorStop(0,'#09231f');gradient.addColorStop(.44,'#090e13');gradient.addColorStop(1,'#09090d');ctx.fillStyle=gradient;ctx.fillRect(0,0,1080,1400);ctx.fillRect(0,1400,1080,470);
     ctx.fillStyle='#10b981';ctx.fillRect(0,0,1080,12);
     await paintDflBrand(ctx,64,65,102);
     const label=(value:string,x:number,y:number,font:string,color:string,maxWidth:number)=>{ctx.textAlign='left';ctx.font=font;ctx.fillStyle=color;ctx.fillText(paintFittedText(ctx,value,maxWidth),x,y);};
@@ -322,7 +374,30 @@ function Content(){
     label(direction,80,1164,'900 28px Arial','#f8fafc',910);
     label(`R$ ${money(data.balance)}`,80,1238,'900 65px Arial','#ffffff',850);
     label(data.retainedCash>0?`Ainda com o motoboy: R$ ${money(data.retainedCash)}`:'Dinheiro da rota conferido no caixa',80,1290,'700 23px Arial','#e2e8f0',910);
-    label('DFL ENTREGAS  •  RESUMO DE CONFERÊNCIA',60,1363,'700 21px Arial','#7b919a',930);
+
+    // R186: fonte unica dos ajustes, sem recalculo de diaria ou duplicacao de vendas.
+    round(48,1340,984,462,26,'#171b20','#2c3339');
+    label('ROTAS E AJUSTES DISCRIMINADOS',80,1390,'900 27px Arial','#f8fafc',915);
+    const routeRows=settlementRouteOrder(data.routeBreakdown);
+    let detailY=1433;
+    const compactDetail=(value:string,color='#cbd5e1')=>{
+      label(value,82,detailY,'600 21px Arial',color,900);
+      detailY+=35;
+    };
+    routeRows.slice(0,3).forEach((item,index)=>compactDetail(`${index+1}. ${item.label}: ${item.orderCount} pedidos · ${item.physicalDeliveryCount} paradas`,'#93c5fd'));
+    if(routeRows.length>3)compactDetail(`+ ${routeRows.length-3} outras rotas; detalhes no texto`,'#93c5fd');
+    if(routeRows.length)detailY+=7;
+    const adjustRows=[
+      ...adjustments.filter(item=>item.direction==='addition').map(item=>({prefix:'+',item,color:'#6ee7b7'})),
+      ...adjustments.filter(item=>item.direction!=='addition').map(item=>({prefix:'-',item,color:'#fda4af'})),
+    ];
+    adjustRows.slice(0,4).forEach(({prefix,item,color})=>{
+      compactDetail(`${prefix} R$ ${money(item.amount)} · ${item.description || adjustmentKindLabel(item)}`,color);
+    });
+    if(adjustRows.length>4)compactDetail(`+ ${adjustRows.length-4} ajustes detalhados na mensagem`,'#fbbf24');
+    if(!adjustRows.length)compactDetail('Sem acréscimos ou abatimentos avulsos.');
+
+    label('DFL ENTREGAS  •  RESUMO DE CONFERÊNCIA',60,1841,'700 21px Arial','#7b919a',930);
     const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}.png`;
     if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:summary(),files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem gerada. Escolha onde compartilhar.');return;}
     const blob=await (await fetch(dataUrl)).blob();const file=new File([blob],filename,{type:'image/png'});if(navigator.share&&navigator.canShare?.({files:[file]})){await navigator.share({title:`Acerto · ${motoboy.name}`,text:summary(),files:[file]});return;}const link=document.createElement('a');link.download=filename;link.href=dataUrl;link.click();toast.info('Imagem baixada. Use Copiar resumo para enviar também o texto.');
@@ -343,6 +418,12 @@ function Content(){
 
     {(data.priorStoreCredit>0||data.priorMotoboyCredit>0)&&<section className="rounded-[22px] border border-amber-500/20 bg-amber-500/[.055] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-amber-400">Saldo trazido do acerto anterior</p><p className="mt-2 text-lg font-black text-amber-200">R$ {money(data.priorStoreCredit||data.priorMotoboyCredit)}</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{data.priorStoreCredit>0?`${motoboy.name} estava com este valor da loja. Ele será compensado automaticamente hoje.`:`A loja devia este valor a ${motoboy.name}. Ele será somado automaticamente ao acerto de hoje.`}</p></section>}
 
+    <section className="rounded-[22px] border border-violet-500/20 bg-violet-500/[.035] p-4">
+      <p className="text-[11px] font-black uppercase tracking-wider text-violet-300">Retornos físicos · conferência</p>
+      <p className="mt-2 text-sm font-black text-zinc-100">{redeliveryCompensationPreview.visits.length} visita(s) confirmada(s) · R$ {money(redeliveryCompensationPreview.amount)} sugeridos</p>
+      <p className="mt-1 text-[11px] text-zinc-400">Tarifa configurada: R$ {money(redeliveryCompensationPreview.rate)} por retorno. Este valor não entra automaticamente na diária ou no caixa. Se devido, registre como acréscimo explícito, com motivo e conferência.</p>
+      {redeliveryCompensationPreview.visits.length>0&&<div className="mt-3 max-h-48 space-y-1 overflow-y-auto border-t border-violet-500/15 pt-2">{redeliveryCompensationPreview.visits.map(visit=><div key={visit.id} className="flex items-center justify-between gap-2 py-1"><p className="min-w-0 text-[11px] text-zinc-400">Pedido #{visit.order} · {new Date(visit.at).toLocaleString('pt-BR')}</p><button type="button" disabled={Boolean(existing)||redeliveryCompensationPreview.rate<=0||motoboyAdjustments.some(item=>item.id===redeliveryAdjustmentDocumentId(visit.deliveryId,visit.attemptId))} onClick={()=>{setAdjustmentDirection('addition');setAdjustmentDescription(`Retorno [retorno:${visit.returnId}]`);setAdjustmentValue(moneyValueToDraft(redeliveryCompensationPreview.rate));setShowAdjustmentForm(true);toast.info('Confira o acréscimo e toque em adicionar para autorizar.');}} className="shrink-0 rounded-lg border border-violet-500/30 px-2.5 py-2 text-[10px] font-black text-violet-200 disabled:opacity-35">{motoboyAdjustments.some(item=>item.id===redeliveryAdjustmentDocumentId(visit.deliveryId,visit.attemptId))?'Registrado':'Preparar acréscimo'}</button></div>)}</div>}
+    </section>
     <section className="rounded-[22px] border border-sky-500/20 bg-sky-500/[.035] p-4"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black uppercase tracking-wider text-sky-300">Prévia do acerto</p><span className="rounded-lg bg-zinc-950/65 px-2.5 py-1 text-[10px] font-bold text-zinc-400">{adjustments.length} ajuste(s)</span></div><div className="mt-4 space-y-3"><Line label="Acerto bruto" value={`R$ ${money(data.fee.amount)}`}/><p className="text-[10px] text-zinc-500">{data.fee.description}</p>{adjustments.map(item=><div key={item.id} className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-zinc-300">{item.description}</p><p className="text-[9px] text-zinc-600">{adjustmentKindLabel(item.kind)} · {item.direction==='addition'?'acréscimo':'abatimento'}</p></div><span className={`text-xs font-black ${item.direction==='addition'?'text-emerald-400':'text-red-400'}`}>{item.direction==='addition'?'+':'-'} R$ {money(item.amount)}</span><button disabled={Boolean(existing)} onClick={()=>setPendingRemoval(item)} aria-label={`Excluir ajuste ${item.description}`} className="grid h-8 w-8 place-items-center rounded-xl text-red-500"><Trash2 size={13}/></button></div>)}<div className="border-t border-sky-500/10 pt-3"><Line label="Total dos abatimentos" value={`- R$ ${money(data.totalVales)}`}/><Line label="Total dos acréscimos" value={`+ R$ ${money(data.totalAdditions)}`}/><Line label="Líquido do motoboy" value={`R$ ${money(data.liquidFee)}`} strong/></div></div></section>
 
     <button type="button" aria-expanded={showAdjustmentForm} onClick={()=>setShowAdjustmentForm(value=>!value)} disabled={Boolean(existing)} className="flex min-h-12 w-full items-center justify-between rounded-2xl border border-amber-500/20 bg-amber-500/[.04] px-4 py-3 text-left text-xs font-black text-amber-200 disabled:opacity-50"><span className="flex items-center gap-2"><Plus size={16}/> {showAdjustmentForm ? 'Recolher novo ajuste' : 'Adicionar acréscimo ou abatimento'}</span><ChevronRight size={16} className={showAdjustmentForm?'rotate-90 transition-transform':'transition-transform'}/></button>

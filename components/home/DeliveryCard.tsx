@@ -14,8 +14,9 @@ import { copyDeliveryToClipboard } from '@/lib/whatsapp';
 import { MiniMap } from '@/components/deliveries/MiniMap';
 import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidencePreview';
 import { locationEvidence } from '@/lib/location-evidence';
-import { appendDeliveryAttempt, deliveryAttemptLabel, DELIVERY_ATTEMPT_REASONS } from '@/lib/delivery-attempts';
+import { appendDeliveryAttempt, deliveryAttemptLabel, deliveryAttemptSummary, DELIVERY_ATTEMPT_REASONS, DELIVERY_ATTEMPT_NOTE_SUGGESTIONS } from '@/lib/delivery-attempts';
 import type { DeliveryAttemptReason } from '@/lib/delivery-attempts';
+import { appendConfirmedReturnVisit } from '@/lib/delivery-return-visits';
 import { buildNavigationLinks } from '@/lib/navigation-links';
 import { useAppStore } from '@/store/useAppStore';
 import { firstActionableCardIssue } from '@/lib/operation/operational-card-issues';
@@ -120,6 +121,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const swipeAxis = useRef<'pending' | 'horizontal' | 'vertical' | null>(null);
   const suppressCardClick = useRef(false);
   const completionBusyRef = useRef(false);
+  // R182: trava sincrona. Estado React isolado nao impede dois taps no mesmo frame.
+  const attemptBusyRef = useRef(false);
+  const paymentReceiptLock = useRef(false);
+  const [paymentReceiptBusy, setPaymentReceiptBusy] = useState(false);
   const copyBusyRef = useRef(false);
   const [copyBusy, setCopyBusy] = useState(false);
   const [completionBusy, setCompletionBusy] = useState(false);
@@ -303,11 +308,46 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
   };
 
+  // R181: quitação é ação financeira explícita, distinta da baixa operacional.
+  const confirmReceivedPayment = async () => {
+    if (paymentReceiptLock.current) return;
+    const current = useAppStore.getState().deliveries.find(item => item.id === delivery.id);
+    if (!current?.completed || deriveDeliveryPaymentState(current) === 'paid') {
+      toast.info('Confira o pedido: o pagamento já foi registrado ou a entrega ainda está pendente.');
+      return;
+    }
+    if (!window.confirm(`Você CONFIRMA que recebeu o pagamento de ${current.customer_name || 'este pedido'}?\n\nA entrega já foi concluída. Esta ação registra a quitação financeira.`)) return;
+    paymentReceiptLock.current = true;
+    setPaymentReceiptBusy(true);
+    const feedbackId = `dfl-confirmar-pagamento:${delivery.id}`;
+    toast.loading('Registrando pagamento recebido…', { id: feedbackId, duration: Infinity });
+    try {
+      await updateDelivery(delivery.id, { is_paid: true, payment_state: 'paid' });
+      toast.dismiss(feedbackId);
+      toast.success('Pagamento recebido e registrado.', { description: 'A quitação foi salva no pedido.', duration: 3500 });
+    } catch (error) {
+      toast.dismiss(feedbackId);
+      toast.error('Não foi possível confirmar o pagamento.', { description: error instanceof Error ? error.message : 'Verifique a conexão e tente novamente.' });
+    } finally {
+      paymentReceiptLock.current = false;
+      setPaymentReceiptBusy(false);
+    }
+  };
+
   const executeCompletion = async (codeInput?: string | Record<string, string>) => {
     const targets = pendingOperationalStopDeliveries(groupedDeliveries);
     if (targets.length === 0 || completionBusyRef.current) return;
     completionBusyRef.current = true;
     setCompletionBusy(true);
+    // Feedback tardio evita poluir operações rápidas e explica as baixas lentas.
+    const completionToastId = `dfl-stop-completion:${route.id}:${delivery.id}`;
+    const completionNotice = window.setTimeout(() => {
+      toast.loading('Registrando baixa dos pedidos…', {
+        id: completionToastId,
+        description: `${targets.length} pedido${targets.length === 1 ? '' : 's'} nesta parada. Não toque novamente.`,
+        duration: Infinity,
+      });
+    }, 650);
 
     try {
       const failed: Delivery[] = [];
@@ -346,9 +386,14 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       closeConfirmationModal();
 
       impact(ImpactStyle.Medium);
+      const financialReviewCount = targets.filter((item) =>
+        deriveDeliveryPaymentState(item) !== 'paid' && deliveryCustomerCharge(item) > 0,
+      ).length;
       toast.success(
         targets.length > 1 ? `${targets.length} entregas concluídas na parada.` : 'Entrega concluída.',
-        { duration: 1800 },
+        financialReviewCount > 0
+          ? { description: `${financialReviewCount} pagamento${financialReviewCount === 1 ? '' : 's'} ainda sem confirmação de recebimento. Confira no financeiro.`, duration: 5200 }
+          : { duration: 1800 },
       );
 
       const routeDeliveries = getDeliveriesByRoute(route.id);
@@ -363,6 +408,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         description: 'O estado anterior foi restaurado. Tente novamente.',
       });
     } finally {
+      window.clearTimeout(completionNotice);
+      toast.dismiss(completionToastId);
       completionBusyRef.current = false;
       setCompletionBusy(false);
     }
@@ -550,8 +597,31 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   };
 
 
+  const confirmPhysicalReturn = async () => {
+    if (attemptBusyRef.current) return;
+    const target = useAppStore.getState().deliveries.find(item => item.id === attemptTargetId);
+    if (!target || target.completed || route.status !== 'aberta' || !routeStartedAt(route) || !canManageStop || !pendingGroupedDeliveries.some(item => item.id === target.id)) {
+      toast.error('Retorno somente para pedido pendente, em rota iniciada.'); return;
+    }
+    const prior = [...(target.delivery_attempts || [])].sort((a,b)=>b.at.localeCompare(a.at))[0];
+    if (!prior) { toast.error('Registre uma tentativa anterior primeiro.'); return; }
+    if (target.redelivery_visits?.some(item => item.attempt_id === prior.id)) { toast.info('Este retorno já foi confirmado.'); return; }
+    if (!window.confirm('Houve uma NOVA visita física a este destino após a tentativa? Este registro não gera pagamento automático.')) return;
+    attemptBusyRef.current = true;
+    setAttemptBusy(true);
+    try {
+      await updateDelivery(target.id, {redelivery_visits:appendConfirmedReturnVisit(target.redelivery_visits, {
+        id:`return-${Date.now()}-${Math.random().toString(36).slice(2,9)}`,attempt_id:prior.id,
+        occurred_at:new Date().toISOString(),
+      })});
+      toast.success('Retorno físico registrado. Nenhuma cobrança ou diária foi alterada.');
+    } catch (error) {toast.error(error instanceof Error?error.message:'Não foi possível registrar o retorno.');}
+    finally {attemptBusyRef.current = false;setAttemptBusy(false);}
+  };
+
   const saveAttempt = async () => {
-    if (attemptBusy) return;
+    if (attemptBusyRef.current) return;
+    attemptBusyRef.current = true;
     setAttemptBusy(true);
     try {
       // Always use the current snapshot; never overwrite a newer local attempt.
@@ -578,7 +648,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       setAttemptMoveLast(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível registrar a tentativa.');
-    } finally { setAttemptBusy(false); }
+    } finally {
+      attemptBusyRef.current = false;
+      setAttemptBusy(false);
+    }
   };
 
   const resetCardSwipe = () => {
@@ -670,7 +743,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   return (
     <>
-      <div data-dfl-route-id={route.id} data-dfl-stop-index={canReorder ? position : undefined} className={clsx(
+      <div data-dfl-op-card="true" data-dfl-op-card-expanded={isExpanded ? "true" : "false"} data-dfl-op-card-state={stopCompleted ? "concluida" : isUrgent ? "urgente" : "pendente"} data-dfl-route-id={route.id} data-dfl-stop-index={canReorder ? position : undefined} className={clsx(
           "relative overflow-hidden rounded-[18px] transition-colors duration-150",
           stopCompleted ? "opacity-80" : "shadow-sm",
           isUrgent && !stopCompleted && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
@@ -699,6 +772,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
         <div
           ref={swipeSurfaceRef}
+          data-dfl-op-surface="true"
           onClick={(event) => {
             const target = event.target as HTMLElement;
             if (isExpanded || isSwiping || suppressCardClick.current || target.closest('button, a, input, textarea, select, [data-no-card-swipe="true"]')) return;
@@ -894,6 +968,19 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 {/* VISUALIZAÇÃO COMPACTA — operação em duas linhas, sem iframe/mapa */}
                 {!isExpanded && (
                   <div className="mt-1.5 flex flex-col gap-1.5 border-t border-zinc-800/50 pt-1.5">
+                    {/* R178: ação frequente acessível sem expandir a parada. */}
+                    <div className="flex justify-end">
+                      <Link
+                        href={`/entregas/editar?id=${delivery.id}${operationalDateQuery}`}
+                        data-no-card-swipe="true"
+                        onClick={(event) => { event.stopPropagation(); impact(ImpactStyle.Light); }}
+                        aria-label="Editar entrega sem expandir o card"
+                        title="Editar entrega"
+                        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-bold text-zinc-200 active:scale-95"
+                      >
+                        <Pencil size={13} /> Editar
+                      </Link>
+                    </div>
                     <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                       {isGroupedStop ? (
                         groupedFinance.collectCount > 0
@@ -1110,7 +1197,22 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   )}
                 </div>
 
+                {delivery.completed && paymentState !== 'paid' && deliveryCustomerCharge(delivery) > 0 && (
+                  <button
+                    type="button"
+                    data-no-card-swipe="true"
+                    onClick={(event) => { event.stopPropagation(); void confirmReceivedPayment(); }}
+                    disabled={paymentReceiptBusy}
+                    aria-busy={paymentReceiptBusy}
+                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[.09] px-3 text-xs font-bold text-amber-200 disabled:opacity-50"
+                  >
+                    {paymentReceiptBusy ? <LoaderCircle size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                    {paymentReceiptBusy ? 'Registrando recebimento…' : 'Confirmar pagamento recebido'}
+                  </button>
+                )}
+
                 {canManageStop && Boolean(routeStartedAt(route)) && (
+                  <>
                   <button type="button" data-no-card-swipe="true" onClick={(event) => {
                     event.stopPropagation();
                     setAttemptTargetId(pendingGroupedDeliveries[0]?.id || delivery.id);
@@ -1121,6 +1223,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   }} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.07] px-3 text-[11px] font-black text-amber-200 active:bg-amber-500/15">
                     <AlertTriangle size={14} /> Registrar tentativa (sem dar baixa)
                   </button>
+                  {Boolean(delivery.delivery_attempts?.length) && (
+                    <p className="px-1 text-[10px] leading-relaxed text-amber-200/80" role="status">
+                      {delivery.delivery_attempts?.length} tentativa{delivery.delivery_attempts?.length === 1 ? '' : 's'} registrada{delivery.delivery_attempts?.length === 1 ? '' : 's'} · a entrega continua pendente e nenhuma cobrança extra foi criada.
+                    </p>
+                  )}
+                  </>
                 )}
                 <div className="flex items-center gap-2 mt-1">
                   <button
@@ -1195,12 +1303,57 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/80 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-10 backdrop-blur-sm sm:items-center" onClick={() => { if (!attemptBusy) setAttemptOpen(false); }} role="presentation">
           <section role="dialog" aria-modal="true" aria-label="Registrar tentativa de entrega" className="max-h-[88dvh] w-full max-w-sm overflow-y-auto rounded-[24px] border border-amber-500/25 bg-zinc-950 p-4 shadow-2xl" onClick={event => event.stopPropagation()}>
             <h3 className="text-base font-black text-zinc-100">Registrar tentativa</h3>
+            {(() => {
+              const selected = pendingGroupedDeliveries.find(item => item.id === attemptTargetId);
+              const history = deliveryAttemptSummary(selected?.delivery_attempts);
+              return history.count > 0 ? (
+                <div className="mt-3 rounded-xl border border-sky-500/20 bg-sky-500/[.06] px-3 py-2 text-xs text-sky-200">
+                  <p className="font-bold">{history.count} tentativa{history.count === 1 ? '' : 's'} anterior{history.count === 1 ? '' : 'es'} neste pedido</p>
+                  <p className="mt-1 text-sky-100/80">Última: {deliveryAttemptLabel(history.latest!.reason)}{history.latest?.note ? ` · ${history.latest.note}` : ''}</p>
+                  <p className="mt-1 text-[10px] text-zinc-400">Uma nova tentativa não cria pedido, baixa financeira nem remuneração adicional.</p>
+                </div>
+              ) : null;
+            })()}
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">A entrega permanece pendente. Não registra confirmação, pagamento ou conclusão.</p>
+            {(() => {
+              const target = pendingGroupedDeliveries.find(item => item.id === attemptTargetId);
+              const summary = deliveryAttemptSummary(target?.delivery_attempts);
+              return summary.count > 0 ? (
+                <details className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/[.055] px-3 py-2.5" open={summary.count <= 2}>
+                  <summary className="cursor-pointer text-[11px] font-bold text-amber-200">
+                    Histórico deste pedido · {summary.count} tentativa{summary.count === 1 ? '' : 's'}
+                  </summary>
+                  <p className="mt-1 text-[10px] text-zinc-400">Última: {summary.latest ? deliveryAttemptLabel(summary.latest.reason) : 'Não informada'}. Próxima visita deve ser combinada; nenhuma tarifa ou nova venda é gerada aqui.</p>
+                  <ol className="mt-2 max-h-36 space-y-2 overflow-y-auto" aria-label="Histórico de tentativas deste pedido">
+                    {summary.history.slice(0, 8).map(item => (
+                      <li key={item.id} className="border-l-2 border-amber-500/30 pl-2 text-[10px] leading-relaxed text-zinc-300">
+                        <span className="font-semibold">{deliveryAttemptLabel(item.reason)}</span>
+                        <span className="ml-1 text-zinc-500">· {new Date(item.at).toLocaleString('pt-BR')}</span>
+                        {item.note && <p className="break-words text-zinc-400">{item.note}</p>}
+                      </li>
+                    ))}
+                  </ol>
+                  {summary.count > 8 && <p className="mt-1 text-[10px] text-zinc-500">Exibindo as 8 tentativas mais recentes.</p>}
+                </details>
+              ) : <p className="mt-3 text-[10px] text-zinc-500">Primeira tentativa deste pedido. O histórico ficará disponível aqui.</p>;
+            })()}
             {pendingGroupedDeliveries.length > 1 && <label className="mt-4 block text-[11px] font-bold text-zinc-300">Pedido desta parada
               <select value={attemptTargetId} onChange={event => setAttemptTargetId(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100">
                 {pendingGroupedDeliveries.map(item => <option key={item.id} value={item.id}>{item.customer_name || getCustomerById(item.customer_id)?.name || item.order_id || item.id}{item.order_id ? ` · #${item.order_id}` : ''}</option>)}
               </select>
             </label>}
+            {(() => {
+              const target = pendingGroupedDeliveries.find(item => item.id === attemptTargetId);
+              const history = target?.delivery_attempts || [];
+              const last = [...history].sort((a,b)=>b.at.localeCompare(a.at))[0];
+              const confirmed = Boolean(last && target?.redelivery_visits?.some(visit => visit.attempt_id === last.id));
+              return last ? <div className="mt-3 rounded-xl border border-violet-500/25 bg-violet-500/[.05] p-3">
+                <p className="text-xs font-black text-violet-200">Retorno físico · registro separado</p>
+                <p className="mt-1 text-[11px] text-zinc-400">Somente confirme se houve uma nova visita presencial ao destino após a tentativa anterior. Não cria venda, não cobra cliente e não lança pagamento ao motoboy.</p>
+                <button type="button" disabled={attemptBusy || confirmed} onClick={() => void confirmPhysicalReturn()} className="mt-3 min-h-11 w-full rounded-xl border border-violet-500/35 bg-violet-500/10 text-xs font-bold text-violet-200 disabled:opacity-45">{confirmed?'Retorno já confirmado para esta tentativa':'Confirmar visita física de retorno'}</button>
+                {!!target?.redelivery_visits?.length && <p className="mt-2 text-[10px] text-zinc-400">{target.redelivery_visits.length} retorno(s) físico(s) confirmado(s) neste pedido</p>}
+              </div> : null;
+            })()}
             <label className="mt-4 block text-[11px] font-bold text-zinc-300">Motivo
               <select value={attemptReason} onChange={event => setAttemptReason(event.target.value as DeliveryAttemptReason)} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100">
                 {DELIVERY_ATTEMPT_REASONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -1209,12 +1362,21 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
             <label className="mt-3 block text-[11px] font-bold text-zinc-300">Observação (opcional)
               <textarea rows={3} maxLength={240} value={attemptNote} onChange={event => setAttemptNote(event.target.value)} placeholder="Ex.: interfone sem resposta; combinar nova tentativa" className="mt-1 w-full resize-none rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-100 outline-none focus:border-amber-500" />
             </label>
+            <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Sugestões de observação">
+              {DELIVERY_ATTEMPT_NOTE_SUGGESTIONS.map(suggestion => (
+                <button key={suggestion} type="button" disabled={attemptBusy}
+                  onClick={() => setAttemptNote(previous => previous.trim() ? `${previous.trim()} · ${suggestion}`.slice(0, 240) : suggestion)}
+                  className="min-h-9 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-[10px] font-semibold text-zinc-300 active:bg-zinc-800 disabled:opacity-50">
+                  {suggestion}
+                </button>
+              ))}
+            </div>
             {canReorder && !orderLocked && <label className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 text-[11px] text-zinc-300">
               <input type="checkbox" checked={attemptMoveLast} onChange={event => setAttemptMoveLast(event.target.checked)} className="h-4 w-4 accent-amber-400" /> Deixar esta parada por último
             </label>}
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button type="button" disabled={attemptBusy} onClick={() => setAttemptOpen(false)} className="h-11 rounded-xl border border-zinc-700 bg-zinc-900 text-xs font-bold text-zinc-300 disabled:opacity-50">Cancelar</button>
-              <button type="button" disabled={attemptBusy} onClick={() => void saveAttempt()} className="h-11 rounded-xl bg-amber-400 text-xs font-black text-zinc-950 disabled:opacity-50">{attemptBusy ? 'Salvando…' : 'Registrar'}</button>
+              <button type="button" disabled={attemptBusy} aria-busy={attemptBusy} onClick={() => void saveAttempt()} className="h-11 rounded-xl bg-amber-400 text-xs font-black text-zinc-950 disabled:opacity-50">{attemptBusy ? 'Salvando tentativa…' : 'Registrar tentativa'}</button>
             </div>
           </section>
         </div>

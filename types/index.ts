@@ -122,6 +122,10 @@ export interface MotoboySettlementAdjustment {
 export type MotoboyAdjustmentStatus = 'pending' | 'cancelled' | 'incorporated';
 
 export interface MotoboyAdjustment extends MotoboySettlementAdjustment {
+  /** Identidade física verificável; preenchida somente após autorização manual. */
+  return_delivery_id?: string;
+  return_visit_id?: string;
+  return_attempt_id?: string;
   motoboy_id: string;
   motoboy_name: string;
   operational_date: string;
@@ -257,6 +261,8 @@ export interface MotoboyPaymentRule {
   delivery_fee?: number;
   threshold?: number;
   extra_fee?: number;
+  /** Valor opcional por retorno físico confirmado; tentativas não são pagas automaticamente. */
+  redelivery_fee?: number;
 }
 
 export interface Route {
@@ -399,6 +405,8 @@ export interface Delivery {
   address_string: string;
   maps_link: string;
   observation?: string;
+  /** Visitas físicas de retorno confirmadas: independentes do valor do pedido e de tentativas. */
+  redelivery_visits?: import('@/lib/delivery-return-visits').DeliveryReturnVisit[];
   /** Registro persistido de tentativa, independente de baixa e confirmação externa. */
   delivery_attempts?: import('@/lib/delivery-attempts').DeliveryAttempt[];
   drinks?: string;

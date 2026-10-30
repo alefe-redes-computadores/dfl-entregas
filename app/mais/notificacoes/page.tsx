@@ -292,6 +292,8 @@ export default function NotificationSettingsPage() {
     }
   };
 
+  // R197: indicador de grupos efetivamente habilitados, sem confundir permissão Android com preferência.
+  const enabledNotificationGroups = Object.entries(preferences).filter(([key, value]) => key !== 'enabled' && typeof value === 'boolean' && value).length;
   const masterDisabled = !preferences.enabled || saving;
   const permissionLabel =
     permissionState === 'granted'
@@ -329,6 +331,10 @@ export default function NotificationSettingsPage() {
       </header>
 
       <p className="mb-3 rounded-xl border border-zinc-800 bg-zinc-900/35 px-3 py-2.5 text-[11px] leading-relaxed text-zinc-400">As categorias abaixo já controlam avisos reais. O Android exige autorização explícita. Lembretes de turno/estoque são agendados localmente; ações diretas na notificação ainda não estão disponíveis.</p>
+      <div aria-label="Estado das notificações" className="mb-3 grid grid-cols-2 gap-2">
+        <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3"><p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Preferências</p><p className="mt-1 text-xs font-black text-zinc-100">{preferences.enabled ? `${enabledNotificationGroups} grupos ativos` : 'Avisos pausados'}</p></div>
+        <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3"><p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Permissão do aparelho</p><p className="mt-1 text-[11px] font-bold leading-snug text-zinc-200">{permissionLabel}</p></div>
+      </div>
       {saving && <p role="status" className="mb-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">Salvando suas preferências…</p>}
       <fieldset disabled={saving} className="min-w-0">
 

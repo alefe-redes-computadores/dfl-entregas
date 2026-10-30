@@ -126,7 +126,8 @@ function confidenceFor(parsed: ParsedIfoodOrder) {
 
 function missingFieldsFor(source: DeliveryInboxSource, parsed: ParsedIfoodOrder) {
   const fields: string[] = [];
-  if (!parsed.orderId) fields.push(source === 'food99' ? 'pedido 99Food' : 'pedido');
+  if (source === 'food99' && !/^\d{6}$/.test(parsed.orderId.trim())) fields.push('pedido 99Food (6 digitos)');
+  else if (!parsed.orderId) fields.push('pedido');
   if (source === 'ifood' && !parsed.ifoodId) fields.push('ID iFood');
   if (!parsed.customerName) fields.push('cliente');
   // A entrega pela 99 não precisa de endereço para uma rota DFL, mas o
@@ -137,7 +138,7 @@ function missingFieldsFor(source: DeliveryInboxSource, parsed: ParsedIfoodOrder)
 
 export function findInboxDuplicate(
   parsed: ParsedIfoodOrder,
-  deliveries: Delivery[],
+  deliveries: readonly Delivery[],
   source: DeliveryInboxSource = parsed.ifoodId ? 'ifood' : 'texto',
 ) {
   const ifoodId = parsed.ifoodId.replace(/\D/g, '');
@@ -230,6 +231,34 @@ export function findInboxDuplicate(
   }
 
   return null;
+}
+
+/**
+ * R199: se outro aparelho ja gravou a entrega e ela chegou pelo sync,
+ * bloquear o rascunho local antes de permitir um segundo lancamento.
+ * Conservador: nao reabre rascunhos bloqueados quando uma consulta parcial
+ * nao retorna o pedido original. Sem escritas ou consultas Firebase.
+ */
+export function reconcileInboxDraftsWithDeliveries(
+  drafts: DeliveryInboxDraft[], deliveries: readonly Delivery[],
+): DeliveryInboxDraft[] {
+  if (!drafts.length || !deliveries.length) return drafts;
+  let changed = false;
+  const checked = drafts.map((draft) => {
+    if (draft.duplicateDeliveryId || draft.status === 'launched' ||
+        draft.status === 'discarded' || draft.status === 'launching') return draft;
+    const duplicate = findInboxDuplicate(draft.parsed, deliveries, draft.source);
+    if (!duplicate) return draft;
+    changed = true;
+    return {
+      ...draft,
+      status: 'review' as const,
+      duplicateDeliveryId: duplicate.id,
+      duplicateReason: duplicate.reason,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+  return changed ? checked : drafts;
 }
 
 export function createInboxDraft(
@@ -419,7 +448,8 @@ export function dedupeInboxImport(
     const ifoodId = (draft.parsed.ifoodId || '').replace(/\D/g, '');
     if (ifoodId) return `ifood:${ifoodId}`;
     const order = (draft.parsed.orderId || '').trim().toLocaleLowerCase('pt-BR');
-    return order ? `order:${order}` : null;
+    // Numeros comerciais podem coincidir entre iFood e 99Food.
+    return order ? `order:${draft.source}:${order}` : null;
   };
   const seen = new Set(existing.map(strongKey).filter((key): key is string => Boolean(key)));
   const textKeys = new Set(existing.filter(draft => !strongKey(draft))

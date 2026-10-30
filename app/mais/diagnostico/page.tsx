@@ -13,10 +13,13 @@ import {
   readSyncDiagnostics,
   syncDiagnosticText,
   summarizeSyncHealth,
+  SYNC_DIAGNOSTIC_EVENT,
   type SyncDiagnostic,
 } from '@/lib/sync-diagnostics';
 import { auth } from '@/lib/firebase';
+import { rankSyncCollectionVolumes } from '@/lib/operation/sync-volume-ranking';
 import { MessageTraceCard } from '@/components/diagnostics/MessageTraceCard';
+import { LegacyImportAuditCard } from '@/components/diagnostics/LegacyImportAuditCard'; // DFL_R202_LEGACY_AUDIT
 
 const DIAGNOSTICS_ADMIN_EMAIL = 'alefejohsefe@gmail.com';
 const SERVER_ORIGIN = (process.env.NEXT_PUBLIC_DFL_SERVER_ORIGIN?.trim() || 'https://dfl-entregas.vercel.app').replace(/\/+$/, '');
@@ -95,6 +98,14 @@ export default function OperationalDiagnosticsPage() {
   }, [entries]);
 
   const localHealth = useMemo(() => summarizeSyncHealth(entries), [entries]);
+  const collectionHotspots = useMemo(() => rankSyncCollectionVolumes(entries), [entries]);
+
+  // A tela aberta acompanha novos diagnósticos sem polling nem fetch adicional.
+  useEffect(() => {
+    const onRecorded = () => setEntries(readSyncDiagnostics());
+    window.addEventListener(SYNC_DIAGNOSTIC_EVENT, onRecorded);
+    return () => window.removeEventListener(SYNC_DIAGNOSTIC_EVENT, onRecorded);
+  }, []);
 
   const recoveryUrl = Capacitor.isNativePlatform()
     ? `${SERVER_ORIGIN}/api/integration/diagnostics`
@@ -219,6 +230,8 @@ export default function OperationalDiagnosticsPage() {
         </div>
       </header>
 
+      <LegacyImportAuditCard />
+
       <section className="grid grid-cols-2 gap-2">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
           <Database size={18} className="text-cyan-400" />
@@ -251,6 +264,18 @@ export default function OperationalDiagnosticsPage() {
         )}
         <p className="mt-2 text-[10px] text-zinc-500">Amostra do histórico local; sem novas consultas à nuvem. Detalhes privados são omitidos ao copiar.</p>
       </section>
+
+      {collectionHotspots.length > 0 && <section aria-label="Ranking local de coleções" className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3">
+        <div className="flex items-center gap-2"><Database size={15} className="text-sky-300" /><p className="text-xs font-black text-zinc-200">Volume por coleção</p></div>
+        <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Média dos últimos cinco sucessos locais (até cinco coleções). Zero consultas extras.</p>
+        <div className="mt-3 space-y-2">{collectionHotspots.map((item) => (
+          <div key={item.name} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-950/40 px-3 py-2">
+            <span className="min-w-0 truncate font-mono text-[10px] font-semibold text-zinc-300" title={item.name}>{item.name}</span>
+            <span className="shrink-0 text-[10px] font-black tabular-nums text-sky-300">média {item.average} · último {item.latest}</span>
+          </div>
+        ))}</div>
+        <p className="mt-2 text-[10px] text-zinc-600">Documentos retornados não equivalem a leituras faturadas. Examine picos antes de mudar índices ou regras do Firestore.</p>
+      </section>}
 
       <button type="button" disabled={isSyncing || syncChecking} onClick={handleSync} className="mt-3 flex h-13 w-full items-center justify-center gap-2 rounded-2xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-3.5 text-sm font-black text-cyan-300 active:scale-[.98] disabled:opacity-50">
         <RefreshCw size={17} className={isSyncing || syncChecking ? 'animate-spin' : ''} />

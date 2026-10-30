@@ -12,6 +12,20 @@ export type DeliveryAttempt = { id: string; reason: DeliveryAttemptReason; at: s
 export const deliveryAttemptLabel = (reason: DeliveryAttemptReason): string =>
   DELIVERY_ATTEMPT_REASONS.find(item => item.value === reason)?.label || 'Outra ocorrência';
 
+/** Recomendações operacionais: não geram visita, taxa ou cobrança automaticamente. */
+export const DELIVERY_ATTEMPT_NOTE_SUGGESTIONS = [
+  'Ligar novamente antes de retornar',
+  'Confirmar número e complemento do endereço',
+  'Combinar novo horário com o cliente',
+  'Aguardar orientação da loja',
+] as const;
+
+export function deliveryAttemptSummary(history: DeliveryAttempt[] | undefined) {
+  const items = [...(history || [])].filter(item => Number.isFinite(Date.parse(item.at)))
+    .sort((a, b) => b.at.localeCompare(a.at));
+  return { count: items.length, latest: items[0] || null, history: items };
+}
+
 /** Never silently discard operational history or mutate the existing array. */
 export function appendDeliveryAttempt(history: DeliveryAttempt[] | undefined, item: DeliveryAttempt): DeliveryAttempt[] {
   const previous = history || [];

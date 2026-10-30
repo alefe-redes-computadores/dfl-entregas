@@ -143,6 +143,7 @@ export default function StaffAccessPage() {
       <StaffNavRow tone="green" icon={ShieldCheck} label="Homologar Google e prévia de dados" detail="Verificar UID e conferir projeções antes do login" onClick={()=>router.push('/mais/acessos/homologacao')}/>
       <StaffNavRow tone="sky" icon={ClipboardList} label="Solicitações da equipe" detail="Revisar entregas e compras sem execução silenciosa" onClick={()=>router.push('/mais/acessos/solicitacoes')}/>
       <StaffNavRow tone="amber" icon={Shield} label="Prontidão da equipe" detail="Auditoria sob demanda, sem alterações" onClick={()=>router.push('/mais/acessos/prontidao')}/>
+      <StaffNavRow tone="sky" icon={ShieldCheck} label="Homologação da produção" detail="Checklist APK, Firebase e concorrência sem liberar acesso" onClick={()=>router.push('/mais/acessos/publicacao')}/>
       <StaffNavRow tone="neutral" icon={LockKeyhole} label="Segurança e revogação" detail="Conferir vínculos e suspender contas" onClick={()=>router.push('/mais/acessos/seguranca')}/>
     </section>
 

@@ -124,9 +124,10 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   useEffect(()=>{
     if (!focusedId) { focusedOnce.current=null; return; }
     if (focusedOnce.current===focusedId) return;
-    if (projection.rows.some(row=>row.delivery.id===focusedId)) {
+    const focusedRow=projection.rows.find(row=>row.delivery.id===focusedId||row.delivery.external_order_id===focusedId);
+    if (focusedRow) {
       focusedOnce.current=focusedId;
-      setSearch('');setFilter('all');setEditing(focusedId);
+      setSearch('');setFilter('all');setEditing(focusedRow.delivery.id);
     }
   },[focusedId,projection.rows]);
   // Revalidacoes de horario nao disparam escritas locais repetidas para os mesmos IDs.
@@ -157,7 +158,9 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
       const routeId=await allocate(delivery.id,newMode?{newRoute:{name:routeName.trim(),motoboyId},operational}:{routeId:selection,operational});
       toast.success('Pedido vinculado à rota.',{description:'A saída para entrega só acontece ao iniciar a rota.'});
       setEditing(null);
-      router.push(`/rotas/details?id=${encodeURIComponent(routeId)}&date=${encodeURIComponent(today)}`);
+      // R175: permanecer na Caixa para processar outros pedidos; a rota segue acessível pelo feedback.
+      const remaining=siteInboxProjection(useAppStore.getState().deliveries).rows.length;
+      toast.info(remaining>0?`${remaining} pedido(s) ainda na Caixa.`:'Caixa organizada.',{description:'Abra a rota quando terminar a triagem.'});
     }catch(error){
       const message=error instanceof Error?error.message:'Não foi possível vincular o pedido.';
       setSaveError(message);

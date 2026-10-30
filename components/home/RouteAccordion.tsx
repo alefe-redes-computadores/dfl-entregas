@@ -192,7 +192,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     const remembered = readRememberedRouteId();
     const rememberedExists = remembered && allRoutes.some((item) => item.id === remembered && item.status !== 'fechada');
     const assembling = allRoutes.filter((item) => item.status === 'aberta' && !routeStartedAt(item));
-    const running = allRoutes.filter((item) => item.status === 'aberta' && Boolean(routeStartedAt(item)));
     // A montagem mais recente prevalece sobre uma rota que já saiu.
     // Preferência manual só prevalece enquanto ainda está em montagem.
     const assemblingNewest = [...assembling].sort((a, b) => {
@@ -200,7 +199,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       const bTime = Date.parse(String(b.created_at || '')) || 0;
       return bTime - aTime || b.id.localeCompare(a.id);
     });
-    const preferred = assemblingNewest[0]?.id || (rememberedExists ? remembered : running[0]?.id) || null;
+    const preferred = assemblingNewest[0]?.id || (rememberedExists ? remembered : null);
     setIsOpen(defaultOpen || preferred === route.id);
     // Este é o estado inicial. Atualizações da lista durante a operação não
     // devem reabrir um card que o operador recolheu manualmente.
@@ -869,10 +868,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   return (
-    <div className={clsx("overflow-hidden rounded-[20px] border transition-colors duration-150 relative", isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : isInProgress ? "bg-zinc-900/70 border-zinc-600/70" : "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]")}>
+    <div data-dfl-op-route="true" data-dfl-op-route-state={isNotStarted ? "montando" : isInProgress ? "na-rua" : "concluida"} data-dfl-op-route-expanded={isOpen ? "true" : "false"} className={clsx("overflow-hidden rounded-[20px] border transition-colors duration-150 relative", isNotStarted ? "bg-zinc-900/60 border-zinc-700/80" : isInProgress ? "bg-zinc-900/70 border-zinc-600/70" : "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]")}>
       {totalDeliveries > 0 && !isCompleted && (
         <div className="absolute top-0 left-0 h-1 bg-zinc-800 w-full">
-          <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
+          <div role="progressbar" aria-label={`Progresso da rota ${route.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent} className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
         </div>
       )}
       <button type="button" onClick={toggleRouteOpen} aria-expanded={isOpen} aria-label={`${route.name} · ${route.motoboy_name} · ${isOpen ? 'Recolher' : 'Expandir'} detalhes da rota`} className="grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-3 pt-3.5 text-left transition-transform active:scale-[0.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-400 motion-reduce:transition-none">
@@ -890,6 +889,14 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               <MotoIcon size={12} className={isInProgress ? 'text-sky-400' : isCompleted ? 'text-emerald-500' : 'text-zinc-500'} />
               <span className="min-w-0 truncate">{route.motoboy_name}</span>
             </div>
+            {totalStops > 0 && (
+              <div className="dfl-r196-route-metrics" aria-label={`Paradas da rota: ${totalStops - pendingStopsCount} concluídas de ${totalStops}`}>
+                <span aria-hidden="true" className="dfl-r196-route-dot" />
+                <strong>{totalStops - pendingStopsCount}/{totalStops}</strong>
+                <span>paradas concluídas</span>
+                <span className="dfl-r196-route-percent" aria-hidden="true">· {progressPercent}%</span>
+              </div>
+            )}
             {totalDeliveries > 0 && <div className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-zinc-400"><Wallet size={11} className="text-emerald-400" /><span>Vendas da rota: <b className="text-zinc-100">{isPrivacyMode ? 'R$ •••' : routeRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</b></span></div>}
           </div>
         </div>

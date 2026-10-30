@@ -2,6 +2,11 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/test-r206-release-preview.cjs',
+  'scripts/test-r205-release-manifest.cjs',
+  'scripts/test-r202-legacy-import-audit.cjs', // DFL_R202_LEGACY_AUDIT
+  'scripts/test-r203-rules-production.cjs', // DFL_R203_RULES_PRODUCTION
+  'scripts/test-r204-release-readiness.cjs', // DFL_R204_PRODUCTION_GATE
   'scripts/test-r126-e15-selective.cjs',
   'scripts/test-r126-e14-plan.cjs',
   'scripts/test-r126-e13-release.cjs',

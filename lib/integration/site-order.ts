@@ -407,7 +407,21 @@ export function siteOrderDrinksFromPayload(value:unknown):string{
  if(!Array.isArray(value))return '';
  const drinks=new Map<string,{name:string;qty:number}>();
  const add=(name:string,qty:number)=>{const clean=siteText(name);if(!clean)return;const key=clean.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const prev=drinks.get(key);drinks.set(key,{name:prev?.name||clean,qty:(prev?.qty||0)+Math.max(1,Math.trunc(qty||1))})};
- value.forEach(raw=>{const i=siteRecord(raw),qty=Math.max(1,Math.trunc(siteMoney(i.quantity)||1)),name=siteText(i.name);if(siteDrinkCategory(i.category)||SITE_DRINK_NAME.test(name))add(name,qty);if(Array.isArray(i.components))i.components.forEach(rawComponent=>{const c=siteRecord(rawComponent),cn=siteText(c.name??c.id);if(siteDrinkCategory(c.category)||SITE_DRINK_NAME.test(cn))add(cn,Math.max(1,Math.trunc(siteMoney(c.quantity)||1)))})});
+ value.forEach(raw=>{
+  const i=siteRecord(raw);
+  const qty=Math.max(1,Math.trunc(siteMoney(i.quantity)||1));
+  const name=siteText(i.name);
+  const isDrink=siteDrinkCategory(i.category)||SITE_DRINK_NAME.test(name);
+  if(isDrink)add(name,qty);
+  if(Array.isArray(i.components))i.components.forEach(rawComponent=>{
+   const c=siteRecord(rawComponent),cn=siteText(c.name??c.id);
+   if(!(siteDrinkCategory(c.category)||SITE_DRINK_NAME.test(cn)))return;
+   // O mesmo produto pode aparecer simultaneamente como item e componente.
+   // Não remova componentes distintos: combos podem conter várias bebidas legítimas.
+   const sameName=isDrink&&cn.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()===name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+   if(!sameName)add(cn,Math.max(1,Math.trunc(siteMoney(c.quantity)||1)));
+  });
+ });
  return [...drinks.values()].map(item=>`${item.qty}x ${item.name}`).join(', ');
 }
 

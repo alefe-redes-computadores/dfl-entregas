@@ -1,0 +1,51 @@
+#!/usr/bin/env node
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),path=require('node:path');
+const core=require('./r203-rules-core.cjs');
+let checks=0;const ok=(condition,message)=>{assert.ok(condition,`R203: ${message}`);checks++;console.log('OK R203:',message)};
+const root=process.env.DFL_R203_ROOT||path.resolve(__dirname,'..');
+const candidates=core.readCandidates(root);
+ok(candidates.length>=4,'quatro espelhos/candidatas locais disponíveis');
+ok(candidates.some(c=>c.name.endsWith('r23-owner-only.rules')),'espelho owner-only preservado');
+const owner=candidates.find(c=>c.name.endsWith('r23-owner-only.rules')).content;
+const candidate=candidates.find(c=>c.name.endsWith('r26-candidate.rules')).content;
+ok(core.evaluateRules(owner,candidates,{verifiedSource:true}).status==='OWNER_ONLY_VERIFICADO','owner-only por fonte autenticada');
+ok(core.evaluateRules(owner,candidates).status==='EVIDENCIA_LOCAL','arquivo local nunca vira regra publicada');
+ok(core.evaluateRules(candidate,candidates,{verifiedSource:true}).status==='BLOQUEADO','R26 candidato nao aprovado para producao');
+ok(core.evaluateRules('rules_version = \'2\'; service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if true; } } }',candidates,{verifiedSource:true}).status==='BLOQUEADO','wildcard publico explicitamente bloqueado');
+ok(core.evaluateRules('service cloud.firestore { match /databases/{database}/documents {} }',candidates,{verifiedSource:true}).status==='REVISAR','regra desconhecida nao recebe aprovacao');
+ok(core.hash(owner)===core.hash(owner.replace(/\n/g,'\r\n')),'hash ignora so variacao CRLF');
+ok(core.normalize(owner+'\n // nota de teste')===core.normalize(owner),'comentarios nao alteram comparacao de espelho');
+ok(core.validProject('dfl-entregas-prod'),'projeto explicito sintaticamente aceito');
+ok(!core.validProject('demo-dfl-entregas-r26'),'projeto de emulator nao e atestacao de producao');
+ok(!core.validProject('../projects/x'),'path traversal bloqueado');
+ok(core.validRulesetName('projects/dfl-entregas-prod/rulesets/abc123','dfl-entregas-prod'),'ruleset dentro do projeto esperado');
+ok(!core.validRulesetName('projects/other-project/rulesets/abc123','dfl-entregas-prod'),'ruleset de outro projeto recusado');
+ok(core.extractRulesetContent({source:{files:[{name:'rules',content:owner}]}})===owner,'retorna fonte especifica do Firestore');
+assert.throws(()=>core.extractRulesetContent({source:{files:[]}}));checks++;console.log('OK R203: ruleset vazio recusado');
+const work=fs.readFileSync(path.join(root,'.github/workflows/main.yml'),'utf8');
+ok(work.includes('assembleDebug')&&work.includes('apksigner'),'workflow de APK e assinatura preservado');
+const pre=fs.readFileSync(path.join(root,'scripts/pre-apk.cjs'),'utf8');
+ok(pre.includes("'scripts/test-r203-rules-production.cjs'"),'R203 integrado ao pre-APK');
+ok(pre.includes("'scripts/test-r202-legacy-import-audit.cjs'") ,'R202 preservado');
+ok(pre.includes("'scripts/test-v112-r94-delivery-concurrency.cjs'"),'protecoes de concorrencia preservadas');
+const store=fs.readFileSync(path.join(root,'store/useAppStore.ts'),'utf8');
+ok(store.includes('DFL_R201_ATOMIC_IMPORT')&&store.includes('assertFreshRemoteImportIds'),'R201 atomica preservada');
+ok(fs.existsSync(path.join(root,'lib/operation/legacy-import-audit.ts')),'R202 radar preservado');
+(async()=>{
+ const calls=[];const project='dfl-entregas-prod';const rulesetName=`projects/${project}/rulesets/test-rule-1`;
+ const result=await core.fetchPublishedRules(project,'12345678901234567890',async (url,options)=>{
+   calls.push({url,method:options.method,auth:options.headers.authorization});
+   if(url.endsWith('/releases/cloud.firestore'))return {ok:true,json:async()=>({rulesetName})};
+   if(url.endsWith('/rulesets/test-rule-1'))return {ok:true,json:async()=>({source:{files:[{name:'firestore.rules',content:owner}]}})};
+   return {ok:false,status:404};
+ });
+ ok(result.content===owner,'leitura remota mock autenticada e sem mutacoes');
+ ok(calls.length===2&&calls.every(x=>x.method==='GET'),'API utiliza apenas dois GETs');
+ ok(calls.every(x=>x.url.startsWith('https://firebaserules.googleapis.com/v1/')),'somente API oficial do Firebase Rules');
+ let rejected=false;
+ try{await core.fetchPublishedRules(project,'12345678901234567890',async()=>({ok:true,json:async()=>({rulesetName:'projects/outro/rulesets/abc'})}));}catch{rejected=true;}
+ ok(rejected,'resposta de release de outro projeto rejeitada');
+ console.log(`R203: ${checks} contratos de segurança aprovados`);
+})().catch(e=>{console.error(e);process.exitCode=1});

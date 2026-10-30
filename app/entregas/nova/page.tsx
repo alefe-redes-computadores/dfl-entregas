@@ -48,7 +48,7 @@ export default function NovaEntregaPage() {
   const inboxDraftId = searchParams.get('inboxDraft') || '';
   const inboxDay = searchParams.get('inboxDay') || '';
   const requestedReturn = searchParams.get('returnTo') || '';
-  const safeReturnTo = requestedReturn.startsWith('/') && !requestedReturn.startsWith('//') ? requestedReturn : '';
+  const safeReturnTo = requestedReturn.startsWith('/') && !requestedReturn.startsWith('//') && !/[\r\n]/.test(requestedReturn) ? requestedReturn : '';
   const todayDateKey = dateKey(new Date());
   const historicalContext = Boolean(returnDate && returnDate !== todayDateKey);
   const deliveriesReturn = historicalContext
@@ -124,6 +124,7 @@ const [routeId, setRouteId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [pendingContactCustomer,setPendingContactCustomer]=useState<Customer|null>(null);
+  const [temporaryCustomerId,setTemporaryCustomerId]=useState<string|null>(null);
   const typedCustomerBeforeSelection = useRef('');
   const previousCustomerDraft = useRef<{name:string;phone:string;address:string;mapsLink:string;observation:string}|null>(null);
   const [selectedCustomerLabel, setSelectedCustomerLabel] = useState('');
@@ -152,6 +153,8 @@ const [routeId, setRouteId] = useState('');
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // R175: trava imediata, antes de renderização/haptics/rede.
+  const submitFlight = useRef(false);
   const [formIssue, setFormIssue] = useState<DeliveryFormIssue | null>(null);
   useEffect(() => { setFormIssue(null); }, [fulfillmentMode, origin]);
   const [extraIfoodOrders, setExtraIfoodOrders] = useState<ExtraIfoodOrderDraft[]>([]);
@@ -481,7 +484,7 @@ const [routeId, setRouteId] = useState('');
   }, [activeAddress, activeMapsLink, knownNeighborhoods]);
 
   const handleCustomerSelect = (c: Customer, typedQuery?: string) => {
-    if (origin !== 'ifood' || customerPhones(c).length>1 || customerAddresses(c).length>1) { setPendingContactCustomer(c); return; }
+    if (customerPhones(c).length > 1 || customerAddresses(c).length > 1) { setPendingContactCustomer(c); return; }
     applyCustomerSelection(c,undefined,undefined,typedQuery);
   };
   const applyCustomerSelection = (c:Customer, chosenPhone?:CustomerPhone, chosenAddress?:CustomerAddress, typedQuery?:string) => {
@@ -506,8 +509,10 @@ const [routeId, setRouteId] = useState('');
     const phone=chosenPhone?.number||c.phone;
     if (phone) setActivePhone(formatPhoneInput(phone));
     if (c.observation) setActiveObservation(c.observation);
-    const mapsLink=chosenAddress?.maps_link||c.maps_link;
-    if (mapsLink) setActiveMapsLink(mapsLink);
+    // A escolha de outro destino nunca herda coordenadas do endereco padrao.
+    const mapsLink=chosenAddress ? (chosenAddress.maps_link || '') : (c.maps_link || '');
+    setActiveMapsLink(mapsLink || '');
+    // Geolocalizacao anterior nao pode ser reutilizada em outro endereco.
     // A confirmação pertence ao pedido, nunca deve vir automaticamente de outro pedido.
     toast.success('Cliente carregado.');
   };
@@ -562,6 +567,8 @@ const [routeId, setRouteId] = useState('');
       }
     }
     if(ownerIdentityAmongDrafts&&!ownerOrderContext){toast.error('Classifique este pedido no seu nome.',{description:'Informe se é teste, pedido real provisório ou retirada real na loja.'});return}
+    if (submitFlight.current) return;
+    submitFlight.current = true;
     setIsSaving(true);
     try{
       const normalizedAddress=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(streetAddress):{address:'',neighborhood:undefined,phone:undefined,observations:[] as string[]};
@@ -606,7 +613,7 @@ const [routeId, setRouteId] = useState('');
       if(origin==='ifood'){
         const deliveriesToCreate:Delivery[]=[];
         const stopGroups=new Map<string,string>();
-        for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));const draftNormalized=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(draft.address||streetAddress):{address:'',phone:undefined};const draftAddress=draftNormalized.address||cleanStreet;const draftPhone=normalizeBrazilPhone(draft.phone)||draftNormalized.phone||'';const draftMaps=(draft.mapsLink||'').trim()||(index===0?resolvedMapsLink:'');const addressKey=canonicalizeOperationalAddress(draftAddress).address.toLocaleLowerCase('pt-BR');let draftStopGroupId=stopSource&&sameCustomerAddress(stopSource.address_string,draftAddress)?stopGroupId:undefined;if(fulfillmentMode==='delivery'&&drafts.length>1){const sameAddressCount=drafts.filter(item=>sameCustomerAddress(item.address||streetAddress,draftAddress)).length;if(sameAddressCount>1){draftStopGroupId=stopGroups.get(addressKey)||draftStopGroupId||`stop-${Date.now()}-${stopGroups.size}-${Math.random().toString(36).slice(2,7)}`;stopGroups.set(addressKey,draftStopGroupId)}}let customerId='';if(draftName){customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?draftAddress:undefined,phone:draftPhone||undefined,mapsLink:fulfillmentMode==='delivery'?draftMaps:undefined,confirmationCode:draft.confirmationCode||undefined,observation:draft.observation.trim()||cleanObservation||undefined,origin,preferredCustomerId:index===0?selectedCustomerId||undefined:undefined})}
+        for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));const draftNormalized=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(draft.address||streetAddress):{address:'',phone:undefined};const draftAddress=draftNormalized.address||cleanStreet;const draftPhone=normalizeBrazilPhone(draft.phone)||draftNormalized.phone||'';const draftMaps=(draft.mapsLink||'').trim()||(index===0?resolvedMapsLink:'');const addressKey=canonicalizeOperationalAddress(draftAddress).address.toLocaleLowerCase('pt-BR');let draftStopGroupId=stopSource&&sameCustomerAddress(stopSource.address_string,draftAddress)?stopGroupId:undefined;if(fulfillmentMode==='delivery'&&drafts.length>1){const sameAddressCount=drafts.filter(item=>sameCustomerAddress(item.address||streetAddress,draftAddress)).length;if(sameAddressCount>1){draftStopGroupId=stopGroups.get(addressKey)||draftStopGroupId||`stop-${Date.now()}-${stopGroups.size}-${Math.random().toString(36).slice(2,7)}`;stopGroups.set(addressKey,draftStopGroupId)}}let customerId='';if(draftName){customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?draftAddress:undefined,phone:draftPhone||undefined,mapsLink:fulfillmentMode==='delivery'?draftMaps:undefined,confirmationCode:draft.confirmationCode||undefined,observation:draft.observation.trim()||cleanObservation||undefined,origin,preferredCustomerId:index===0?selectedCustomerId||undefined:undefined,temporaryCustomerId:index===0&&temporaryCustomerId&&temporaryCustomerId===selectedCustomerId?temporaryCustomerId:undefined})}
           deliveriesToCreate.push({id:index===0?Date.now().toString():`${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='external_delivery'?'ifood':'dfl',stop_group_id:draftStopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:splitEnabled?'dinheiro':draft.paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?draftAddress:'',maps_link:fulfillmentMode==='delivery'?draftMaps:'',phone:draftPhone||undefined,notify_whatsapp:draft.notifyWhatsapp,observation:(index===0?cleanObservation:draft.observation.trim()||cleanObservation)||undefined,drinks:draft.drinks,createdAt:now,created_at:now,updated_at:now});
           if(ownerOrderContext && hasOwnerIdentity({name:draftName,phone:draftPhone})) Object.assign(deliveriesToCreate[deliveriesToCreate.length-1],ownerContextFlags(ownerOrderContext));
         }
@@ -620,7 +627,7 @@ const [routeId, setRouteId] = useState('');
         markInboxDraft(inboxDay, inboxDraftId, 'launched');
       }
       router.replace(safeReturnTo||deliveriesReturn);
-    }catch(error){console.error('Erro ao cadastrar entrega:',error);toast.error('Não foi possível cadastrar a entrega.',{description:'Confira os dados e sua conexão e tente novamente.'})}finally{setIsSaving(false)}
+    }catch(error){console.error('Erro ao cadastrar entrega:',error);toast.error('Não foi possível cadastrar a entrega.',{description:'Confira os dados e sua conexão e tente novamente.'})}finally{submitFlight.current=false;setIsSaving(false)}
   };
 
   return (
@@ -1236,7 +1243,7 @@ const [routeId, setRouteId] = useState('');
               {splitEnabled && (
                 <div className="mt-4 space-y-3 border-t border-zinc-800 pt-3">
                   <label className="block text-[11px] font-bold text-zinc-300">Valor em dinheiro
-                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700 bg-zinc-950 px-3 focus-within:border-amber-400"><Banknote size={17} className="mr-2 shrink-0 text-amber-400"/><span className="mr-1 text-xs text-zinc-500">R$</span><input inputMode="numeric" type="text" value={splitCash} onChange={e => setSplitCash(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 bg-transparent text-base font-black tabular-nums text-zinc-100 outline-none"/></span>
+                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700/65 bg-zinc-950/60 px-3 transition-colors focus-within:border-amber-400/80 focus-within:ring-1 focus-within:ring-amber-400/20"><Banknote size={17} className="mr-2 shrink-0 text-amber-400"/><span className="mr-1 text-xs text-zinc-500">R$</span><input inputMode="numeric" type="text" value={splitCash} onChange={e => setSplitCash(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 border-0 bg-transparent p-0 text-base font-black tabular-nums text-zinc-100 shadow-none outline-none focus:outline-none focus:ring-0"/></span>
                   </label>
                   <div>
                     <p className="mb-2 text-[11px] font-bold text-zinc-300">Segunda forma de pagamento</p>
@@ -1246,7 +1253,7 @@ const [routeId, setRouteId] = useState('');
                     </div>
                   </div>
                   <label className="block text-[11px] font-bold text-zinc-300">Valor no {splitOtherMethod === 'pix' ? 'Pix' : 'cartão'}
-                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700 bg-zinc-950 px-3 focus-within:border-emerald-400"><span className="mr-1 text-xs text-zinc-500">R$</span><input type="text" inputMode="numeric" value={splitOther} onChange={e => setSplitOther(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 bg-transparent text-base font-black tabular-nums text-zinc-100 outline-none"/></span>
+                    <span className="mt-1 flex h-12 items-center rounded-xl border border-zinc-700/65 bg-zinc-950/60 px-3 transition-colors focus-within:border-emerald-400/80 focus-within:ring-1 focus-within:ring-emerald-400/20"><span className="mr-1 text-xs text-zinc-500">R$</span><input type="text" inputMode="numeric" value={splitOther} onChange={e => setSplitOther(formatCurrencyInput(e.target.value))} placeholder="0,00" className="w-full min-w-0 border-0 bg-transparent p-0 text-base font-black tabular-nums text-zinc-100 shadow-none outline-none focus:outline-none focus:ring-0"/></span>
                   </label>
                   <div role="status" className={`rounded-xl border p-3 text-[11px] font-bold ${splitReview().valid ? 'border-emerald-500/25 bg-emerald-500/[.08] text-emerald-300' : 'border-amber-500/25 bg-amber-500/[.06] text-amber-200'}`}>
                     <p>{splitReview().valid ? 'Valores conferidos: divisão exata.' : splitReview().errors[0] || 'Informe os valores de cada parte.'}</p>
@@ -1307,16 +1314,26 @@ const [routeId, setRouteId] = useState('');
           {isSaving ? 'Salvando...' : extraIfoodOrders.length ? `Salvar ${extraIfoodOrders.length + 1} pedidos` : 'Salvar entrega'}
         </button>
       </form>
-      {pendingContactCustomer&&<CustomerDestinationSheet customer={pendingContactCustomer} onClose={()=>setPendingContactCustomer(null)} onConfirm={(phone,address)=>{applyCustomerSelection(pendingContactCustomer,phone,address);setPendingContactCustomer(null);}} onAddAddress={origin==='ifood'?undefined:async(address)=>{
+      {pendingContactCustomer&&<CustomerDestinationSheet customer={pendingContactCustomer} onUseTemporary={origin==='loja'?(chosenPhone,destination)=>{
+        const selected=pendingContactCustomer;
+        if(!selected)return;
+        applyCustomerSelection(selected,chosenPhone,{id:'temporary-delivery',address:destination,maps_link:''});
+        // Links antigos nunca devem apontar para outro endereço.
+        setActiveMapsLink('');
+        setTemporaryCustomerId(selected.id);
+        setPendingContactCustomer(null);
+        toast.info('Destino temporário selecionado. O cadastro do cliente não será alterado.');
+      }:undefined} onClose={()=>setPendingContactCustomer(null)} onConfirm={(phone,address)=>{applyCustomerSelection(pendingContactCustomer,phone,address);setTemporaryCustomerId(null);setPendingContactCustomer(null);}} onAddAddress={origin==='ifood'?undefined:async(address,makePrimary)=>{
         const customer=pendingContactCustomer;
         if(!customer)return undefined;
         const existing=customerAddresses(customer);
         const key=(s:string)=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
         if(existing.some(item=>key(item.address)===key(address))){toast.warning('Endereço já está cadastrado neste cliente.');return undefined;}
-        const entry:CustomerAddress={id:`addr-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,address,primary:false,label:'Outro endereço'};
+        const entry:CustomerAddress={id:`addr-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,address,primary:makePrimary,label:'Outro endereço'};
+        const updatedAddresses=makePrimary?[...existing.map(item=>({...item,primary:false})),entry]:[...existing,entry];
         try{
-          await updateCustomer(customer.id,{addresses:[...existing,entry]});
-          setPendingContactCustomer({...customer,addresses:[...existing,entry]});
+          await updateCustomer(customer.id,{addresses:updatedAddresses,...(makePrimary?{address:entry.address,neighborhood:entry.neighborhood||'',maps_link:entry.maps_link||''}:{})});
+          setPendingContactCustomer({...customer,addresses:updatedAddresses,...(makePrimary?{address:entry.address,neighborhood:entry.neighborhood||'',maps_link:entry.maps_link||''}:{})});
           toast.success('Novo endereço salvo no cliente existente.');
           return entry;
         }catch{toast.error('Não foi possível salvar o endereço.');return undefined;}

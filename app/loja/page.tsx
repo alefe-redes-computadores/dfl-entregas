@@ -53,6 +53,24 @@ export default function LojaPage() {
   const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
   const routeReminderActive = storeSettings.routeReminderEnabled !== false;
   const autoCloseActive = storeSettings.autoCloseCompletedRoutes !== false;
+  // R197: preferências remotas têm gravação única e feedback somente após persistência.
+  const quickPreferenceInFlight = useRef(false);
+  const [quickPreferenceBusy, setQuickPreferenceBusy] = useState(false);
+  const saveQuickPreference = async (patch: Parameters<typeof updateStoreSettings>[0]) => {
+    if (quickPreferenceInFlight.current || storeSettingsBusy || storeToggleBusy) return;
+    quickPreferenceInFlight.current = true;
+    setQuickPreferenceBusy(true);
+    try {
+      await updateStoreSettings(patch);
+      toast.success('Preferência operacional salva.');
+      touchFeedback(ImpactStyle.Light);
+    } catch {
+      toast.error('Não foi possível salvar a preferência.', { description: 'A configuração anterior foi preservada.' });
+    } finally {
+      quickPreferenceInFlight.current = false;
+      setQuickPreferenceBusy(false);
+    }
+  };
 
   const [isStoreOpen, setIsStoreOpen] = useState(false);
   const toggleInFlight = useRef(false);
@@ -736,6 +754,14 @@ export default function LojaPage() {
           </div>
           <ChevronDown size={18} className={`text-zinc-600 transition-transform ${isSettingsOpen ? 'rotate-180' : ''}`} />
         </button>
+        {/* R197: leitura do estado real; não dispara escrita nem consulta remota. */}
+        <div aria-label="Resumo das preferências operacionais" className="grid grid-cols-2 gap-2 px-3 pb-3 text-[10px] font-semibold">
+          <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">Rotas: {routeReminderActive ? 'lembretes ativos' : 'lembretes pausados'}</span>
+          <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">Fechamento: {autoCloseActive ? 'automático' : 'manual'}</span>
+          <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">99Food: {(storeSettings.marketplaceDeliveryModes?.food99 || 'platform') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
+          <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">iFood: {(storeSettings.marketplaceDeliveryModes?.ifood || 'dfl') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
+        </div>
+        {quickPreferenceBusy && <p role="status" className="px-4 pb-2 text-[11px] text-sky-300">Salvando preferência no sistema…</p>}
 
         {isSettingsOpen && (
           <div className="flex flex-col gap-4 rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-4">
@@ -748,7 +774,7 @@ export default function LojaPage() {
                 return <div key={source} className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
                   <p className={`text-xs font-bold ${source === 'food99' ? 'text-amber-300' : 'text-red-300'}`}>{source === 'food99' ? '99Food' : 'iFood'}</p>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    {(['platform','dfl'] as const).map(next => <button key={next} type="button" disabled={storeSettingsBusy} aria-pressed={mode===next} onClick={() => void updateStoreSettings({marketplaceDeliveryModes:{ifood:storeSettings.marketplaceDeliveryModes?.ifood || 'dfl',food99:storeSettings.marketplaceDeliveryModes?.food99 || 'platform',[source]:next}}).catch(()=>toast.error('Não foi possível salvar a modalidade.'))} className={`min-h-11 rounded-xl border px-2 text-[11px] font-bold ${mode===next?'border-amber-400/45 bg-amber-400/10 text-amber-200':'border-zinc-700 text-zinc-400'}`}>{next === 'platform' ? 'Plataforma entrega' : 'DFL entrega'}</button>)}
+                    {(['platform','dfl'] as const).map(next => <button key={next} type="button" disabled={storeSettingsBusy||quickPreferenceBusy||mode===next} aria-pressed={mode===next} onClick={() => void saveQuickPreference({marketplaceDeliveryModes:{ifood:storeSettings.marketplaceDeliveryModes?.ifood || 'dfl',food99:storeSettings.marketplaceDeliveryModes?.food99 || 'platform',[source]:next}})} className={`min-h-11 rounded-xl border px-2 text-[11px] font-bold ${mode===next?'border-amber-400/45 bg-amber-400/10 text-amber-200':'border-zinc-700 text-zinc-400'}`}>{next === 'platform' ? 'Plataforma entrega' : 'DFL entrega'}</button>)}
                   </div>
                 </div>;
               })}
@@ -789,10 +815,10 @@ export default function LojaPage() {
             </div>
 
             <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/10 text-violet-400"><BellRing size={18}/></div><div><p className="text-sm font-black text-zinc-200">Rotas e lembretes</p><p className="text-[10px] text-zinc-600">Configure lembretes e fechamento separadamente.</p></div></div>
+              <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/10 text-violet-400"><BellRing size={18}/></div><div><p className="text-sm font-black text-zinc-200">Rotas e lembretes</p><p className="text-[10px] text-zinc-500">Lembretes e fechamento são salvos individualmente. Desativar o automático exige finalizar rotas manualmente.</p></div></div>
               <div className="flex min-w-0 flex-col gap-2">
-                <button type="button" role="switch" aria-checked={routeReminderActive} disabled={storeSettingsBusy} onClick={()=>void updateStoreSettings({routeReminderEnabled:!routeReminderActive}).catch(()=>toast.error('Não foi possível salvar lembretes.'))} className={`min-h-10 rounded-xl border px-3 text-[10px] font-bold disabled:opacity-50 ${routeReminderActive?'border-violet-500/40 bg-violet-500/10 text-violet-300':'border-zinc-700 text-zinc-400'}`}>Lembretes {routeReminderActive?'ligados':'desligados'}</button>
-                <button type="button" role="switch" aria-checked={autoCloseActive} disabled={storeSettingsBusy} onClick={()=>void updateStoreSettings({autoCloseCompletedRoutes:!autoCloseActive}).catch(()=>toast.error('Não foi possível salvar fechamento automático.'))} className={`min-h-10 rounded-xl border px-3 text-[10px] font-bold disabled:opacity-50 ${autoCloseActive?'border-emerald-500/40 bg-emerald-500/10 text-emerald-300':'border-zinc-700 text-zinc-400'}`}>Fechamento auto {autoCloseActive?'ligado':'desligado'}</button>
+                <button type="button" role="switch" aria-label="Lembretes de rotas" aria-checked={routeReminderActive} aria-busy={quickPreferenceBusy} disabled={storeSettingsBusy||quickPreferenceBusy} onClick={()=>void saveQuickPreference({routeReminderEnabled:!routeReminderActive})} className={`min-h-10 rounded-xl border px-3 text-[10px] font-bold disabled:opacity-50 ${routeReminderActive?'border-violet-500/40 bg-violet-500/10 text-violet-300':'border-zinc-700 text-zinc-400'}`}>Lembretes {routeReminderActive?'ligados':'desligados'}</button>
+                <button type="button" role="switch" aria-label="Fechamento automático das rotas" aria-checked={autoCloseActive} aria-busy={quickPreferenceBusy} disabled={storeSettingsBusy||quickPreferenceBusy} onClick={()=>void saveQuickPreference({autoCloseCompletedRoutes:!autoCloseActive})} className={`min-h-10 rounded-xl border px-3 text-[10px] font-bold disabled:opacity-50 ${autoCloseActive?'border-emerald-500/40 bg-emerald-500/10 text-emerald-300':'border-zinc-700 text-zinc-400'}`}>Fechamento auto {autoCloseActive?'ligado':'desligado'}</button>
               </div>
             </div>
 

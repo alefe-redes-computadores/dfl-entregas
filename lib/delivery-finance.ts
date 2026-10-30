@@ -53,7 +53,10 @@ export const paymentStateForInput = (
 export const deliveryPaymentStateLabel = (delivery: Delivery) => {
   const state = deriveDeliveryPaymentState(delivery);
   if (state === 'paid') return 'Pago';
+  if (delivery.completed) return 'Entregue · recebimento não confirmado';
   if (state === 'pending') return delivery.payment_method === 'pix' ? 'Pix pendente' : 'Pagamento pendente';
+  if (delivery.payment_method === 'cartao' || delivery.payment_method === 'cartao_credito' || delivery.payment_method === 'cartao_debito') return 'Cartão a receber na entrega';
+  if (delivery.payment_method === 'dinheiro') return 'Dinheiro a receber na entrega';
   return 'Cobrar na entrega';
 };
 

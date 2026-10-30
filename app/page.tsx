@@ -362,7 +362,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="dfl-page">
+    <div className="dfl-page dfl-r196-home">
 
       <OperationalDatePicker
         selectedDate={selectedDate}
@@ -558,7 +558,7 @@ export default function HomePage() {
           </div>
           {openRoutes.map((route, index) => (
             !compactOpenRoutes || index < 3 ? (
-              <RouteAccordion key={route.id} route={route} defaultOpen={index === 0} />
+              <RouteAccordion key={route.id} route={route} defaultOpen={false} />
             ) : null
           ))}
           {compactOpenRoutes && openRoutes.length > 3 && (

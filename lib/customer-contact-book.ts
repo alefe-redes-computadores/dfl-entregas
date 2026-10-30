@@ -19,8 +19,11 @@ export function customerAddresses(customer: Pick<Customer, 'address' | 'addresse
   const stored=(customer.addresses||[]).filter(item=>!!item.address.trim());
   const source=stored.length?stored:customer.address?[{id:'legacy-address',address:customer.address,neighborhood:customer.neighborhood,maps_link:customer.maps_link,primary:true,label:'Principal'}]:[];
   const seen=new Set<string>();
-  return source.filter(item=>{const key=addressKey(item.address,item.neighborhood);if(!item.address.trim()||seen.has(key))return false;seen.add(key);return true;})
-    .map((item,index)=>({...item,primary:source.some(entry=>entry.primary)?Boolean(item.primary):index===0}));
+  const unique = source.filter(item=>{const key=addressKey(item.address,item.neighborhood);if(!item.address.trim()||seen.has(key))return false;seen.add(key);return true;});
+  // A flag principal pode estar no item duplicado removido ou em um item mais adiante.
+  // Recalcular depois da deduplicacao impede lista sem nenhum endereco principal.
+  const selectedPrimary = unique.find(item => item.primary) || unique[0];
+  return unique.map(item => ({...item, primary: item.id === selectedPrimary?.id}));
 }
 export function customerPhoneMatches(customer: Customer, query: string) {
   const sought=digits(query);return sought.length>=3&&customerPhones(customer).some(item=>digits(item.number).includes(sought) || `55${digits(item.number)}`.includes(sought));
@@ -38,6 +41,8 @@ export function customerContactPayload(phonesInput: CustomerPhone[], addressesIn
   const addresses=addressRows.filter(item=>{const key=addressKey(item.address,item.neighborhood);if(uniqueAddresses.has(key))return false;uniqueAddresses.add(key);return true;});
   const phonePrimary=phones.find(item=>item.primary)||phones[0];
   const addressPrimary=addresses.find(item=>item.primary)||addresses[0];
+  // Campos legados refletem SOMENTE o endereco principal, mas os demais ficam
+  // preservados na colecao e continuam pesquisaveis. Nenhuma migracao implicita.
   // Exactly one primary in each collection, keeping legacy consumers working.
   return {phones:phones.map(item=>({...item,primary:item.id===phonePrimary?.id})),addresses:addresses.map(item=>({...item,primary:item.id===addressPrimary?.id})),phone:phonePrimary?.number||'',address:addressPrimary?.address||'',neighborhood:addressPrimary?.neighborhood||'',maps_link:addressPrimary?.maps_link||''};
 }

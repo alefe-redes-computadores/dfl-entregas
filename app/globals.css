@@ -344,3 +344,75 @@ html[data-dfl-platform="android"] [data-sonner-toaster].dfl-toaster[data-y-posit
 html[data-dfl-platform="android"] header.safe-top {
   padding-top: calc(max(env(safe-area-inset-top, 0px), var(--dfl-native-statusbar-fallback, 0px)) + 1rem) !important;
 }
+
+
+/* DFL R196 — OPERAÇÃO PREMIUM | escopo exclusivo da Home */
+.dfl-r196-home [data-dfl-op-route="true"] {
+  isolation: isolate;
+  box-shadow: 0 9px 24px rgba(0, 0, 0, .14);
+}
+.dfl-r196-home [data-dfl-op-route="true"] > button:first-of-type {
+  background-image: linear-gradient(110deg, rgba(255,255,255,.027), transparent 56%);
+}
+.dfl-r196-home [data-dfl-op-route-state="montando"] > button:first-of-type {
+  box-shadow: inset 3px 0 rgba(245,158,11,.55);
+}
+.dfl-r196-home [data-dfl-op-route-state="na-rua"] > button:first-of-type {
+  box-shadow: inset 3px 0 rgba(56,189,248,.58);
+}
+.dfl-r196-home [data-dfl-op-route-state="concluida"] > button:first-of-type {
+  box-shadow: inset 3px 0 rgba(52,211,153,.45);
+}
+.dfl-r196-route-metrics {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 100%;
+  margin-top: 4px;
+  color: #a1a1aa;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+.dfl-r196-route-metrics strong { color: #e4e4e7; font-weight: 800; }
+.dfl-r196-route-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #38bdf8;
+}
+[data-dfl-op-route-state="montando"] .dfl-r196-route-dot { background: #fbbf24; }
+[data-dfl-op-route-state="concluida"] .dfl-r196-route-dot { background: #34d399; }
+.dfl-r196-home [data-dfl-op-card="true"] {
+  /* Não aplicar contain:layout; os modais fixed do card precisam cobrir a tela. */
+  -webkit-tap-highlight-color: transparent;
+}
+.dfl-r196-home [data-dfl-op-card-expanded="false"] [data-dfl-op-surface="true"] {
+  background-image: linear-gradient(105deg, rgba(255,255,255,.022), transparent 62%);
+}
+.dfl-r196-home [data-dfl-op-card-expanded="true"] [data-dfl-op-surface="true"] {
+  background-image: linear-gradient(150deg, rgba(255,255,255,.022), transparent 62%);
+}
+.dfl-r196-home [data-dfl-op-route="true"] button:focus-visible,
+.dfl-r196-home [data-dfl-op-card="true"] button:focus-visible,
+.dfl-r196-home [data-dfl-op-card="true"] a:focus-visible {
+  outline: 2px solid #6ee7b7;
+  outline-offset: 2px;
+}
+.dfl-r196-home [data-dfl-op-card="true"] button[disabled] {
+  cursor: not-allowed;
+}
+@media (max-width: 360px) {
+  .dfl-r196-route-percent { display: none; }
+  .dfl-r196-home [data-dfl-op-route="true"] > button:first-of-type { gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dfl-r196-home [data-dfl-op-route="true"],
+  .dfl-r196-home [data-dfl-op-card="true"] {
+    scroll-behavior: auto;
+    transition-duration: 0ms !important;
+  }
+}

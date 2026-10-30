@@ -19,7 +19,7 @@ export function searchSiteInboxRows<T extends SiteTriageRow>(rows: readonly T[],
     delivery.observation,
   ].filter(Boolean).join(' ')).includes(needle)) : [...rows];
   if (!focusId) return visible;
-  const index = visible.findIndex(row => row.delivery.id === focusId);
+  const index = visible.findIndex(row => row.delivery.id === focusId || row.delivery.external_order_id === focusId);
   if (index <= 0) return visible;
   return [visible[index], ...visible.slice(0, index), ...visible.slice(index + 1)];
 }

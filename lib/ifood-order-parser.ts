@@ -618,6 +618,28 @@ function reconcileCashChangeFromWholeText(
 ) {
   const normalized = spaces(text.replace(/\r?\n/g, ' '));
 
+  // R179: "troco para" informa o valor entregue, inclusive quando
+  // o valor do pedido está em outra linha. Nunca confundir com troco a devolver.
+  // Protege valores explícitos já conciliados e pagamentos não monetários.
+  const requestedTender = normalized.match(
+    /\btroco\s*(?:para|p\/?|pro)\s*:?\s*(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i,
+  );
+  if (requestedTender && result.paymentMethod !== 'cartao' && result.paymentMethod !== 'pix') {
+    const tender = numberValue(requestedTender[1]);
+    const before = normalized.slice(0, requestedTender.index);
+    const priorAmounts = [...before.matchAll(/r\$\s*(\d+(?:[.,]\d{1,2})?)/gi)];
+    const evidentCharge = priorAmounts.length === 1 ? priorAmounts[0][1] : '';
+    const charge = numberValue(result.customerCharge || result.value || evidentCharge);
+    if (tender > 0 && charge > 0 && tender >= charge) {
+      result.paymentMethod = 'dinheiro';
+      result.isPaid = false;
+      result.customerCharge ||= currency(charge);
+      result.value ||= result.customerCharge;
+      result.changeFor = currency(tender);
+      return;
+    }
+  }
+
   // Contrato operacional:
   // "27 troco para 30" => cliente paga 27 e entrega 30.
   // "27 troco 3"      => cliente paga 27 e precisa receber 3; entrega 30.
