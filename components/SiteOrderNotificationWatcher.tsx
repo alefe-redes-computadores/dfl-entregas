@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase';
 import { useAppStore } from '@/store/useAppStore';
 import { markUnreadSiteOrders, readUnreadSiteOrderIds } from '@/lib/site-order-inbox';
 import { notifyNewSiteOrder } from '@/lib/native/notifications';
+import { shouldAlertSiteOrderNow } from '@/lib/operation/site-order-alert-policy';
 import type { Delivery } from '@/types';
 
 export function SiteOrderNotificationWatcher() {
@@ -45,7 +46,7 @@ export function SiteOrderNotificationWatcher() {
           seen.add(id);
           newUnreadIds.push(id);
 
-          if (!unreadBefore.has(id)) {
+          if (!unreadBefore.has(id) && !snapshot.metadata.fromCache && shouldAlertSiteOrderNow(delivery, Date.now())) {
             notifications.push({
               id,
               customerName: customerById.get(delivery.customer_id || '')?.name,

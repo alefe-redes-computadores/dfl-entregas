@@ -6,6 +6,7 @@ import { RouteSequenceAdvisor } from '@/components/home/RouteSequenceAdvisor';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -781,19 +782,25 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   };
 
   const moveOptimizerItem = (index: number, direction: -1 | 1) => {
-    setOptimizerOrder((current) => {
+    const applyMove = () => { setOptimizerOrder((current) => {
       const next = [...current];
       const target = index + direction;
       if (target < 0 || target >= next.length) return current;
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
-    setOptimizerEdited(true);
+    setOptimizerEdited(true); };
+    const documentWithTransition = typeof document === 'undefined' ? null : document as Document & { startViewTransition?: (callback: () => void) => unknown };
+    if (documentWithTransition?.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      documentWithTransition.startViewTransition(() => flushSync(applyMove));
+    } else applyMove();
   };
 
   const applyOptimizerOrder = async () => {
     if (optimizerOrder.length < 2 || !optimizerOrigin) return;
     setOptimizerBusy(true);
+    const feedbackId = `dfl-optimizer-${route.id}`;
+    toast.loading('Salvando nova ordem da rota…', { id: feedbackId, duration: Infinity });
 
     try {
       const now = new Date().toISOString();
@@ -826,10 +833,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         void Haptics.notification({ type: NotificationType.Success }).catch(() => undefined);
       }
 
+      toast.dismiss(feedbackId);
       toast.success(optimizerEdited ? 'Ordem manual aplicada.' : 'Ordem inteligente aplicada.', {
         description: optimizerEdited ? 'A sequência foi salva sem criar travas automáticas.' : 'A sequência continua livre para encaixar novas paradas.',
       });
     } catch (error) {
+      toast.dismiss(feedbackId);
       console.error('[DFL V60] Falha ao persistir ordem mista:', error);
       toast.error(error instanceof Error ? error.message : 'Não foi possível aplicar a ordem sugerida.');
     } finally {
@@ -1302,7 +1311,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   return (
                     <div
                       key={row.delivery.id}
-                      className={`rounded-[20px] border p-3 ${
+                      style={{ viewTransitionName: `dfl-stop-${row.delivery.id.replace(/[^a-zA-Z0-9_-]/g, '-')}` }}
+                      className={`rounded-[20px] border p-3 transition-colors duration-200 ${
                         row.approximate
                           ? 'border-amber-500/15 bg-amber-500/[.04]'
                           : changed
@@ -1365,8 +1375,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 disabled={optimizerBusy || optimizerOrder.length < 2 || !optimizerOrigin}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-500 py-3.5 text-sm font-black text-white disabled:opacity-40"
               >
-                <Navigation size={17} />
-                {optimizerEdited ? 'Aplicar ordem corrigida' : 'Aplicar ordem sugerida'}
+                {optimizerBusy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" /> : <Navigation size={17} />}
+                {optimizerBusy ? 'Salvando ordem…' : optimizerEdited ? 'Aplicar ordem corrigida' : 'Aplicar ordem sugerida'}
               </button>
               <button onClick={() => setOptimizerOpen(false)} className="mt-2 flex h-11 w-full items-center justify-center text-xs font-bold text-zinc-500">
                 Manter ordem atual

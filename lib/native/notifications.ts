@@ -277,10 +277,12 @@ export async function notifyOperational(
           title,
           body,
           channelId: ANDROID_CHANNEL_ID,
-          schedule: {
+          // R228: pedidos do Site usam entrega imediata do plugin, sem alarme agendado
+          // que o Android poderia entregar muito depois do evento original.
+          ...(key.startsWith('site-order:') ? {} : { schedule: {
             at: new Date(now + 500),
             allowWhileIdle: true,
-          },
+          } }),
           extra: ownerExtra('immediate', {
             ...options?.extra,
             dflPreferenceKey: options?.preferenceKey,

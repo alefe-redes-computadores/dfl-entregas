@@ -1833,8 +1833,11 @@ export const useAppStore = create<AppState>()(
           }
           recordActionLatency('delivery_write', Date.now() - r227DeliveryStartedAt, 'confirmed');
           if (deliveryWithTimestamp.route_id && !deliveryWithTimestamp.is_urgent) {
-            try {
-              const r227ArrangeStartedAt = Date.now();
+            // R228: a entrega JA foi salva. Reorganizar a rota nao bloqueia
+             // a liberacao do formulario; falha continua isolada e registrada.
+             void (async () => {
+             try {
+               const r227ArrangeStartedAt = Date.now();
               try {
                  await autoOrganizeLoadedRouteAfterInsert(deliveryWithTimestamp.route_id, get().deliveries, get().customers, get().storeSettings);
                  recordActionLatency('route_auto_order', Date.now() - r227ArrangeStartedAt, 'confirmed');
@@ -1845,6 +1848,7 @@ export const useAppStore = create<AppState>()(
             } catch (organizeError) {
               console.warn('Auto-organização incremental não aplicada:', organizeError);
             }
+            })();
           }
         } catch (error) {
           recordActionLatency('delivery_write', Date.now() - r227DeliveryStartedAt, 'failed');

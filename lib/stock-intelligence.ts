@@ -41,7 +41,7 @@ export interface StockRecommendation {
 
 const DAY = 86_400_000;
 const LOOKBACK_DAYS = 30;
-const SAFETY_BUFFER_DAYS = 3;
+const SAFETY_BUFFER_DAYS = 1.5;
 const DEFAULT_LEAD_TIME_DAYS = 2;
 
 const validDate = (value?: string) => {
@@ -113,7 +113,9 @@ const rateForWindow = (
   );
   if (!first) return 0;
   const firstDate = validDate(first.occurred_at);
-  return firstDate ? total / stockObservedDays(firstDate, now, days) : 0;
+  // A primeira baixa isolada não pode representar consumo diário de uma semana.
+  // Pelo menos sete dias-calendário de denominador, salvo janelas menores.
+  return firstDate ? total / Math.max(Math.min(days, 7), stockObservedDays(firstDate, now, days)) : 0;
 };
 
 const weightedDailyRate = (
@@ -238,15 +240,18 @@ export function buildStockRecommendation(
 
   const usesHistory =
     confidence !== 'baixa' &&
+    distinctConsumptionDays >= 4 &&
     averageDailyConsumption > 0;
 
   /*
    * Histórico pode elevar a meta para que, ao comprar, exista uma pequena
    * margem acima do mínimo. Nunca reduz mínimo/meta configurados.
    */
+  // Crescimento progressivo: máximo de dois dias observados sobre o mínimo,
+  // e a margem passa a 1,5 dia. Metas manuais nunca são regravadas.
   const historyTarget = usesHistory
     ? product.minimum_quantity +
-      averageDailyConsumption * SAFETY_BUFFER_DAYS
+      Math.min(averageDailyConsumption * SAFETY_BUFFER_DAYS, Math.max(1, configuredTarget * 0.5))
     : 0;
 
   const targetQuantity = Math.max(

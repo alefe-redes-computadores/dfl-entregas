@@ -38,14 +38,14 @@ assert.ok(waPos>=0 && pencilPos>waPos && arrowsPos>pencilPos && expandPos>arrows
 assert.ok(card.includes('completionWriteMs.push(') && card.includes('completionLatencyNote'), 'baixa registra tempos sem perder transacao');
 assert.ok(route.includes('Inicio de rota confirmado') && route.includes('const startedMs = Date.now()'), 'inicio cronometra confirmacao real');
 assert.ok(card.includes('const completionIconOnly = canManageStop && Boolean(routeStartedAt(route));'), 'baixa na rua usa icone padronizado em todos os clientes');
-assert.ok(card.includes('completionIconOnly ? \'w-10 shrink-0 px-0\' : \'min-w-0 flex-1 gap-1 px-1.5\''), 'botao de baixa adapta largura conforme os atalhos');
+assert.ok(card.includes("completionIconOnly ? 'min-w-[40px] flex-1 px-0' : 'min-w-[40px] flex-1 gap-1 px-1.5'") && card.includes('flex min-w-0 flex-wrap items-stretch gap-1.5'), 'botao de baixa adapta largura e ocupa espaco disponivel sem quebrar atalhos');
 assert.ok(card.includes('aria-label="Dar baixa nesta parada"') && card.includes('title="Dar baixa nesta parada"'), 'icone de baixa tem identificacao acessivel');
 assert.ok(card.includes('{!completionIconOnly && <span>Dar baixa</span>}'), 'texto condicionado ao estado operacional sem variar pelo nome');
 assert.ok(card.includes("handleTriggerAction('complete')"), 'operacao de baixa continua com o handler seguro');
 const home = read('app/page.tsx');
 const details = read('app/entregas/details/page.tsx');
 assert.ok(home.includes("deriveDeliveryPaymentState(order) === 'paid'"), 'home obedece ao estado canonico de pagamento');
-assert.ok(home.includes('Retirada concluída · cartão a conferir') && home.includes('Concluído · recebimento a conferir'), 'retirada concluida distingue financeiro');
+assert.ok(home.includes("'Concluído · cartão a conferir'") && home.includes("'Concluído · recebimento a conferir'") && home.includes("paidConfirmed ? 'Concluído'"), 'cartao nao confirmado continua pendente e quitacao nao e inferida pela conclusao');
 assert.ok(!home.includes("order.is_paid ? 'Pago' : 'Pagamento pendente'"), 'atalho ambiguo de pagamento removido');
 assert.ok(details.includes('cardPaymentLock.current = true') && details.includes('cardPaymentLock.current = false'), 'confirmacao financeira protegida contra duplo toque');
 assert.ok(details.includes("await updateDelivery(delivery.id, { is_paid: true, payment_state: 'paid' })"), 'pagamento so quita apos confirmacao explicita');

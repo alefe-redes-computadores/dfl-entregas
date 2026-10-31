@@ -610,10 +610,15 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     }
     reorderBusyRef.current = true;
     setReorderBusy(true);
+    const feedbackId = `dfl-move-stop-${delivery.id}`;
+    toast.loading('Movendo parada…', { id: feedbackId, duration: Infinity });
     try {
       await moveDeliveryToIndex(route.id, delivery.id, boundedTarget);
       impact(ImpactStyle.Light);
+      toast.dismiss(feedbackId);
+      toast.success('Parada movida.', { duration: 1500 });
     } catch (error) {
+      toast.dismiss(feedbackId);
       toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a nova posição.');
     } finally {
       reorderBusyRef.current = false;
@@ -812,7 +817,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         >
           <div className={clsx("flex flex-col", isExpanded ? "p-3 sm:p-3.5" : "px-2.5 py-2")}>
             <div className="flex items-start gap-3">
-              <div className="relative mt-0.5 flex w-9 shrink-0 self-start flex-col items-center">
+              <div className="relative mt-0.5 flex w-9 shrink-0 self-stretch flex-col items-center">
                 <span className={clsx('flex shrink-0 items-center justify-center rounded-lg border', isExpanded ? 'h-9 w-9' : 'h-9 w-9', channelStyle.shell)}>
                   <ChannelIcon size={19} aria-hidden="true" />
                 </span>
@@ -823,7 +828,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 )}
                 <span
                   aria-label={`Origem ${channelStyle.label}`}
-                  className={clsx('mt-1.5 flex h-[65px] w-7 shrink-0 items-center justify-center rounded-lg border py-1 font-heading text-[9px] font-black uppercase tracking-[.10em]', channelStyle.badge)}
+                  className={clsx('mt-1.5 flex min-h-[65px] w-7 flex-1 items-center justify-center rounded-lg border py-1 font-heading text-[9px] font-black uppercase tracking-[.10em]', channelStyle.badge)}
                   style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
                 >
                   {channelStyle.label}
@@ -1008,7 +1013,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       {!isGroupedStop && delivery.drinks && <span className="truncate text-[10px] text-sky-300"><CupSoda size={11} className="mr-1 inline"/>{delivery.drinks}</span>}
                       {isNeighbor && <span className="ml-auto shrink-0 text-[9px] font-bold text-sky-400">Vizinha {neighborPosition || 1}/{neighborTotal || 2}</span>}
                     </div>
-                    <div className="flex min-w-0 items-center gap-1.5" aria-label="Ações rápidas da parada">
+                    <div className="flex min-w-0 flex-wrap items-stretch gap-1.5" aria-label="Ações rápidas da parada">
                       {canManageStop && Boolean(routeStartedAt(route)) ? (
                         <button
                             type="button"
@@ -1020,7 +1025,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             title="Dar baixa nesta parada"
                             className={clsx(
                               'flex h-10 items-center justify-center whitespace-nowrap rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-[11px] font-black text-emerald-300 active:bg-emerald-500/15 disabled:opacity-60',
-                              completionIconOnly ? 'w-10 shrink-0 px-0' : 'min-w-0 flex-1 gap-1 px-1.5',
+                              completionIconOnly ? 'min-w-[40px] flex-1 px-0' : 'min-w-[40px] flex-1 gap-1 px-1.5',
                             )}
                           >
                             {completionBusy ? <LoaderCircle size={16} className="shrink-0 animate-spin" /> : <CheckCircle2 size={16} className="shrink-0" />}
@@ -1049,25 +1054,25 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           aria-busy={copyBusy}
                           aria-label={copyBusy ? 'Copiando mensagem' : isGroupedStop ? 'Copiar mensagem da parada' : 'Copiar mensagem do pedido'}
                           title={isGroupedStop ? 'Copiar todos os pedidos desta parada' : 'Copiar mensagem deste pedido'}
-                          className="grid h-10 w-9 shrink-0 place-items-center rounded-xl border border-emerald-500/25 bg-emerald-500/[.065] text-emerald-300 disabled:opacity-40 active:bg-emerald-500/15"
+                          className="grid h-10 min-w-[40px] flex-1 place-items-center rounded-xl border border-emerald-500/25 bg-emerald-500/[.065] text-emerald-300 disabled:opacity-40 active:bg-emerald-500/15"
                         >
                           {copyBusy ? <LoaderCircle size={15} className="animate-spin" /> : <Copy size={15} />}
                         </button>
                       )}
-                      {normalizedWhatsappPhone && <a href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`} target="_blank" rel="noreferrer" aria-label="Chamar cliente no WhatsApp" onClick={event=>event.stopPropagation()} className="grid h-10 w-9 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] text-emerald-300"><MessageCircle size={15}/></a>}
+                      {normalizedWhatsappPhone && <a href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`} target="_blank" rel="noreferrer" aria-label="Chamar cliente no WhatsApp" onClick={event=>event.stopPropagation()} className="grid h-10 min-w-[40px] flex-1 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] text-emerald-300"><MessageCircle size={15}/></a>}
                       <Link
                          href={`/entregas/editar?id=${delivery.id}${operationalDateQuery}`}
                          data-no-card-swipe="true"
                          onClick={(event) => { event.stopPropagation(); impact(ImpactStyle.Light); }}
                          aria-label="Editar pedido sem expandir o card"
                          title="Editar pedido"
-                         className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-zinc-700 bg-zinc-950/80 text-zinc-300 active:bg-zinc-800"
+                         className="grid h-10 min-w-[40px] flex-1 place-items-center rounded-xl border border-zinc-700 bg-zinc-950/80 text-zinc-300 active:bg-zinc-800"
                        ><Pencil size={16} /></Link>
-                      {canReorder && <div role="group" aria-label="Subir ou descer parada" className="flex shrink-0 items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]">
-                        <button type="button" aria-label="Mover uma posição para cima" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={event=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-8 place-items-center text-sky-200 disabled:opacity-30"><ArrowUp size={14}/></button>
-                        <button type="button" aria-label="Mover uma posição para baixo" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={event=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 w-8 place-items-center text-sky-200 disabled:opacity-30"><ArrowDown size={14}/></button>
+                      {canReorder && <div role="group" aria-label="Subir ou descer parada" className="flex min-w-[80px] flex-[2_1_80px] items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]">
+                        <button type="button" aria-label="Mover uma posição para cima" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={event=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 min-w-[40px] flex-1 place-items-center text-sky-200 disabled:opacity-30"><ArrowUp size={14}/></button>
+                        <button type="button" aria-label="Mover uma posição para baixo" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={event=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 min-w-[40px] flex-1 place-items-center text-sky-200 disabled:opacity-30"><ArrowDown size={14}/></button>
                       </div>}
-                      <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();toggleDeliveryExpansion(delivery.id,true);}} aria-label="Expandir detalhes da parada" className="grid h-10 w-9 shrink-0 place-items-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-300"><Maximize2 size={15}/></button>
+                      <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();toggleDeliveryExpansion(delivery.id,true);}} aria-label="Expandir detalhes da parada" className="grid h-10 min-w-[40px] flex-1 place-items-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-300"><Maximize2 size={15}/></button>
                     </div>
                   </div>
                 )}

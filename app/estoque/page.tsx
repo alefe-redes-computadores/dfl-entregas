@@ -33,7 +33,7 @@ import { rankStockProducts } from '@/lib/stock-search';
 export default function StockPage() {
   const router=useRouter(); const products=useAppStore(s=>s.stockProducts); const movements=useAppStore(s=>s.stockMovements);const supplies=useAppStore(s=>s.stockSupplies);const committedMap=useMemo(()=>committedStockQuantityMap(supplies),[supplies]);
   const replenishmentRadar=useMemo(()=>buildReplenishmentRadar(products,committedMap),[products,committedMap]); const openPurchasesCount=useMemo(()=>supplies.filter(s=>s.status==='solicitado').length,[supplies]);
-  const [query,setQuery]=useState(()=>readStockUiStorage('session','dfl-stock-query')||''); const [filterOpen,setFilterOpen]=useState(false); const [brainOpen,setBrainOpen]=useState(false); const [reviewOpen,setReviewOpen]=useState(false); const [moreOpen,setMoreOpen]=useState(false); const [commercialOnly,setCommercialOnly]=useState(false);
+  const [query,setQuery]=useState(()=>readStockUiStorage('session','dfl-stock-query')||''); const [filterOpen,setFilterOpen]=useState(false); const [brainOpen,setBrainOpen]=useState(false); const [radarOpen,setRadarOpen]=useState(false); const [reviewOpen,setReviewOpen]=useState(false); const [moreOpen,setMoreOpen]=useState(false); const [commercialOnly,setCommercialOnly]=useState(false);
   const [planningTab,setPlanningTab]=useState<'dia'|'montar'>(()=>typeof window==='undefined'?'dia':parseStockPanelPreferences({planningTab: readStockUiStorage('local','dfl-stock-planning-tab')}).planningTab);
   const [filter,setFilter]=useState<'todos'|'baixo'|'zero'>(()=>typeof window==='undefined'?'todos':parseStockPanelPreferences({filter:readStockUiStorage('local','dfl-stock-filter')}).filter);
   const [collapsed,setCollapsed]=useState<Record<string,boolean>>(()=>typeof window==='undefined'?{}:parseStockPanelPreferences({collapsed:readStockUiStorage('local','dfl-stock-collapsed')}).collapsed);
@@ -148,13 +148,13 @@ export default function StockPage() {
       <section aria-label="Radar de reposição" className="rounded-[22px] border border-sky-500/20 bg-sky-500/[.045] p-4">
         <div className="flex items-center justify-between gap-3">
           <div><p className="text-xs font-black text-sky-300">Radar de reposição</p><p className="mt-1 text-[10px] text-zinc-400">Considera metas cadastradas e quantidades de compras em aberto.</p></div>
-          <button type="button" onClick={()=>rememberAndPush('/estoque/compras')} className="shrink-0 rounded-xl border border-sky-500/25 px-3 py-2 text-[10px] font-black text-sky-300">Ver compras</button>
+          <div className="flex shrink-0 gap-2"><button type="button" onClick={()=>setRadarOpen(v=>!v)} aria-expanded={radarOpen} className="rounded-xl border border-sky-500/25 px-3 py-2 text-[10px] font-black text-sky-300">{radarOpen?'Recolher':'Detalhes'}</button><button type="button" onClick={()=>rememberAndPush('/estoque/compras')} className="rounded-xl border border-sky-500/25 px-3 py-2 text-[10px] font-black text-sky-300">Compras</button></div>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        {radarOpen&&<div className="mt-3 grid grid-cols-2 gap-2">
           <div className="rounded-xl bg-zinc-950/60 p-3"><p className="text-[10px] text-zinc-500">Ainda precisa comprar</p><p className="mt-1 text-xl font-black text-amber-300">{replenishmentRadar.needsAction}</p></div>
           <div className="rounded-xl bg-zinc-950/60 p-3"><p className="text-[10px] text-zinc-500">Cobertos por pedidos</p><p className="mt-1 text-xl font-black text-emerald-300">{replenishmentRadar.coveredByOrders}</p></div>
-        </div>
-        <p className="mt-2 text-[10px] text-zinc-500">Compras solicitadas não aumentam o estoque até o recebimento. Sugestões sujeitas à conferência.</p>
+        </div>}
+        {radarOpen&&<p className="mt-2 text-[10px] text-zinc-500">Compras solicitadas não aumentam o estoque até o recebimento. Sugestões sujeitas à conferência.</p>}
       </section>}
     {!query&&suggested.length>0&&<section className="rounded-[22px] border border-amber-500/25 bg-amber-500/[.055] p-4">
       <div className="flex items-center justify-between gap-3">

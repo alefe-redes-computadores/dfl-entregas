@@ -1,6 +1,7 @@
 'use client';
 import { NavigationLinkAssistance } from '@/components/deliveries/NavigationLinkAssistance';
 import { readActiveOperationalRouteId, rememberActiveOperationalRouteId } from '@/lib/route-ui-storage';
+import { prioritizeOpenRoutesForNewDelivery, recommendRouteForNewDelivery } from '@/lib/operation/intelligent-route-choice';
 import { formatBrazilPhone, normalizeBrazilPhone } from '@/lib/phone';
 
 import {
@@ -78,6 +79,8 @@ export default function NovaEntregaPage() {
       }),
     [routes, todayDateKey],
   );
+
+  const rankedOpenRoutes = useMemo(() => prioritizeOpenRoutesForNewDelivery(openRoutes), [openRoutes]);
 
   const knownNeighborhoods = useMemo(
     () =>
@@ -291,40 +294,19 @@ const [routeId, setRouteId] = useState('');
   }, [sameStopSource]);
 
   useEffect(() => {
-    if (fulfillmentMode !== 'delivery' || routeSelectionTouched.current) return;
-
-    const currentStillEligible =
-      routeId && openRoutes.some((route) => route.id === routeId);
-
-    if (currentStillEligible) return;
-
-    if (typeof window !== 'undefined') {
-      const rememberedRouteId = readActiveOperationalRouteId();
-      const rememberedRoute = openRoutes.find((route) => route.id === rememberedRouteId);
-      if (rememberedRoute) {
-        setRouteId(rememberedRoute.id);
-        return;
-      }
+    if (fulfillmentMode !== 'delivery' || routeSelectionTouched.current || !hasHydrated) return;
+    const remembered = readActiveOperationalRouteId();
+    const recommended = recommendRouteForNewDelivery(openRoutes, remembered);
+    const selectedRoute = openRoutes.find((route) => route.id === routeId);
+    // Um preenchimento automático anterior que saiu à rua não deve prevalecer
+    // sobre a rota ainda montando. A escolha manual é preservada via ref.
+    if (selectedRoute && !routeStartedAt(selectedRoute)) {
+      if (recommended.routeId === routeId) return;
+      // Se houver mais de uma opção montando, preservar a seleção válida do formulário.
+      if (recommended.reason === 'multiple_assembling') return;
     }
-
-    if (openRoutes.length === 1) {
-      setRouteId(openRoutes[0].id);
-      return;
-    }
-
-    /*
-     * Contrato operacional real:
-     * - aberta sem started_at/departure_time = Montando
-     * - aberta com routeStartedAt()          = Na rua
-     *
-     * Só automatizamos quando existe uma única resposta inequívoca.
-     */
-    const assemblingRoutes = openRoutes.filter((route) => !routeStartedAt(route));
-
-    if (assemblingRoutes.length === 1) {
-      setRouteId(assemblingRoutes[0].id);
-    }
-  }, [fulfillmentMode, openRoutes, routeId]);
+    if (routeId !== recommended.routeId) setRouteId(recommended.routeId);
+  }, [fulfillmentMode, openRoutes, routeId, hasHydrated]);
 
   const formatCurrencyInput = (inputValue: string) => {
     const onlyDigits = inputValue.replace(/\D/g, '');
@@ -615,15 +597,23 @@ const [routeId, setRouteId] = useState('');
       if(origin==='ifood'){
         const deliveriesToCreate:Delivery[]=[];
         const stopGroups=new Map<string,string>();
-        for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));const draftNormalized=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(draft.address||streetAddress):{address:'',phone:undefined};const draftAddress=draftNormalized.address||cleanStreet;const draftPhone=normalizeBrazilPhone(draft.phone)||draftNormalized.phone||'';const draftMaps=(draft.mapsLink||'').trim()||(index===0?resolvedMapsLink:'');const addressKey=canonicalizeOperationalAddress(draftAddress).address.toLocaleLowerCase('pt-BR');let draftStopGroupId=stopSource&&sameCustomerAddress(stopSource.address_string,draftAddress)?stopGroupId:undefined;if(fulfillmentMode==='delivery'&&drafts.length>1){const sameAddressCount=drafts.filter(item=>sameCustomerAddress(item.address||streetAddress,draftAddress)).length;if(sameAddressCount>1){draftStopGroupId=stopGroups.get(addressKey)||draftStopGroupId||`stop-${Date.now()}-${stopGroups.size}-${Math.random().toString(36).slice(2,7)}`;stopGroups.set(addressKey,draftStopGroupId)}}let customerId='';if(draftName){customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?draftAddress:undefined,phone:draftPhone||undefined,mapsLink:fulfillmentMode==='delivery'?draftMaps:undefined,confirmationCode:draft.confirmationCode||undefined,observation:draft.observation.trim()||cleanObservation||undefined,origin,preferredCustomerId:index===0?selectedCustomerId||undefined:undefined,temporaryCustomerId:index===0&&temporaryCustomerId&&temporaryCustomerId===selectedCustomerId?temporaryCustomerId:undefined})}
+        for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));const draftNormalized=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(draft.address||streetAddress):{address:'',phone:undefined};const draftAddress=draftNormalized.address||cleanStreet;const draftPhone=normalizeBrazilPhone(draft.phone)||draftNormalized.phone||'';const draftMaps=(draft.mapsLink||'').trim()||(index===0?resolvedMapsLink:'');const addressKey=canonicalizeOperationalAddress(draftAddress).address.toLocaleLowerCase('pt-BR');let draftStopGroupId=stopSource&&sameCustomerAddress(stopSource.address_string,draftAddress)?stopGroupId:undefined;if(fulfillmentMode==='delivery'&&drafts.length>1){const sameAddressCount=drafts.filter(item=>sameCustomerAddress(item.address||streetAddress,draftAddress)).length;if(sameAddressCount>1){draftStopGroupId=stopGroups.get(addressKey)||draftStopGroupId||`stop-${Date.now()}-${stopGroups.size}-${Math.random().toString(36).slice(2,7)}`;stopGroups.set(addressKey,draftStopGroupId)}}let customerId='';if(draftName){const r228r3CustomerAt = Date.now(); try {customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?draftAddress:undefined,phone:draftPhone||undefined,mapsLink:fulfillmentMode==='delivery'?draftMaps:undefined,confirmationCode:draft.confirmationCode||undefined,observation:draft.observation.trim()||cleanObservation||undefined,origin,preferredCustomerId:index===0?selectedCustomerId||undefined:undefined,temporaryCustomerId:index===0&&temporaryCustomerId&&temporaryCustomerId===selectedCustomerId?temporaryCustomerId:undefined}); recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'confirmed'); } catch(customerError) {recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'failed');throw customerError;}}
           deliveriesToCreate.push({id:index===0?Date.now().toString():`${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='external_delivery'?'ifood':'dfl',stop_group_id:draftStopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:splitEnabled?'dinheiro':draft.paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?draftAddress:'',maps_link:fulfillmentMode==='delivery'?draftMaps:'',phone:draftPhone||undefined,notify_whatsapp:draft.notifyWhatsapp,observation:(index===0?cleanObservation:draft.observation.trim()||cleanObservation)||undefined,drinks:draft.drinks,createdAt:now,created_at:now,updated_at:now});
           if(ownerOrderContext && hasOwnerIdentity({name:draftName,phone:draftPhone})) Object.assign(deliveriesToCreate[deliveriesToCreate.length-1],ownerContextFlags(ownerOrderContext));
         }
-        await addDeliveries(deliveriesToCreate);toast.success(drafts.length>1?`${drafts.length} pedidos cadastrados nos endereços conferidos.`:'Entrega cadastrada com sucesso!');
+        const r228r3ConfirmAt = Date.now();
+        try {
+          await addDeliveries(deliveriesToCreate);
+          recordActionLatency('delivery_form_confirm', Date.now() - r228r3ConfirmAt, 'confirmed', deliveriesToCreate.length);
+        } catch (confirmError) {
+          recordActionLatency('delivery_form_confirm', Date.now() - r228r3ConfirmAt, 'failed', deliveriesToCreate.length);
+          throw confirmError;
+        }
+        toast.success(drafts.length>1?`${drafts.length} pedidos cadastrados nos endereços conferidos.`:'Entrega cadastrada com sucesso!');
       }else{
         const customerAddress=fulfillmentMode==='delivery'?cleanStreet:streetAddress.trim();
-        let customerId='';if(customerName.trim())customerId=await findOrCreateCustomer(customerName,{address:customerAddress||undefined,phone:rawPhone||undefined,mapsLink:mapsLink.trim()||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});
-        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='food99'?'food99':'dfl',stop_group_id:stopGroupId,origin,order_id:origin==='food99'?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});toast.success(origin==='food99'?'Pedido 99Food cadastrado sem criar rota DFL.':stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+        let customerId='';if(customerName.trim()){const r228r3CustomerAt=Date.now();try {customerId=await findOrCreateCustomer(customerName,{address:customerAddress||undefined,phone:rawPhone||undefined,mapsLink:mapsLink.trim()||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'confirmed');}catch(customerError){recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'failed');throw customerError;}}
+        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();try {await addDelivery({id:Date.now().toString(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='food99'?'food99':'dfl',stop_group_id:stopGroupId,origin,order_id:origin==='food99'?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}toast.success(origin==='food99'?'Pedido 99Food cadastrado sem criar rota DFL.':stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
       }
       if (inboxDraftId && inboxDay) {
         markInboxDraft(inboxDay, inboxDraftId, 'launched');
@@ -876,7 +866,7 @@ const [routeId, setRouteId] = useState('');
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-500">03 · Logística</p>
             <p className="mt-1 text-sm font-black text-zinc-200">Rota responsável</p>
             <p className="mt-1 text-[11px] text-zinc-600">
-              Somente rotas abertas da operação de hoje aparecem aqui.
+              Priorizamos rotas montando. Rotas na rua exigem seleção explícita.
             </p>
           </div>
         <div className="relative flex flex-col gap-2">
@@ -893,7 +883,7 @@ const [routeId, setRouteId] = useState('');
                 <span className="font-semibold">
                   {openRoutes.find(r => r.id === routeId)?.name} <span className="text-zinc-400 font-normal">({openRoutes.find(r => r.id === routeId)?.motoboy_name})</span>
                 </span>
-              ) : 'Selecione a rota...'}
+              ) : 'Selecione uma rota montando...'}
             </span>
             <ChevronDown size={20} className={`text-zinc-500 transition-transform ${isRouteDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
@@ -902,15 +892,15 @@ const [routeId, setRouteId] = useState('');
 
           {isRouteDropdownOpen && (
             <div className="absolute top-[84px] z-30 flex max-h-56 w-full flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl">
-              {openRoutes.map(r => (
+              {rankedOpenRoutes.map(r => (
                 <button
                   key={r.id}
                   type="button"
                   onClick={() => { routeSelectionTouched.current = true; setRouteId(r.id); rememberActiveOperationalRouteId(r.id); setFormIssue(null); setIsRouteDropdownOpen(false); if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined); }}
                   className="flex items-center justify-between px-4 py-4 text-left text-sm active:bg-zinc-800 border-b border-zinc-800/50 last:border-0"
                 >
-                  <span className={`font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>
-                    {r.name} <span className={routeId === r.id ? 'text-emerald-500/70' : 'text-zinc-500 font-normal'}>({r.motoboy_name})</span>
+                  <span className={`min-w-0 font-semibold ${routeId === r.id ? 'text-emerald-500' : 'text-zinc-200'}`}>
+                    {r.name} <span className={routeId === r.id ? 'text-emerald-500/70' : 'text-zinc-500 font-normal'}>({r.motoboy_name})</span><span className={`ml-2 inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold ${routeStartedAt(r) ? 'bg-amber-500/10 text-amber-300' : 'bg-emerald-500/10 text-emerald-300'}`}>{routeStartedAt(r) ? 'Na rua' : 'Montando'}</span>
                   </span>
                   {routeId === r.id ? (
                     <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
@@ -921,6 +911,8 @@ const [routeId, setRouteId] = useState('');
               ))}
             </div>
           )}
+          {!routeId && openRoutes.length > 0 && !openRoutes.some(r => !routeStartedAt(r)) && <p role="status" className="text-[11px] font-semibold text-amber-300">Todas as rotas abertas já saíram. Se desejar inserir uma entrega em uma delas, escolha manualmente.</p>}
+          {Boolean(routeId && routeStartedAt(openRoutes.find(r=>r.id===routeId) || {id:routeId})) && <p role="status" className="text-[11px] font-semibold text-amber-300">Rota na rua: confira se o motoboy pode receber mais uma entrega.</p>}
           {formIssue?.field === 'route' && <p id="dfl-delivery-route-error" className="text-xs font-semibold text-red-300">{formIssue.message}</p>}
         </div>
         </section>

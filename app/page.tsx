@@ -501,10 +501,12 @@ export default function HomePage() {
               const cardPayment = ['cartao', 'cartao_credito', 'cartao_debito'].includes(order.payment_method);
               // Conclusao fisica nao comprova o recebimento financeiro. O Site pode
               // entregar apenas o metodo de pagamento, sem a confirmacao do terminal.
-              const financialCaption = paidConfirmed ? 'Pago confirmado'
-                : order.completed && isPickup && cardPayment ? 'Retirada concluída · cartão a conferir'
-                : order.completed ? 'Concluído · recebimento a conferir'
-                : 'Pagamento pendente';
+              // Status operacional primeiro; pago e concluído não são sinônimos.
+              // Nunca apresentar confirmação financeira só porque ocorreu a entrega.
+              const financialCaption = order.completed
+                ? paidConfirmed ? 'Concluído' : cardPayment ? 'Concluído · cartão a conferir' : 'Concluído · recebimento a conferir'
+                : paidConfirmed ? isPickup ? 'Pago · aguardando retirada' : 'Pago'
+                : cardPayment ? 'Cartão a conferir' : 'Pagamento pendente';
               const ModeIcon = isPickup || isPlatform ? ShoppingBag : Store;
               return (
                 <button

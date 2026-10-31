@@ -35,8 +35,9 @@ check('replay com pendência não conclui',()=>assert.equal(recoveryCheckpointEl
 check('replay com aceite pode concluir',()=>assert.equal(recoveryCheckpointEligible(recovery(['a']),payload(0,0),40),true));
 check('replay sem relay é incompleto',()=>assert.equal(recoveryCheckpointEligible(recovery(['a']),null,40),false));
 check('replay página completa é incompleto',()=>assert.equal(recoveryCheckpointEligible(recovery(Array(40).fill('a')),payload(0,0),40),false));
+const siteAlertPolicy=compile('lib/operation/site-order-alert-policy.ts');
 const watcherSource='components/SiteOrderNotificationWatcher.tsx';
-function watcherScenario({initialUnread=[],source='dfl_site',status='pendente',user=true,repeat=false}={}) {
+function watcherScenario({initialUnread=[],source='dfl_site',status='pendente',user=true,repeat=false,ageMs=0,fromCache=false,invalidTimestamp=false}={}) {
  const unread=new Set(initialUnread),marked=[],notified=[];
  let receive=()=>{};let subscriptions=0;
  const useStore=(select)=>select({user:user?{uid:'owner'}:null,authLoaded:true,hasHydrated:true});
@@ -47,10 +48,11 @@ function watcherScenario({initialUnread=[],source='dfl_site',status='pendente',u
   '@/lib/firebase':{db:{}},'@/store/useAppStore':{useAppStore:useStore},
   '@/lib/site-order-inbox':{readUnreadSiteOrderIds:()=>[...unread],markUnreadSiteOrders:ids=>{marked.push(...ids);ids.forEach(id=>unread.add(id));}},
   '@/lib/native/notifications':{notifyNewSiteOrder:(id)=>{notified.push(id);return Promise.resolve(true);}},
+  '@/lib/operation/site-order-alert-policy':siteAlertPolicy,
  });
  exports.SiteOrderNotificationWatcher();
- const item={type:'added',doc:{id:'doc-1',data:()=>({id:'pedido-1',customer_id:'c',source_system:source,site_order_status:status})}};
- if(user) {receive({docChanges:()=>[item]});if(repeat)receive({docChanges:()=>[item]});}
+ const item={type:'added',doc:{id:'doc-1',metadata:{hasPendingWrites:false},data:()=>({id:'pedido-1',customer_id:'c',source_system:source,site_order_status:status,created_at:invalidTimestamp?'invalid':new Date(Date.now()-ageMs).toISOString()})}};
+ if(user) {receive({metadata:{fromCache},docChanges:()=>[item]});if(repeat)receive({metadata:{fromCache},docChanges:()=>[item]});}
  return {unread:[...unread],marked,notified,subscriptions};
 }
 check('pedido novo gera badge e uma notificação',()=>{const r=watcherScenario();assert.deepEqual(r.notified,['pedido-1']);assert.deepEqual(r.unread,['pedido-1']);assert.equal(r.subscriptions,1);});
@@ -59,4 +61,7 @@ check('mesma emissão não duplica',()=>{const r=watcherScenario({repeat:true});
 check('pedido iFood não gera alerta de Site',()=>{const r=watcherScenario({source:'ifood'});assert.deepEqual(r.notified,[]);});
 check('pedido cancelado não gera novo alerta',()=>{const r=watcherScenario({status:'cancelado'});assert.deepEqual(r.notified,[]);});
 check('sem usuário não instala listener',()=>{const r=watcherScenario({user:false});assert.equal(r.subscriptions,0);});
+check('pedido antigo alimenta Inbox mas não alerta novamente',()=>{const r=watcherScenario({ageMs:11*60_000});assert.deepEqual(r.notified,[]);assert.deepEqual(r.unread,['pedido-1']);});
+check('snapshot do cache alimenta Inbox sem alerta novo',()=>{const r=watcherScenario({fromCache:true});assert.deepEqual(r.notified,[]);assert.deepEqual(r.unread,['pedido-1']);});
+check('timestamp inválido alimenta Inbox sem alarme fantasma',()=>{const r=watcherScenario({invalidTimestamp:true});assert.deepEqual(r.notified,[]);assert.deepEqual(r.unread,['pedido-1']);});
 console.log(`R55 RELIABILITY BEHAVIOR: ${checks} verificações aprovadas.`);

@@ -60,6 +60,13 @@ const IFOOD_HEADER_PATTERNS = [
 ];
 
 function explicitIfoodHeader(line: string) {
+  // Um número de 8 dígitos ANTES do pedido de 3–6 dígitos
+  // representa um cabeçalho iFood igualmente válido; não inferir
+  // de linhas com endereço, telefone, valores, CEP rotulado ou código.
+  const reverse = line.match(/^\s*(\d{8})\s+#?(\d{3,6})\s*$/)
+    || line.match(/^\s*(\d{8})\s*[-–—|•·:]\s*#?(\d{3,6})\s*$/)
+    || line.match(/^\s*(?:id\s*(?:ifood|do\s+ifood|do\s+pedido)?|ifood\s+id)\s*[:#-]?\s*(\d{8})\b[\s\S]{0,28}?\b(?:pedido|n[º°o.]?\s*(?:do\s+)?pedido)\s*[:#-]?\s*#?(\d{3,6})\s*$/i);
+  if (reverse) return { orderId: reverse[2], ifoodId: reverse[1] };
   for (const pattern of IFOOD_HEADER_PATTERNS) {
     const match = line.match(pattern);
     if (match) return { orderId: match[1], ifoodId: match[2] };

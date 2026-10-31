@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Boxes,
@@ -55,6 +55,25 @@ export function StockProductPicker({
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [visibleViewport, setVisibleViewport] = useState<{ height: number; offsetTop: number } | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open || typeof window === 'undefined') return;
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const readViewport = () => setVisibleViewport({
+      height: Math.max(180, viewport.height),
+      offsetTop: Math.max(0, viewport.offsetTop),
+    });
+    readViewport();
+    viewport.addEventListener('resize', readViewport);
+    viewport.addEventListener('scroll', readViewport);
+    return () => {
+      viewport.removeEventListener('resize', readViewport);
+      viewport.removeEventListener('scroll', readViewport);
+    };
+  }, [open]);
+  useEffect(() => { if (open && query.trim()) dialogRef.current?.scrollTo({ top: 0, behavior: 'instant' }); }, [open, query]);
   const [showOtherProducts, setShowOtherProducts] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(30);
   const [creating, setCreating] = useState(false);
@@ -100,7 +119,7 @@ export function StockProductPicker({
             return aRank - bRank;
           }
 
-          return query.trim() ? 0 : a.name.localeCompare(b.name, 'pt-BR');
+          return a.name.localeCompare(b.name, 'pt-BR');
         }),
     [preferredRank, products, query],
   );
@@ -146,6 +165,13 @@ export function StockProductPicker({
       (product) => !preferredRank.has(product.id),
     );
 
+    // Quando o usuário está buscando, nunca espalhar os resultados entre
+    // categorias ou privilegiados: lista alfabética única, fácil de encontrar.
+    if (query.trim()) {
+      return [{ key: 'all' as const, label: null,
+        groups: [['Resultados da busca', [...visibleFiltered].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))] as [string, StockProduct[]]],
+      }];
+    }
     if (!preferred.length) {
       return [
         {
@@ -176,6 +202,7 @@ export function StockProductPicker({
     visibleFiltered,
     preferredRank,
     preferredSectionLabel,
+    query,
   ]);
 
   const canCreate =
@@ -307,9 +334,10 @@ export function StockProductPicker({
           }}
           onKeyDown={(event) => { if (event.key === 'Escape' && !busy) { setOpen(false); setCreating(false); } }}
           role="presentation"
+          style={visibleViewport ? { top: `${visibleViewport.offsetTop}px`, bottom: 'auto', height: `${visibleViewport.height}px`, maxHeight: `${visibleViewport.height}px` } : undefined}
           className="fixed inset-0 z-[120] flex max-h-[100dvh] items-end justify-center overflow-y-auto overscroll-contain bg-black/85 px-2 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-md sm:items-center sm:px-4"
         >
-          <div role="dialog" aria-modal="true" aria-label={creating ? 'Cadastrar produto de estoque' : 'Selecionar produto de estoque'} className="mx-auto max-h-[calc(100dvh-24px)] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[30px] border border-zinc-700 bg-zinc-950 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[30px]">
+          <div ref={dialogRef} style={visibleViewport ? { maxHeight: `${Math.max(150, visibleViewport.height - 24)}px` } : undefined} role="dialog" aria-modal="true" aria-label={creating ? 'Cadastrar produto de estoque' : 'Selecionar produto de estoque'} className="mx-auto max-h-[calc(100dvh-24px)] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[30px] border border-zinc-700 bg-zinc-950 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[30px]">
             <div className="sticky top-0 z-10 -mx-1 flex justify-between gap-3 bg-zinc-950/95 px-1 pb-3 backdrop-blur">
               <div>
                 <h3 className="font-heading text-lg font-black text-zinc-100">
@@ -359,7 +387,7 @@ export function StockProductPicker({
                   />
                 </div>
 
-                {canCreate && (
+                {canCreate && filtered.length === 0 && (
                   <button
                     type="button"
                     onClick={() => {
