@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Banknote,
   CheckCircle2,
@@ -131,9 +132,11 @@ export function ReportDrilldownSheet({
       ? model.quality
       : ([] as DataQualityIssue[]);
 
-  return (
-    <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-black/80 backdrop-blur-sm">
-      <section className="safe-bottom max-h-[92dvh] overflow-hidden rounded-t-[34px] border-t border-zinc-800 bg-zinc-950 shadow-2xl">
+  // Evita clip por transform/overflow de pais e pelo rodape fixo do aplicativo.
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[310] flex flex-col justify-end overflow-hidden bg-black/80 backdrop-blur-sm">
+      <section className="safe-bottom flex max-h-[calc(100dvh-12px)] min-h-0 flex-col overflow-hidden rounded-t-[34px] border-t border-zinc-800 bg-zinc-950 shadow-2xl">
         <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-zinc-800" />
 
         <header className="flex items-start justify-between gap-4 border-b border-zinc-800/80 px-5 pb-4 pt-4">
@@ -156,7 +159,7 @@ export function ReportDrilldownSheet({
           </button>
         </header>
 
-        <div className="max-h-[calc(92vh-100px)] overflow-y-auto px-5 pb-10 pt-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(34px,env(safe-area-inset-bottom))] pt-4">
           {buckets.length > 0 && (
             <div className="mb-5 flex flex-wrap gap-2">
               <button
@@ -331,8 +334,7 @@ export function ReportDrilldownSheet({
           )}
         </div>
       </section>
-    </div>
-  );
+    </div>, document.body);
 }
 
 function MiniStat({

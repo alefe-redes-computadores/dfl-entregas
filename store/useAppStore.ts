@@ -2190,9 +2190,13 @@ export const useAppStore = create<AppState>()(
             // comuns continuam com batch e SEM leitura Firestore adicional.
             const commitCritical = () => runTransaction(db, async (transaction) => {
               const deliveryRef = doc(db, 'deliveries', id);
-              const currentSnap = await transaction.get(deliveryRef);
               const needsRoute = Boolean(nextRouteId && (routeChanged || isDeliveryFulfillment(deliveryToUpdate)));
-              const routeSnap = needsRoute ? await transaction.get(doc(db, 'routes', nextRouteId)) : null;
+              // Leituras independentes do mesmo snapshot transacional: evitar dois RTTs em serie.
+              // Mantem assertRemoteDeliveryTransition e todas as leituras antes das escritas.
+              const [currentSnap, routeSnap] = await Promise.all([
+                transaction.get(deliveryRef),
+                needsRoute ? transaction.get(doc(db, 'routes', nextRouteId)) : Promise.resolve(null),
+              ]);
               const remoteDelivery = currentSnap.exists() ? { ...currentSnap.data(), id: currentSnap.id } as Delivery : null;
               const remoteRoute = routeSnap?.exists() ? { ...routeSnap.data(), id: nextRouteId } as Route : null;
               assertRemoteDeliveryTransition(deliveryToUpdate, remoteDelivery, dataWithTimestamp, remoteRoute, needsRoute);

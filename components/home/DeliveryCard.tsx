@@ -479,6 +479,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   };
 
   async function handleTriggerAction(actionType: 'complete' | 'expand') {
+    // Clique repetido nao deve abrir outro fluxo antes do termino do commit.
+    if (actionType === 'complete' && completionBusyRef.current) return;
     impact(ImpactStyle.Light);
 
     if (actionType === 'complete') {
@@ -1008,14 +1010,16 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                             type="button"
                             data-no-card-swipe="true"
                             onClick={event=>{event.stopPropagation();void handleTriggerAction('complete');}}
+                            disabled={completionBusy}
+                            aria-busy={completionBusy}
                             aria-label="Dar baixa nesta parada"
                             title="Dar baixa nesta parada"
                             className={clsx(
-                              'flex h-10 items-center justify-center whitespace-nowrap rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-[11px] font-black text-emerald-300 active:bg-emerald-500/15',
+                              'flex h-10 items-center justify-center whitespace-nowrap rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-[11px] font-black text-emerald-300 active:bg-emerald-500/15 disabled:opacity-60',
                               completionIconOnly ? 'w-10 shrink-0 px-0' : 'min-w-0 flex-1 gap-1 px-1.5',
                             )}
                           >
-                            <CheckCircle2 size={16} className="shrink-0" />
+                            {completionBusy ? <LoaderCircle size={16} className="shrink-0 animate-spin" /> : <CheckCircle2 size={16} className="shrink-0" />}
                             {!completionIconOnly && <span>Dar baixa</span>}
                           </button>
                       ) : (
@@ -1261,7 +1265,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 <div className="flex items-center gap-2 mt-1">
                   <button
                     onClick={() => handleTriggerAction('complete')}
-                    disabled={isRecoveryRoute}
+                    disabled={isRecoveryRoute || completionBusy}
+                    aria-busy={completionBusy}
                     className={clsx(
                       "flex-1 flex h-11 items-center justify-center gap-2 rounded-xl text-[13px] font-black transition-all active:scale-95 shadow-lg disabled:active:scale-100",
                       isRecoveryRoute
@@ -1271,8 +1276,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-emerald-500/5"
                     )}
                   >
-                    <CheckCircle2 size={16} />
-                    {isRecoveryRoute
+                    {completionBusy ? <LoaderCircle size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                    {completionBusy ? 'Confirmando no servidor…' : isRecoveryRoute
                       ? 'Corrigir rota primeiro'
                       : delivery.completed
                         ? 'Desfazer Baixa'
