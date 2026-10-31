@@ -722,13 +722,13 @@ export default function ShoppingList() {
           return (
             <article
               key={product.id}
-              className={`rounded-2xl border px-3 py-2.5 ${
+              className={`rounded-xl border px-2.5 py-2 ${
                 selected[product.id]
                   ? 'border-amber-500/30 bg-amber-500/[.05]'
                   : 'border-zinc-800 bg-zinc-900/40'
               }`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   aria-pressed={!!selected[product.id]}
@@ -775,7 +775,7 @@ export default function ShoppingList() {
                     {product.name}
                   </p>
 
-                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1">
                     <span className={`rounded-full border px-2 py-0.5 text-[8px] font-black uppercase ${
                       operationPriority === 'ruptura'
                         ? 'border-red-500/25 bg-red-500/10 text-red-300'
@@ -803,16 +803,9 @@ export default function ShoppingList() {
                     )}
                   </p>
 
-                  {recommendation && (
-                    <p className="mt-1 text-[9px] text-zinc-500">
-                      Até o mínimo <b className="text-zinc-300">{operationTiming.minimum}</b>
-                      {' · '}até zerar <b className="text-zinc-300">{operationTiming.zero}</b>
-                      {' · '}reposição <b className="text-zinc-300">{operationTiming.lead}</b>
-                    </p>
-                  )}
 
                   {suggestedQuantity > 0 && (
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1">
                       <p className="text-[9px] font-black text-amber-400">
                         Comprar{' '}
                         {(() => {
@@ -866,7 +859,7 @@ export default function ShoppingList() {
 
               </div>
 
-              <div className={`mt-2 grid gap-2 border-t border-zinc-800/70 pt-2 ${(product.presentations || []).filter((item) => item.active && item.conversion_quantity > 0).length > 1 ? "grid-cols-[minmax(0,1fr)_92px]" : "grid-cols-[92px]"}`}>
+              <div className={`mt-1.5 grid gap-1.5 border-t border-zinc-800/70 pt-1.5 ${(product.presentations || []).filter((item) => item.active && item.conversion_quantity > 0).length > 1 ? "grid-cols-[minmax(0,1fr)_92px]" : "grid-cols-[92px]"}`}>
                 {(product.presentations || []).filter((item) => item.active && item.conversion_quantity > 0).length > 1 && (
                   <div className="min-w-0">
                     <label className="mb-1 block text-[8px] font-black uppercase tracking-wider text-zinc-600">Forma de compra</label>
@@ -922,10 +915,11 @@ export default function ShoppingList() {
               </div>
 
               {recommendation && (
-                <details className="mt-2 border-t border-zinc-800/60 pt-2">
+                <details className="mt-1.5 border-t border-zinc-800/60 pt-1.5">
                   <summary className="cursor-pointer list-none text-[9px] font-bold text-zinc-500">
                     Por que esta sugestão?
                   </summary>
+                  <p className="mt-1.5 text-[9px] leading-relaxed text-zinc-500">Até o mínimo <b className="text-zinc-300">{operationTiming.minimum}</b> · até zerar <b className="text-zinc-300">{operationTiming.zero}</b> · reposição <b className="text-zinc-300">{operationTiming.lead}</b></p>
                   <p className="mt-1.5 text-[9px] leading-relaxed text-zinc-500">
                     {purchasePlan?.guard.reason}. {recommendation.explanation}
                     {` Prazo de reposição: ${recommendation.leadTimeDays.toLocaleString(

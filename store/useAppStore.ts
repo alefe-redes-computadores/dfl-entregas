@@ -1274,6 +1274,7 @@ export const useAppStore = create<AppState>()(
       },
 
       addStockSupply: async (supply) => {
+        const stockSupplyStartedMs = Date.now();
         const now = new Date().toISOString();
         const next: StockSupply = {
           ...supply,
@@ -1297,7 +1298,13 @@ export const useAppStore = create<AppState>()(
           throw error;
         });
 
-        await trackStockSupplyWrite(next.id, operation);
+        try {
+          await trackStockSupplyWrite(next.id, operation);
+          recordActionLatency('stock_supply', Date.now() - stockSupplyStartedMs, 'confirmed');
+        } catch (error) {
+          recordActionLatency('stock_supply', Date.now() - stockSupplyStartedMs, 'failed');
+          throw error;
+        }
       },
 
       updateStockSupply: async (id, updatedData) => {
@@ -1534,7 +1541,8 @@ export const useAppStore = create<AppState>()(
       },
 
       addStockMovement: async (movement) => {
-        // A origem de verdade é o saldo confirmado pelo servidor. Uma cópia local
+         const stockMovementStartedMs = Date.now();
+         // A origem de verdade é o saldo confirmado pelo servidor. Uma cópia local
         // antiga NUNCA deve escrever um novo saldo baseado nela.
         if (get().stockMovements.some((item) => item.id === movement.id)) return;
         let result: ReturnType<typeof planStockMovement> & { alreadyExisted: boolean };
@@ -1563,8 +1571,9 @@ export const useAppStore = create<AppState>()(
             transaction.set(movementRef, sanitizeForFirebase(plan.record));
             return { ...plan, alreadyExisted: false };
           });
-        } catch (error) {
-          const fresh = lastServerRead.current;
+         } catch (error) {
+           recordActionLatency('stock_movement', Date.now() - stockMovementStartedMs, 'failed');
+           const fresh = lastServerRead.current;
           if (fresh && error instanceof Error && /mudou em outro aparelho|Saldo insuficiente/.test(error.message)) {
             set((state) => ({
               stockProducts: state.stockProducts.map((item) => item.id === fresh.id ? fresh : item),
@@ -1575,8 +1584,9 @@ export const useAppStore = create<AppState>()(
           }
           throw error;
         }
-        // Só refletir na interface depois da confirmação transacional.
-        set((state) => ({
+         // Só refletir na interface depois da confirmação transacional.
+         recordActionLatency('stock_movement', Date.now() - stockMovementStartedMs, 'confirmed');
+         set((state) => ({
           stockProducts: state.stockProducts.map((item) => item.id === result.changed.id ? result.changed : item),
           stockMovements: [result.record, ...state.stockMovements.filter((item) => item.id !== result.record.id)],
         }));

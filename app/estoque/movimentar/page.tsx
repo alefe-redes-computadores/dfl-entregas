@@ -3,6 +3,7 @@
 
 import { commercialMovementPreview, commercialPresentationEquation, humanPresentation } from '@/lib/stock-commercial-display-v2';
 import { stockPackageBreakdown } from '@/lib/stock-package-insights';
+import { fullStockQuantityInput, canShortcutAllStock, movementStockSignal } from '@/lib/stock-movement-shortcuts';
 import { committedStockQuantityMap } from '@/lib/stock-shopping';
 import { dualStockView, looseMovementPresentation, stockMovementBaseQuantity } from '@/lib/stock-dual-unit';
 
@@ -23,6 +24,11 @@ import {
   AlertCircle,
   Calculator,
   PackageOpen,
+  PackagePlus,
+  PackageMinus,
+  AlertTriangle,
+  ClipboardCheck,
+  SlidersHorizontal,
   ShoppingCart,
   Save,
   SkipForward,
@@ -293,7 +299,7 @@ function Content() {
     }
     try {
       const changes = JSON.parse(sessionStorage.getItem('dfl-stock-review-changes') || '[]');
-      if (changes.length) await notifyStockThresholdChanges(changes, useAppStore.getState().storeSettings.notificationPreferences);
+      if (changes.length) void notifyStockThresholdChanges(changes, useAppStore.getState().storeSettings.notificationPreferences).catch((error) => console.warn('[R225 estoque] Aviso de revisão não bloqueante:', error));
     } catch {}
     sessionStorage.removeItem('dfl-stock-review-changes');
     sessionStorage.removeItem('dfl-stock-review-queue');
@@ -446,7 +452,7 @@ function Content() {
 
         try {
           const changes = JSON.parse(sessionStorage.getItem('dfl-stock-review-changes') || '[]');
-          if (changes.length) await notifyStockThresholdChanges(changes, useAppStore.getState().storeSettings.notificationPreferences);
+          if (changes.length) void notifyStockThresholdChanges(changes, useAppStore.getState().storeSettings.notificationPreferences).catch((error) => console.warn('[R225 estoque] Aviso de revisão não bloqueante:', error));
         } catch {}
         sessionStorage.removeItem('dfl-stock-review-changes');
         sessionStorage.removeItem('dfl-stock-review-queue');
@@ -494,7 +500,7 @@ function Content() {
         }
       />
 
-      <section className="relative mb-5 overflow-hidden rounded-[26px] border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[.11] via-zinc-950 to-zinc-950 p-4 shadow-[0_18px_60px_rgba(16,185,129,.07)]">
+      <section className="relative mb-3 overflow-hidden rounded-[22px] border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[.11] via-zinc-950 to-zinc-950 p-3 shadow-[0_12px_35px_rgba(16,185,129,.05)]">
         <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-emerald-500/10 blur-2xl" />
         <div className="relative flex items-start gap-3">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400">
@@ -504,7 +510,7 @@ function Content() {
             <p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-400">
               Movimentando agora
             </p>
-            <h1 className="mt-1 break-words font-heading text-xl font-black leading-tight text-zinc-50">
+            <h1 className="mt-0.5 break-words font-heading text-lg font-black leading-tight text-zinc-50">
               {product.name}
             </h1>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] font-bold">
@@ -520,26 +526,24 @@ function Content() {
           </div>
         </div>
 
-        <div className="relative mt-4 flex items-end justify-between gap-3 border-t border-white/[.06] pt-3">
+        <div className="relative mt-2.5 flex items-end justify-between gap-3 border-t border-white/[.06] pt-2.5">
           <div>
             <p className="text-[9px] font-black uppercase tracking-wider text-zinc-600">Saldo atual</p>
-            <p className="mt-1 font-heading text-3xl font-black text-zinc-100">
+            <p className="mt-1 font-heading text-2xl font-black text-zinc-100">
               {formatStockQuantity(product.current_quantity, product.unit)}
             </p>
             {dualStockView(product) && <p className="mt-1 text-[11px] font-bold text-emerald-300">{dualStockView(product)?.secondary}</p>}
           </div>
-          <p className="max-w-[46%] text-right text-[9px] leading-relaxed text-zinc-600">
-            Confira o produto antes de registrar a movimentação.
-          </p>
+           <p className="max-w-[48%] text-right text-[10px] leading-snug text-zinc-500">Saldo controlado em {product.unit}</p>
         </div>
       </section>
 
       <form
         onSubmit={submit}
-        className="space-y-5 pb-28"
+        className="space-y-3.5 pb-28"
         noValidate
       >
-        <div className="grid grid-cols-2 gap-2">
+        <div role="group" aria-label="Tipo de movimentação" className="grid grid-cols-3 gap-1.5">
           {options.map(
             ([
               key,
@@ -549,6 +553,9 @@ function Content() {
               <button
                 type="button"
                 key={key}
+                aria-pressed={type === key}
+                aria-label={`${label}: ${description}`}
+                title={description}
                 onClick={() => {
                   setType(key);
                   setMode('moved');
@@ -557,29 +564,21 @@ function Content() {
                     false,
                   );
                 }}
-                className={`min-h-16 rounded-2xl border p-3 text-left ${
+                className={`flex min-h-12 items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-center text-[11px] ${
                   type === key
                     ? 'border-emerald-500/50 bg-emerald-500/10'
                     : 'border-zinc-800 bg-zinc-900'
                 }`}
               >
-                <b
-                  className={
-                    type === key
-                      ? 'text-emerald-400'
-                      : 'text-zinc-300'
-                  }
-                >
-                  {label}
-                </b>
-
-                <small className="mt-1 block text-[9px] text-zinc-600">
-                  {description}
-                </small>
+                <span className={type === key ? 'text-emerald-300' : 'text-zinc-500'}>
+                  {key === 'entrada' ? <PackagePlus size={16}/> : key === 'saida' ? <PackageMinus size={16}/> : key === 'perda' ? <AlertTriangle size={16}/> : key === 'contagem' ? <ClipboardCheck size={16}/> : <SlidersHorizontal size={16}/>}
+                </span>
+                <b className={type === key ? 'text-emerald-300' : 'text-zinc-300'}>{label}</b>
               </button>
             ),
           )}
         </div>
+        <p className="-mt-2 text-[10px] leading-snug text-zinc-500" aria-live="polite">{options.find(([key]) => key === type)?.[2]}</p>
 
         {canUseRemaining && (
           <div>
@@ -597,7 +596,7 @@ function Content() {
                     false,
                   );
                 }}
-                className={`h-12 rounded-xl border text-xs font-black ${
+                className={`h-10 rounded-xl border text-xs font-black ${
                   mode === 'moved'
                     ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
                     : 'border-zinc-800 text-zinc-500'
@@ -617,7 +616,7 @@ function Content() {
                     false,
                   );
                 }}
-                className={`h-12 rounded-xl border text-xs font-black ${
+                className={`h-10 rounded-xl border text-xs font-black ${
                   mode ===
                   'remaining'
                     ? 'border-sky-500/50 bg-sky-500/10 text-sky-400'
@@ -632,9 +631,9 @@ function Content() {
 
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3">
           <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Como você vai informar?</p><p className="mt-1 text-[9px] text-zinc-600">Escolha a unidade usada na digitação.</p></div>{(()=>{try{const q=JSON.parse(sessionStorage.getItem('dfl-stock-review-queue')||'[]') as string[];const i=q.indexOf(product.id);return q.length&&i>=0?<span className="text-[10px] font-black text-sky-400">{i+1}/{q.length}</span>:null}catch{return null}})()}</div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <button type="button" onClick={()=>{setPresentationId('base');setQuantity('');setAttempted(false)}} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId==='base'?'border-sky-500/40 bg-sky-500/10 text-sky-300':'border-zinc-800 text-zinc-500'}`}>Direto em {quantityLabel(product.unit)}<span className="mt-1 block text-[9px] font-medium">Baixa direta na unidade-base, sem precisar fracionar pacote</span></button>
-            {presentations.map((item)=><button type="button" key={item.id} onClick={()=>{setPresentationId(item.id);setQuantity('');setAttempted(false)}} className={`rounded-xl border p-3 text-left text-xs font-black ${presentationId===item.id?'border-amber-500/40 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-500'}`}>{humanPresentation(item,product.unit)}<span className="mt-1 block text-[9px] font-medium">{Math.abs(Number(item.conversion_quantity)-1)<1e-9?`Formato de compra · mesma quantidade`:commercialPresentationEquation(item,product.unit)}</span></button>)}
+          <div className="mt-2 flex gap-2 overflow-x-auto overscroll-x-contain pb-1" role="group" aria-label="Unidade ou embalagem de movimentação">
+            <button type="button" aria-pressed={presentationId==='base'} onClick={()=>{setPresentationId('base');setQuantity('');setAttempted(false)}} className={`min-w-[148px] max-w-[205px] shrink-0 rounded-xl border px-3 py-2 text-left text-[11px] font-black ${presentationId==='base'?'border-sky-500/40 bg-sky-500/10 text-sky-300':'border-zinc-800 text-zinc-500'}`}>Direto em {quantityLabel(product.unit)}<span className="mt-0.5 block text-[9px] font-medium leading-tight">Baixa direta na unidade-base, sem precisar fracionar pacote</span></button>
+            {presentations.map((item)=><button type="button" key={item.id} aria-pressed={presentationId===item.id} onClick={()=>{setPresentationId(item.id);setQuantity('');setAttempted(false)}} className={`min-w-[148px] max-w-[205px] shrink-0 rounded-xl border px-3 py-2 text-left text-[11px] font-black ${presentationId===item.id?'border-amber-500/40 bg-amber-500/10 text-amber-300':'border-zinc-800 text-zinc-500'}`}>{humanPresentation(item,product.unit)}<span className="mt-0.5 block text-[9px] font-medium leading-tight">{Math.abs(Number(item.conversion_quantity)-1)<1e-9?`Formato de compra · mesma quantidade`:commercialPresentationEquation(item,product.unit)}</span></button>)}
           </div>
         </section>
 
@@ -660,7 +659,6 @@ function Content() {
           </span>
 
           <input
-            autoFocus
             inputMode="decimal"
             value={quantity}
             onChange={(event) =>
@@ -674,16 +672,17 @@ function Content() {
             onBlur={() =>
               quantity.trim() &&
               setQuantity(
-                normalizeStockQuantityInput(
-                  quantity,
-                ),
+                canUseRemaining && mode === 'moved' && presentationId === 'base' &&
+                quantity === fullStockQuantityInput(product.current_quantity)
+                  ? quantity // R225-R2: manter todas as 4 casas do saldo integral.
+                  : normalizeStockQuantityInput(quantity),
               )
             }
             aria-invalid={
               attempted &&
               quantityInvalid
             }
-            className={`mt-2 h-14 w-full rounded-2xl border bg-zinc-900 px-4 text-xl font-black text-zinc-100 outline-none ${
+            className={`mt-2 h-12 w-full rounded-xl border bg-zinc-900 px-3 text-lg font-black text-zinc-100 outline-none ${
               attempted &&
               quantityInvalid
                 ? 'border-red-500/70 focus:border-red-500'
@@ -722,16 +721,13 @@ function Content() {
           if(!present||!future)return null;
           const pack=view.packageLabel;
           const fmt=(x:number)=>x.toLocaleString('pt-BR',{maximumFractionDigits:3});
-          return <section aria-label="Equivalencia por embalagem" className="rounded-2xl border border-sky-500/20 bg-sky-500/[.045] p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-sky-300">Equivalência de embalagem</p>
-              <p className="text-[10px] text-zinc-500">1 {pack} ≈ {fmt(view.countPerPackage)} un.</p>
-            </div>
+          return <details aria-label="Equivalencia por embalagem" className="rounded-2xl border border-sky-500/20 bg-sky-500/[.045] p-3">
+            <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-1.5 text-[10px] font-black text-sky-300">Equivalência de embalagem <span className="font-medium text-zinc-500">{fmt(present.full)} + {fmt(present.loose)} avulsas → {quantityInvalid ? '—' : fmt(future.full) + ' + ' + fmt(future.loose)} · 1 {pack} ≈ {fmt(view.countPerPackage)} un.</span></summary>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-zinc-950/60 p-3"><p className="text-[10px] text-zinc-500">Em estoque</p><p className="mt-1 text-lg font-black text-zinc-100">{fmt(present.full)} completas</p><p className="text-[11px] text-zinc-400">+ {fmt(present.loose)} avulsas</p></div>
               <div className="rounded-xl bg-zinc-950/60 p-3"><p className="text-[10px] text-zinc-500">Após operação</p><p className="mt-1 text-lg font-black text-emerald-300">{quantityInvalid?'—':fmt(future.full)+' completas'}</p><p className="text-[11px] text-zinc-400">{quantityInvalid?'Confira a quantidade':'+ '+fmt(future.loose)+' avulsas'}</p></div>
             </div>
-          </section>;
+          </details>;
         })()}
 
         {/* R128_ATALHOS_DE_QUANTIDADE — unidade selecionada sempre governa a conversao. */}
@@ -740,7 +736,7 @@ function Content() {
             <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Quantidade rápida</p>
             <p className="text-[10px] text-zinc-500">{selectedPresentation ? humanPresentation(selectedPresentation, product.unit) : quantityLabel(product.unit)}</p>
           </div>
-          <div className="mt-2 grid grid-cols-4 gap-2">
+          <div className={`mt-2 grid gap-1.5 ${canShortcutAllStock(type, mode, product.current_quantity) ? 'grid-cols-5' : 'grid-cols-4'}` }>
             {(selectedPresentation ? [0.25, 0.5, 1, 2] : [1, 2, 5, 10]).map((preset) => {
               const base = stockMovementBaseQuantity(preset, conversion, product.current_quantity, {
                 loose: selectedPresentation?.id === '__loose-unit',
@@ -753,6 +749,9 @@ function Content() {
                 {preset.toLocaleString('pt-BR')}
               </button>;
             })}
+            {canShortcutAllStock(type, mode, product.current_quantity) && (
+              <button type="button" disabled={busy} aria-label={`Informar todo o saldo disponível: ${formatStockQuantity(product.current_quantity, product.unit)}`} title="Baixar todo o saldo disponível" onClick={() => {setPresentationId('base'); setQuantity(fullStockQuantityInput(product.current_quantity)); setAttempted(false);}} className="min-h-11 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-1 text-[11px] font-black text-emerald-300 active:scale-[.98] disabled:opacity-40">Tudo</button>
+            )}
           </div>
           {quantity.trim() && Number.isFinite(typed) && typed >= 0 && Number.isFinite(baseTyped) && !quantityInvalid && (
             <div aria-live="polite" className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[.06] p-3">
@@ -760,8 +759,9 @@ function Content() {
               <p className="mt-1 text-xs text-zinc-200">
                 {type === 'entrada' ? 'Entrada' : canUseRemaining ? 'Retirada' : 'Novo saldo'}: <b>{formatStockQuantity(amount, product.unit)}</b>
               </p>
-              <p className="mt-1 text-xs text-zinc-400">Saldo após confirmar: <b className="text-zinc-100">{formatStockQuantity(resultingBalance, product.unit)}</b></p>
-            </div>
+               <p className="mt-1 text-xs text-zinc-400">Saldo após confirmar: <b className="text-zinc-100">{formatStockQuantity(resultingBalance, product.unit)}</b></p>
+               {movementStockSignal(type, resultingBalance, product.minimum_quantity) && <p role="status" className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-amber-300"><AlertTriangle size={13} className="shrink-0"/>{movementStockSignal(type, resultingBalance, product.minimum_quantity)} · mínimo {formatStockQuantity(product.minimum_quantity, product.unit)}</p>}
+             </div>
           )}
         </section>
 
@@ -787,7 +787,7 @@ function Content() {
 
         {quantity.trim() &&
           !quantityInvalid && (
-            <section className="rounded-2xl border border-sky-500/20 bg-sky-500/[.05] p-4">
+            <details aria-label="Calculo completo da movimentacao" className="rounded-2xl border border-sky-500/20 bg-sky-500/[.035] px-3 py-2.5"><summary className="cursor-pointer text-[11px] font-bold text-sky-300">Ver cálculo completo e conversões</summary><div className="mt-2">
               <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-sky-400">
                 <Calculator
                   size={14}
@@ -842,7 +842,7 @@ function Content() {
                   )}
                 </b>
               </p>
-            </section>
+            </div></details>
           )}
 
         {type ===
@@ -879,7 +879,9 @@ function Content() {
           </label>
         )}
 
-        <div>
+        <details className="rounded-2xl border border-zinc-800 bg-zinc-900/25 px-3 py-2.5" data-dfl-stock-advanced>
+          <summary className="cursor-pointer text-[11px] font-bold text-zinc-300">Mais opções · responsável e observação</summary>
+        <div className="mt-3">
           <p className="mb-2 text-xs font-bold text-zinc-400">
             Responsável{' '}
             <span className="font-normal text-zinc-600">
@@ -920,6 +922,7 @@ function Content() {
             className="mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-100 outline-none focus:border-emerald-500"
           />
         </label>
+        </details>
 
         <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
           <button

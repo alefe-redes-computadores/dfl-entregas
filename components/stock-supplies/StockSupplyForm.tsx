@@ -651,9 +651,9 @@ export function StockSupplyForm({
   };
 
   return (
-    <form onInputCapture={() => setDirty(true)} onClickCapture={(event) => { const target = event.target as HTMLElement; if (target.closest('button') && !target.closest('button[type="submit"]')) setDirty(true); }} onSubmit={submit} className="flex flex-col gap-5 pb-10" noValidate>
+    <form onInputCapture={() => setDirty(true)} onClickCapture={(event) => { const target = event.target as HTMLElement; if (target.closest('button') && !target.closest('button[type="submit"]')) setDirty(true); }} onSubmit={submit} className="flex flex-col gap-3.5 pb-10" noValidate>
       {draftStorageFailed && <p role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs font-semibold text-amber-200">Rascunho não salvo neste aparelho. Libere espaço antes de sair ou finalize a compra com internet.</p>}
-      <section className="rounded-[26px] border border-amber-500/20 bg-amber-500/[.05] p-4">
+      <section className="rounded-[20px] border border-amber-500/20 bg-amber-500/[.05] p-3">
         <div className="flex items-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-2xl bg-amber-500/10 text-amber-400">
             <PackagePlus size={20} />
@@ -692,7 +692,7 @@ export function StockSupplyForm({
               type="button"
               key={key}
               onClick={() => setStatus(key as StockSupplyStatus)}
-              className={`rounded-xl border px-3 py-3 text-xs font-bold ${
+              className={`min-h-11 rounded-xl border px-3 py-2 text-xs font-bold ${
                 status === key
                   ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
                   : 'border-zinc-800 bg-zinc-900 text-zinc-500'
@@ -768,7 +768,7 @@ export function StockSupplyForm({
             <article
               id={`purchase-item-${item.id}`}
               key={item.id}
-              className={`rounded-[24px] border bg-zinc-900/45 p-4 transition-colors ${
+              className={`rounded-[18px] border bg-zinc-900/45 p-3 transition-colors ${
                 errors
                   ? 'border-red-500/50'
                   : 'border-zinc-800'
@@ -807,7 +807,7 @@ export function StockSupplyForm({
                 )}
               </div>
 
-              <label className="mt-3 block text-[10px] font-bold text-zinc-500">
+              <label className="mt-2 block text-[10px] font-bold text-zinc-500">
                 Produto*
                 <StockProductPicker
                   products={products.filter(
@@ -1076,7 +1076,7 @@ export function StockSupplyForm({
 
               {(!product || !product.presentations?.length) &&
                 item.purchase_unit !== 'un' && (
-                  <label className="mt-3 block text-[10px] font-bold text-zinc-500">
+                  <label className="mt-2 block text-[10px] font-bold text-zinc-500">
                     Unidades dentro de cada pacote*
                     <input
                       inputMode="decimal"

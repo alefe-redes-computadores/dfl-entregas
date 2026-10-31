@@ -8,7 +8,9 @@ export type ActionLatencyKind =
   | 'delivery_critical'
   | 'delivery_queue'
   | 'route_start'
-  | 'route_close';
+  | 'route_close'
+  | 'stock_movement'
+  | 'stock_supply';
 export type ActionLatencyStatus = 'confirmed' | 'failed' | 'partial';
 export type ActionLatencySample = {
   kind: ActionLatencyKind;
@@ -22,7 +24,7 @@ const STORAGE_KEY = 'dfl-action-latency-v1';
 const MAX_SAMPLES = 60;
 const KINDS: readonly ActionLatencyKind[] = [
   'stop_completion', 'delivery_critical', 'delivery_queue',
-  'route_start', 'route_close',
+  'route_start', 'route_close', 'stock_movement', 'stock_supply',
 ];
 const STATUSES: readonly ActionLatencyStatus[] = ['confirmed', 'failed', 'partial'];
 const safeMs = (value: unknown) =>
@@ -92,6 +94,8 @@ export const ACTION_LATENCY_LABEL: Record<ActionLatencyKind, string> = {
   delivery_queue: 'Espera na fila local',
   route_start: 'Início de rota',
   route_close: 'Fechamento de rota',
+  stock_movement: 'Movimentação de estoque',
+  stock_supply: 'Compra de estoque',
 };
 
 export function summarizeActionLatencies(samples: readonly ActionLatencySample[]) {
