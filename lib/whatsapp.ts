@@ -20,21 +20,28 @@ const deliveryCharge = (delivery: Delivery) => delivery.customer_charge ?? deliv
 const deliveryGroupKey = deliveryStopKey;
 
 // R119: instrucoes finais com ID por pedido, sem inferir codigo de outro pedido.
-const ifoodPortalLines = (items: readonly Delivery[]): string[] => {
+// R221: detalhes do ID e codigo ficam no pedido; o link aparece uma so vez,
+// ao fim da mensagem. Rotas inteiras mantem listagem quando nao houve resumo.
+const ifoodPortalLines = (items: readonly Delivery[], alreadyListed = false): string[] => {
   const orders = items.filter(item => item.origin === 'ifood');
   if (!orders.length) return [];
-  const lines = ['', '🔴 *CONFIRMAÇÃO IFOOD*', '', '🌐 *Portal de confirmação:*', IFOOD_DRIVER_CONFIRMATION_URL, ''];
-  lines.push(orders.length > 1 ? '*Confirme cada pedido individualmente:*' : '*Confirme este pedido:*');
-  orders.forEach((item, index) => {
-    const id = (item.ifood_id || '').replace(/\D/g, '');
-    const code = orderConfirmationCode(item.confirmation_code);
-    const prefix = orders.length > 1 ? `${index + 1}. ` : '';
-    const label = item.customer_name?.trim() || (item.order_id ? `Pedido #${item.order_id}` : 'Pedido iFood');
-    lines.push('', `${prefix}*${label}*`);
-    lines.push(id.length === 8 ? `🆔 *ID iFood:* \`${id}\`` : '⚠️ *ID iFood ausente — solicite à loja*');
-    lines.push(code ? `🔑 *Código do cliente:* \`${code}\`` : '🔑 *Código:* pedir os 4 dígitos ao cliente');
-  });
-  lines.push('', '⚠️ *Abra o portal e confirme cada pedido.* Salvar código no DFL ou abrir o link não confirma no iFood.');
+  const lines = ['', '🔴 *CONFIRMAÇÃO IFOOD*'];
+  if (!alreadyListed) {
+    lines.push(orders.length > 1 ? '*Pedidos a confirmar:*' : '*Pedido a confirmar:*');
+    orders.forEach((item, index) => {
+      const id = (item.ifood_id || '').replace(/\D/g, '');
+      const code = orderConfirmationCode(item.confirmation_code);
+      const prefix = orders.length > 1 ? `${index + 1}. ` : '';
+      const label = item.customer_name?.trim() || (item.order_id ? `Pedido #${item.order_id}` : 'Pedido iFood');
+      lines.push(`${prefix}*${label}* · ${id.length === 8 ? `ID ${id}` : 'ID ausente — solicite à loja'}`);
+      lines.push(code ? `🔑 Código: *${code}*` : '🔑 Código: pedir 4 dígitos ao cliente');
+    });
+  }
+  lines.push(orders.length > 1
+    ? '🔑 *Ação:* confira o código e confirme cada pedido separadamente no portal.'
+    : '🔑 *Ação:* confira o código com o cliente e confirme este pedido no portal.');
+  lines.push('⚠️ Salvar o código no DFL ou abrir o link não confirma a entrega no iFood.');
+  lines.push('', '🌐 *Abrir portal de confirmação:*', IFOOD_DRIVER_CONFIRMATION_URL);
   return lines;
 };
 
@@ -149,7 +156,7 @@ export async function copyDeliveryToClipboard(
       if (driverConfirmsIfood && groupedOrders.some(item => item.origin === 'ifood')) parts.push('', '🗺️ *1. Navegar ate a parada:*');
       parts.push('', '🗺️ *Abrir no mapa:*', mapLink);
       if (driverConfirmsIfood && groupedOrders.some(item => item.origin === 'ifood')) {
-        parts.push(...ifoodPortalLines(groupedOrders));
+        parts.push(...ifoodPortalLines(groupedOrders, true));
       }
       await navigator.clipboard.writeText(parts.join('\n'));
       return true;
@@ -220,7 +227,7 @@ export async function copyDeliveryToClipboard(
       parts.push(`🗺️ *Mapa:*`); parts.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanAddress)}`);
     }
 
-    if (driverConfirmsIfood && isIfood) parts.push(...ifoodPortalLines([delivery]));
+    if (driverConfirmsIfood && isIfood) parts.push(...ifoodPortalLines([delivery], true));
     const textToCopy = parts.join('\n');
     await navigator.clipboard.writeText(textToCopy);
     return true;
@@ -537,7 +544,7 @@ export async function generateRouteMessages(
     }
 
     if (driverConfirmsIfood && ifoodCount > 0) {
-      msg1.push(...ifoodPortalLines(deliveries));
+      msg1.push(...ifoodPortalLines(deliveries, true));
       msg1.push('');
     }
 

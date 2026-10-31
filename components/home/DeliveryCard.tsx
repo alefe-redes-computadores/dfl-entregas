@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -1071,7 +1072,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           {isExpanded && (
             <div className="animate-in slide-in-from-top-2 fade-in duration-200">
               <div className="px-3 pb-2.5 flex flex-col gap-2">
-                <div className="rounded-xl border border-zinc-800/65 bg-zinc-950/25 px-3 py-2" aria-label="Resumo da parada">
+                <div className="rounded-xl border border-zinc-800/50 bg-zinc-950/20 px-3 py-1.5" aria-label="Resumo da parada">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Detalhes da parada</span>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -1079,20 +1080,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${stopCompleted ? 'bg-emerald-500/10 text-emerald-300' : 'bg-sky-500/10 text-sky-300'}`}>{stopCompleted ? 'Concluída' : isGroupedStop ? `${groupedPending} pedidos pendentes` : 'Pendente'}</span>
                     </div>
                   </div>
-                  {canManageStop && <details className="mt-2 rounded-xl border border-zinc-800/60 bg-zinc-950/25 px-2.5 py-1">
-                    <summary className="flex min-h-9 cursor-pointer items-center justify-between gap-2 text-[11px] font-black text-sky-300"><span>Ajustar ordem {position ? `· parada ${position}` : ''}</span><ChevronDown size={15}/></summary>
-                    <div className="mt-2 flex flex-wrap items-center gap-2" aria-label="Organizar parada expandida">
-                      {canManageStop && <button type="button" onClick={(event)=>void toggleStopLock(event)} disabled={reorderBusy} className={`rounded-lg border px-2 py-1 text-[10px] font-black ${orderLocked ? 'border-amber-500/35 bg-amber-500/10 text-amber-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}>{orderLocked ? 'Destravar' : 'Fixar'}</button>}
-                    <span className="mr-auto text-[10px] font-semibold text-zinc-400">{orderLocked ? 'Parada fixada · destrave para mover' : canReorder ? `Parada ${position} de ${pendingCount}` : 'Sequência de parada'}</span>
-                    {canReorder && <div className="flex items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]" role="group" aria-label="Mover parada expandida">
-                      <button type="button" data-no-card-swipe="true" aria-label="Subir parada expandida" title="Subir uma parada" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowUp size={15}/></button>
-                      <span className="h-4 w-px bg-sky-500/20"/>
-                      <button type="button" data-no-card-swipe="true" aria-label="Descer parada expandida" title="Descer uma parada" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowDown size={15}/></button>
-                    </div>}
-                    {canReorder && <button type="button" data-no-card-swipe="true" onClick={(event)=>{event.stopPropagation();setMoveSheetOpen(true);}} className="min-h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-bold text-zinc-200">Mover para…</button>}
-                    {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(0);}} className="min-h-10 rounded-xl border border-emerald-500/25 bg-emerald-500/[.07] px-3 text-[11px] font-black text-emerald-300 disabled:opacity-35">Ir primeiro</button>}
-                    {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(pendingCount-1);}} className="min-h-10 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 text-[11px] font-black text-amber-300 disabled:opacity-35">Deixar por último</button>}
-                  </div></details>}
+
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
                     {!delivery.completed && groupedCodeDeliveries.length > 0 && <span className="rounded-lg bg-amber-500/10 px-2 py-1 font-bold text-amber-300">{groupedCodeDeliveries.length} código{groupedCodeDeliveries.length===1?'':'s'} para conferir</span>}
                     {activePhone && <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-300">Contato disponível</span>}
@@ -1103,12 +1091,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     {stopCompleted ? 'Parada concluída · reordenação indisponível' : 'Rota fechada · ordem preservada'}
                   </div>
                 )}
-                <section className="rounded-xl border border-sky-500/20 bg-sky-500/[.045] px-3 py-2.5" aria-label="Próxima ação operacional">
+                <section className="rounded-xl border border-sky-500/15 bg-sky-500/[.025] px-3 py-2" aria-label="Próxima ação operacional">
                   <div className="flex items-start gap-2.5">
-                    <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-sky-500/10 text-sky-300"><CheckSquare size={16}/></span>
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-300"><CheckSquare size={16}/></span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[9px] font-black uppercase tracking-[.14em] text-sky-300">Próximo passo</p>
-                      <p className="mt-1 text-[12px] font-black leading-snug text-zinc-100">{
+                      <p className="mt-0.5 text-[12px] font-black leading-snug text-zinc-100">{
                         stopCompleted ? 'Entrega concluída — confira o histórico' :
                         cardIssue ? cardIssue.label :
                         groupedCodeDeliveries.some(item=>!orderConfirmationCode(item.confirmation_code)) ? 'Solicitar código iFood do pedido pendente' :
@@ -1134,8 +1122,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
                 <div className="mt-1">
                   {navigationLinks && <div className="mb-1.5 grid min-w-0 grid-cols-2 gap-1.5" aria-label="Navegação sem abrir o mapa">
-                    <a href={navigationLinks.maps} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/[.08] px-2 text-[11px] font-black text-sky-200"><Navigation size={13} className="mr-1"/> Navegar com Maps</a>
-                    <a href={navigationLinks.waze} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/[.08] px-2 text-[11px] font-black text-violet-200"><Navigation size={13} className="mr-1"/> Navegar com Waze</a>
+                    <a href={navigationLinks.maps} target="_blank" rel="noopener noreferrer" className="flex min-h-10 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/[.08] px-2 text-[11px] font-black text-sky-200"><Navigation size={13} className="mr-1"/> Navegar com Maps</a>
+                    <a href={navigationLinks.waze} target="_blank" rel="noopener noreferrer" className="flex min-h-10 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/[.08] px-2 text-[11px] font-black text-violet-200"><Navigation size={13} className="mr-1"/> Navegar com Waze</a>
                   </div>}
 
                   <button
@@ -1176,6 +1164,20 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         </button>
       )}
 
+                  {canManageStop && <details className="mx-3 mb-2 rounded-xl border border-zinc-800/70 bg-zinc-950/25 px-3 py-1.5">
+                    <summary className="flex min-h-9 cursor-pointer items-center justify-between gap-2 text-[11px] font-black text-sky-300"><span>Ferramentas · ajustar ordem {position ? `· parada ${position}` : ''}</span><ChevronDown size={15}/></summary>
+                    <div className="mt-2 flex flex-wrap items-center gap-2" aria-label="Organizar parada expandida">
+                      {canManageStop && <button type="button" onClick={(event)=>void toggleStopLock(event)} disabled={reorderBusy} className={`rounded-lg border px-2 py-1 text-[10px] font-black ${orderLocked ? 'border-amber-500/35 bg-amber-500/10 text-amber-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}>{orderLocked ? 'Destravar' : 'Fixar'}</button>}
+                    <span className="mr-auto text-[10px] font-semibold text-zinc-400">{orderLocked ? 'Parada fixada · destrave para mover' : canReorder ? `Parada ${position} de ${pendingCount}` : 'Sequência de parada'}</span>
+                    {canReorder && <div className="flex items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]" role="group" aria-label="Mover parada expandida">
+                      <button type="button" data-no-card-swipe="true" aria-label="Subir parada expandida" title="Subir uma parada" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowUp size={15}/></button>
+                      <span className="h-4 w-px bg-sky-500/20"/>
+                      <button type="button" data-no-card-swipe="true" aria-label="Descer parada expandida" title="Descer uma parada" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowDown size={15}/></button>
+                    </div>}
+                    {canReorder && <button type="button" data-no-card-swipe="true" onClick={(event)=>{event.stopPropagation();setMoveSheetOpen(true);}} className="min-h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-bold text-zinc-200">Mover para…</button>}
+                    {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(0);}} className="min-h-10 rounded-xl border border-emerald-500/25 bg-emerald-500/[.07] px-3 text-[11px] font-black text-emerald-300 disabled:opacity-35">Ir primeiro</button>}
+                    {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(pendingCount-1);}} className="min-h-10 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 text-[11px] font-black text-amber-300 disabled:opacity-35">Deixar por último</button>}
+                  </div></details>}
               <details className="mx-3 mb-3 rounded-2xl border border-zinc-800/85 bg-zinc-950/40 px-3 py-2.5">
                 <summary className="cursor-pointer text-[11px] font-semibold text-zinc-300">Histórico e localização</summary>
                 <div className="mt-3 space-y-2">
@@ -1199,7 +1201,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
               <div className={clsx(
                 "mx-3 mb-3 flex flex-col border border-zinc-800/70 bg-zinc-950/45",
-                isExpanded ? "gap-2.5 rounded-[18px] px-3 py-3" : "gap-2 rounded-[16px] px-3 py-2.5",
+                isExpanded ? "gap-2 rounded-[18px] px-3 py-2.5" : "gap-2 rounded-[16px] px-3 py-2.5",
                 delivery.completed && !isExpanded && "bg-emerald-500/[.025] border-emerald-500/10"
               )}>
                 <p className="text-[9px] font-black uppercase tracking-[.15em] text-zinc-500">Pagamento e finalização</p>
@@ -1325,9 +1327,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         </div>
       </div>
 
-      {attemptOpen && (
-        <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/80 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-10 backdrop-blur-sm sm:items-center" onClick={() => { if (!attemptBusy) setAttemptOpen(false); }} role="presentation">
-          <section role="dialog" aria-modal="true" aria-label="Registrar tentativa de entrega" className="max-h-[88dvh] w-full max-w-sm overflow-y-auto rounded-[24px] border border-amber-500/25 bg-zinc-950 p-4 shadow-2xl" onClick={event => event.stopPropagation()}>
+      {attemptOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[330] flex items-end justify-center overflow-hidden bg-black/80 px-3 pt-6 backdrop-blur-sm sm:items-center" onClick={() => { if (!attemptBusy) setAttemptOpen(false); }} role="presentation">
+          <section role="dialog" aria-modal="true" aria-label="Registrar tentativa de entrega" className="max-h-[calc(100dvh-20px)] w-full max-w-sm overflow-y-auto overscroll-contain rounded-t-[24px] border border-amber-500/25 bg-zinc-950 p-4 pb-[max(34px,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[24px]" onClick={event => event.stopPropagation()}>
             <h3 className="text-base font-black text-zinc-100">Registrar tentativa</h3>
             {(() => {
               const selected = pendingGroupedDeliveries.find(item => item.id === attemptTargetId);
@@ -1406,11 +1408,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
             </div>
           </section>
         </div>
-      )}
+      , document.body)}
 
-      {deleteOpen && (
-        <div className="fixed inset-0 z-[140] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center" onClick={() => { if (!deleteBusy) setDeleteOpen(false); }} role="presentation">
-          <section className="w-full max-w-sm rounded-[28px] border border-red-500/20 bg-zinc-950 p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      {deleteOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[330] flex items-end justify-center overflow-hidden bg-black/80 px-3 pt-3 backdrop-blur-sm sm:items-center" onClick={() => { if (!deleteBusy) setDeleteOpen(false); }} role="presentation">
+          <section className="max-h-[calc(100dvh-20px)] w-full max-w-sm overflow-y-auto overscroll-contain rounded-t-[28px] border border-red-500/20 bg-zinc-950 p-5 pb-[max(34px,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[28px]" onClick={(event) => event.stopPropagation()}>
             <div className="grid h-11 w-11 place-items-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-400"><Trash2 size={19} /></div>
             <p className="mt-4 text-[10px] font-black uppercase tracking-[0.16em] text-red-400">Excluir entrega</p>
             <h3 className="mt-1 font-heading text-lg font-black text-zinc-100">Remover {customer?.name || delivery.customer_name || 'esta entrega'}?</h3>
@@ -1421,11 +1423,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
             </div>
           </section>
         </div>
-      )}
+      , document.body)}
 
-      {moveSheetOpen && (
-        <div className="fixed inset-0 z-[125] flex items-end justify-center bg-black/75" onClick={() => setMoveSheetOpen(false)}>
-          <div className="w-full max-w-lg rounded-t-[24px] border border-zinc-700 bg-[#171717] p-4 pb-[max(18px,env(safe-area-inset-bottom))] shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      {moveSheetOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[330] flex items-end justify-center overflow-hidden bg-black/80 px-3 pt-[max(16px,env(safe-area-inset-top))] sm:items-center" role="presentation" onClick={() => setMoveSheetOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Mover ou fixar parada" className="w-full max-w-lg max-h-[calc(100dvh-20px)] overflow-y-auto overscroll-contain rounded-t-[24px] border border-zinc-700 bg-[#171717] p-4 pb-[max(34px,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[24px]" onClick={(event) => event.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-black text-zinc-100">Mover / Fixar parada</p><p className="text-[11px] text-zinc-400">{position || 1}ª posição · {groupedDeliveries.length} pedido(s)</p></div><button type="button" className="rounded-xl border border-zinc-700 p-2 text-zinc-300" onClick={() => setMoveSheetOpen(false)}><X size={18}/></button></div>
             <button type="button" className="mb-3 w-full rounded-xl border border-amber-500/25 bg-amber-500/[.06] p-3 text-left text-xs font-bold text-amber-200" disabled={reorderBusy} onClick={(event) => {void toggleStopLock(event);}}>{orderLocked ? 'Destravar esta posição' : 'Fixar esta posição'}</button>
             <div className="grid grid-cols-3 gap-2">
@@ -1434,11 +1436,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
             <p className="mt-3 text-[10px] text-zinc-500">Paradas fixadas permanecem na posição. Destrave para movê-las.</p>
           </div>
         </div>
-      )}
+      , document.body)}
       {/* Código iFood — captura operacional compacta */}
-      {isIfoodModalOpen && (
+      {isIfoodModalOpen && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[120] flex items-end bg-black/70 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-16 backdrop-blur-sm animate-in fade-in duration-150 sm:items-center sm:justify-center"
+          className="fixed inset-0 z-[330] flex items-end justify-center overflow-hidden bg-black/70 px-3 pt-6 backdrop-blur-sm animate-in fade-in duration-150 sm:items-center"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !completionBusy) {
               closeConfirmationModal();
@@ -1446,7 +1448,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           }}
         >
           <div
-            className="mx-auto w-full max-w-[340px] rounded-[20px] border border-zinc-800 bg-zinc-950 p-3.5 shadow-2xl"
+            className="mx-auto max-h-[calc(100dvh-20px)] w-full max-w-[340px] overflow-y-auto overscroll-contain rounded-t-[20px] border border-zinc-800 bg-zinc-950 p-3.5 pb-[max(34px,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[20px]"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="flex items-center gap-3">
@@ -1565,7 +1567,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
             </button>
           </div>
         </div>
-      )}
+      , document.body)}
     </>
   );
 }

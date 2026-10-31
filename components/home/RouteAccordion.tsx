@@ -5,6 +5,7 @@ import { PreRouteIntelligence } from '@/components/home/PreRouteIntelligence';
 import { RouteSequenceAdvisor } from '@/components/home/RouteSequenceAdvisor';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -1212,8 +1213,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         />
       )}
 
-      {optimizerOpen && (
-        <div className="fixed inset-0 z-[110] flex flex-col justify-end bg-black/85 backdrop-blur-sm animate-in fade-in">
+      {optimizerOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[310] flex flex-col justify-end overflow-hidden bg-black/85 backdrop-blur-sm animate-in fade-in">
           <div className="flex max-h-[calc(100dvh-12px)] min-h-0 flex-col overflow-hidden rounded-t-[28px] border-t border-zinc-700 bg-[#151515]">
             <div className="flex items-start justify-between gap-3 border-b border-zinc-800 px-5 pb-4 pt-5">
               <div className="flex items-start gap-3">
@@ -1365,12 +1366,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* MODAL BOTTOM SHEET DE CÓPIA DO WHATSAPP */}
-      {isCopyMenuOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col justify-end bg-black/80 animate-in fade-in" onClick={() => setIsCopyMenuOpen(false)}>
-          <div className="dfl-bottom-sheet safe-bottom relative flex max-h-[88dvh] flex-col overflow-y-auto rounded-t-[30px] p-5 pb-6 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-200" onClick={(event) => event.stopPropagation()}>
+      {isCopyMenuOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[310] flex flex-col justify-end overflow-hidden bg-black/80 animate-in fade-in" onClick={() => setIsCopyMenuOpen(false)}>
+          <div className="dfl-bottom-sheet safe-bottom relative flex max-h-[calc(100dvh-12px)] flex-col overflow-y-auto overscroll-contain rounded-t-[30px] p-5 pb-[max(34px,env(safe-area-inset-bottom))] shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom duration-200" onClick={(event) => event.stopPropagation()}>
              <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-zinc-700" />
              <div className="mb-4 flex items-center justify-between gap-3">
                <div><h3 className="flex items-center gap-2 font-heading text-lg font-black text-zinc-50"><Copy size={18} className="text-emerald-400"/> {routeCopyBusy ? 'Copiando mensagem…' : 'Copiar para o motoboy'}</h3><p className="mt-1 text-[10px] text-zinc-500">{ifoodConfirmationMode === 'motoboy' ? 'Motoboy confirma iFood · link do portal incluso.' : 'Loja confirma iFood · coletar o código com o cliente.'} Logística e checklist por parada.</p></div>
@@ -1398,11 +1399,11 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
              </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* MODAL PARA O BALCÃO AVISAR CLIENTES DA SAÍDA */}
-      {isDispatchModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+      {isDispatchModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[310] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-emerald-400">
@@ -1434,12 +1435,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* MODAL DE REABERTURA */}
-      {isReopenModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+      {isReopenModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[310] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="max-h-[calc(100dvh-24px)] w-full max-w-md overflow-y-auto overscroll-contain bg-zinc-900 border border-zinc-800 rounded-3xl p-5 shadow-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5 text-amber-500">
                 <AlertTriangle size={24} />
@@ -1457,12 +1458,12 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* MODAL DE ENDEREÇOS FUZZY */}
-      {fuzzyModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+      {fuzzyModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[310] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="max-h-[calc(100dvh-24px)] w-full max-w-md overflow-y-auto overscroll-contain bg-zinc-900 border border-zinc-800 rounded-3xl p-5 shadow-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between"><div className="flex items-center gap-2.5 text-amber-400"><AlertTriangle size={24} /><h3 className="text-lg font-bold text-zinc-50">Endereços Incompletos</h3></div><button onClick={() => setFuzzyModalOpen(false)} className="text-zinc-500 hover:text-zinc-300"><X size={20}/></button></div>
             <p className="text-xs text-zinc-400 leading-relaxed">Encontramos <strong className="text-zinc-200">{currentFuzzyList.length}</strong> {currentFuzzyList.length === 1 ? 'parada' : 'paradas'} sem número explícito. O Google Maps pode se confundir.</p>
             <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
@@ -1479,7 +1480,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }
