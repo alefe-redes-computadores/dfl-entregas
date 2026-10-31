@@ -35,6 +35,7 @@ import clsx from 'clsx';
 
 import type { Route } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
+import { recordActionLatency } from '@/lib/operation/action-latency';
 import { DeliveryCard } from '@/components/home/DeliveryCard';
 import { RouteDepartureChecklist } from '@/components/routes/RouteDepartureChecklist';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
@@ -398,11 +399,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       setDepartureChecklistOpen(false);
       await safeRouteHaptic(true);
       const latencyMs = Date.now() - startedMs;
+      recordActionLatency('route_start', latencyMs, 'confirmed');
       if (latencyMs >= 2000) console.info('[DFL R220-R4] Inicio de rota confirmado', { totalMs: latencyMs });
       toast.success('Rota iniciada.', { description: latencyMs >= 4000
         ? `Checklist salvo após ${(latencyMs / 1000).toFixed(1).replace('.', ',')} s de confirmação.`
         : 'Checklist conferido e horário real de saída registrado.' });
     } catch (error) {
+      recordActionLatency('route_start', Date.now() - startedMs, 'failed');
       toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar a rota.');
     } finally { setActionBusy(false); }
   };
@@ -446,9 +449,13 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     if (actionBusy || routeActionLock.current) return;
     routeActionLock.current = true;
     setActionBusy(true);
+    const closeStartedAt = Date.now();
+    let closePersisted = false;
 
     try {
       await closeRoute(route.id);
+      closePersisted = true;
+      recordActionLatency('route_close', Date.now() - closeStartedAt, 'confirmed');
 
       await safeRouteHaptic(true);
 
@@ -496,6 +503,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
       setIsOpen(false);
     } catch (error) {
+      if (!closePersisted) recordActionLatency('route_close', Date.now() - closeStartedAt, 'failed');
       toast.error(
         error instanceof Error
           ? error.message

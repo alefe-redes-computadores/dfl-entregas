@@ -18,6 +18,7 @@ import {
 } from '@/lib/sync-diagnostics';
 import { auth } from '@/lib/firebase';
 import { rankSyncCollectionVolumes } from '@/lib/operation/sync-volume-ranking';
+import { ACTION_LATENCY_EVENT, actionLatencyDiagnosticText, clearActionLatencies, readActionLatencies, summarizeActionLatencies, type ActionLatencySample } from '@/lib/operation/action-latency';
 import { MessageTraceCard } from '@/components/diagnostics/MessageTraceCard';
 import { LegacyImportAuditCard } from '@/components/diagnostics/LegacyImportAuditCard'; // DFL_R202_LEGACY_AUDIT
 
@@ -49,6 +50,7 @@ export default function OperationalDiagnosticsPage() {
   const syncClickLockRef = useRef(false);
   const recoveryClickLockRef = useRef(false);
   const [entries, setEntries] = useState<SyncDiagnostic[]>([]);
+  const [latencies, setLatencies] = useState<ActionLatencySample[]>([]);
   const [pendingNotifications, setPendingNotifications] = useState<number | null>(null);
   const [pendingPreview, setPendingPreview] = useState<
     Array<{ id: number; title: string; at?: string }>
@@ -66,6 +68,7 @@ export default function OperationalDiagnosticsPage() {
 
   useEffect(() => {
     setEntries(readSyncDiagnostics());
+    setLatencies(readActionLatencies());
     if (!Capacitor.isNativePlatform()) return;
     void LocalNotifications.getPending()
       .then((result) => {
@@ -99,6 +102,12 @@ export default function OperationalDiagnosticsPage() {
 
   const localHealth = useMemo(() => summarizeSyncHealth(entries), [entries]);
   const collectionHotspots = useMemo(() => rankSyncCollectionVolumes(entries), [entries]);
+  const actionLatencyGroups = useMemo(() => summarizeActionLatencies(latencies), [latencies]);
+  useEffect(() => {
+    const refreshLatency = () => setLatencies(readActionLatencies());
+    window.addEventListener(ACTION_LATENCY_EVENT, refreshLatency);
+    return () => window.removeEventListener(ACTION_LATENCY_EVENT, refreshLatency);
+  }, []);
 
   // A tela aberta acompanha novos diagnósticos sem polling nem fetch adicional.
   useEffect(() => {
@@ -171,7 +180,7 @@ export default function OperationalDiagnosticsPage() {
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(syncDiagnosticText(entries));
+      await navigator.clipboard.writeText(syncDiagnosticText(entries) + '\n\n' + actionLatencyDiagnosticText(latencies));
       toast.success('Diagnóstico copiado.');
     } catch {
       toast.error('Não foi possível copiar o diagnóstico.');
@@ -180,7 +189,9 @@ export default function OperationalDiagnosticsPage() {
 
   const clear = () => {
     clearSyncDiagnostics();
+    clearActionLatencies();
     setEntries([]);
+    setLatencies([]);
     toast.success('Histórico local apagado.');
   };
 
@@ -276,6 +287,15 @@ export default function OperationalDiagnosticsPage() {
         ))}</div>
         <p className="mt-2 text-[10px] text-zinc-600">Documentos retornados não equivalem a leituras faturadas. Examine picos antes de mudar índices ou regras do Firestore.</p>
       </section>}
+
+      <section aria-label="Tempos das confirmações operacionais" className="mt-3 rounded-2xl border border-cyan-500/20 bg-zinc-900/45 p-3" data-dfl-action-latency="true">
+        <div className="flex items-center gap-2"><Activity size={16} className="text-cyan-400"/><h2 className="text-xs font-black text-zinc-100">Tempo de confirmação</h2></div>
+        <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Últimas 60 medições neste aparelho. Nenhum nome, ID, valor ou endereço. Os tempos não provam a origem exata da lentidão.</p>
+        {actionLatencyGroups.length > 0 ? <div className="mt-3 space-y-2">{actionLatencyGroups.map((item) => <div key={item.kind} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-[11px] text-zinc-200">{item.label}</b><span className="text-[10px] font-black tabular-nums text-cyan-300">média {(item.averageMs / 1000).toFixed(1)}s · P90 {(item.p90Ms / 1000).toFixed(1)}s</span></div>
+          <p className="mt-1 text-[9px] text-zinc-500">{item.confirmed} confirmados · {item.failures} falhas/parciais · {item.slow} acima de 4s</p>
+        </div>)}</div> : <p className="mt-3 text-[11px] text-zinc-500">Sem medições. Inicie uma rota ou conclua uma entrega para começar.</p>}
+      </section>
 
       <button type="button" disabled={isSyncing || syncChecking} onClick={handleSync} className="mt-3 flex h-13 w-full items-center justify-center gap-2 rounded-2xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-3.5 text-sm font-black text-cyan-300 active:scale-[.98] disabled:opacity-50">
         <RefreshCw size={17} className={isSyncing || syncChecking ? 'animate-spin' : ''} />

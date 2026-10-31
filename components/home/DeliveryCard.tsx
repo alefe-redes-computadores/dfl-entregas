@@ -30,6 +30,7 @@ import { auditOperationalAddress } from '@/lib/address-quality';
 import { SiteOrderSnapshot } from '@/components/home/SiteOrderSnapshot';
 import { customerRecurrence } from '@/lib/customer-recurrence';
 import { isDeliveryExpanded } from '@/lib/delivery-expansion-index';
+import { recordActionLatency } from '@/lib/operation/action-latency';
 import { pendingOperationalStopDeliveries } from '@/lib/delivery-stop-pending';
 import { deliveryPaymentStateLabel, deriveDeliveryPaymentState, deliveryCustomerCharge, deliveryEconomicValue } from '@/lib/delivery-finance';
 import { summarizeStopFinance } from '@/lib/delivery-stop-finance';
@@ -376,6 +377,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       }
 
       if (failed.length > 0) {
+        recordActionLatency('stop_completion', Date.now() - completionStartedMs, completedIds.size ? 'partial' : 'failed', targets.length);
         const pendingLabels = failed.map((item) => {
           const itemCustomer = getCustomerById(item.customer_id);
           return itemCustomer?.name || item.customer_name || (item.order_id ? `#${item.order_id}` : 'pedido sem nome');
@@ -390,6 +392,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
       closeConfirmationModal();
       const completionTotalMs = Date.now() - completionStartedMs;
+      recordActionLatency('stop_completion', completionTotalMs, 'confirmed', targets.length);
       if (completionTotalMs >= 2000) {
         console.info('[DFL R220-R4] Tempo de baixa confirmada', {
           totalMs: completionTotalMs,
@@ -418,6 +421,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         toast.info('Última entrega salva. Conferindo fechamento seguro no servidor.', { duration: 2200 });
       }
     } catch (error) {
+      recordActionLatency('stop_completion', Date.now() - completionStartedMs, 'failed', targets.length);
       console.error('Erro inesperado ao concluir parada:', error);
       impact(ImpactStyle.Heavy);
       toast.error('Não foi possível dar baixa na entrega.', {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { createPortal } from 'react-dom';
 import { AlertCircle, CalendarClock, ChevronDown, CheckCircle2, Inbox, MapPin, Plus, Route as RouteIcon, ShieldCheck, ShoppingBag, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { dateKey, routeOperationalDateKey } from '@/lib/operational-time';
@@ -168,8 +169,8 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
     }finally{lock.current=false;setSaving(false);}
   };
   return <section className="space-y-3" aria-label="Pedidos recebidos do Site">
-    {archiveId && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="Confirmar arquivamento operacional">
-      <div className="w-full max-w-md space-y-3 rounded-3xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl">
+    {archiveId && typeof document !== 'undefined' && createPortal(<div className="fixed inset-0 z-[340] flex items-center justify-center overflow-hidden bg-black/80 px-3 pt-[max(16px,env(safe-area-inset-top))] pb-[max(20px,env(safe-area-inset-bottom))]" role="dialog" aria-modal="true" aria-label="Confirmar arquivamento operacional">
+      <div className="max-h-[calc(100dvh-24px)] w-full max-w-md space-y-3 overflow-y-auto overscroll-contain rounded-3xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl">
         <h3 className="text-base font-black text-zinc-100">Arquivar pedido da operação?</h3>
         <p className="text-xs leading-relaxed text-zinc-300">O pedido sairá da Caixa ativa e continuará no histórico operacional. <strong>Isso não cancela o pedido no Site, não avisa o cliente e não registra entrega.</strong> Use somente após conferir a situação comercial.</p>
         <label className="block text-xs font-bold text-zinc-200">Motivo obrigatório
@@ -181,7 +182,7 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
           <button type="button" disabled={archiveBusy||archiveReason.trim().length<8} onClick={()=>void confirmArchive()} className="min-h-11 flex-1 rounded-xl border border-amber-500/40 bg-amber-500/15 text-xs font-black text-amber-200 disabled:opacity-40">{archiveBusy?'Arquivando...':'Confirmar arquivamento'}</button>
         </div>
       </div>
-    </div>}
+    </div>, document.body)}
 
   {/* R161_SITE_HISTORY: somente leitura, sem restaurar ou alterar documentos. */}
     <section aria-label="Histórico de pedidos do Site" className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-2.5">

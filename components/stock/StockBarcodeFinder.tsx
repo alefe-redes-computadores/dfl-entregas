@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Barcode, Camera, CameraOff, Search, X, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import type { StockProduct } from '@/types';
@@ -110,8 +111,8 @@ export function StockBarcodeFinder({ products, onSelect }: {
     <button type="button" onClick={() => { setOpen(true); setMessage(''); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[.07] px-3 text-[10px] font-black text-emerald-300 active:scale-[.98]">
       <Barcode size={17}/> Buscar código de barras
     </button>
-    {open && <div role="dialog" aria-modal="true" aria-label="Localizar produto por código de barras" className="fixed inset-0 z-[160] flex items-end justify-center bg-black/80 p-3 backdrop-blur-sm">
-      <section className="w-full max-w-md rounded-[28px] border border-zinc-700 bg-zinc-950 p-4 shadow-2xl">
+    {open && typeof document !== 'undefined' && createPortal(<div role="dialog" aria-modal="true" aria-label="Localizar produto por código de barras" className="fixed inset-0 z-[340] flex items-end justify-center overflow-hidden bg-black/80 px-3 pt-[max(16px,env(safe-area-inset-top))] pb-[max(20px,env(safe-area-inset-bottom))] backdrop-blur-sm">
+      <section className="max-h-[calc(100dvh-24px)] w-full max-w-md overflow-y-auto overscroll-contain rounded-[28px] border border-zinc-700 bg-zinc-950 p-4 shadow-2xl">
         <div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-[.15em] text-emerald-400">Busca rápida</p><h2 className="mt-1 font-heading text-lg font-black text-zinc-100">Código de barras</h2></div><button type="button" onClick={() => { stop(); setOpen(false); }} aria-label="Fechar leitor" className="grid h-11 w-11 place-items-center rounded-xl bg-zinc-900"><X size={18}/></button></div>
         <p className="mt-2 text-[10px] text-zinc-500">Leitura local do código salvo no cadastro, sem consulta externa e sem gravar estoque.</p>
         <div className="mt-3 overflow-hidden rounded-2xl border border-zinc-800 bg-black"><video ref={video} playsInline muted className={`aspect-[4/3] w-full object-cover ${scanning ? '' : 'hidden'}`}/>{!scanning && <div className="grid h-28 place-items-center text-zinc-600"><CameraOff size={24}/></div>}</div>
@@ -120,6 +121,6 @@ export function StockBarcodeFinder({ products, onSelect }: {
         <div className="mt-3 flex gap-2"><input value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') find(query); }} placeholder="EAN, UPC ou código interno" aria-label="Código de barras digitado" className="h-12 min-w-0 flex-1 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none focus:border-emerald-500"/><button type="button" onClick={() => { if (!find(query)) toast.info('Confira o código no cadastro do produto.'); }} className="grid h-12 w-12 place-items-center rounded-xl border border-zinc-700 bg-zinc-900 text-emerald-300" aria-label="Buscar produto"><Search size={18}/></button></div>
         <p className="mt-2 flex items-center gap-2 text-[9px] text-zinc-600"><CheckCircle2 size={12}/> Câmera desligada ao sair ou colocar aplicativo em segundo plano.</p>
       </section>
-    </div>}
+    </div>, document.body)}
   </>;
 }

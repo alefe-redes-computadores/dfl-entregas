@@ -6,6 +6,7 @@ import { persist } from 'zustand/middleware';
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBatch, deleteField, runTransaction, query, where } from 'firebase/firestore';
 import { createSerializedWriteQueue } from '@/lib/store/serializedWriteQueue';
 import { queueDeliveryDocuments } from '@/lib/store/atomicDeliveryWriteQueue';
+import { recordActionLatency } from '@/lib/operation/action-latency';
 import { deliveryImportDocumentId, assertFreshRemoteImportIds } from '@/lib/operation/delivery-import-identity'; // DFL_R201_ATOMIC_IMPORT
 import { createKeyedWriteQueue } from '@/lib/store/keyedWriteQueue';
 import { rollbackAddedEntity, rollbackUpdatedEntity, rollbackDeletedEntity, rollbackAddedEntities, rollbackUpdatedEntities } from '@/lib/operation/optimisticRollback';
@@ -2177,6 +2178,9 @@ export const useAppStore = create<AppState>()(
         }));
 
         let deliveryCommitCompleted = false;
+        const criticalOperation = isCompleting || isReopening || routeChanged;
+        const criticalQueuedAt = Date.now();
+        let criticalRemoteStartedAt = 0;
         try {
           const batch = writeBatch(db);
           const safeData: Record<string, unknown> = sanitizeForFirebase(dataWithTimestamp);
@@ -2189,6 +2193,7 @@ export const useAppStore = create<AppState>()(
             // R95: validação REMOTA somente para transições críticas. Edições
             // comuns continuam com batch e SEM leitura Firestore adicional.
             const commitCritical = () => runTransaction(db, async (transaction) => {
+              if (!criticalRemoteStartedAt) criticalRemoteStartedAt = Date.now();
               const deliveryRef = doc(db, 'deliveries', id);
               const needsRoute = Boolean(nextRouteId && (routeChanged || isDeliveryFulfillment(deliveryToUpdate)));
               // Leituras independentes do mesmo snapshot transacional: evitar dois RTTs em serie.
@@ -2214,6 +2219,11 @@ export const useAppStore = create<AppState>()(
             await queueDeliveryDocuments(queueEntityWrite, [id], () => batch.commit());
           }
           deliveryCommitCompleted = true;
+          if (criticalOperation) {
+            const total = Date.now() - criticalQueuedAt;
+            recordActionLatency('delivery_critical', total, 'confirmed');
+            if (criticalRemoteStartedAt) recordActionLatency('delivery_queue', Math.max(0, criticalRemoteStartedAt - criticalQueuedAt), 'confirmed');
+          }
 
           // Urgência pertence à parada física. Todos os pedidos do mesmo
           // endereço recebem o mesmo estado e, ao ativar, a parada inteira vai
@@ -2344,6 +2354,9 @@ export const useAppStore = create<AppState>()(
             }
           }
         } catch (error) {
+          if (criticalOperation && !deliveryCommitCompleted) {
+            recordActionLatency('delivery_critical', Date.now() - criticalQueuedAt, 'failed');
+          }
           if (deliveryCommitCompleted) {
             set({ syncError: true });
             console.error('Entrega salva, mas não foi possível fechar a rota automaticamente:', error);

@@ -265,7 +265,7 @@ export function RouteDepartureChecklist({
           type="button"
           disabled={busy}
           onClick={() => void onConfirm()}
-          className="mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 text-sm font-black text-zinc-950 active:scale-[0.98] disabled:opacity-50"
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 text-sm font-black text-zinc-950 active:scale-[0.98] disabled:opacity-50"
         >
           {busy ? <LoaderCircle size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
           {busy
