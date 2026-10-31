@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertCircle, Calculator, Clock3, PackagePlus, Plus, Save, Trash2 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import type {
@@ -224,6 +225,10 @@ export function StockSupplyForm({
         })
       : [fresh()],
   );
+
+  // Indexar produtos já usados evita repetir items.some() para cada candidato
+  // em cada linha do formulário de compra. A exceção mantém o item atual selecionável.
+  const assignedProductIds = useMemo(() => new Set(items.map((item) => item.stock_product_id).filter(Boolean)), [items]);
 
   const formDraft = useMemo<PersistedFormDraft>(() => ({
     occurredAt,
@@ -813,11 +818,7 @@ export function StockSupplyForm({
                   products={products.filter(
                     (candidate) =>
                       candidate.id === item.stock_product_id ||
-                      !items.some(
-                        (other) =>
-                          other.id !== item.id &&
-                          other.stock_product_id === candidate.id,
-                      ),
+                      !assignedProductIds.has(candidate.id),
                   )}
                   draftIncoming={draftIncoming}
                   preferredProductIds={preferredProductIds}
@@ -1213,14 +1214,14 @@ export function StockSupplyForm({
         {busy || submitting ? 'Registrando...' : submitLabel}
       </button>
 
-      {leaveOpen && (
+      {leaveOpen && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[180] flex items-end bg-black/80 p-3 backdrop-blur-sm"
+          className="fixed inset-0 z-[180] flex max-h-[100dvh] items-end overflow-y-auto overscroll-contain bg-black/80 px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:justify-center"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setLeaveOpen(false);
           }}
         >
-          <div className="mx-auto w-full max-w-md rounded-[28px] border border-zinc-800 bg-zinc-950 p-5 shadow-2xl">
+          <div className="mx-auto max-h-[calc(100dvh-28px)] w-full max-w-md overflow-y-auto overscroll-contain rounded-[24px] border border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
             <p className="text-[10px] font-black uppercase tracking-[.18em] text-amber-400">
               Compra não salva
             </p>
@@ -1254,7 +1255,8 @@ export function StockSupplyForm({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 </form>
   );

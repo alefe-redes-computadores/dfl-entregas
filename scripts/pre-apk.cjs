@@ -2,6 +2,7 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/test-r226-preopening-last-mile.cjs',
   'scripts/test-r225-stock-premium.cjs',
   'scripts/test-r224-final-closeout.cjs',
   'scripts/test-r222-preopening-fastlane.cjs',

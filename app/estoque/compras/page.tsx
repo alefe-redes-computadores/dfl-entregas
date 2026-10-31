@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { useRouter } from 'next/navigation';
+import { createPortal } from 'react-dom';
 import {
   BrainCircuit,
   Check,
@@ -584,7 +585,7 @@ export default function ShoppingList() {
 
       {/* R131_COBERTURA_DE_COMPRAS */}
       <StockPurchaseCoveragePanel products={products} committed={committedMap}/>
-      {leavePrompt && <div role="dialog" aria-modal="true" aria-label="Sair da compra" className="fixed inset-0 z-[170] flex items-end justify-center bg-black/80 p-3 backdrop-blur-sm"><section className="w-full max-w-md rounded-[28px] border border-amber-500/25 bg-zinc-950 p-5 shadow-2xl"><p className="text-[10px] font-black uppercase tracking-[.14em] text-amber-400">Compra em andamento</p><h2 className="mt-2 font-heading text-lg font-black text-zinc-100">Deseja realmente sair?</h2><p className="mt-2 text-xs leading-relaxed text-zinc-400">Sua seleção, quantidades e embalagens serão preservadas no rascunho deste aparelho. Nenhuma compra será registrada sem sua confirmação.</p><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setLeavePrompt(false)} className="h-12 rounded-xl bg-emerald-500 font-black text-zinc-950">Continuar compra</button><button type="button" onClick={() => { setLeavePrompt(false); router.replace('/estoque'); }} disabled={busy} className="h-12 rounded-xl border border-zinc-700 bg-zinc-900 text-xs font-bold text-zinc-300 disabled:opacity-50">Sair e salvar</button></div></section></div>}
+      {leavePrompt && typeof document !== 'undefined' && createPortal(<div role="dialog" aria-modal="true" aria-label="Sair da compra" className="fixed inset-0 z-[170] flex max-h-[100dvh] items-end justify-center overflow-y-auto overscroll-contain bg-black/80 px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center"><section className="w-full max-w-md max-h-[calc(100dvh-28px)] overflow-y-auto overscroll-contain rounded-[24px] border border-amber-500/25 bg-zinc-950 p-4 shadow-2xl"><p className="text-[10px] font-black uppercase tracking-[.14em] text-amber-400">Compra em andamento</p><h2 className="mt-2 font-heading text-lg font-black text-zinc-100">Deseja realmente sair?</h2><p className="mt-2 text-xs leading-relaxed text-zinc-400">Sua seleção, quantidades e embalagens serão preservadas no rascunho deste aparelho. Nenhuma compra será registrada sem sua confirmação.</p><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setLeavePrompt(false)} className="h-12 rounded-xl bg-emerald-500 font-black text-zinc-950">Continuar compra</button><button type="button" onClick={() => { setLeavePrompt(false); router.replace('/estoque'); }} disabled={busy} className="h-12 rounded-xl border border-zinc-700 bg-zinc-900 text-xs font-bold text-zinc-300 disabled:opacity-50">Sair e salvar</button></div></section></div>, document.body)}
 
       <section className="mb-4 rounded-[24px] border border-amber-500/20 bg-amber-500/[.06] p-4">
         <div className="flex gap-3">

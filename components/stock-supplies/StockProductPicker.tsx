@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Boxes,
   Check,
@@ -297,7 +298,7 @@ export function StockProductPicker({
         </span>
       </button>
 
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
         <div
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !busy) {
@@ -306,9 +307,9 @@ export function StockProductPicker({
           }}
           onKeyDown={(event) => { if (event.key === 'Escape' && !busy) { setOpen(false); setCreating(false); } }}
           role="presentation"
-          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/85 px-2 pt-3 backdrop-blur-md sm:items-center sm:px-4"
+          className="fixed inset-0 z-[120] flex max-h-[100dvh] items-end justify-center overflow-y-auto overscroll-contain bg-black/85 px-2 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-md sm:items-center sm:px-4"
         >
-          <div role="dialog" aria-modal="true" aria-label={creating ? 'Cadastrar produto de estoque' : 'Selecionar produto de estoque'} className="mx-auto max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[30px] border border-zinc-700 bg-zinc-950 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[30px]">
+          <div role="dialog" aria-modal="true" aria-label={creating ? 'Cadastrar produto de estoque' : 'Selecionar produto de estoque'} className="mx-auto max-h-[calc(100dvh-24px)] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[30px] border border-zinc-700 bg-zinc-950 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[30px]">
             <div className="sticky top-0 z-10 -mx-1 flex justify-between gap-3 bg-zinc-950/95 px-1 pb-3 backdrop-blur">
               <div>
                 <h3 className="font-heading text-lg font-black text-zinc-100">
@@ -632,7 +633,8 @@ export function StockProductPicker({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

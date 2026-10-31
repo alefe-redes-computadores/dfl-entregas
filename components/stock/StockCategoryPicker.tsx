@@ -203,7 +203,7 @@ export function StockCategoryPicker({
 
       {mounted && open && createPortal(
         <div
-          className="fixed inset-0 z-[1000] flex items-end bg-black/85 px-3 pt-3 backdrop-blur-md sm:items-center sm:justify-center"
+          className="fixed inset-0 z-[1000] flex max-h-[100dvh] items-end overflow-y-auto overscroll-contain bg-black/85 px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-md sm:items-center sm:justify-center"
           onMouseDown={(event) => {
             if (
               event.target ===
@@ -213,7 +213,7 @@ export function StockCategoryPicker({
             }
           }}
         >
-          <section className="mx-auto max-h-[88dvh] w-full max-w-md overflow-hidden rounded-t-[30px] border border-zinc-800 bg-zinc-950 shadow-2xl sm:rounded-[30px]">
+          <section className="mx-auto max-h-[calc(100dvh-24px)] w-full max-w-md overflow-hidden rounded-t-[30px] border border-zinc-800 bg-zinc-950 shadow-2xl sm:rounded-[30px]">
             <header className="flex items-center justify-between border-b border-zinc-800 p-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[.18em] text-emerald-400">
