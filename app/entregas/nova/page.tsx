@@ -15,6 +15,7 @@ import { paymentStateForInput } from '@/lib/delivery-finance';
 import { reviewDeliveryPaymentSplit, toPaymentCents, type DeliveryPaymentPart } from '@/lib/delivery-payment-split';
 import { firstMultiOrderIssue } from '@/lib/operation/multiOrderDraft';
 import { useAppStore } from '@/store/useAppStore';
+import { recordActionLatency } from '@/lib/operation/action-latency';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { CustomerDestinationSheet } from '@/components/customers/CustomerDestinationSheet';
 import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
@@ -26,7 +27,7 @@ import { parseIfoodOrdersText } from '@/lib/ifood-order-parser';
 import { normalizeFood99Order } from '@/lib/food99-order';
 import { assessIfoodParseQuality, buildIfoodParseGuide, buildIfoodRecognitionSummary } from '@/lib/ifood-parser-quality';
 import { loadInboxDay, markInboxDraft } from '@/lib/delivery-inbox';
-import { geocodeAddress } from '@/lib/store-geocoding';
+import { deliverySearchMapLink } from '@/lib/operation/delivery-create-fastlane';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 import { customerIdentityEvidence, sameCustomerAddress, sameCustomerIdentityAddress, normalizeCustomerName } from '@/lib/customer-identity';
 import {
@@ -570,6 +571,7 @@ const [routeId, setRouteId] = useState('');
     if (submitFlight.current) return;
     submitFlight.current = true;
     setIsSaving(true);
+    const r227SubmitStartedAt = Date.now();
     try{
       const normalizedAddress=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(streetAddress):{address:'',neighborhood:undefined,phone:undefined,observations:[] as string[]};
       const cleanStreet=fulfillmentMode==='delivery'?normalizedAddress.address:'';
@@ -588,8 +590,8 @@ const [routeId, setRouteId] = useState('');
           duration:5200,
         });
       }
-      let resolvedMapsLink=mapsLink.trim();
-      if(fulfillmentMode==='delivery'&&cleanStreet&&!resolvedMapsLink){try{const point=await geocodeAddress(cleanStreet);if(point)resolvedMapsLink=`https://www.google.com/maps?q=${point.lat},${point.lng}`}catch(error){console.warn('Não foi possível resolver coordenadas automaticamente:',error)}}
+      // R227: endereço navegável imediatamente; geocodificação remota não segura o cadastro.
+      const resolvedMapsLink=fulfillmentMode==='delivery' ? deliverySearchMapLink(cleanStreet, mapsLink) : mapsLink.trim();
       const now=new Date().toISOString();
       const sameAddressSource = fulfillmentMode === 'delivery'
         ? deliveries.find((candidate) =>
@@ -626,8 +628,9 @@ const [routeId, setRouteId] = useState('');
       if (inboxDraftId && inboxDay) {
         markInboxDraft(inboxDay, inboxDraftId, 'launched');
       }
+      recordActionLatency('delivery_form', Date.now() - r227SubmitStartedAt, 'confirmed', origin === 'ifood' ? drafts.length : 1);
       router.replace(safeReturnTo||deliveriesReturn);
-    }catch(error){console.error('Erro ao cadastrar entrega:',error);toast.error('Não foi possível cadastrar a entrega.',{description:'Confira os dados e sua conexão e tente novamente.'})}finally{submitFlight.current=false;setIsSaving(false)}
+    }catch(error){recordActionLatency('delivery_form', Date.now() - r227SubmitStartedAt, 'failed', origin === 'ifood' ? drafts.length : 1);console.error('Erro ao cadastrar entrega:',error);toast.error('Não foi possível cadastrar a entrega.',{description:'Confira os dados e sua conexão e tente novamente.'})}finally{submitFlight.current=false;setIsSaving(false)}
   };
 
   return (

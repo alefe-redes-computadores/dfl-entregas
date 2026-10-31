@@ -998,6 +998,7 @@ export const useAppStore = create<AppState>()(
       getCustomerById: (customerId) => findByIdIndexed(get().customers, customerId),
 
       addRoute: async (route) => {
+        const r227RouteStartedAt = Date.now();
         const now = new Date().toISOString();
         const routeWithTimestamp: Route = {
           ...route,
@@ -1017,7 +1018,9 @@ export const useAppStore = create<AppState>()(
         try {
           const safeData = sanitizeForFirebase(routeWithTimestamp);
           await setDoc(doc(db, 'routes', route.id), safeData);
+          recordActionLatency('route_create', Date.now() - r227RouteStartedAt, 'confirmed');
         } catch (error) {
+          recordActionLatency('route_create', Date.now() - r227RouteStartedAt, 'failed');
           set((state) => ({ routes: rollbackAddedEntity(state.routes, routeWithTimestamp) }));
           console.error(error);
           throw error;
@@ -1308,6 +1311,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateStockSupply: async (id, updatedData) => {
+        const r227SupplyStartedAt = Date.now();
         const current = get().stockSupplies.find((item) => item.id === id);
 
         if (!current) {
@@ -1370,7 +1374,13 @@ export const useAppStore = create<AppState>()(
             throw error;
           });
 
-        await trackStockSupplyWrite(id, operation);
+        try {
+          await trackStockSupplyWrite(id, operation);
+          recordActionLatency('purchase_update', Date.now() - r227SupplyStartedAt, 'confirmed');
+        } catch (error) {
+          recordActionLatency('purchase_update', Date.now() - r227SupplyStartedAt, 'failed');
+          throw error;
+        }
       },
 
       deleteStockSupply: async (id) => {
@@ -1604,6 +1614,7 @@ export const useAppStore = create<AppState>()(
       },
 
       integrateStockSupply: async (id) => {
+        const r227IntegrateStartedAt = Date.now();
         await waitForStockSupplyWrite(id);
         const result = await runTransaction(db, async (transaction) => {
           const supplyRef = doc(db, 'stock_supplies', id);
@@ -1641,6 +1652,7 @@ export const useAppStore = create<AppState>()(
           transaction.update(supplyRef, sanitizeForFirebase(supplyPatch));
           return { ...plan, supplyPatch };
         });
+        recordActionLatency('stock_integrate', Date.now() - r227IntegrateStartedAt, 'confirmed');
         if (!result) return;
         const changedMap = new Map(result.changed.map((item) => [item.id, item]));
         const recordIds = new Set(result.records.map((item) => item.id));
@@ -1770,6 +1782,7 @@ export const useAppStore = create<AppState>()(
       },
 
       addDelivery: async (delivery) => {
+        const r227DeliveryStartedAt = Date.now();
         if (isCancelledSiteDelivery(delivery)) throw new Error('Pedido cancelado não pode ser importado como entrega ativa.');
         // R201: todos os aparelhos calculam o MESMO documento para um pedido de plataforma.
         // Site integrado nao passa aqui; registros da loja sem ID comercial preservam IDs atuais.
@@ -1818,14 +1831,23 @@ export const useAppStore = create<AppState>()(
             // Fluxos historicos da loja e sem identificador forte continuam intactos.
             await queueEntityWrite('deliveries', delivery.id, () => setDoc(doc(db, 'deliveries', delivery.id), safeData));
           }
+          recordActionLatency('delivery_write', Date.now() - r227DeliveryStartedAt, 'confirmed');
           if (deliveryWithTimestamp.route_id && !deliveryWithTimestamp.is_urgent) {
             try {
-              await autoOrganizeLoadedRouteAfterInsert(deliveryWithTimestamp.route_id, get().deliveries, get().customers, get().storeSettings);
+              const r227ArrangeStartedAt = Date.now();
+              try {
+                 await autoOrganizeLoadedRouteAfterInsert(deliveryWithTimestamp.route_id, get().deliveries, get().customers, get().storeSettings);
+                 recordActionLatency('route_auto_order', Date.now() - r227ArrangeStartedAt, 'confirmed');
+               } catch (arrangeError) {
+                 recordActionLatency('route_auto_order', Date.now() - r227ArrangeStartedAt, 'failed');
+                 throw arrangeError;
+               }
             } catch (organizeError) {
               console.warn('Auto-organização incremental não aplicada:', organizeError);
             }
           }
         } catch (error) {
+          recordActionLatency('delivery_write', Date.now() - r227DeliveryStartedAt, 'failed');
           set((state) => ({ deliveries: rollbackAddedEntity(state.deliveries, deliveryWithTimestamp) }));
           console.error(error);
           throw error;
@@ -1836,6 +1858,7 @@ export const useAppStore = create<AppState>()(
 
       addDeliveries: async (items) => {
         if (!items.length) return;
+        const r227BatchStartedAt = Date.now();
         if (items.some(isCancelledSiteDelivery)) throw new Error('O lote contém pedido cancelado. Revise antes de importar.');
         // R201: normalizar IDs ANTES de deduplicacao local, optimistic UI e fila de escrita.
         items = items.map((item) => {
@@ -1899,6 +1922,7 @@ export const useAppStore = create<AppState>()(
             ));
             await queueDeliveryDocuments(queueEntityWrite, prepared.map((delivery) => delivery.id), () => batch.commit());
           }
+          recordActionLatency('delivery_write', Date.now() - r227BatchStartedAt, 'confirmed', prepared.length);
           const touchedRoutes = Array.from(new Set(prepared.map((delivery) => delivery.route_id).filter(Boolean)));
           for (const touchedRouteId of touchedRoutes) {
             // Não desfazer, no mesmo cadastro, a prioridade fixada de uma urgência.
@@ -1915,6 +1939,7 @@ export const useAppStore = create<AppState>()(
             }
           }
         } catch (error) {
+          recordActionLatency('delivery_write', Date.now() - r227BatchStartedAt, 'failed', prepared.length);
           set((state) => ({ deliveries: rollbackAddedEntities(state.deliveries, prepared), syncError: true }));
           console.error('Erro ao adicionar pedidos em lote:', error);
           throw error;
@@ -3529,7 +3554,8 @@ export const useAppStore = create<AppState>()(
           return pending.catch(() => '').then(() =>
             get().findOrCreateCustomer(name, details));
         }
-        const operation = (async (): Promise<string> => {
+        const r227CustomerStartedAt = Date.now();
+        const rawOperation = (async (): Promise<string> => {
 
         const previousCustomers = get().customers;
         const now = new Date().toISOString();
@@ -3596,9 +3622,7 @@ export const useAppStore = create<AppState>()(
         ) => {
           const before = { ...customer };
 
-          const updatedFields: Partial<Customer> = {
-            updated_at: now,
-          };
+          const updatedFields: Partial<Customer> = {};
 
           /*
            * Cadastro selecionado/reutilizado é enriquecido.
@@ -3613,12 +3637,12 @@ export const useAppStore = create<AppState>()(
             updatedFields.maps_link = details.mapsLink.trim();
           }
 
-          if (details?.confirmationCode?.trim()) {
+          if (details?.confirmationCode?.trim() && details.confirmationCode.trim() !== customer.last_confirmation_code) {
             updatedFields.last_confirmation_code =
               details.confirmationCode.trim();
           }
 
-          if (details?.observation?.trim()) {
+          if (details?.observation?.trim() && details.observation.trim() !== customer.observation) {
             updatedFields.observation =
               details.observation.trim();
           }
@@ -3627,7 +3651,7 @@ export const useAppStore = create<AppState>()(
             updatedFields.neighborhood = derivedNeighborhood;
           }
 
-          if (details?.origin) {
+          if (details?.origin && details.origin !== customer.origin) {
             updatedFields.origin = details.origin;
           }
 
@@ -3635,6 +3659,9 @@ export const useAppStore = create<AppState>()(
             updatedFields.phone = details.phone.trim();
           }
 
+          // Se o cliente já estava correto, eliminar o round-trip Firestore inteiro.
+          if (!Object.keys(updatedFields).length) return customer.id;
+          updatedFields.updated_at = now;
           set((state) => ({
             customers: state.customers.map(
               (current) =>
@@ -3769,6 +3796,10 @@ export const useAppStore = create<AppState>()(
           throw error;
         }
         })();
+        const operation = rawOperation.then(
+          (value) => { recordActionLatency('customer_upsert', Date.now() - r227CustomerStartedAt, 'confirmed'); return value; },
+          (error) => { recordActionLatency('customer_upsert', Date.now() - r227CustomerStartedAt, 'failed'); throw error; },
+        );
         customerCreationFlights.set(flightKey, operation);
         void operation.finally(() => {
           if (customerCreationFlights.get(flightKey) === operation) {

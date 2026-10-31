@@ -10,7 +10,14 @@ export type ActionLatencyKind =
   | 'route_start'
   | 'route_close'
   | 'stock_movement'
-  | 'stock_supply';
+  | 'stock_supply'
+  | 'delivery_form'
+  | 'delivery_write'
+  | 'customer_upsert'
+  | 'route_create'
+  | 'route_auto_order'
+  | 'purchase_update'
+  | 'stock_integrate';
 export type ActionLatencyStatus = 'confirmed' | 'failed' | 'partial';
 export type ActionLatencySample = {
   kind: ActionLatencyKind;
@@ -25,6 +32,8 @@ const MAX_SAMPLES = 60;
 const KINDS: readonly ActionLatencyKind[] = [
   'stop_completion', 'delivery_critical', 'delivery_queue',
   'route_start', 'route_close', 'stock_movement', 'stock_supply',
+  'delivery_form', 'delivery_write', 'customer_upsert', 'route_create',
+  'route_auto_order', 'purchase_update', 'stock_integrate',
 ];
 const STATUSES: readonly ActionLatencyStatus[] = ['confirmed', 'failed', 'partial'];
 const safeMs = (value: unknown) =>
@@ -96,6 +105,13 @@ export const ACTION_LATENCY_LABEL: Record<ActionLatencyKind, string> = {
   route_close: 'Fechamento de rota',
   stock_movement: 'Movimentação de estoque',
   stock_supply: 'Compra de estoque',
+  delivery_form: 'Nova entrega (total)',
+  delivery_write: 'Gravação da entrega',
+  customer_upsert: 'Cliente (vínculo)',
+  route_create: 'Nova rota',
+  route_auto_order: 'Organização da rota',
+  purchase_update: 'Recebimento/edição compra',
+  stock_integrate: 'Integração crítica estoque',
 };
 
 export function summarizeActionLatencies(samples: readonly ActionLatencySample[]) {
