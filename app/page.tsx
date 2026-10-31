@@ -16,7 +16,7 @@ import { OperationalRadar } from '@/components/home/OperationalRadar';
 import { ShiftBriefing } from '@/components/home/ShiftBriefing';
 import { OperationalCommandCenter } from '@/components/home/OperationalCommandCenter';
 import { OperationalDatePicker } from '@/components/home/OperationalDatePicker';
-import { deliveryEconomicValue } from '@/lib/delivery-finance';
+import { deliveryEconomicValue, deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
 
 function formatDateLabel(date: Date): string {
@@ -497,6 +497,14 @@ export default function HomePage() {
               const mode = getFulfillmentMode(order);
               const isPickup = mode === 'pickup';
               const isPlatform = mode === 'external_delivery';
+              const paidConfirmed = deriveDeliveryPaymentState(order) === 'paid';
+              const cardPayment = ['cartao', 'cartao_credito', 'cartao_debito'].includes(order.payment_method);
+              // Conclusao fisica nao comprova o recebimento financeiro. O Site pode
+              // entregar apenas o metodo de pagamento, sem a confirmacao do terminal.
+              const financialCaption = paidConfirmed ? 'Pago confirmado'
+                : order.completed && isPickup && cardPayment ? 'Retirada concluída · cartão a conferir'
+                : order.completed ? 'Concluído · recebimento a conferir'
+                : 'Pagamento pendente';
               const ModeIcon = isPickup || isPlatform ? ShoppingBag : Store;
               return (
                 <button
@@ -516,7 +524,7 @@ export default function HomePage() {
                       </span>
                     </div>
                     <p className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-500">
-                      <Clock3 size={10} />{formatOrderTime(order)}<span>•</span>{order.is_paid ? 'Pago' : 'Pagamento pendente'}
+                      <Clock3 size={10} className="shrink-0" />{formatOrderTime(order)}<span>•</span><span className="min-w-0 truncate" title={financialCaption}>{financialCaption}</span>
                     </p>
                   </div>
                   <div className="shrink-0 text-right">

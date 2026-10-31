@@ -1,7 +1,7 @@
 // app/entregas/details/page.tsx
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
@@ -52,6 +52,7 @@ import {
 import { siteIntegrationStages } from '@/lib/site-integration-health';
 import { canMarkSitePickupReady, isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
+import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 
 const money = (value = 0) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -88,6 +89,9 @@ function DeliveryDetailsContent() {
   );
   const [isCompleting, setIsCompleting] = useState(false);
   const [isMarkingReady, setIsMarkingReady] = useState(false);
+  const [confirmCardPaymentOpen, setConfirmCardPaymentOpen] = useState(false);
+  const [confirmCardPaymentBusy, setConfirmCardPaymentBusy] = useState(false);
+  const cardPaymentLock = useRef(false);
   const [openingAdmin, setOpeningAdmin] = useState(false);
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -120,6 +124,8 @@ function DeliveryDetailsContent() {
   const name = customer?.name || delivery.customer_name || 'Cliente não informado';
   const phone = formatBrazilianPhone(delivery.phone || customer?.phone);
   const mode = getFulfillmentMode(delivery);
+  const paymentConfirmed = deriveDeliveryPaymentState(delivery) === 'paid';
+  const isCardPickup = mode === 'pickup' && ['cartao', 'cartao_credito', 'cartao_debito'].includes(delivery.payment_method);
   const logistics = isDeliveryFulfillment(delivery);
   const modeLabel = fulfillmentLabel(delivery);
   const ModeIcon = mode === 'pickup' || mode === 'external_delivery' ? ShoppingBag : mode === 'counter' ? Store : Bike;
@@ -293,6 +299,25 @@ function DeliveryDetailsContent() {
     }
   };
 
+  // Nunca inferir quitacao a partir de completed: o pagamento precisa de evidencia humana.
+  const confirmCardPickupPayment = async () => {
+    if (!isCardPickup || !delivery.completed || paymentConfirmed || cancelled || cardPaymentLock.current) return;
+    cardPaymentLock.current = true;
+    setConfirmCardPaymentBusy(true);
+    try {
+      await updateDelivery(delivery.id, { is_paid: true, payment_state: 'paid' });
+      setConfirmCardPaymentOpen(false);
+      toast.success('Pagamento em cartão confirmado e registrado.');
+    } catch (error) {
+      toast.error('Não foi possível confirmar o cartão.', {
+        description: error instanceof Error ? error.message : 'Pagamento preservado para conferência.',
+      });
+    } finally {
+      cardPaymentLock.current = false;
+      setConfirmCardPaymentBusy(false);
+    }
+  };
+
   const handleCompletionAction = async () => {
     if (cancelled || isCompleting) return;
     await vibrate(ImpactStyle.Light);
@@ -450,11 +475,32 @@ function DeliveryDetailsContent() {
             <p className="text-[10px] uppercase text-zinc-500">Pagamento</p>
             <p className="mt-1 flex items-center gap-1.5 text-sm font-bold capitalize text-zinc-200">
               <PaymentIcon size={15} />
-              {delivery.is_paid ? 'Pago no app' : delivery.payment_method}
+              {paymentConfirmed ? 'Pagamento confirmado' : isCardPickup && delivery.completed ? 'Cartão · recebimento a conferir' : delivery.payment_method}
             </p>
           </div>
         </div>
       </section>
+
+      {isCardPickup && delivery.completed && !paymentConfirmed && !cancelled && (
+        <section className="rounded-[22px] border border-amber-500/25 bg-amber-500/[.06] p-4" aria-label="Conferência financeira da retirada">
+          <p className="text-sm font-black text-amber-200">Retirada concluída · cartão a conferir</p>
+          <p className="mt-1 text-xs leading-relaxed text-zinc-400">A entrega do pedido foi registrada, mas ainda falta confirmar que o valor entrou pela maquininha. A conclusão não quita a venda automaticamente.</p>
+          <button type="button" disabled={confirmCardPaymentBusy} onClick={() => setConfirmCardPaymentOpen(true)} className="mt-3 min-h-11 w-full rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 text-xs font-black text-amber-200 disabled:opacity-45">Confirmar cartão recebido</button>
+        </section>
+      )}
+      {confirmCardPaymentOpen && (
+        <div role="dialog" aria-modal="true" aria-label="Confirmar pagamento da retirada" className="fixed inset-0 z-[180] flex items-end justify-center bg-black/80 p-3 backdrop-blur-sm" onClick={() => { if (!confirmCardPaymentBusy) setConfirmCardPaymentOpen(false); }}>
+          <section className="w-full max-w-md rounded-[26px] border border-amber-500/25 bg-zinc-950 p-5 pb-[max(20px,env(safe-area-inset-bottom))]" onClick={(event) => event.stopPropagation()}>
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">Conferência do cartão</p>
+            <h3 className="mt-2 text-base font-black text-zinc-100">O pagamento foi recebido?</h3>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-400">Confirme somente depois de verificar a aprovação na maquininha. A retirada já está concluída; esta ação registra apenas a quitação financeira.</p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button type="button" disabled={confirmCardPaymentBusy} onClick={() => setConfirmCardPaymentOpen(false)} className="h-12 rounded-xl border border-zinc-700 text-xs font-bold text-zinc-300 disabled:opacity-45">Cancelar</button>
+              <button type="button" disabled={confirmCardPaymentBusy || paymentConfirmed} aria-busy={confirmCardPaymentBusy} onClick={() => void confirmCardPickupPayment()} className="h-12 rounded-xl bg-amber-500 px-2 text-xs font-black text-zinc-950 disabled:opacity-45">{confirmCardPaymentBusy ? 'Registrando…' : 'Sim, cartão recebido'}</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {channel === 'site' && (
         <section className="rounded-[24px] border border-cyan-500/20 bg-cyan-500/[.035] p-4">

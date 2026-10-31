@@ -339,6 +339,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     if (targets.length === 0 || completionBusyRef.current) return;
     completionBusyRef.current = true;
     setCompletionBusy(true);
+    const completionStartedMs = Date.now();
+    const completionWriteMs: number[] = [];
     // Feedback tardio evita poluir operações rápidas e explica as baixas lentas.
     const completionToastId = `dfl-stop-completion:${route.id}:${delivery.id}`;
     const completionNotice = window.setTimeout(() => {
@@ -362,7 +364,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         if (codeToSave) updatePayload.confirmation_code = codeToSave;
 
         try {
-          await updateDelivery(item.id, updatePayload);
+          const writeStartedMs = Date.now();
+          try { await updateDelivery(item.id, updatePayload); }
+          finally { completionWriteMs.push(Date.now() - writeStartedMs); }
           completedIds.add(item.id);
         } catch (error) {
           console.error(`Erro ao concluir entrega ${item.id}:`, error);
@@ -384,6 +388,17 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       }
 
       closeConfirmationModal();
+      const completionTotalMs = Date.now() - completionStartedMs;
+      if (completionTotalMs >= 2000) {
+        console.info('[DFL R220-R4] Tempo de baixa confirmada', {
+          totalMs: completionTotalMs,
+          pedidos: targets.length,
+          writesMs: completionWriteMs,
+        });
+      }
+      const completionLatencyNote = completionTotalMs >= 4000
+        ? `Confirmação remota em ${(completionTotalMs / 1000).toFixed(1).replace('.', ',')} s.`
+        : '';
 
       impact(ImpactStyle.Medium);
       const financialReviewCount = targets.filter((item) =>
@@ -392,8 +407,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       toast.success(
         targets.length > 1 ? `${targets.length} entregas concluídas na parada.` : 'Entrega concluída.',
         financialReviewCount > 0
-          ? { description: `${financialReviewCount} pagamento${financialReviewCount === 1 ? '' : 's'} ainda sem confirmação de recebimento. Confira no financeiro.`, duration: 5200 }
-          : { duration: 1800 },
+          ? { description: `${financialReviewCount} pagamento${financialReviewCount === 1 ? '' : 's'} ainda sem confirmação de recebimento. Confira no financeiro.${completionLatencyNote ? ' ' + completionLatencyNote : ''}`, duration: 5200 }
+          : completionLatencyNote ? { description: completionLatencyNote, duration: 4200 } : { duration: 1800 },
       );
 
       const routeDeliveries = getDeliveriesByRoute(route.id);
@@ -546,6 +561,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     route.id !== 'rota-site-aguardando-confirmacao' &&
     route.status === 'aberta' && !delivery.completed;
   const canReorder = canManageStop && position !== undefined && pendingCount > 1 && !completionBusy;
+  // Quando o card exibe setas ou WhatsApp, nao estreitar o texto da baixa.
+  // A acao e a mesma: o icone conserva aria-label e title especificos.
+  const completionIconOnly = canManageStop && Boolean(routeStartedAt(route));
 
   const toggleStopLock = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -985,7 +1003,20 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     </div>
                     <div className="flex min-w-0 items-center gap-1.5" aria-label="Ações rápidas da parada">
                       {canManageStop && Boolean(routeStartedAt(route)) ? (
-                        <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();void handleTriggerAction('complete');}} className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-1.5 text-[11px] font-black text-emerald-300"><CheckCircle2 size={14}/>Dar baixa</button>
+                        <button
+                            type="button"
+                            data-no-card-swipe="true"
+                            onClick={event=>{event.stopPropagation();void handleTriggerAction('complete');}}
+                            aria-label="Dar baixa nesta parada"
+                            title="Dar baixa nesta parada"
+                            className={clsx(
+                              'flex h-10 items-center justify-center whitespace-nowrap rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-[11px] font-black text-emerald-300 active:bg-emerald-500/15',
+                              completionIconOnly ? 'w-10 shrink-0 px-0' : 'min-w-0 flex-1 gap-1 px-1.5',
+                            )}
+                          >
+                            <CheckCircle2 size={16} className="shrink-0" />
+                            {!completionIconOnly && <span>Dar baixa</span>}
+                          </button>
                       ) : (
                         <button
                           type="button"
@@ -997,7 +1028,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/[.065] px-2 text-[11px] font-black text-emerald-300 disabled:opacity-40 active:bg-emerald-500/15"
                         >
                           {copyBusy ? <LoaderCircle size={15} className="shrink-0 animate-spin" /> : <Copy size={15} className="shrink-0" />}
-                          <span className="truncate">{copyBusy ? 'Copiando...' : isGroupedStop ? 'Copiar parada' : 'Copiar pedido'}</span>
+                          <span className="truncate">{copyBusy ? 'Copiando...' : 'Copiar'}</span>
                         </button>
                       )}
                       {canManageStop && Boolean(routeStartedAt(route)) && (
@@ -1014,6 +1045,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           {copyBusy ? <LoaderCircle size={15} className="animate-spin" /> : <Copy size={15} />}
                         </button>
                       )}
+                      {normalizedWhatsappPhone && <a href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`} target="_blank" rel="noreferrer" aria-label="Chamar cliente no WhatsApp" onClick={event=>event.stopPropagation()} className="grid h-10 w-9 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] text-emerald-300"><MessageCircle size={15}/></a>}
                       <Link
                          href={`/entregas/editar?id=${delivery.id}${operationalDateQuery}`}
                          data-no-card-swipe="true"
@@ -1022,7 +1054,6 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                          title="Editar pedido"
                          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-zinc-700 bg-zinc-950/80 text-zinc-300 active:bg-zinc-800"
                        ><Pencil size={16} /></Link>
-                      {normalizedWhatsappPhone && <a href={`https://wa.me/${normalizedWhatsappPhone}?text=${encodeURIComponent('Olá! Sou o entregador da Da Família Lanches e já cheguei com seu pedido. Estou no portão.')}`} target="_blank" rel="noreferrer" aria-label="Chamar cliente no WhatsApp" onClick={event=>event.stopPropagation()} className="grid h-10 w-9 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] text-emerald-300"><MessageCircle size={15}/></a>}
                       {canReorder && <div role="group" aria-label="Subir ou descer parada" className="flex shrink-0 items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]">
                         <button type="button" aria-label="Mover uma posição para cima" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={event=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-8 place-items-center text-sky-200 disabled:opacity-30"><ArrowUp size={14}/></button>
                         <button type="button" aria-label="Mover uma posição para baixo" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={event=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 w-8 place-items-center text-sky-200 disabled:opacity-30"><ArrowDown size={14}/></button>

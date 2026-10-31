@@ -390,12 +390,17 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const confirmStartRoute = async () => {
     if (actionBusy) return;
     setActionBusy(true);
+    const startedMs = Date.now();
     try {
       await safeRouteHaptic();
       await startRoute(route.id);
       setDepartureChecklistOpen(false);
       await safeRouteHaptic(true);
-      toast.success('Rota iniciada.', { description: 'Checklist conferido e horário real de saída registrado.' });
+      const latencyMs = Date.now() - startedMs;
+      if (latencyMs >= 2000) console.info('[DFL R220-R4] Inicio de rota confirmado', { totalMs: latencyMs });
+      toast.success('Rota iniciada.', { description: latencyMs >= 4000
+        ? `Checklist salvo após ${(latencyMs / 1000).toFixed(1).replace('.', ',')} s de confirmação.`
+        : 'Checklist conferido e horário real de saída registrado.' });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar a rota.');
     } finally { setActionBusy(false); }
@@ -894,7 +899,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 <span aria-hidden="true" className="dfl-r196-route-dot" />
                 <strong>{totalStops - pendingStopsCount}/{totalStops}</strong>
                 <span>paradas concluídas</span>
-                <span className="dfl-r196-route-percent" aria-hidden="true">· {progressPercent}%</span>
+                <span className="dfl-r196-route-percent" aria-hidden="true">· {Math.round(progressPercent)}%</span>
               </div>
             )}
             {totalDeliveries > 0 && <div className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-zinc-400"><Wallet size={11} className="text-emerald-400" /><span>Vendas da rota: <b className="text-zinc-100">{isPrivacyMode ? 'R$ •••' : routeRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</b></span></div>}
