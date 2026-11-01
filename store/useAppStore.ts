@@ -7,6 +7,7 @@ import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBa
 import { createSerializedWriteQueue } from '@/lib/store/serializedWriteQueue';
 import { queueDeliveryDocuments } from '@/lib/store/atomicDeliveryWriteQueue';
 import { recordActionLatency } from '@/lib/operation/action-latency';
+import { beginOperationalWrite, finishOperationalWrite } from '@/lib/operation/operational-write-journal';
 import { changedRouteOrderDocuments } from '@/lib/operation/route-sparse-order';
 import { deliveryImportDocumentId, assertFreshRemoteImportIds } from '@/lib/operation/delivery-import-identity'; // DFL_R201_ATOMIC_IMPORT
 import { createKeyedWriteQueue } from '@/lib/store/keyedWriteQueue';
@@ -1290,6 +1291,7 @@ export const useAppStore = create<AppState>()(
           stockSupplies: [next, ...state.stockSupplies],
         }));
 
+        const r230PurchaseReceipt = beginOperationalWrite('purchase', get().user?.uid);
         const operation = setDoc(
           doc(db, 'stock_supplies', next.id),
           sanitizeForFirebase(next),
@@ -1305,8 +1307,10 @@ export const useAppStore = create<AppState>()(
         try {
           await trackStockSupplyWrite(next.id, operation);
           recordActionLatency('stock_supply', Date.now() - stockSupplyStartedMs, 'confirmed');
+          finishOperationalWrite(get().user?.uid, r230PurchaseReceipt, 'confirmed');
         } catch (error) {
           recordActionLatency('stock_supply', Date.now() - stockSupplyStartedMs, 'failed');
+          finishOperationalWrite(get().user?.uid, r230PurchaseReceipt, 'failed');
           throw error;
         }
       },
@@ -1345,6 +1349,7 @@ export const useAppStore = create<AppState>()(
           ),
         }));
 
+        const r230PurchaseEditReceipt = beginOperationalWrite('purchase', get().user?.uid);
         const operation = updateDoc(
           doc(db, 'stock_supplies', id),
           sanitizeForFirebase(next),
@@ -1378,8 +1383,10 @@ export const useAppStore = create<AppState>()(
         try {
           await trackStockSupplyWrite(id, operation);
           recordActionLatency('purchase_update', Date.now() - r227SupplyStartedAt, 'confirmed');
+          finishOperationalWrite(get().user?.uid, r230PurchaseEditReceipt, 'confirmed');
         } catch (error) {
           recordActionLatency('purchase_update', Date.now() - r227SupplyStartedAt, 'failed');
+          finishOperationalWrite(get().user?.uid, r230PurchaseEditReceipt, 'failed');
           throw error;
         }
       },
@@ -1556,6 +1563,7 @@ export const useAppStore = create<AppState>()(
          // A origem de verdade é o saldo confirmado pelo servidor. Uma cópia local
         // antiga NUNCA deve escrever um novo saldo baseado nela.
         if (get().stockMovements.some((item) => item.id === movement.id)) return;
+        const r230MovementReceipt = beginOperationalWrite('stock_movement', get().user?.uid);
         let result: ReturnType<typeof planStockMovement> & { alreadyExisted: boolean };
         const lastServerRead: { current: StockProduct | null } = { current: null };
         try {
@@ -1582,8 +1590,10 @@ export const useAppStore = create<AppState>()(
             transaction.set(movementRef, sanitizeForFirebase(plan.record));
             return { ...plan, alreadyExisted: false };
           });
+          finishOperationalWrite(get().user?.uid, r230MovementReceipt, 'confirmed');
          } catch (error) {
            recordActionLatency('stock_movement', Date.now() - stockMovementStartedMs, 'failed');
+           finishOperationalWrite(get().user?.uid, r230MovementReceipt, 'failed');
            const fresh = lastServerRead.current;
           if (fresh && error instanceof Error && /mudou em outro aparelho|Saldo insuficiente/.test(error.message)) {
             set((state) => ({
@@ -1617,6 +1627,7 @@ export const useAppStore = create<AppState>()(
       integrateStockSupply: async (id) => {
         const r227IntegrateStartedAt = Date.now();
         await waitForStockSupplyWrite(id);
+        const r230IntegrationReceipt = beginOperationalWrite('stock_integration', get().user?.uid);
         const result = await runTransaction(db, async (transaction) => {
           const supplyRef = doc(db, 'stock_supplies', id);
           const supplySnap = await transaction.get(supplyRef);
@@ -1652,6 +1663,12 @@ export const useAppStore = create<AppState>()(
           };
           transaction.update(supplyRef, sanitizeForFirebase(supplyPatch));
           return { ...plan, supplyPatch };
+        }).then(value => {
+          finishOperationalWrite(get().user?.uid, r230IntegrationReceipt, 'confirmed');
+          return value;
+        }, error => {
+          finishOperationalWrite(get().user?.uid, r230IntegrationReceipt, 'failed');
+          throw error;
         });
         recordActionLatency('stock_integrate', Date.now() - r227IntegrateStartedAt, 'confirmed');
         if (!result) return;
@@ -1817,6 +1834,7 @@ export const useAppStore = create<AppState>()(
         } as Delivery;
 
         set((state) => ({ deliveries: [deliveryWithTimestamp, ...state.deliveries] }));
+        const r230DeliveryReceipt = beginOperationalWrite('delivery', get().user?.uid);
 
         try {
           const safeData = sanitizeForFirebase(deliveryWithTimestamp);
@@ -1833,6 +1851,7 @@ export const useAppStore = create<AppState>()(
             await queueEntityWrite('deliveries', delivery.id, () => setDoc(doc(db, 'deliveries', delivery.id), safeData));
           }
           recordActionLatency('delivery_write', Date.now() - r227DeliveryStartedAt, 'confirmed');
+          finishOperationalWrite(get().user?.uid, r230DeliveryReceipt, 'confirmed');
           if (deliveryWithTimestamp.route_id && !deliveryWithTimestamp.is_urgent) {
             // R228: a entrega JA foi salva. Reorganizar a rota nao bloqueia
              // a liberacao do formulario; falha continua isolada e registrada.
@@ -1853,6 +1872,7 @@ export const useAppStore = create<AppState>()(
           }
         } catch (error) {
           recordActionLatency('delivery_write', Date.now() - r227DeliveryStartedAt, 'failed');
+          finishOperationalWrite(get().user?.uid, r230DeliveryReceipt, 'failed');
           set((state) => ({ deliveries: rollbackAddedEntity(state.deliveries, deliveryWithTimestamp) }));
           console.error(error);
           throw error;
@@ -2904,6 +2924,7 @@ export const useAppStore = create<AppState>()(
         }));
 
         const r229CommitStarted = Date.now();
+        const r230Receipt = beginOperationalWrite('route_order', get().user?.uid);
         try {
           const batch = writeBatch(db);
           changed.forEach((delivery) => {
@@ -2927,8 +2948,10 @@ export const useAppStore = create<AppState>()(
           // grava somente os alterados. Nenhuma escrita antiga ultrapassa o lote.
           await queueDeliveryDocuments(queueEntityWrite, normalized.map((delivery) => delivery.id), () => batch.commit());
           recordActionLatency('route_order_commit', Date.now() - r229CommitStarted, 'confirmed', changed.length);
+          finishOperationalWrite(get().user?.uid, r230Receipt, 'confirmed');
         } catch (error) {
           recordActionLatency('route_order_commit', Date.now() - r229CommitStarted, 'failed', changed.length);
+          finishOperationalWrite(get().user?.uid, r230Receipt, 'failed');
           const touched = new Set(changed.map((delivery) => delivery.id));
           set((current) => ({
             deliveries: rollbackRouteOrderFields(

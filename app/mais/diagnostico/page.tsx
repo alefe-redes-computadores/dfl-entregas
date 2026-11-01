@@ -18,6 +18,7 @@ import {
 } from '@/lib/sync-diagnostics';
 import { auth } from '@/lib/firebase';
 import { rankSyncCollectionVolumes } from '@/lib/operation/sync-volume-ranking';
+import { acknowledgeUnverifiedWrites, readWriteJournal, WRITE_JOURNAL_EVENT, writeJournalSummary, type WriteReceipt } from '@/lib/operation/operational-write-journal';
 import { ACTION_LATENCY_EVENT, actionLatencyDiagnosticText, clearActionLatencies, readActionLatencies, summarizeActionLatencies, type ActionLatencySample } from '@/lib/operation/action-latency';
 import { MessageTraceCard } from '@/components/diagnostics/MessageTraceCard';
 import { LegacyImportAuditCard } from '@/components/diagnostics/LegacyImportAuditCard'; // DFL_R202_LEGACY_AUDIT
@@ -51,6 +52,7 @@ export default function OperationalDiagnosticsPage() {
   const recoveryClickLockRef = useRef(false);
   const [entries, setEntries] = useState<SyncDiagnostic[]>([]);
   const [latencies, setLatencies] = useState<ActionLatencySample[]>([]);
+  const [writeReceipts, setWriteReceipts] = useState<WriteReceipt[]>([]);
   const [pendingNotifications, setPendingNotifications] = useState<number | null>(null);
   const [pendingPreview, setPendingPreview] = useState<
     Array<{ id: number; title: string; at?: string }>
@@ -58,6 +60,14 @@ export default function OperationalDiagnosticsPage() {
   const [recovery, setRecovery] = useState<{ stats: Record<string, number>; issues: RecoveryIssue[] } | null>(null);
   const [recoveryBusy, setRecoveryBusy] = useState('');
   const isAdmin = user?.email?.trim().toLowerCase() === DIAGNOSTICS_ADMIN_EMAIL;
+
+  useEffect(() => {
+    const refresh = () => setWriteReceipts(readWriteJournal(user?.uid));
+    refresh();
+    window.addEventListener(WRITE_JOURNAL_EVENT, refresh);
+    return () => window.removeEventListener(WRITE_JOURNAL_EVENT, refresh);
+  }, [user?.uid]);
+  const writeHealth = useMemo(() => writeJournalSummary(writeReceipts), [writeReceipts]);
 
   // Dados do relay são da sessão que os consultou; trocar o Google limpa a prévia.
   useEffect(() => { setRecovery(null); }, [user?.uid]);
@@ -242,6 +252,17 @@ export default function OperationalDiagnosticsPage() {
       </header>
 
       <LegacyImportAuditCard />
+
+      <section aria-label="Diário de confirmação operacional" className="mb-3 rounded-2xl border border-amber-500/20 bg-zinc-900/60 p-4">
+        <h2 className="text-sm font-bold text-zinc-100">Confirmacões de operações neste aparelho</h2>
+        <p className="mt-1 text-xs text-zinc-400">{writeHealth.pending} aguardando · {writeHealth.unverified} não verificadas após reinício · {writeHealth.failed} falhas · {writeHealth.confirmed} confirmadas.</p>
+        <p className="mt-2 text-[11px] text-zinc-500">Somente metadados locais: sem cliente, valor ou número de pedido. Não é fila de reenvio. Uma operação não verificada precisa ser conferida no histórico antes de repetir.</p>
+        {writeHealth.unverified > 0 && <button type="button" className="mt-3 rounded-lg border border-amber-500/30 px-3 py-2 text-xs font-semibold text-amber-200" onClick={() => {
+          if (!user?.uid || !window.confirm('Você já conferiu essas operações no histórico? Este botão apenas reconhece os avisos; não envia nem altera pedidos no servidor.')) return;
+          acknowledgeUnverifiedWrites(user.uid);
+          setWriteReceipts(readWriteJournal(user.uid));
+        }}>Já conferi os registros no servidor</button>}
+      </section>
 
       <section className="grid grid-cols-2 gap-2">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
