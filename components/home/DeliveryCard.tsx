@@ -575,22 +575,36 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   const toggleStopLock = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
+    const feedbackId = `dfl-stop-lock-${delivery.id}`;
     if (reorderBusyRef.current) return;
     reorderBusyRef.current = true;
     setReorderBusy(true);
     try {
       const nextLocked = !orderLocked;
       const changedAt = new Date().toISOString();
+      let saved = 0;
+      toast.loading(nextLocked ? 'Fixando parada…' : 'Destravando parada…', {
+        id: feedbackId, duration: Infinity,
+      });
       for (const item of groupedDeliveries) {
         await updateDelivery(item.id, {
           order_locked: nextLocked,
           order_source: 'manual',
           order_updated_at: changedAt,
         });
+        saved++;
+        if (groupedDeliveries.length > 1) toast.loading(
+          `${nextLocked ? 'Fixando' : 'Destravando'} pedidos ${saved}/${groupedDeliveries.length}…`,
+          { id: feedbackId, duration: Infinity },
+        );
       }
+      toast.dismiss(feedbackId);
       toast.success(nextLocked ? 'Parada fixada nesta posição.' : 'Parada destravada.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível alterar a trava.');
+      toast.dismiss(feedbackId);
+      toast.error(error instanceof Error ? error.message : 'Não foi possível alterar a trava.', {
+        description: groupedDeliveries.length > 1 ? 'Confira os pedidos agrupados: uma gravação anterior pode ter sido confirmada.' : undefined,
+      });
     } finally {
       reorderBusyRef.current = false;
       setReorderBusy(false);

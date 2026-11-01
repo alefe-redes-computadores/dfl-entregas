@@ -203,6 +203,14 @@ export function StockSupplyForm({
   const allowLeaveRef = useRef(false);
   const submitInFlight = useRef(false);
   const [submitting, setSubmitting] = useState(false);
+  // O service worker só poderá recarregar depois de salvar ou abandonar
+  // conscientemente a edição; nenhuma escrita remota é antecipada.
+  useEffect(() => {
+    window.dispatchEvent(new Event('dfl:operation-form-state'));
+    return () => {
+      window.queueMicrotask(() => window.dispatchEvent(new Event('dfl:operation-form-state')));
+    };
+  }, [dirty, submitting]);
   const [slowPurchaseConfirmation, setSlowPurchaseConfirmation] = useState(false);
   const purchaseConfirmationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftKey = stockSupplyDraftKey(initial?.id);
@@ -663,7 +671,7 @@ export function StockSupplyForm({
   };
 
   return (
-    <form onInputCapture={() => setDirty(true)} onClickCapture={(event) => { const target = event.target as HTMLElement; if (target.closest('button') && !target.closest('button[type="submit"]')) setDirty(true); }} onSubmit={submit} className="flex flex-col gap-3.5 pb-10" noValidate>
+    <form data-dfl-unsaved-form={dirty || submitting ? 'true' : undefined} onInputCapture={() => setDirty(true)} onClickCapture={(event) => { const target = event.target as HTMLElement; if (target.closest('button') && !target.closest('button[type="submit"]')) setDirty(true); }} onSubmit={submit} className="flex flex-col gap-3.5 pb-10" noValidate>
       {draftStorageFailed && <p role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs font-semibold text-amber-200">Rascunho não salvo neste aparelho. Libere espaço antes de sair ou finalize a compra com internet.</p>}
       <section className="rounded-[20px] border border-amber-500/20 bg-amber-500/[.05] p-3">
         <div className="flex items-center gap-3">

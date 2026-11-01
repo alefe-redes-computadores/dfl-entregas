@@ -26,7 +26,10 @@ export function ConnectivityRecovery() {
       setUnverified(summary.unverified);
     };
     const onOnline = () => {
-      const wasOffline = offlineSeen.current;
+      // Se o app reiniciou com escrita incerta, a retomada em primeiro plano
+      // também pode solicitar UMA leitura de reconciliação (sem replay).
+      const hasUnverified = readWriteJournal(owner).some(x => x.status === 'unverified');
+      const wasOffline = offlineSeen.current || hasUnverified;
       refresh();
       const snapshot = useAppStore.getState();
       if (!mayReconcileAfterReconnect({
@@ -37,22 +40,32 @@ export function ConnectivityRecovery() {
         hasSyncError: snapshot.syncError,
         hasUnverifiedWrite: readWriteJournal(owner).some(x => x.status === 'unverified'),
       })) return;
-      lastAttempt.current = Date.now();
-      offlineSeen.current = false;
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => {
         const current = useAppStore.getState();
         if (navigator.onLine === false || document.visibilityState === 'hidden' || !current.authLoaded ||
           !current.hasHydrated || current.user?.uid !== owner || current.isSyncing) return;
+        // Só consumir cooldown após realmente disparar a leitura.
+        lastAttempt.current = Date.now();
+        offlineSeen.current = false;
         // Leitura de reconciliação, NÃO replay nem confirmação de escrita.
         void current.initData();
       }, RECONNECT_DELAY_MS);
     };
+    const onForeground = () => {
+      if (document.visibilityState !== 'hidden') onOnline();
+    };
     refresh();
+    window.addEventListener('focus', onForeground);
+    window.addEventListener('dfl:app-foreground', onForeground);
+    document.addEventListener('visibilitychange', onForeground);
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', refresh);
     window.addEventListener(WRITE_JOURNAL_EVENT, refresh);
     return () => {
+      window.removeEventListener('focus', onForeground);
+      window.removeEventListener('dfl:app-foreground', onForeground);
+      document.removeEventListener('visibilitychange', onForeground);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', refresh);
       window.removeEventListener(WRITE_JOURNAL_EVENT, refresh);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { AlertCircle, CalendarClock, ChevronDown, CheckCircle2, Inbox, MapPin, Plus, Route as RouteIcon, ShieldCheck, ShoppingBag, X } from 'lucide-react';
@@ -53,21 +53,23 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   const projection = useMemo(()=>siteInboxProjection(deliveries,clock),[deliveries,clock]);
   const [filter,setFilter]=useState<'all'|'pronto'|'confirmar'|'aguardar_agenda'|'revisar'>('all');
   const [search,setSearch]=useState('');
+  const deferredSearch = useDeferredValue(search);
   const [historyOpen,setHistoryOpen]=useState(false);
   // R166_HISTORY_FILTER: sem consulta extra ao Firestore.
   const [historySearch,setHistorySearch]=useState('');
+  const deferredHistorySearch = useDeferredValue(historySearch);
   const [historyStatus,setHistoryStatus]=useState<'todos'|'cancelado'|'retirado_operacao'|'entregue'|'tentativa'>('todos');
   const [historyLimit,setHistoryLimit]=useState(10);
   const history=useMemo(()=>siteHistoryRows(deliveries, 200),[deliveries]);
   const filteredHistory=useMemo(()=>{
-    const needle=historySearch.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const needle=deferredHistorySearch.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     return history.filter(item=>{
       if(historyStatus!=='todos' && siteHistoryKind(item)!==historyStatus)return false;
       if(!needle)return true;
       return [item.customer_name,item.external_order_id,item.order_id,item.id,item.phone,item.operational_dismissal_reason]
         .filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(needle);
     });
-  },[history,historySearch,historyStatus]);
+  },[history,deferredHistorySearch,historyStatus]);
   const [saveError,setSaveError]=useState('');
   const focusedOnce=useRef<string|null>(null);
   const [limit,setLimit]=useState(OPERATION_FIRST_BATCH);
@@ -118,8 +120,8 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   const activeMotoboyIds=useMemo(()=>activeMotoboys.map(item=>item.id),[activeMotoboys]);
   // R136_SITE_LAUNCH_GATE: busca e foco sao somente apresentacao; nunca alteram a projecao canonica.
   const displayed=useMemo(()=>searchSiteInboxRows(
-    projection.rows.filter(row=>filter==='all'||row.state===filter),search,focusedId,
-  ),[projection,filter,search,focusedId]);
+    projection.rows.filter(row=>filter==='all'||row.state===filter),deferredSearch,focusedId,
+  ),[projection,filter,deferredSearch,focusedId]);
   const shown=displayed.slice(0,limit);
   useEffect(()=>setLimit(OPERATION_FIRST_BATCH),[filter,search]);
   useEffect(()=>{
