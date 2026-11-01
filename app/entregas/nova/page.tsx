@@ -157,6 +157,8 @@ const [routeId, setRouteId] = useState('');
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [slowDeliveryConfirmation, setSlowDeliveryConfirmation] = useState(false);
+  const deliveryConfirmationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // R175: trava imediata, antes de renderização/haptics/rede.
   const submitFlight = useRef(false);
   const [formIssue, setFormIssue] = useState<DeliveryFormIssue | null>(null);
@@ -553,6 +555,8 @@ const [routeId, setRouteId] = useState('');
     if (submitFlight.current) return;
     submitFlight.current = true;
     setIsSaving(true);
+    setSlowDeliveryConfirmation(false);
+    deliveryConfirmationTimer.current = setTimeout(() => setSlowDeliveryConfirmation(true), 1400);
     const r227SubmitStartedAt = Date.now();
     try{
       const normalizedAddress=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(streetAddress):{address:'',neighborhood:undefined,phone:undefined,observations:[] as string[]};
@@ -620,11 +624,12 @@ const [routeId, setRouteId] = useState('');
       }
       recordActionLatency('delivery_form', Date.now() - r227SubmitStartedAt, 'confirmed', origin === 'ifood' ? drafts.length : 1);
       router.replace(safeReturnTo||deliveriesReturn);
-    }catch(error){recordActionLatency('delivery_form', Date.now() - r227SubmitStartedAt, 'failed', origin === 'ifood' ? drafts.length : 1);console.error('Erro ao cadastrar entrega:',error);toast.error('Não foi possível cadastrar a entrega.',{description:'Confira os dados e sua conexão e tente novamente.'})}finally{submitFlight.current=false;setIsSaving(false)}
+    }catch(error){recordActionLatency('delivery_form', Date.now() - r227SubmitStartedAt, 'failed', origin === 'ifood' ? drafts.length : 1);console.error('Erro ao cadastrar entrega:',error);toast.error('Não foi possível cadastrar a entrega.',{description:'Confira os dados e sua conexão e tente novamente.'})}finally{if(deliveryConfirmationTimer.current)clearTimeout(deliveryConfirmationTimer.current);deliveryConfirmationTimer.current=null;setSlowDeliveryConfirmation(false);submitFlight.current=false;setIsSaving(false)}
   };
 
   return (
     <div className="relative flex flex-col gap-5 pb-28 animate-in fade-in duration-300">
+      {isSaving && slowDeliveryConfirmation && <p role="status" aria-live="polite" className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-3 text-xs font-semibold text-sky-200">Pedido preparado; aguardando confirmação do servidor. Não toque novamente em salvar. Os tempos de cliente e gravação podem ser vistos em Mais · Diagnóstico.</p>}
       <header className="flex items-center gap-3">
         <button
           onClick={() => router.replace(safeReturnTo || deliveriesReturn)}

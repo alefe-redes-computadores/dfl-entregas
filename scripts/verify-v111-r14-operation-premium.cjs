@@ -40,7 +40,7 @@ const card = read('components/home/DeliveryCard.tsx');
 ok(card.includes('isDeliveryExpanded(state.deliveries, delivery.id)'),'card usa seleção indexada');
 ok(card.includes('const targets = pendingOperationalStopDeliveries(groupedDeliveries)'),'baixa agrupada usa apenas alvos operacionais');
 ok(card.includes('const newStatus = pendingGroupedDeliveries.length > 0 || !delivery.completed;'),'grupo parcialmente concluído ainda permite completar pendentes');
-ok(card.includes('const wasComplete = groupedPending > 0;'),'gesto de baixa só opera grupo pendente');
+ok(card.includes('canSwipeCompleteOrUndo(groupedPending, groupedDeliveries.filter(item => item.completed).length)'),'gesto de baixa e desfazer reconhece parada concluida sem ignorar pendentes');
 ok(card.includes('const stopCompleted = isGroupedStop ? groupedPending === 0 : delivery.completed;'),'card agrupado só fica verde quando todos os pedidos ativos terminam');
 ok(card.includes("await updateDelivery(delivery.id, { completed: false })"),'desfazer baixa individual preservado');
 ok(card.includes('failed.length > 0') && card.includes('pendingLabels.join'),'falhas parciais da baixa são comunicadas');

@@ -15,7 +15,7 @@ assert.match(card, /swipeSurfaceRef\.current\.style\.transform/);
 assert.doesNotMatch(card, /setSwipeOffset\(/, 'A gesture should not set React state for every pixel');
 assert.match(card, /Math\.abs\(dx\) < 88/);
 assert.match(card, /Math\.abs\(dx\) <= Math\.abs\(dy\) \* 1\.5/);
-assert.match(card, /if \(dx < 0 && wasComplete\)/, 'Swipe may not undo completed deliveries');
+assert.match(card, /if \(dx < 0 && swipeCanCompleteOrUndo\)/, 'Swipe may undo completed deliveries through the protected completion handler');
 assert.match(card, /reorderBusyRef\.current = true/);
 assert.match(card, /finally \{\s*reorderBusyRef\.current = false/);
 assert.match(card, /disabled=\{reorderBusy \|\| orderLocked \|\| \(position \|\| 1\) <= 1\}/, 'Seta subir respeita trava e limite');

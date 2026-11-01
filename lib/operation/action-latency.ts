@@ -18,6 +18,7 @@ export type ActionLatencyKind =
   | 'customer_upsert'
   | 'route_create'
   | 'route_auto_order'
+  | 'route_order_commit'
   | 'purchase_update'
   | 'stock_integrate';
 export type ActionLatencyStatus = 'confirmed' | 'failed' | 'partial';
@@ -35,7 +36,7 @@ const KINDS: readonly ActionLatencyKind[] = [
   'stop_completion', 'delivery_critical', 'delivery_queue',
   'route_start', 'route_close', 'stock_movement', 'stock_supply',
   'delivery_form', 'delivery_form_customer', 'delivery_form_confirm', 'delivery_write', 'customer_upsert', 'route_create',
-  'route_auto_order', 'purchase_update', 'stock_integrate',
+  'route_auto_order', 'route_order_commit', 'purchase_update', 'stock_integrate',
 ];
 const STATUSES: readonly ActionLatencyStatus[] = ['confirmed', 'failed', 'partial'];
 const safeMs = (value: unknown) =>
@@ -114,6 +115,7 @@ export const ACTION_LATENCY_LABEL: Record<ActionLatencyKind, string> = {
   customer_upsert: 'Cliente (vínculo)',
   route_create: 'Nova rota',
   route_auto_order: 'Organização da rota',
+  route_order_commit: 'Rota · confirmar ordem (lote enxuto)',
   purchase_update: 'Recebimento/edição compra',
   stock_integrate: 'Integração crítica estoque',
 };

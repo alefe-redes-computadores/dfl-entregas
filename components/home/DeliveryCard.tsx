@@ -20,6 +20,7 @@ import type { DeliveryAttemptReason } from '@/lib/delivery-attempts';
 import { appendConfirmedReturnVisit } from '@/lib/delivery-return-visits';
 import { buildNavigationLinks } from '@/lib/navigation-links';
 import { useAppStore } from '@/store/useAppStore';
+import { canSwipeCompleteOrUndo } from '@/lib/operation/swipe-stop-eligibility';
 import { firstActionableCardIssue } from '@/lib/operation/operational-card-issues';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { Capacitor } from '@capacitor/core';
@@ -611,7 +612,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     reorderBusyRef.current = true;
     setReorderBusy(true);
     const feedbackId = `dfl-move-stop-${delivery.id}`;
-    toast.loading('Movendo parada…', { id: feedbackId, duration: Infinity });
+    toast.loading('Movendo parada… · aguardando confirmação', { id: feedbackId, duration: Infinity });
     try {
       await moveDeliveryToIndex(route.id, delivery.id, boundedTarget);
       impact(ImpactStyle.Light);
@@ -757,12 +758,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     if (swipeAxis.current !== 'horizontal') { resetCardSwipe(); return; }
     const dx = touchCurrentX.current - touchStartX.current;
     const dy = touchCurrentY.current - touchStartY.current;
-    const wasComplete = groupedPending > 0;
+    const swipeCanCompleteOrUndo = canSwipeCompleteOrUndo(groupedPending, groupedDeliveries.filter(item => item.completed).length);
     resetCardSwipe();
     suppressCardClick.current = true;
     window.setTimeout(() => { suppressCardClick.current = false; }, 300);
     if (Math.abs(dx) < 88 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
-    if (dx < 0 && wasComplete) void handleTriggerAction('complete');
+    if (dx < 0 && swipeCanCompleteOrUndo) void handleTriggerAction('complete');
     if (dx > 0) void handleTriggerAction('expand');
   };
 
@@ -773,7 +774,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   return (
     <>
-      <div data-dfl-op-card="true" data-dfl-op-card-expanded={isExpanded ? "true" : "false"} data-dfl-op-card-state={stopCompleted ? "concluida" : isUrgent ? "urgente" : "pendente"} data-dfl-route-id={route.id} data-dfl-stop-index={canReorder ? position : undefined} className={clsx(
+      <div data-dfl-op-card="true" data-dfl-op-card-expanded={isExpanded ? "true" : "false"} data-dfl-op-card-state={stopCompleted ? "concluida" : isUrgent ? "urgente" : "pendente"} data-dfl-route-id={route.id} data-dfl-stop-id={delivery.id} data-dfl-stop-index={canReorder ? position : undefined} className={clsx(
           "relative overflow-hidden rounded-[18px] transition-colors duration-150",
           stopCompleted ? "opacity-80" : "shadow-sm",
           isUrgent && !stopCompleted && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
@@ -795,7 +796,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
             <span className="text-xs">{isExpanded ? 'Minimizar' : 'Expandir'}</span>
           </div>
           <div className={clsx("flex items-center gap-2 font-bold transition-[opacity,color,transform] duration-150", isDraggingLeft ? "opacity-100 text-emerald-200 scale-110" : "opacity-40 text-zinc-400")}>
-            <span className="text-xs">{isRecoveryRoute ? 'Corrigir rota' : 'Dar Baixa'}</span>
+            <span className="text-xs">{isRecoveryRoute ? 'Corrigir rota' : stopCompleted ? 'Desfazer Baixa' : 'Dar Baixa'}</span>
             <CheckCircle2 size={20} />
           </div>
         </div>
@@ -1076,6 +1077,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     </div>
                   </div>
                 )}
+              {reorderBusy && <span role="status" aria-live="polite" className="mt-1 block text-[10px] font-semibold text-sky-300">Posição atualizada localmente · confirmando no servidor…</span>}
               </div>
             </div>
           </div>

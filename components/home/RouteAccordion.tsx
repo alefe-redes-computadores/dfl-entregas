@@ -4,7 +4,7 @@ import { RouteStopBriefing } from '@/components/home/RouteStopBriefing';
 import { PreRouteIntelligence } from '@/components/home/PreRouteIntelligence';
 import { RouteSequenceAdvisor } from '@/components/home/RouteSequenceAdvisor';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
@@ -134,6 +134,35 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const routeDeliveryRevision = useAppStore((state) =>
     indexedRouteDeliveryRevision(state.deliveries, route.id),
   );
+  const previousStopPositions = useRef<Map<string, { index: string; top: number }>>(new Map());
+  useLayoutEffect(() => {
+    if (!isOpen || typeof document === 'undefined') {
+      previousStopPositions.current.clear();
+      return;
+    }
+    const current = new Map<string, { index: string; top: number }>();
+    const elements = Array.from(document.querySelectorAll<HTMLElement>('[data-dfl-op-card="true"]'))
+      .filter((element) => element.dataset.dflRouteId === route.id);
+    const motionAllowed = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    for (const element of elements) {
+      const id = element.dataset.dflStopId || '';
+      const index = element.dataset.dflStopIndex || '';
+      if (!id || !index) continue;
+      const top = element.getBoundingClientRect().top;
+      const before = previousStopPositions.current.get(id);
+      current.set(id, { index, top });
+      if (motionAllowed && before && before.index !== index && typeof element.animate === 'function') {
+        const delta = before.top - top;
+        if (Math.abs(delta) > 2 && Math.abs(delta) < 1600) {
+          element.animate([
+            { transform: `translateY(${delta}px)`, opacity: 0.92 },
+            { transform: 'translateY(0)', opacity: 1 },
+          ], { duration: 230, easing: 'cubic-bezier(.2,.8,.25,1)' });
+        }
+      }
+    }
+    previousStopPositions.current = current;
+  }, [route.id, isOpen, routeDeliveryRevision]);
   const selectedDate = useAppStore((state) => state.selectedDate);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const closeRoute = useAppStore((state) => state.closeRoute);

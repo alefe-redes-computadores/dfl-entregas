@@ -7,6 +7,7 @@ import { collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, writeBa
 import { createSerializedWriteQueue } from '@/lib/store/serializedWriteQueue';
 import { queueDeliveryDocuments } from '@/lib/store/atomicDeliveryWriteQueue';
 import { recordActionLatency } from '@/lib/operation/action-latency';
+import { changedRouteOrderDocuments } from '@/lib/operation/route-sparse-order';
 import { deliveryImportDocumentId, assertFreshRemoteImportIds } from '@/lib/operation/delivery-import-identity'; // DFL_R201_ATOMIC_IMPORT
 import { createKeyedWriteQueue } from '@/lib/store/keyedWriteQueue';
 import { rollbackAddedEntity, rollbackUpdatedEntity, rollbackDeletedEntity, rollbackAddedEntities, rollbackUpdatedEntities } from '@/lib/operation/optimisticRollback';
@@ -2866,8 +2867,13 @@ export const useAppStore = create<AppState>()(
         const orderUpdatedAt =
           metadata?.order_updated_at || now;
 
+        // Apenas posições / travas que mudaram geram escrita e rerender.
+        // A fila por rota/documento permanece íntegra e continua protegendo
+        // as ações simultâneas de outros aparelhos.
+        const changed = changedRouteOrderDocuments(routeDeliveries, normalized, metadata);
+        if (changed.length === 0) return;
         const indexById = new Map(
-          normalized.map(
+          changed.map(
             (delivery) =>
               [delivery.id, delivery.order_index] as const,
           ),
@@ -2897,9 +2903,10 @@ export const useAppStore = create<AppState>()(
           }),
         }));
 
+        const r229CommitStarted = Date.now();
         try {
           const batch = writeBatch(db);
-          normalized.forEach((delivery) => {
+          changed.forEach((delivery) => {
             batch.update(doc(db, 'deliveries', delivery.id), {
               order_index: delivery.order_index,
               ...(metadata
@@ -2916,9 +2923,13 @@ export const useAppStore = create<AppState>()(
               updated_at: now,
             });
           });
+          // Compatibilidade com R94: bloquear os mesmos IDs enquanto o lote
+          // grava somente os alterados. Nenhuma escrita antiga ultrapassa o lote.
           await queueDeliveryDocuments(queueEntityWrite, normalized.map((delivery) => delivery.id), () => batch.commit());
+          recordActionLatency('route_order_commit', Date.now() - r229CommitStarted, 'confirmed', changed.length);
         } catch (error) {
-          const touched = new Set(normalized.map((delivery) => delivery.id));
+          recordActionLatency('route_order_commit', Date.now() - r229CommitStarted, 'failed', changed.length);
+          const touched = new Set(changed.map((delivery) => delivery.id));
           set((current) => ({
             deliveries: rollbackRouteOrderFields(
               current.deliveries, state.deliveries, touched, now,

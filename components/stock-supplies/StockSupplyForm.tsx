@@ -203,6 +203,8 @@ export function StockSupplyForm({
   const allowLeaveRef = useRef(false);
   const submitInFlight = useRef(false);
   const [submitting, setSubmitting] = useState(false);
+  const [slowPurchaseConfirmation, setSlowPurchaseConfirmation] = useState(false);
+  const purchaseConfirmationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftKey = stockSupplyDraftKey(initial?.id);
 
   const [items, setItems] = useState<Draft[]>(
@@ -618,6 +620,8 @@ export function StockSupplyForm({
 
     submitInFlight.current = true;
     setSubmitting(true);
+    setSlowPurchaseConfirmation(false);
+    purchaseConfirmationTimer.current = setTimeout(() => setSlowPurchaseConfirmation(true), 1400);
     try {
       await onSubmit({
       occurred_at: new Date(occurredAt).toISOString(),
@@ -651,6 +655,9 @@ export function StockSupplyForm({
       try { writeStockSupplyDraft(draftKey, formDraft); } catch { /* armazenamento local indisponível */ }
     } finally {
       submitInFlight.current = false;
+      if (purchaseConfirmationTimer.current) clearTimeout(purchaseConfirmationTimer.current);
+      purchaseConfirmationTimer.current = null;
+      setSlowPurchaseConfirmation(false);
       setSubmitting(false);
     }
   };
@@ -1211,9 +1218,10 @@ export function StockSupplyForm({
         className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-amber-500 font-black text-zinc-950 disabled:opacity-40"
       >
         <Save size={18} />
-        {busy || submitting ? 'Registrando...' : submitLabel}
+        {busy || submitting ? 'Aguardando confirmação…' : submitLabel}
       </button>
 
+      {submitting && slowPurchaseConfirmation && <p role="status" aria-live="polite" className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-3 text-xs font-semibold text-sky-200">Compra preparada. A confirmação do servidor está demorando; mantenha esta tela aberta. O rascunho permanece protegido e ainda não é uma gravação confirmada.</p>}
       {leaveOpen && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 z-[180] flex max-h-[100dvh] items-end overflow-y-auto overscroll-contain bg-black/80 px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:justify-center"

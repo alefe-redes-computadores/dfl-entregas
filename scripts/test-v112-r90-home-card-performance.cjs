@@ -53,7 +53,7 @@ ok(card.includes('useEffect(() => () => {'),'desmontagem também cancela frames 
 ok(card.includes('style.willChange = \'auto\'')&&card.includes('style.willChange = \'transform\''),'camada GPU só durante gesto horizontal');
 ok(card.includes('translate3d(${swipeOffsetRef.current}px,0,0)'),'composição acelerada na movimentação');
 ok(card.includes('if (Math.abs(dx) < 88 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;'),'limiar e proteção contra gesto diagonal preservados');
-ok(card.includes("if (dx < 0 && wasComplete) void handleTriggerAction('complete')")&&card.includes("if (dx > 0) void handleTriggerAction('expand')"),'baixa e expansão preservam suas direções');
+ok(card.includes("if (dx < 0 && swipeCanCompleteOrUndo) void handleTriggerAction('complete')")&&card.includes("if (dx > 0) void handleTriggerAction('expand')"),'baixa, desfazer e expansão preservam suas direções');
 ok(card.includes('touchAction: \'pan-y\''),'rolagem vertical do Android preservada');
 ok(card.includes('onTouchCancel={handleTouchCancel}'),'cancelamento de gestos continua seguro');
 ok(!lazy.includes('firebase')&&!home.includes('collection(db,')&&!card.includes('collection(db,'),'sem consultas Firestore adicionais');
