@@ -12,6 +12,7 @@ import {
   isIntegrationEventEnvelope,
   type IntegrationEventEnvelope,
 } from './contracts';
+import { legacySiteOrderCanPreserveContent } from './site-combo-unit-guard';
 
 export interface DflSiteCustomerSnapshotV1 {
   id: string;
@@ -128,7 +129,9 @@ function isDeliverySnapshot(
 export function isDflSiteOrderPayloadV1(
   value: unknown,
 ): value is DflSiteOrderEventPayloadV1 {
-  if (!isRecord(value)) return false;
+  // R242: only v1/v2 without unit-level drafts can use the legacy Site consumer.
+  // Reject incompatible future payloads BEFORE transactional identity/persistence.
+  if (!isRecord(value) || !legacySiteOrderCanPreserveContent(value)) return false;
 
   const tipoEntrega = value.tipoEntrega;
 

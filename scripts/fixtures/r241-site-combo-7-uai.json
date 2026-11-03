@@ -1,0 +1,289 @@
+{
+  "contract": "dfl_site_combo_units_preview_v1",
+  "version": 1,
+  "status": "preview_only",
+  "authorization": {
+    "order": false,
+    "checkout": false,
+    "payment": false,
+    "relay": false,
+    "print": false,
+    "production": false
+  },
+  "producer": {
+    "system": "dfl_site",
+    "envelopeSchema": 1,
+    "currentOrderSchema": 2,
+    "proposedUnitOrderSchema": 3
+  },
+  "consumer": {
+    "system": "dfl_entregas",
+    "requiredCapability": "dfl_site_combo_unit_lines_v1",
+    "observedSchema": 1,
+    "supportsUnits": false
+  },
+  "source": {
+    "productId": "combo-7-uai",
+    "blueprintFingerprint": "v2-7a34e4d5",
+    "draftId": "draft-59d12d4c-eda5506a",
+    "previewId": "draft-59d12d4c-eda5506a|q2|v2-7a34e4d5",
+    "quantity": 2
+  },
+  "accounting": {
+    "basePerComboCents": 6999,
+    "extrasPerComboCents": 975,
+    "extrasForOrderCents": 1950,
+    "previewTotalCents": 15948,
+    "payable": false
+  },
+  "units": [
+    {
+      "unitKey": "c1:1:1",
+      "comboNumber": 1,
+      "componentKey": "1:1",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 1,
+      "groupQuantity": 7,
+      "addons": [],
+      "removals": [
+        {
+          "id": "cebola",
+          "label": "Cebola"
+        }
+      ],
+      "note": "",
+      "extrasCents": 0
+    },
+    {
+      "unitKey": "c1:1:2",
+      "comboNumber": 1,
+      "componentKey": "1:2",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 2,
+      "groupQuantity": 7,
+      "addons": [],
+      "removals": [
+        {
+          "id": "cebola",
+          "label": "Cebola"
+        }
+      ],
+      "note": "",
+      "extrasCents": 0
+    },
+    {
+      "unitKey": "c1:1:3",
+      "comboNumber": 1,
+      "componentKey": "1:3",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 3,
+      "groupQuantity": 7,
+      "addons": [
+        {
+          "id": "bacon",
+          "label": "Bacon",
+          "priceCents": 375
+        }
+      ],
+      "removals": [],
+      "note": "",
+      "extrasCents": 375
+    },
+    {
+      "unitKey": "c1:1:4",
+      "comboNumber": 1,
+      "componentKey": "1:4",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 4,
+      "groupQuantity": 7,
+      "addons": [
+        {
+          "id": "bacon",
+          "label": "Bacon",
+          "priceCents": 375
+        },
+        {
+          "id": "queijo",
+          "label": "Mussarela",
+          "priceCents": 225
+        }
+      ],
+      "removals": [],
+      "note": "",
+      "extrasCents": 600
+    },
+    {
+      "unitKey": "c1:1:5",
+      "comboNumber": 1,
+      "componentKey": "1:5",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 5,
+      "groupQuantity": 7,
+      "addons": [],
+      "removals": [],
+      "note": "",
+      "extrasCents": 0
+    },
+    {
+      "unitKey": "c1:1:6",
+      "comboNumber": 1,
+      "componentKey": "1:6",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 6,
+      "groupQuantity": 7,
+      "addons": [],
+      "removals": [],
+      "note": "",
+      "extrasCents": 0
+    },
+    {
+      "unitKey": "c1:1:7",
+      "comboNumber": 1,
+      "componentKey": "1:7",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 7,
+      "groupQuantity": 7,
+      "addons": [],
+      "removals": [],
+      "note": "Molho separado",
+      "extrasCents": 0
+    },
+    {
+      "unitKey": "c2:1:1",
+      "comboNumber": 2,
+      "componentKey": "1:1",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 1,
+      "groupQuantity": 7,
+      "addons": [],
+      "removals": [
+        {
+          "id": "cebola",
+          "label": "Cebola"
+        }
+      ],
+      "note": "",
+      "extrasCents": 0
+    },
+    {
+      "unitKey": "c2:1:2",
+      "comboNumber": 2,
+      "componentKey": "1:2",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 2,
+      "groupQuantity": 7,
+      "addons": [],
+      "removals": [
+        {
+          "id": "cebola",
+          "label": "Cebola"
+        }
+      ],
+      "note": "",
+      "extrasCents": 0
+    },
+    {
+      "unitKey": "c2:1:3",
+      "comboNumber": 2,
+      "componentKey": "1:3",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 3,
+      "groupQuantity": 7,
+      "addons": [
+        {
+          "id": "bacon",
+          "label": "Bacon",
+          "priceCents": 375
+        }
+      ],
+      "removals": [],
+      "note": "",
+      "extrasCents": 375
+    },
+    {
+      "unitKey": "c2:1:4",
+      "comboNumber": 2,
+      "componentKey": "1:4",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 4,
+      "groupQuantity": 7,
+      "addons": [
+        {
+          "id": "bacon",
+          "label": "Bacon",
+          "priceCents": 375
+        },
+        {
+          "id": "queijo",
+          "label": "Mussarela",
+          "priceCents": 225
+        }
+      ],
+      "removals": [],
+      "note": "",
+      "extrasCents": 600
+    },
+    {
+      "unitKey": "c2:1:5",
+      "comboNumber": 2,
+      "componentKey": "1:5",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 5,
+      "groupQuantity": 7,
+      "addons": [],
+      "removals": [],
+      "note": "",
+      "extrasCents": 0
+    },
+    {
+      "unitKey": "c2:1:6",
+      "comboNumber": 2,
+      "componentKey": "1:6",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 6,
+      "groupQuantity": 7,
+      "addons": [],
+      "removals": [],
+      "note": "",
+      "extrasCents": 0
+    },
+    {
+      "unitKey": "c2:1:7",
+      "comboNumber": 2,
+      "componentKey": "1:7",
+      "productId": "uai",
+      "productLabel": "Uai",
+      "unitNumber": 7,
+      "groupQuantity": 7,
+      "addons": [],
+      "removals": [],
+      "note": "Molho separado",
+      "extrasCents": 0
+    }
+  ],
+  "safety": {
+    "losslessForLegacyReceiver": false,
+    "requiresEntregasUpgrade": true,
+    "unitChoices": 10,
+    "addonUnits": 6,
+    "removedIngredients": 4,
+    "annotatedUnits": 2
+  },
+  "diagnosticId": "diagnostic-9a8f7e7d",
+  "eventId": null,
+  "orderId": null,
+  "sendAllowed": false
+}
