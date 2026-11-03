@@ -1,0 +1,57 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const Module=require('node:module');
+const ts=require('typescript');
+const read=f=>fs.readFileSync(f,'utf8');
+const source=read('lib/operation/assistant-shortcuts.ts');
+const js=ts.transpileModule(source,{fileName:'assistant-shortcuts.ts',compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+const mod=new Module('r236-shortcuts',module);mod.filename=`${process.cwd()}/lib/operation/assistant-shortcuts.ts`;mod.paths=module.paths;mod._compile(js,mod.filename);
+const m=mod.exports;
+const state=m.parseAssistantShortcuts(null);
+assert.deepEqual(state,{favorites:[],recent:[]},'ausência de dados não cria favoritos falsos');
+assert.deepEqual(m.parseAssistantShortcuts('invalid JSON'),state,'falha de storage é tolerante');
+assert.deepEqual(m.parseAssistantShortcuts('{"version":3,"favorites":["routes-building"]}'),state,'versão desconhecida não reaproveita dado incompatível');
+const malicious=JSON.stringify({version:1,favorites:['routes-building','routes-building','secret-phone-31999999999','stock-low','purchases-open','inbox-open'],recent:['stock-low','secret-query',4,'routes-building']});
+const recovered=m.parseAssistantShortcuts(malicious);
+assert.deepEqual(recovered.favorites,['routes-building','stock-low','purchases-open','inbox-open'],'persistência restringe a identificadores conhecidos');
+assert.deepEqual(recovered.recent,['stock-low','routes-building'],'recente não guarda texto livre');
+assert.ok(!m.serializeAssistantShortcuts(recovered).includes('31999999999'),'nenhum telefone de teste foi persistido');
+assert.ok(!m.serializeAssistantShortcuts(recovered).includes('secret-query'),'nenhum comando arbitrário foi persistido');
+const favorites=m.toggleAssistantFavorite(recovered,'routes-building');
+assert.equal(favorites.favorites.includes('routes-building'),false,'favorito alterna sem duplicar');
+const favoriteAgain=m.toggleAssistantFavorite(favorites,'routes-building');
+assert.equal(favoriteAgain.favorites[0],'routes-building');
+const recent=m.rememberAssistantShortcut(m.rememberAssistantShortcut(recovered,'inbox-open'),'inbox-open');
+assert.deepEqual(recent.recent,['inbox-open','stock-low','routes-building'],'recente move comando conhecido para o topo');
+assert.equal(m.assistantShortcutByCommand('ROtas em Montagem').id,'routes-building');
+assert.equal(m.assistantShortcutByCommand('pedido do João'),undefined,'comandos livres não são registrados');
+assert.equal(m.assistantShortcutById('secret'),undefined,'identificador não permitido não gera ação');
+assert.ok(m.parseAssistantShortcuts('x'.repeat(2049)).favorites.length===0,'limite de armazenamento impede payload gigante');
+const hook=read('hooks/useAssistantShortcuts.ts');
+const assistant=read('components/home/OperationalAssistant.tsx');
+const context=read('components/assistant/ContextualAssistantCard.tsx');
+const css=read('app/globals.css');
+const preapk=read('scripts/pre-apk.cjs');
+assert.ok(hook.includes('useEffect(')&&hook.includes('parseAssistantShortcuts('),'leitura local só após montagem');
+assert.ok(hook.includes('try { window.localStorage.setItem')&&hook.includes('catch {'),'bloqueio do storage não quebra operação');
+assert.ok(assistant.includes('useDeferredValue')&&assistant.includes('searchAssistantSnapshot'),'busca local R234 preservada');
+assert.ok(assistant.includes('useAssistantShortcuts()')&&assistant.includes('runShortcut('),'atalhos integrados');
+assert.ok(assistant.includes('remember(safe.id)')&&assistant.includes('remember(id)'),'recentes usam IDs da allowlist');
+assert.ok(assistant.includes('toggleFavorite(id)')&&assistant.includes('aria-pressed={shortcuts.favorites.includes(id)}'),'favoritos possuem estado acessível');
+assert.ok(assistant.includes("prefers-reduced-motion: reduce")&&assistant.includes('window.clearInterval(timer)')&&assistant.includes("document.visibilityState !== 'visible'"),'texto progressivo respeita acessibilidade e limpeza');
+assert.ok(assistant.includes('onFocus={() => setFocused(true)}')&&assistant.includes('if (focused || value'),'animação para no foco ou ao digitar');
+assert.ok(context.includes('signals.find(item => !hiddenIds.has(item.id))')&&context.includes('hideForToday(signal.id)'),'insight R235 continua dispensável');
+assert.ok(context.includes('dfl-assistant-contextual')&&assistant.includes('dfl-assistant-premium'),'contorno premium nas duas experiências');
+assert.ok(css.includes('mask-composite: exclude')&&css.includes('dfl-assistant-border-orbit'),'rastro acompanha contorno, não cria overlay sobre botões');
+assert.ok(css.includes('@media (prefers-reduced-motion: reduce)')&&css.includes('animation: none !important'),'movimento reduzido respeitado');
+assert.ok(preapk.includes("'scripts/test-r236-premium-assistant.cjs'")&&preapk.includes("'scripts/test-r235-contextual-assistant.cjs'"),'regressões anteriores preservadas');
+for(const [name,content] of [['assistant',assistant],['context',context],['shortcuts',source],['hook',hook]]) {
+ assert.ok(!content.includes('fetch(')&&!content.includes('onSnapshot(')&&!content.includes('runTransaction('),`${name} não adiciona I/O remoto`);
+}
+for(const file of ['components/home/OperationalAssistant.tsx','components/assistant/ContextualAssistantCard.tsx','lib/operation/assistant-shortcuts.ts','hooks/useAssistantShortcuts.ts']) {
+ const parsed=ts.transpileModule(read(file),{fileName:file,compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext},reportDiagnostics:true});
+ const errors=(parsed.diagnostics||[]).filter(d=>d.category===ts.DiagnosticCategory.Error);
+ assert.equal(errors.length,0,`${file}: TS sintático sem erro`);
+}
+console.log('R236: favoritos/recentes sem PII, estilo premium, animações acessíveis, offline e regressões preservadas OK');

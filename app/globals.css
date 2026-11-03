@@ -416,3 +416,44 @@ html[data-dfl-platform="android"] header.safe-top {
     transition-duration: 0ms !important;
   }
 }
+
+
+/* R236 DFL Assistente · contorno vivo discreto; sem custo de rede ou canvas. */
+@property --dfl-assistant-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.dfl-assistant-premium,
+.dfl-assistant-contextual {
+  position: relative;
+  isolation: isolate;
+}
+.dfl-assistant-premium::before,
+.dfl-assistant-contextual::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--dfl-assistant-angle), transparent 0deg, transparent 255deg, rgba(251,191,36,.07) 278deg, rgba(251,191,36,.7) 315deg, rgba(16,185,129,.36) 331deg, transparent 355deg);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: dfl-assistant-border-orbit 11s linear infinite;
+}
+.dfl-assistant-contextual::before { opacity: .48; animation-duration: 17s; }
+@keyframes dfl-assistant-border-orbit { to { --dfl-assistant-angle: 360deg; } }
+@keyframes dfl-assistant-arrive {
+  from { opacity: .6; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dfl-assistant-contextual { animation: dfl-assistant-arrive .26s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .dfl-assistant-premium::before,
+  .dfl-assistant-contextual::before,
+  .dfl-assistant-contextual { animation: none !important; }
+}

@@ -23,7 +23,7 @@ export function ContextualAssistantCard({
       ? 'border-sky-500/20 bg-sky-500/[.055] text-sky-300'
       : 'border-emerald-500/20 bg-emerald-500/[.055] text-emerald-300';
   return (
-    <section aria-label={`DFL Assistente contextual — ${scope}`} className={`rounded-[20px] border p-3 ${accent}`}>
+    <section aria-label={`DFL Assistente contextual — ${scope}`} className={`dfl-assistant-contextual rounded-[20px] border p-3 ${accent}`}>
       <div className="flex items-start gap-2.5">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-zinc-700/30 bg-zinc-950/35"><Sparkles size={16} aria-hidden="true" /></span>
         <div className="min-w-0 flex-1">
