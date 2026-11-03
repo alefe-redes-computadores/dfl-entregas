@@ -114,8 +114,9 @@ export default function DeliveriesPage() {
   };
   const [calendarMonth, setCalendarMonth] = useState(() => operationalDateFromKey(initialDateKey));
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<StatusFilter>('todas');
+  const [query, setQuery] = useState(() => searchParams.get('q')?.slice(0, 110) || '');
+  const [status, setStatus] = useState<StatusFilter>(() => { const initial = searchParams.get('status'); return initial === 'pendentes' || initial === 'incompletas' ? initial : 'todas'; });
+  const paymentPending = searchParams.get('payment') === 'pending';
   const [origin, setOrigin] = useState<OriginFilter>('todas');
   const [fulfillment, setFulfillment] = useState<FulfillmentFilter>('todas');
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
@@ -143,6 +144,7 @@ export default function DeliveriesPage() {
         // Filtrar critérios baratos antes de criar texto de busca, resolver cliente e rota.
         // Os casos "incompletas" ainda usam a validação completa abaixo.
         .filter((delivery) => {
+          if (paymentPending && (isCancelledSiteDelivery(delivery) || deriveDeliveryPaymentState(delivery) === 'paid')) return false;
           if (origin !== 'todas' && delivery.origin !== origin) return false;
           if (fulfillment !== 'todas' && getFulfillmentMode(delivery) !== fulfillment) return false;
           if (status === 'concluidas') return delivery.completed === true;
@@ -190,7 +192,7 @@ export default function DeliveriesPage() {
           (a, b) =>
             a.sortAt - b.sortAt,
         ),
-    [customerById, dayDeliveries, fulfillment, origin, normalizedQuery, routeById, status],
+    [customerById, dayDeliveries, fulfillment, origin, normalizedQuery, paymentPending, routeById, status],
   );
 
   const renderedRows = useMemo(() => rows.slice(0, progressiveCount(rows.length, visibleLimit)), [rows, visibleLimit]);
@@ -329,7 +331,7 @@ export default function DeliveriesPage() {
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Buscar neste dia"
+          placeholder={paymentPending ? "Somente pagamentos a conferir" : "Buscar neste dia"}
           className="dfl-search pl-11 pr-4 focus:border-amber-500/50"
         />
       </div>

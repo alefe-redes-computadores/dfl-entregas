@@ -40,6 +40,7 @@ export default function StockPage() {
   const [categoryLimits,setCategoryLimits]=useState<Record<string,number>>({});
   const restoredScroll=useRef(false);
   const scrollFrame=useRef<number|null>(null);
+  useEffect(() => { const params = new URLSearchParams(window.location.search); const text = params.get('q'); if (text) setQuery(text.slice(0, 110)); const target = params.get('filter'); if (target === 'baixo' || target === 'zero') setFilter(target); }, []);
   useEffect(()=>{writeStockUiStorage('local','dfl-stock-filter',filter)},[filter]);
   useEffect(()=>{writeStockUiStorage('session','dfl-stock-query',query)},[query]);
   useEffect(()=>{writeStockUiStorage('local','dfl-stock-collapsed',JSON.stringify(collapsed))},[collapsed]);

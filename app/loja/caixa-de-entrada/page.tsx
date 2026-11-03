@@ -71,7 +71,7 @@ export default function DeliveryInboxPage() {
   const [processing, setProcessing] = useState(false);
   const importLock = useRef(false);
   const [view, setView] = useState<InboxView>('todos');
-  const [inboxSearch,setInboxSearch] = useState('');
+  const [inboxSearch,setInboxSearch] = useState(() => params.get('q')?.slice(0,110) || '');
   const [visibleLimit, setVisibleLimit] = useState(OPERATION_FIRST_BATCH);
   useEffect(() => setVisibleLimit(OPERATION_FIRST_BATCH), [view, today]);
 

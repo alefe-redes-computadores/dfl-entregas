@@ -13,6 +13,7 @@ import type { Route } from '@/types';
 import { getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { firstValidTimestamp, saoPauloDateKey } from '@/lib/reports/time';
 import { OperationalRadar } from '@/components/home/OperationalRadar';
+import { OperationalAssistant } from '@/components/home/OperationalAssistant';
 import { ShiftBriefing } from '@/components/home/ShiftBriefing';
 import { OperationalCommandCenter } from '@/components/home/OperationalCommandCenter';
 import { OperationalDatePicker } from '@/components/home/OperationalDatePicker';
@@ -52,6 +53,7 @@ export default function HomePage() {
   const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
 
   const [globalMotoboy, setGlobalMotoboy] = useState<string | null>(null);
+  const [legacyRadarOpen, setLegacyRadarOpen] = useState(false);
   // R154_R2_ROUTE_FOCUS: compactacao voluntaria, nenhuma rota fica oculta sem acao explicita.
   const [compactOpenRoutes, setCompactOpenRoutes] = useState(false);
   // R90: balcão/retirada/99Food não montam dezenas de cards numa só pintura.
@@ -374,6 +376,7 @@ export default function HomePage() {
       />
 
       <OperationalCommandCenter routes={routesDoDia} deliveries={deliveriesDoDia} />
+      <OperationalAssistant dayDeliveries={deliveriesDoDia} dateKey={selectedDateKey} />
       <ShiftBriefing />
 
       {hasOperationSummary ? (
@@ -476,7 +479,15 @@ export default function HomePage() {
       )}
 
 
-      <OperationalRadar />
+      {/* R234: o Radar legado é opcional. Não monta cálculo pesado ao fechar. */}
+      <section className="px-1">
+        <button type="button" aria-expanded={legacyRadarOpen} aria-controls="dfl-legacy-radar"
+          onClick={() => setLegacyRadarOpen(value => !value)}
+          className="min-h-9 text-[11px] font-semibold text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline">
+          {legacyRadarOpen ? 'Ocultar análises antigas' : 'Ver análises avançadas (Radar legado)'}
+        </button>
+        {legacyRadarOpen && <div id="dfl-legacy-radar" className="pt-2"><OperationalRadar /></div>}
+      </section>
 
       {storeOrdersDoDia.length > 0 && !globalMotoboy && (
         <section className="flex flex-col gap-3">

@@ -58,8 +58,8 @@ export default function RoutesPage() {
   };
   const [calendarMonth, setCalendarMonth] = useState(() => operationalDateFromKey(initialDateKey));
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [filter, setFilter] = useState<Filter>('todas');
-  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<Filter>(() => { const initial = searchParams.get('filter'); return initial === 'montando' || initial === 'na-rua' || initial === 'prontas' || initial === 'finalizadas' ? initial : 'todas'; });
+  const [query, setQuery] = useState(() => searchParams.get('q')?.slice(0, 110) || '');
   const [visibleLimit, setVisibleLimit] = useState(OPERATION_FIRST_BATCH);
   useEffect(() => { setVisibleLimit(OPERATION_FIRST_BATCH); }, [selectedDate, filter, query]);
 
