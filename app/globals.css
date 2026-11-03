@@ -7,6 +7,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* R237: Search palette universal, leve, sem decoração sobre botões. */
+.dfl-r237-command-sheet { animation: dfl-r237-sheet-in .22s ease-out both; }
+@keyframes dfl-r237-sheet-in { from { opacity: .75; transform: translateY(7px) scale(.995); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.dfl-r237-command-sheet input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.dfl-r237-command-sheet button:focus-visible { outline: 2px solid rgba(251,191,36,.85); outline-offset: 2px; }
+.dfl-r237-command-sheet [role="search"]:focus-within { box-shadow: 0 0 0 1px rgba(251,191,36,.18),0 0 24px rgba(251,191,36,.035); }
+@media (prefers-reduced-motion: reduce) { .dfl-r237-command-sheet { animation: none !important; } }
+
 * {
   -webkit-tap-highlight-color: transparent;
 }

@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { PwaInstallPrompt } from '@/components/pwa/PwaInstallPrompt';
-import { User, LogOut, RefreshCw } from 'lucide-react';
+import { User, LogOut, RefreshCw, Search } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { UserAvatar } from '@/components/UserAvatar';
+import { GlobalAssistantPalette } from '@/components/assistant/GlobalAssistantPalette';
 import { latestSyncDiagnostic, latestSuccessfulSyncDiagnostic, SYNC_DIAGNOSTIC_EVENT } from '@/lib/sync-diagnostics';
 import { shouldRefreshOnForeground } from '@/lib/operation/foreground-sync-policy';
 
@@ -36,6 +37,7 @@ export function Header() {
   
   const [greeting, setGreeting] = useState('Boa noite');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<string | undefined>();
   const [online, setOnline] = useState(true);
   const [, setClock] = useState(0);
@@ -153,6 +155,19 @@ export function Header() {
     return () => window.removeEventListener('keydown', onEscape);
   }, [isProfileOpen]);
 
+  // Ctrl/Cmd+K abre a Busca 360 em qualquer tela.
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsProfileOpen(false);
+        setAssistantOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onShortcut);
+    return () => window.removeEventListener('keydown', onShortcut);
+  }, []);
+
   const firstName = user?.displayName?.trim().split(/\s+/)[0] || 'Usuário';
 
   return (
@@ -217,6 +232,9 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button type="button" aria-label="Abrir Busca 360" title="Busca 360 · Ctrl+K" onClick={() => { setIsProfileOpen(false); setAssistantOpen(true); }} className="grid h-10 w-10 place-items-center rounded-xl border border-amber-500/25 bg-amber-500/[.08] text-amber-300 transition active:scale-95 active:bg-amber-500/15">
+              <Search size={18} />
+            </button>
             <button
               type="button"
               onClick={() => void refreshNow(true)}
@@ -231,6 +249,8 @@ export function Header() {
           </div>
         </div>
       </header>
+
+      {assistantOpen && <GlobalAssistantPalette onClose={() => setAssistantOpen(false)} />}
 
       {/* Modal de Edição / Visualização de Perfil */}
       {isProfileOpen && (

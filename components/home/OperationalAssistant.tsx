@@ -58,11 +58,13 @@ export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries
     isDeliveryFulfillment(item) && !isCancelledSiteDelivery(item)
   ), 0), [dayDeliveries]);
   const belowMinimum = useMemo(() => products.reduce((total, p) => total + Number(p.active && Number.isFinite(p.minimum_quantity) && p.minimum_quantity > 0 && p.current_quantity < p.minimum_quantity), 0), [products]);
-  const insight = unrouted > 0
-    ? { id: `assistant:unrouted:${dateKey}`, text: `${unrouted} entrega${unrouted === 1 ? '' : 's'} sem rota neste período.`, action: 'Abrir pendências', href: `/entregas?date=${encodeURIComponent(dateKey)}&status=incompletas` }
-    : belowMinimum > 0
-      ? { id: 'assistant:stock-low', text: `${belowMinimum} produto${belowMinimum === 1 ? '' : 's'} abaixo do mínimo cadastrado.`, action: 'Conferir estoque', href: '/estoque?filter=baixo' }
-      : null;
+  // Quando a primeira sugestão é dispensada, uma segunda evidência útil pode assumir.
+  // Não produzir mensagens genéricas nem recuperar dados remotamente.
+  const insightOptions = [
+    ...(unrouted > 0 ? [{ id: `assistant:unrouted:${dateKey}`, text: `${unrouted} entrega${unrouted === 1 ? '' : 's'} sem rota neste período.`, action: 'Abrir pendências', href: `/entregas?date=${encodeURIComponent(dateKey)}&status=incompletas` }] : []),
+    ...(belowMinimum > 0 ? [{ id: 'assistant:stock-low', text: `${belowMinimum} produto${belowMinimum === 1 ? '' : 's'} abaixo do mínimo cadastrado.`, action: 'Conferir estoque', href: '/estoque?filter=baixo' }] : []),
+  ];
+  const insight = insightOptions.find(option => !hiddenIds.has(option.id)) ?? null;
 
   const goTo = (href: string) => {
     const safe = assistantShortcutByCommand(value.trim());
