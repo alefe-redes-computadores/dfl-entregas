@@ -27,6 +27,7 @@ import {
   buildOperationalMemory,
   buildOperationalMemoryInsights,
 } from './buildOperationalMemory';
+import { excludedFromReports } from '@/lib/operation/report-eligibility';
 
 import {
   buildRouteSequenceInsights,
@@ -436,6 +437,7 @@ export function buildOperationalIntelligence(
 
   const operationalDeliveries = deliveries.filter(
     (delivery) =>
+      !excludedFromReports(delivery, customerMap.get(delivery.customer_id)) &&
       !delivery.exclude_customer_metrics &&
       !internalCustomerIds.has(delivery.customer_id),
   );
@@ -485,7 +487,7 @@ export function buildOperationalIntelligence(
       deliveries: operationalDeliveries,
       undatedDeliveries: includeUndatedQuality
         ? undatedDeliveries.filter(
-            (delivery) => !internalCustomerIds.has(delivery.customer_id),
+            (delivery) => !excludedFromReports(delivery, customerMap.get(delivery.customer_id)) && !internalCustomerIds.has(delivery.customer_id),
           )
         : [],
       customers: input.customers,

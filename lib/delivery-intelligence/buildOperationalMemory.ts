@@ -129,7 +129,7 @@ function buildRecurringCustomerPatterns(
   const customerMap = new Map(customers.map((item) => [item.id, item]));
   const excludedCustomerIds = new Set(
     customers
-      .filter(isOperationalCustomer)
+      .filter((customer) => isOperationalCustomer(customer) || customer.exclude_from_rankings === true || customer.exclude_from_analytics === true)
       .map((customer) => customer.id),
   );
   const buckets = new Map<

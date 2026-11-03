@@ -25,7 +25,7 @@ export function buildPendingMotoboySettlements(input:{
   }
   const settledSources=new Set(input.expenses.map((expense)=>expense.source_id).filter(Boolean));
   return input.motoboys
-    .filter((motoboy)=>motoboy.active && !isInternalOperationalMotoboy(motoboy))
+    .filter((motoboy)=>motoboy.active && !isInternalOperationalMotoboy(motoboy) && motoboy.settlement_required !== false)
     .flatMap((motoboy)=>{
       const linkedRoutes=dayRoutes.filter((route)=>routeBelongsToMotoboy(route,motoboy));
       if(!linkedRoutes.length||linkedRoutes.some((route)=>route.status!=='fechada'))return [];

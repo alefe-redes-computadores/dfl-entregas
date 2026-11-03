@@ -48,6 +48,9 @@ export function ReportChartCard({
     chartValue: item[dataKey] ?? 0,
   }));
 
+  const mobileCategoryBars = chartType === 'bar' && chartData.length >= 6;
+  const visibleBars = mobileCategoryBars ? chartData.slice(0, 8) : chartData;
+
   const handleChartClick = (state: unknown) => {
     if (!onSelectBucket || !state || typeof state !== 'object') return;
 
@@ -90,7 +93,7 @@ export function ReportChartCard({
           Nenhum dado confiável para esta análise.
         </div>
       ) : (
-        <div className="h-[210px] min-w-0 w-full overflow-hidden px-1 pb-1 sm:h-[250px] sm:px-2">
+        <div className="h-[210px] min-w-0 w-full overflow-hidden px-1 pb-1 sm:h-[250px] sm:px-2" style={mobileCategoryBars ? { height: Math.max(245, visibleBars.length * 44 + 46) } : undefined}>
           <ResponsiveContainer width="100%" height="100%">
             {chartType === 'line' ? (
               <LineChart
@@ -134,23 +137,29 @@ export function ReportChartCard({
               </LineChart>
             ) : (
               <BarChart
-                data={chartData}
-                margin={{ top: 16, right: 14, left: -20, bottom: 0 }}
+                data={visibleBars}
+                layout={mobileCategoryBars ? 'vertical' : 'horizontal'}
+                margin={mobileCategoryBars ? { top: 10, right: 19, left: 10, bottom: 4 } : { top: 16, right: 14, left: -20, bottom: 0 }}
                 onClick={handleChartClick}
                 style={{ cursor: onSelectBucket ? 'pointer' : 'default' }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                 <XAxis
-                  dataKey="label"
+                  dataKey={mobileCategoryBars ? undefined : 'label'}
+                  type={mobileCategoryBars ? 'number' : 'category'}
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: '#71717a', fontSize: 10 }}
                   minTickGap={8}
                 />
                 <YAxis
+                  dataKey={mobileCategoryBars ? 'label' : undefined}
+                  type={mobileCategoryBars ? 'category' : 'number'}
+                  width={mobileCategoryBars ? 125 : undefined}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: '#52525b', fontSize: 10 }}
+                  tick={{ fill: '#a1a1aa', fontSize: 10 }}
+                  tickFormatter={mobileCategoryBars ? (value: string) => value.length > 18 ? `${value.slice(0, 16)}…` : value : undefined}
                   allowDecimals={dataKey === 'average'}
                 />
                 <Tooltip

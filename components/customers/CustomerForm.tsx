@@ -13,6 +13,7 @@ export interface CustomerFormValue {
   name: string; origin: OrderOrigin; phone?: string; phones?: CustomerPhone[];
   address?: string; addresses?: CustomerAddress[]; neighborhood?: string; maps_link?: string;
   observation?: string; last_confirmation_code?: string; internal_owner_verified?: boolean;
+  exclude_from_rankings?: boolean; exclude_from_analytics?: boolean;
 }
 interface Props {initial?:Customer;submitLabel:string;busy?:boolean;onSubmit:(value:CustomerFormValue)=>Promise<void>}
 const token=()=>Math.random().toString(36).slice(2,10);
@@ -24,8 +25,10 @@ export function CustomerForm({initial,submitLabel,busy,onSubmit}:Props){
   const [observation,setObservation]=useState(initial?.observation||'');
   const [code,setCode]=useState(initial?.last_confirmation_code||'');
   const [isInternal,setIsInternal]=useState(verifiedInternalCustomer(initial));
+  const [excludeRankings,setExcludeRankings]=useState(initial?.exclude_from_rankings===true);
+  const [excludeAnalytics,setExcludeAnalytics]=useState(initial?.exclude_from_analytics===true);
   const [invalid,setInvalid]=useState('');
-  useEffect(()=>{if(!initial)return;setName(initial.name);setOrigin(initial.origin||'loja');setPhones(customerPhones(initial));setAddresses(customerAddresses(initial));setObservation(initial.observation||'');setCode(initial.last_confirmation_code||'');setIsInternal(verifiedInternalCustomer(initial));},[initial]);
+  useEffect(()=>{if(!initial)return;setName(initial.name);setOrigin(initial.origin||'loja');setPhones(customerPhones(initial));setAddresses(customerAddresses(initial));setObservation(initial.observation||'');setCode(initial.last_confirmation_code||'');setIsInternal(verifiedInternalCustomer(initial));setExcludeRankings(initial.exclude_from_rankings===true);setExcludeAnalytics(initial.exclude_from_analytics===true);},[initial]);
   const updatePhone=(id:string,patch:Partial<CustomerPhone>)=>setPhones(list=>list.map(item=>item.id===id?{...item,...patch}:item));
   const updateAddress=(id:string,patch:Partial<CustomerAddress>)=>setAddresses(list=>list.map(item=>item.id===id?{...item,...patch}:item));
   const setPrimaryPhone=(id:string)=>setPhones(list=>list.map(item=>({...item,primary:item.id===id})));
@@ -44,7 +47,7 @@ export function CustomerForm({initial,submitLabel,busy,onSubmit}:Props){
     const fields=customerContactPayload(phones,normalizedAddresses);
     if(nonblankPhones.length!==(fields.phones||[]).length){setInvalid('Há telefones duplicados ou incompletos.');return;}
     if(addresses.filter(item=>item.address.trim()).length!==(fields.addresses||[]).length){setInvalid('Há endereços duplicados.');return;}
-    await onSubmit({name:name.trim(),origin,...fields,observation:observation.trim()||undefined,last_confirmation_code:origin==='ifood'&&code?code:undefined,internal_owner_verified:isInternal});
+    await onSubmit({name:name.trim(),origin,...fields,observation:observation.trim()||undefined,last_confirmation_code:origin==='ifood'&&code?code:undefined,internal_owner_verified:isInternal,exclude_from_rankings:excludeRankings,exclude_from_analytics:excludeAnalytics});
   };
   return <form onSubmit={save} className="flex flex-col gap-4 pb-28">
     <div className="grid grid-cols-3 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-1">{([['ifood','iFood',Smartphone],['food99','99Food',ShoppingBag],['loja','Loja',Store]] as const).map(([value,label,Icon])=><button key={value} type="button" onClick={()=>setOrigin(value)} className={`flex h-12 items-center justify-center gap-1.5 rounded-xl text-xs font-bold ${origin===value?value==='ifood'?'bg-red-500 text-white':value==='food99'?'bg-yellow-400 text-zinc-950':'bg-emerald-500 text-zinc-950':'text-zinc-400'}`}><Icon size={15}/>{label}</button>)}</div>
@@ -60,6 +63,11 @@ export function CustomerForm({initial,submitLabel,busy,onSubmit}:Props){
     <label className="flex flex-col gap-2"><span className="flex items-center gap-2 text-xs font-bold text-zinc-400"><MessageSquare size={14}/>Observações gerais</span><textarea value={observation} onChange={e=>setObservation(e.target.value)} rows={2} className="field-input min-h-20 resize-y py-3" placeholder="Preferências e detalhes do cliente"/></label>
     {origin==='ifood'&&<label className="flex flex-col gap-2 text-xs font-bold text-zinc-500">Último código (apenas referência)<input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,4))} inputMode="numeric" className="field-input"/></label>}
     <label className="flex items-start gap-3 rounded-xl border border-violet-500/20 bg-violet-500/[.04] p-3 text-xs text-zinc-300"><input type="checkbox" checked={isInternal} onChange={e=>setIsInternal(e.target.checked)} className="mt-0.5 accent-violet-500"/><span><span className="flex items-center gap-1 font-black text-violet-300"><ShieldCheck size={13}/>Cadastro interno DEV verificado</span><span className="mt-1 block text-[11px] leading-relaxed text-zinc-400">Somente para seu cadastro operacional. Não aparece no ranking de clientes; vendas reais continuam nos valores gerais. Não marque homônimos.</span></span></label>
+    <section className="rounded-2xl border border-violet-500/25 bg-violet-500/[.035] p-3.5 space-y-3" aria-label="Preferências dos indicadores do cliente">
+      <p className="text-xs font-black text-violet-200">Indicadores e relatórios</p>
+      <label className="flex items-start gap-3 text-xs text-zinc-200"><input type="checkbox" checked={excludeRankings} onChange={event=>setExcludeRankings(event.target.checked)} className="mt-0.5 accent-violet-500"/><span><b className="block">Não participar de rankings de clientes</b><small className="mt-1 block text-[11px] leading-relaxed text-zinc-500">Oculta este cadastro do Top clientes, recorrência e hábitos. Não remove vendas do financeiro.</small></span></label>
+      <label className="flex items-start gap-3 text-xs text-zinc-200"><input type="checkbox" checked={excludeAnalytics} onChange={event=>setExcludeAnalytics(event.target.checked)} className="mt-0.5 accent-violet-500"/><span><b className="block">Não contar pedidos nos indicadores</b><small className="mt-1 block text-[11px] leading-relaxed text-zinc-500">Use apenas para cadastros de testes. Exclui seus pedidos dos gráficos e análises, sem apagar os registros ou alterar o caixa.</small></span></label>
+    </section>
     {invalid&&<p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{invalid}</p>}
     <button disabled={busy||!name.trim()} className="h-14 rounded-2xl bg-amber-400 text-sm font-black text-zinc-950 shadow-lg shadow-amber-500/10 disabled:opacity-50">{busy?'Salvando...':submitLabel}</button>
     <style jsx>{`.field-input{min-height:3rem;width:100%;min-width:0;border-radius:.8rem;border:1px solid rgb(39 39 42);background:rgb(24 24 27 / .6);padding:.65rem .8rem;color:rgb(244 244 245);font-size:.8rem;outline:none}.field-input:focus{border-color:rgb(16 185 129)}`}</style>

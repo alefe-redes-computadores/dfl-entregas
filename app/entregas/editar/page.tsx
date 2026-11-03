@@ -95,6 +95,7 @@ const [routeId, setRouteId] = useState('');
   const [ifoodSubsidy, setIfoodSubsidy] = useState('');
   const [hasIfoodSubsidy, setHasIfoodSubsidy] = useState(false);
   const [isUrgent, setIsUrgent] = useState(false);
+  const [excludeFromReports, setExcludeFromReports] = useState(false);
   const [drinks, setDrinks] = useState('');
   const [observation, setObservation] = useState('');
 
@@ -511,6 +512,7 @@ const [routeId, setRouteId] = useState('');
       setSplitOther(otherPart ? (otherPart.amountCents/100).toFixed(2).replace('.',',') : '');
       setSplitOtherMethod(otherPart && otherPart.method !== 'dinheiro' ? otherPart.method as 'pix'|'cartao'|'cartao_credito'|'cartao_debito' : 'cartao');
       setIsUrgent(delivery.is_urgent || false);
+      setExcludeFromReports(delivery.exclude_from_reports === true);
       setChangeFor(delivery.change_for ? delivery.change_for.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
       setDrinks(delivery.drinks || '');
       setObservation(delivery.observation || '');
@@ -660,6 +662,7 @@ const [routeId, setRouteId] = useState('');
         ifood_subsidy: subsidy > 0 ? subsidy : undefined,
         is_paid: isPaid,
         is_urgent: isUrgent,
+        exclude_from_reports: excludeFromReports,
         payment_method: splitEnabled ? 'dinheiro' : paymentMethod,
         payment_state: paymentStateForInput(paymentMethod, isPaid),
         ...(splitEnabled ? { payment_splits: splitParts() } : { payment_splits: undefined }),
@@ -1347,6 +1350,10 @@ const [routeId, setRouteId] = useState('');
           </div>
         </section>
 
+        <label className={`flex items-start gap-3 rounded-2xl border p-3.5 text-xs ${excludeFromReports ? 'border-amber-500/35 bg-amber-500/[.08]' : 'border-zinc-800 bg-zinc-900/45'}`}>
+          <input type="checkbox" checked={excludeFromReports} onChange={event=>setExcludeFromReports(event.target.checked)} className="mt-0.5 accent-amber-400"/>
+          <span><b className="block text-zinc-200">Excluir este pedido dos indicadores</b><small className="mt-1 block text-[11px] text-zinc-500">Marque testes e lançamentos de treinamento. Não apaga o pedido, não desfaz caixa/estoque e não altera a entrega. Pedidos DEV continuam excluídos mesmo sem essa marcação.</small></span>
+        </label>
         <div className="flex flex-col gap-3 mt-1">
           <button type="submit" disabled={isSaving || isDeleting} className="h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-amber-500/20 transition-all">
             {isSaving ? 'Salvando...' : 'Salvar alterações'}

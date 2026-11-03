@@ -1054,10 +1054,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                           disabled={copyBusy}
                           aria-busy={copyBusy}
                           aria-label={copyBusy ? 'Copiando mensagem' : isGroupedStop ? 'Copiar mensagem da parada' : 'Copiar mensagem do pedido'}
-                          className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/[.065] px-2 text-[11px] font-black text-emerald-300 disabled:opacity-40 active:bg-emerald-500/15"
+                          title={isGroupedStop ? "Copiar todos os pedidos da parada" : "Copiar mensagem do pedido"}
+                          className="grid h-10 min-w-[40px] flex-1 place-items-center rounded-xl border border-emerald-500/25 bg-emerald-500/[.065] text-emerald-300 disabled:opacity-40 active:bg-emerald-500/15"
                         >
                           {copyBusy ? <LoaderCircle size={15} className="shrink-0 animate-spin" /> : <Copy size={15} className="shrink-0" />}
-                          <span className="truncate">{copyBusy ? 'Copiando...' : 'Copiar'}</span>
+                          <span className="sr-only">{copyBusy ? 'Copiando...' : 'Copiar'}</span>
                         </button>
                       )}
                       {canManageStop && Boolean(routeStartedAt(route)) && (

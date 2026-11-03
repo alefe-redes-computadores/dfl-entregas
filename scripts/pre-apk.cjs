@@ -2,6 +2,7 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/test-r233-report-comms-polish.cjs',
   'scripts/test-r232-final-operation-gate.cjs',
   'scripts/test-r231-global-closeout.cjs',
   'scripts/test-r230-offline-recovery.cjs',
@@ -308,7 +309,18 @@ if (missing.length) {
 let failed=0;
 for(const file of tests){
   console.log(`\n===== ${file} =====`);
-  const r=spawnSync(process.execPath,[file],{stdio:'inherit'});
+  let r=spawnSync(process.execPath,[file],{stdio:'inherit'});
+  if(r.status===null){
+    console.error(`[PRE-APK] Processo interrompido: ${file}`,
+      r.error?.message || r.signal || 'sem status');
+    const transient=(r.error &&
+      ['EAGAIN','ENOMEM','ETIMEDOUT'].includes(r.error.code))
+      || r.signal==='SIGKILL';
+    if(transient){
+      console.warn(`[PRE-APK] Repetindo processo interrompido: ${file}`);
+      r=spawnSync(process.execPath,[file],{stdio:'inherit'});
+    }
+  }
   if(r.status!==0){ failed++; console.error(`FALHOU: ${file}`); }
 }
 if(failed){

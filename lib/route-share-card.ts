@@ -140,7 +140,8 @@ export async function buildRouteShareCard(
   roundBox(ctx, 48, y + 10, 984, checklistHeight - 12, 25, '#10262c');
   text('ANTES DE SAIR', 76, y + 60, '900 31px Arial', '#7dd3fc');
   text(cardOrders.length ? `MAQUININHA  •  ${cardOrders.length} cobrança(s)` : 'MAQUININHA  •  não necessária', 76, y + 112, '800 26px Arial', cardOrders.length ? '#fbbf24' : '#cbd5e1');
-  text(`${pendingCodes} códigos iFood  •  ${pendingPix.length} Pix a confirmar`, 76, y + 155, '700 25px Arial', '#e2e8f0');
+  const requiredChecks = [pendingCodes > 0 ? `${pendingCodes} código${pendingCodes===1?'':'s'} iFood` : '', pendingPix.length > 0 ? `${pendingPix.length} Pix a confirmar` : ''].filter(Boolean);
+  text(requiredChecks.length ? requiredChecks.join('  •  ') : 'Sem códigos ou Pix pendentes', 76, y + 155, '700 25px Arial', '#e2e8f0');
   if (drinks.length) {
     text('BEBIDAS PARA CONFERIR', 76, y + 208, '900 26px Arial', '#34d399');
     drinks.slice(0, 5).forEach((drink, i) => text(drink, 76, y + 245 + i * 36, '700 24px Arial', '#f8fafc'));

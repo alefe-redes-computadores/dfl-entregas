@@ -426,6 +426,8 @@ export interface Delivery {
   customer_name?: string;
   /** Preserva a venda, mas exclui ranking/recorrência de cliente. */
   exclude_customer_metrics?: boolean;
+  /** Fora de indicadores e inteligência; histórico bruto e caixa intactos. */
+  exclude_from_reports?: boolean;
   /** Pedido criado pelo proprietário para teste; nunca entra em métricas de cliente. */
   developer_test?: boolean;
   /** Contexto explícito quando a identidade do proprietário/loja é usada no pedido. */
@@ -467,6 +469,10 @@ export interface Customer {
   phone?: string;
   phones?: CustomerPhone[];
   addresses?: CustomerAddress[];
+  /** Não participa de rankings e memória de clientes; vendas seguem reais. */
+  exclude_from_rankings?: boolean;
+  /** Exclui os pedidos deste cadastro só das projeções gerais. */
+  exclude_from_analytics?: boolean;
   internal_owner_verified?: boolean;
   origin?: OrderOrigin;
   neighborhood?: string;
@@ -488,6 +494,8 @@ export interface Motoboy {
   type?: MotoboyType;
   avatar?: string;
   payment_rule?: MotoboyPaymentRule;
+  /** false = não abrir pendência de diária/acerto. Ausente = comportamento legado. */
+  settlement_required?: boolean;
   internal_owner_verified?: boolean;
   /** Responsavel por confirmar no portal: ausente = loja (legado). */
   ifood_confirmation_mode?: 'store' | 'motoboy';

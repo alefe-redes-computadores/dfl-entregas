@@ -2,6 +2,7 @@ import type { Customer, Delivery, Route, StockSupply, Motoboy } from '@/types';
 import { SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { isInternalOperationalCustomer, isInternalOperationalRoute } from '@/lib/operational-exclusions';
+import { excludedFromReports } from '@/lib/operation/report-eligibility';
 import { deliveryCustomerCharge, deliveryEconomicValue, deliveryIfoodSubsidy } from '@/lib/delivery-finance';
 import {
   deliveryOperationalTimestamp,
@@ -559,6 +560,7 @@ export function buildReportModel(input: {
     .filter(
       (delivery) =>
         delivery.developer_test !== true &&
+        !excludedFromReports(delivery, delivery.customer) && // exclusão de indicadores, não do ledger
         true, // sales on internal routes remain part of true commercial revenue
     );
 
@@ -638,6 +640,7 @@ export function buildReportModel(input: {
   // exatamente a mesma população limpa das métricas gerais/financeiras.
   const customerOperationalCurrent = logisticsCurrent.filter(
     (delivery) =>
+      !excludedFromReports(delivery, delivery.customer) &&
       delivery.exclude_customer_metrics !== true &&
       !isInternalOperationalCustomer(delivery.customer),
   );

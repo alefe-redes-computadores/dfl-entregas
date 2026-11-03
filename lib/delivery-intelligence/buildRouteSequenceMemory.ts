@@ -194,7 +194,8 @@ function buildObservations(input: {
            */
           if (
             Number.isFinite(value) &&
-            value >= 0 &&
+            // 0,0 min pode ser lote/mesmo instante; não é deslocamento medido.
+            value >= 0.5 &&
             value <= 180
           ) {
             minutes = value;

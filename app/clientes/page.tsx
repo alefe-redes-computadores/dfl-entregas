@@ -25,7 +25,7 @@ export default function CustomersPage(){
 
   const customerStats = useMemo(() => buildCustomerStatsIndex(customers, deliveries), [customers, deliveries]);
   const items=useMemo(()=>customers.map(customer=>({customer,stats:customerStats.get(customer.id)!})),[customers,customerStats]);
-  const ranked=useMemo(()=>[...items].filter(item=>item.stats.orderCount>0&&!isOperationalCustomer(item.customer)).sort((a,b)=>b.stats.orderCount-a.stats.orderCount||b.stats.totalValue-a.stats.totalValue),[items]);
+  const ranked=useMemo(()=>[...items].filter(item=>item.stats.orderCount>0&&!isOperationalCustomer(item.customer)&&item.customer.exclude_from_rankings!==true&&item.customer.exclude_from_analytics!==true).sort((a,b)=>b.stats.orderCount-a.stats.orderCount||b.stats.totalValue-a.stats.totalValue),[items]);
   const filtered=useMemo(()=>{
     const term=normalizeCustomerName(query);
     const searchedDigits=query.replace(/\D/g,'');

@@ -22,7 +22,7 @@ function completedByCustomer(deliveries: Delivery[]) {
   const result = new Map<string, RecurrenceCount>();
   const byId = new Map<string, Delivery>();
   for (const item of deliveries) {
-    if (!item.customer_id || item.completed !== true || item.exclude_customer_metrics === true) continue;
+    if (!item.customer_id || item.completed !== true || item.exclude_customer_metrics === true || item.developer_test === true || item.exclude_from_reports === true) continue;
     byId.set(item.id, item);
     const value = result.get(item.customer_id) || { completed: 0, direct: 0 };
     value.completed += 1;

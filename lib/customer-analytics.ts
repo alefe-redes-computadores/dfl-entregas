@@ -44,7 +44,9 @@ export function getCustomerStats(customer: Customer, deliveries: Delivery[]): Cu
     .filter(delivery =>
       deliveryBelongsToCustomer(delivery, customer) &&
       delivery.exclude_customer_metrics !== true &&
-      delivery.developer_test !== true
+      delivery.developer_test !== true &&
+      delivery.exclude_from_reports !== true &&
+      customer.exclude_from_analytics !== true
     )
     .sort((a,b) => new Date(getDeliveryCreatedAt(b) || 0).getTime() - new Date(getDeliveryCreatedAt(a) || 0).getTime());
   const totalValue = linked.reduce((total, delivery) => total + deliveryCustomerCharge(delivery), 0);
@@ -84,7 +86,7 @@ export function buildCustomerStatsIndex(customers: Customer[], deliveries: Deliv
   }
 
   for (const delivery of deliveries) {
-    if (delivery.exclude_customer_metrics === true || delivery.developer_test === true) continue;
+    if (delivery.exclude_customer_metrics === true || delivery.developer_test === true || delivery.exclude_from_reports === true || customerById.get(delivery.customer_id)?.exclude_from_analytics === true) continue;
     if (delivery.customer_id) {
       if (knownIds.has(delivery.customer_id)) linked.get(delivery.customer_id)?.push(delivery);
       continue;

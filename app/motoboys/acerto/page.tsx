@@ -97,6 +97,8 @@ function Content(){
   const offsetReturn=baseData?Math.max(0,baseData.cashInHand-Math.min(baseData.cashCollected,Math.max(0,baseData.liquidFee+baseData.priorMotoboyCredit-baseData.priorStoreCredit))):0;
   const cashSettlementInput=settlementStrategy==='separate'?true:settlementStrategy==='offset'?offsetReturn:manualCashInput;
   const data=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,existing?.settlement_adjustments||adjustments,cashSettlementInput,priorCarry):null,[adjustments,cashSettlementInput,date,deliveries,existing,motoboy,priorCarry,routes]);
+  // Usar exatamente o mesmo snapshot dos totais no texto e na imagem, mesmo após fechar o dia.
+  const displayAdjustments=existing?.settlement_adjustments||adjustments;
   // R192: visitas confirmadas são eventos físicos, não novos pedidos ou vendas.
   // A competência da prévia é a DATA da visita e a identidade vem do motoboy da rota.
   // Eventos do mesmo ID são contados uma vez, independentemente do número de pedidos da parada.
@@ -207,16 +209,18 @@ function Content(){
       `📅 *Data:* ${day}/${monthValue}/${year}`,
       '',
       `📦 *${data.orderCount} pedidos · ${data.physicalDeliveryCount} paradas físicas* · 🔁 *${data.completedRoutes} rotas*`,
-      groupedExplanation,
+      ...(data.groupedOrderCount>0?[groupedExplanation]:[]),
       '',
       `🛣️ *CONTAGEM POR ROTA*`,
       // R88: ordem visual natural; o caixa e a diaria permanecem intactos.
       ...settlementRouteOrder(data.routeBreakdown).map((item,index)=>`*${String(index+1).padStart(2,'0')} · ${item.label}*  •  ${item.orderCount} pedido${item.orderCount===1?'':'s'}  →  ${item.physicalDeliveryCount} parada${item.physicalDeliveryCount===1?'':'s'}${item.groupedOrderCount>0?`  ·  ${item.groupedOrderCount} agrupado${item.groupedOrderCount===1?'':'s'}`:''}`),
       '',
       '──────────────────',
-      `↩️ *RETORNOS FÍSICOS · PRÉVIA NÃO LANÇADA*`,
-      `${redeliveryCompensationPreview.visits.length} retorno(s) confirmado(s) nesta data · tarifa R$ ${money(redeliveryCompensationPreview.rate)}`,
-      `Valor sugerido: *R$ ${money(redeliveryCompensationPreview.amount)}* · fora do acerto até ajuste explícito`,
+      ...(redeliveryCompensationPreview.visits.length ? [
+        `↩️ *RETORNOS FÍSICOS · PRÉVIA NÃO LANÇADA*`,
+        `${redeliveryCompensationPreview.visits.length} retorno(s) confirmado(s) · tarifa R$ ${money(redeliveryCompensationPreview.rate)}`,
+        `Valor sugerido: *R$ ${money(redeliveryCompensationPreview.amount)}* · fora do acerto até ajuste explícito`,
+      ] : []),
       ...redeliveryCompensationPreview.visits.slice(0,12).map((visit,index)=>`↳ ${index+1}. Pedido #${visit.order} · ${new Date(visit.at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`),
       ...(redeliveryCompensationPreview.visits.length>12?[`↳ Mais ${redeliveryCompensationPreview.visits.length-12} retorno(s) no histórico operacional`]:[]),
       '',
@@ -234,17 +238,17 @@ function Content(){
           : `↳ A loja devia R$ ${money(data.priorMotoboyCredit)} a ${motoboy.name}`
       );
     }
-    if(adjustments.length){
-      lines.push(
-        '',
-        `➖ *ABATIMENTOS: - R$ ${money(data.totalVales)}*`,
-        `*Motivos dos abatimentos:*`
-      );
-      adjustments.filter(item=>item.direction!=='addition').forEach(item=>lines.push(`↳ - ${adjustmentKindLabel(item)} · ${item.description} · R$ ${money(item.amount)}`));
+    if(data.totalVales>0){
+      lines.push('',`➖ *ABATIMENTOS: - R$ ${money(data.totalVales)}*`);
+      const deductions=displayAdjustments.filter(item=>item.direction!=='addition');
+      if (!deductions.length) lines.push('↳ Motivo indisponível no registro anterior.');
+      else deductions.forEach(item=>lines.push(`↳ ${adjustmentKindLabel(item)} · ${item.description?.trim()||'Sem descrição registrada'} · - R$ ${money(item.amount)}`));
     }
     if(data.totalAdditions>0){
-      lines.push('',`➕ *ACRÉSCIMOS: + R$ ${money(data.totalAdditions)}*`,`*Motivos dos acréscimos:*`);
-      adjustments.filter(item=>item.direction==='addition').forEach(item=>lines.push(`↳ + ${adjustmentKindLabel(item)} · ${item.description} · R$ ${money(item.amount)}`));
+      lines.push('',`➕ *ACRÉSCIMOS: + R$ ${money(data.totalAdditions)}*`);
+      const additions=displayAdjustments.filter(item=>item.direction==='addition');
+      if (!additions.length) lines.push('↳ Motivo indisponível no registro anterior.');
+      else additions.forEach(item=>lines.push(`↳ ${adjustmentKindLabel(item)} · ${item.description?.trim()||'Sem descrição registrada'} · + R$ ${money(item.amount)}`));
     }
     lines.push(
       '',
@@ -339,10 +343,23 @@ function Content(){
     if(imageBusy)return;
     setImageBusy(true);
     try{
-    const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1870;
+    // R233: altura sob demanda. A imagem não pode esconder as rotas ou
+    // declarar inexistentes ajustes registrados no histórico.
+    const settlementRouteRows=settlementRouteOrder(data.routeBreakdown);
+    const settlementImageRows=[
+      ...settlementRouteRows.map((item,index)=>({line:`${index+1}. ${item.label}: ${item.orderCount} pedidos · ${item.physicalDeliveryCount} paradas`,color:'#93c5fd'})),
+      ...displayAdjustments.map(item=>({line:`${item.direction==='addition'?'+':'−'} R$ ${money(item.amount)} · ${item.description?.trim()||adjustmentKindLabel(item)}`,color:item.direction==='addition'?'#6ee7b7':'#fda4af'})),
+    ];
+    if(!displayAdjustments.length && data.totalAdditions+data.totalVales>0)settlementImageRows.push({line:'Há ajustes registrados, mas os motivos não estão disponíveis.',color:'#fbbf24'});
+    if(!displayAdjustments.length && data.totalAdditions+data.totalVales===0)settlementImageRows.push({line:'Sem acréscimos ou abatimentos.',color:'#cbd5e1'});
+    const visibleImageRows=settlementImageRows.slice(0,16);
+    const imageExtraRows=settlementImageRows.length-visibleImageRows.length;
+    const settlementDetailHeight=Math.max(205,110+(visibleImageRows.length+(imageExtraRows>0?1:0))*35);
+    const imageHeight=1340+settlementDetailHeight+84;
+    const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=imageHeight;
     const ctx=canvas.getContext('2d');if(!ctx)return void toast.error('Não foi possível gerar a imagem.');
     const round=(x:number,y:number,w:number,h:number,r:number,fill:string,stroke?:string)=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}};
-    const gradient=ctx.createLinearGradient(0,0,1080,1870);gradient.addColorStop(0,'#09231f');gradient.addColorStop(.44,'#090e13');gradient.addColorStop(1,'#09090d');ctx.fillStyle=gradient;ctx.fillRect(0,0,1080,1400);ctx.fillRect(0,1400,1080,470);
+    const gradient=ctx.createLinearGradient(0,0,1080,imageHeight);gradient.addColorStop(0,'#09231f');gradient.addColorStop(.44,'#090e13');gradient.addColorStop(1,'#09090d');ctx.fillStyle=gradient;ctx.fillRect(0,0,1080,1400);if(imageHeight>1400)ctx.fillRect(0,1400,1080,imageHeight-1400);
     ctx.fillStyle='#10b981';ctx.fillRect(0,0,1080,12);
     await paintDflBrand(ctx,64,65,102);
     const label=(value:string,x:number,y:number,font:string,color:string,maxWidth:number)=>{ctx.textAlign='left';ctx.font=font;ctx.fillStyle=color;ctx.fillText(paintFittedText(ctx,value,maxWidth),x,y);};
@@ -376,28 +393,16 @@ function Content(){
     label(data.retainedCash>0?`Ainda com o motoboy: R$ ${money(data.retainedCash)}`:'Dinheiro da rota conferido no caixa',80,1290,'700 23px Arial','#e2e8f0',910);
 
     // R186: fonte unica dos ajustes, sem recalculo de diaria ou duplicacao de vendas.
-    round(48,1340,984,462,26,'#171b20','#2c3339');
+    round(48,1340,984,settlementDetailHeight,26,'#171b20','#2c3339');
     label('ROTAS E AJUSTES DISCRIMINADOS',80,1390,'900 27px Arial','#f8fafc',915);
-    const routeRows=settlementRouteOrder(data.routeBreakdown);
     let detailY=1433;
-    const compactDetail=(value:string,color='#cbd5e1')=>{
-      label(value,82,detailY,'600 21px Arial',color,900);
+    visibleImageRows.forEach(item=>{
+      label(item.line,82,detailY,'600 21px Arial',item.color,900);
       detailY+=35;
-    };
-    routeRows.slice(0,3).forEach((item,index)=>compactDetail(`${index+1}. ${item.label}: ${item.orderCount} pedidos · ${item.physicalDeliveryCount} paradas`,'#93c5fd'));
-    if(routeRows.length>3)compactDetail(`+ ${routeRows.length-3} outras rotas; detalhes no texto`,'#93c5fd');
-    if(routeRows.length)detailY+=7;
-    const adjustRows=[
-      ...adjustments.filter(item=>item.direction==='addition').map(item=>({prefix:'+',item,color:'#6ee7b7'})),
-      ...adjustments.filter(item=>item.direction!=='addition').map(item=>({prefix:'-',item,color:'#fda4af'})),
-    ];
-    adjustRows.slice(0,4).forEach(({prefix,item,color})=>{
-      compactDetail(`${prefix} R$ ${money(item.amount)} · ${item.description || adjustmentKindLabel(item)}`,color);
     });
-    if(adjustRows.length>4)compactDetail(`+ ${adjustRows.length-4} ajustes detalhados na mensagem`,'#fbbf24');
-    if(!adjustRows.length)compactDetail('Sem acréscimos ou abatimentos avulsos.');
+    if(imageExtraRows>0)label(`+ ${imageExtraRows} detalhes na mensagem textual`,82,detailY,'600 21px Arial','#fbbf24',900);
 
-    label('DFL ENTREGAS  •  RESUMO DE CONFERÊNCIA',60,1841,'700 21px Arial','#7b919a',930);
+    label('DFL ENTREGAS  •  RESUMO DE CONFERÊNCIA',60,imageHeight-32,'700 21px Arial','#7b919a',930);
     const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}.png`;
     if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:summary(),files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem gerada. Escolha onde compartilhar.');return;}
     const blob=await (await fetch(dataUrl)).blob();const file=new File([blob],filename,{type:'image/png'});if(navigator.share&&navigator.canShare?.({files:[file]})){await navigator.share({title:`Acerto · ${motoboy.name}`,text:summary(),files:[file]});return;}const link=document.createElement('a');link.download=filename;link.href=dataUrl;link.click();toast.info('Imagem baixada. Use Copiar resumo para enviar também o texto.');
