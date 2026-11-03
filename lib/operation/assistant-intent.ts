@@ -27,7 +27,8 @@ export function assistantDestinations(raw: string, selectedDate = ''): Assistant
   if (/\b(caixa de entrada|pedidos? (?:do|recebidos? (?:no|pelo)) site|importar pedidos?|rascunhos?)\b/.test(query)) {
     add('inbox', 'Caixa de Entrada', 'Pedidos do Site e triagem manual', '/loja/caixa-de-entrada');
   } else if (/\b(compras?|fornecedores?)\b/.test(query)) {
-    add('purchases', 'Compras e fornecedores', 'Consultar histórico e itens', '/estoque/compras');
+    const item = subject.replace(/\b(?:compras?|fornecedores?|ontem|hoje|semana|mes|m[eê]s|no|na|de|do|da|dos|das|em|com|um|uma|o|a|itens?|produtos?)\b/g, ' ').replace(/\s+/g,' ').trim().slice(0,80);
+    add('purchases', 'Montar compra', item ? `Pesquisar ${item} na lista` : 'Conferir sugestões e lista de mercado', url('/estoque/compras', {q:item||undefined}));
   } else if (/\b(estoque|produto|produtos|falta|abaixo do minimo|zerados?|acabando)\b/.test(query)) {
     const low = /abaixo|baixo|minimo|falta|acabando/.test(query);
     const zero = /zerado|zerou/.test(query);

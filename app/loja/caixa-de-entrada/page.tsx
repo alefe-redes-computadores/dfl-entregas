@@ -10,6 +10,8 @@ import { SitePlanningPreview } from "@/components/store/SitePlanningPreview";
 import { OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 import { classifyInboxDrafts, inboxViewDrafts, type InboxView } from '@/lib/operation/inboxPresentation';
 import { searchInboxDrafts, inboxAttentionCounts } from '@/lib/operation/inbox-command-search';
+import { ContextualAssistantCard } from '@/components/assistant/ContextualAssistantCard';
+import { inboxContextSignals } from '@/lib/operation/contextual-signals';
 import {
   ArrowLeft,
   ClipboardPaste,
@@ -362,6 +364,9 @@ export default function DeliveryInboxPage() {
           <button type="button" onClick={()=>setChannel('site')} aria-pressed={channel==='site'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='site'?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}>Site</button>
           <button type="button" onClick={()=>setChannel('manual')} aria-pressed={channel==='manual'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='manual'?'border-violet-500/40 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}>Importar</button>
         </nav>
+
+        <ContextualAssistantCard scope="caixa de entrada" signals={inboxContextSignals({siteReady:siteBacklog.ready,siteReview:siteBacklog.review,siteCommercial:siteBacklog.commercial,manualReview:attentionCounts.review,manualDuplicates:attentionCounts.duplicates,manualReady:attentionCounts.ready})}
+          onAction={target=>{if(target==='site'){setChannel('site');}else if(target==='manual-review'){setChannel('manual');setView('revisar');}else if(target==='manual-ready'){setChannel('manual');setView('prontos');}}} />
 
         {channel==='site'?<>
           <SitePlanningPreview />

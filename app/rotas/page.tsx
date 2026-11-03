@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Bike, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, Search, User, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { matchesOperationSearch } from '@/lib/operation/searchR99';
+import { ContextualAssistantCard } from '@/components/assistant/ContextualAssistantCard';
+import { routeContextSignals } from '@/lib/operation/contextual-signals';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { OPERATION_BATCH, OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
@@ -194,6 +196,8 @@ export default function RoutesPage() {
       </div>
     </section>
 
+    <ContextualAssistantCard scope="rotas" signals={routeContextSignals({ dateKey: selectedDate, montando: counts.montando, rua: counts.rua, prontas: counts.prontas })}
+      onAction={target => { if(target === 'prontas' || target === 'montando' || target === 'na-rua') { setQuery(''); setFilter(target); } }} />
     <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar rota ou entregador" className="dfl-search pl-11 pr-16"/>{query && <button type="button" onClick={() => setQuery('')} aria-label="Limpar busca de rotas" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-2 text-[10px] font-bold text-emerald-300">Limpar</button>}</div>
     <div className="dfl-filter-row" role="group" aria-label="Filtrar rotas por situação">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => { const count = value === 'todas' ? dayRoutes.length : value === 'na-rua' ? counts.rua : counts[value]; return <button type="button" key={value} aria-pressed={filter === value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-3.5 py-2.5 text-xs font-bold transition-colors ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label} <span className="ml-1 text-[10px] tabular-nums opacity-70">{count}</span></button>; })}</div>
 
