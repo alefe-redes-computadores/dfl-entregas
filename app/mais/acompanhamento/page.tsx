@@ -11,6 +11,8 @@ import { toast } from '@/lib/operational-toast';
 import { OwnerTrackingCard } from '@/components/tracking/OwnerTrackingCard';
 import { OwnerTrackingInspection } from '@/components/tracking/OwnerTrackingInspection';
 import type { TrackingInspection } from '@/lib/tracking/gate1/readiness';
+import type { Gate2Certificate } from '@/lib/tracking/gate2/certification';
+import { TrackingGate2Certificate } from '@/components/tracking/TrackingGate2Certificate';
 
 const ORIGIN = 'https://dfl-entregas.vercel.app';
 const baseUrl=()=>Capacitor.isNativePlatform()?(process.env.NEXT_PUBLIC_DFL_SERVER_ORIGIN?.trim()||ORIGIN).replace(/\/+$/,''):'';
@@ -27,11 +29,14 @@ function ControlPanel(){
   const initialId=params.get('id')||'';
   const [selectedId,setSelectedId]=useState(initialId);
   const [inspection,setInspection]=useState<TrackingInspection|null>(null);
+  const [certificate,setCertificate]=useState<Gate2Certificate|null>(null);
+  const [certifying,setCertifying]=useState(false);
   const [loading,setLoading]=useState(false);
   const [working,setWorking]=useState(false);
   const [failure,setFailure]=useState('');
   const [listOpen,setListOpen]=useState(!initialId);
   const lastRequest=useRef(0);
+  const lastCertificateRequest=useRef(0);
   const allowed=Boolean(isSuperadminUid(user?.uid));
   const listed=useMemo(()=>{
     const needle=norm(query.trim());
@@ -60,12 +65,12 @@ function ControlPanel(){
       if(response.status===403)return {off:true} as const;
       throw new Error(`Consulta protegida indisponível (HTTP ${response.status}).`);
     }
-    return response.json() as Promise<{ok?:boolean;inspection?:TrackingInspection;result?:string}>;
+    return response.json() as Promise<{ok?:boolean;inspection?:TrackingInspection;certificate?:Gate2Certificate;result?:string}>;
   },[]);
   const inspect=useCallback(async(id:string)=>{
     if(!allowed || !id)return;
     const request=++lastRequest.current;
-    setLoading(true);setFailure('');setInspection(null);
+    lastCertificateRequest.current++;setCertifying(false);setLoading(true);setFailure('');setInspection(null);setCertificate(null);
     try{
       const result=await api(`/admin/inspect?delivery_id=${encodeURIComponent(id)}`);
       if(request!==lastRequest.current)return;
@@ -76,7 +81,19 @@ function ControlPanel(){
     finally{if(request===lastRequest.current)setLoading(false);}
   },[allowed,api]);
   useEffect(()=>{if(initialId&&allowed&&selectedId===initialId)void inspect(initialId);},[initialId,allowed,inspect,selectedId]);
-  const choose=(id:string)=>{setSelectedId(id);setListOpen(false);setInspection(null);setFailure('');void inspect(id);};
+  const choose=(id:string)=>{setSelectedId(id);setListOpen(false);setInspection(null);setCertificate(null);setFailure('');void inspect(id);};
+  const certify=async()=>{
+    if(!allowed||!selectedId||!inspection||certifying)return;
+    const certificateRequest=++lastCertificateRequest.current;
+    setCertifying(true);setCertificate(null);
+    try{
+      const result=await api(`/admin/certify?delivery_id=${encodeURIComponent(selectedId)}`);
+      if(certificateRequest!==lastCertificateRequest.current)return;
+      if('certificate' in result && result.certificate)setCertificate(result.certificate);
+      else toast.error('Certificação indisponível. Revise a autenticação e a origem.');
+    }catch(e){if(certificateRequest===lastCertificateRequest.current)toast.error(e instanceof Error?e.message:'Não foi possível certificar o pedido.');}
+    finally{if(certificateRequest===lastCertificateRequest.current)setCertifying(false);}
+  };
   const copy=(text:string)=>{void navigator.clipboard.writeText(text).then(()=>toast.success('Prévia copiada, sem dados privados.')).catch(()=>toast.error('Cópia não disponível neste aparelho.'));};
   const submit=async(action:'confirm'|'sync')=>{
     if(!allowed||!selectedId||working)return;
@@ -96,6 +113,7 @@ function ControlPanel(){
   if(!allowed)return <div className="dfl-page"><LockKeyhole className="text-zinc-500"/><h1 className="mt-3 font-black text-zinc-100">Área administrativa restrita</h1><p className="mt-2 text-xs text-zinc-500">O acesso exige autenticação do proprietário.</p></div>;
   return <div className="dfl-page space-y-4 pb-28">
     <header className="flex items-start gap-3"><button type="button" onClick={()=>router.push('/mais')} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900"><ArrowLeft size={18}/></button><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.15em] text-cyan-400">Gate 1 · R250 · Operação interna</p><h1 className="font-heading text-xl font-black text-zinc-100">Central de Acompanhamento</h1><p className="mt-1 text-xs text-zinc-500">Inspeção e simulação. Sem acesso público nem mensagens reais.</p></div></header>
+    <button type="button" onClick={()=>router.push('/mais/acompanhamento/laboratorio')} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-cyan-500/25 bg-cyan-500/[.06] px-4 text-left text-xs font-bold text-cyan-100"><span className="flex items-center gap-2"><BookOpenCheck size={18}/> Laboratório visual · 14 cenários fictícios</span><span className="text-[10px] text-cyan-300">Abrir</span></button>
     <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[.06] p-3"><div className="flex items-center gap-2 text-xs font-black text-amber-200"><ShieldCheck size={16}/> Modo de homologação protegido</div><p className="mt-1 text-[11px] leading-relaxed text-zinc-400">Esta central usa o cache para localizar pedidos, mas somente o servidor pode confirmar eventos. Sem tenant/configuração certificada, a inspeção será bloqueada. Links e WhatsApp permanecem OFF.</p></div>
     <section className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3"><button type="button" onClick={()=>setListOpen(v=>!v)} className="flex w-full items-center justify-between text-left"><span className="flex items-center gap-2 text-sm font-black text-zinc-100"><Search size={17}/> Selecionar pedido</span><ChevronDown className={`text-zinc-500 transition-transform ${listOpen?'rotate-180':''}`} size={17}/></button>
       {listOpen&&<><div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3"><Search size={16} className="text-zinc-500"/><input aria-label="Buscar pedido" value={query} onChange={e=>setQuery(e.target.value.slice(0,100))} placeholder="ID ou cliente" className="min-h-11 w-full min-w-0 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"/></div><div className="flex gap-2 overflow-x-auto pb-1">{([['todas','Todos'],['site','Site'],['manual','Loja'],['ifood','iFood'],['food99','99Food']] as const).map(([key,label])=><button key={key} type="button" onClick={()=>setFilter(key)} className={`min-h-9 shrink-0 rounded-xl border px-3 text-xs font-bold ${filter===key?'border-cyan-500/40 bg-cyan-500/10 text-cyan-200':'border-zinc-800 text-zinc-400'}`}>{label}</button>)}</div><div className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain">{listed.map(d=><OwnerTrackingCard key={d.id} delivery={d} active={selectedId===d.id} onClick={()=>choose(d.id)}/>)}{listed.length===0&&<p className="p-4 text-center text-xs text-zinc-500">Nenhum pedido no cache com esses filtros.</p>}</div><p className="text-[10px] text-zinc-600">Até 80 resultados locais; não gera consultas adicionais por card.</p></>}
@@ -104,6 +122,8 @@ function ControlPanel(){
     {loading&&<div role="status" className="rounded-2xl border border-zinc-800 p-4 text-xs text-zinc-400">Consultando somente os fatos confirmados no servidor...</div>}
     {failure&&<div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-200"><AlertTriangle size={17} className="mb-2"/>{failure}<p className="mt-2 text-zinc-400">O aplicativo operacional continua funcionando normalmente.</p></div>}
     {inspection&&<OwnerTrackingInspection value={inspection} busy={working} onCopy={copy} onConfirm={()=>void submit('confirm')} onSync={()=>void submit('sync')}/>}
+    {inspection&&<button type="button" disabled={certifying||loading} onClick={()=>void certify()} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/[.06] px-3 text-xs font-black text-cyan-100 disabled:opacity-40"><ShieldCheck size={16}/>{certifying?'Certificando evidências...':'Certificar contratos A–E neste pedido'}</button>}
+    {certificate&&<TrackingGate2Certificate certificate={certificate}/>}
     <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4"><div className="flex items-center gap-2 text-xs font-black text-zinc-300"><BookOpenCheck size={16}/> Contrato do Site preservado</div><p className="mt-2 text-xs leading-relaxed text-zinc-500">A página pública será construída separadamente pelo Site. Copiar a prévia não emite credenciais, não registra vendas e não aciona a VPS.</p></section>
   </div>;
 }

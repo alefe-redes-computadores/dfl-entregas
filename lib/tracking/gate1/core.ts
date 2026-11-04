@@ -192,7 +192,7 @@ export function projectPublicTracking(s: ConfirmedSnapshot): PublicProjection {
     terminal,
   };
 }
-export function validatePublicProjection(p: PublicProjection): boolean {
+function validateBasePublicProjection(p: PublicProjection): boolean {
   if (p.contract !== TRACKING_PUBLIC_CONTRACT || p.version !== 1 || !iso(p.as_of)) return false;
   if (!['fresh','stale','reconciling','unknown'].includes(p.freshness) || !EVENT_KINDS.includes(p.status)) return false;
   if (p.order.label.length > 32 || p.order.origin_label.length > 40 || p.timeline.length > 30) return false;
@@ -210,4 +210,54 @@ export function validatePublicProjection(p: PublicProjection): boolean {
       v.is_next_stop !== (v.stops_ahead === 0)) return false;
   }
   return true;
+}
+
+/** R251 strict public allowlist: rejects extra fields, inconsistent progress and private information. */
+export function validateStrictPublicProjection(value: unknown): value is PublicProjection {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const shape = (v:unknown, names:readonly string[]) => Boolean(v && typeof v==='object' && !Array.isArray(v) &&
+    Object.keys(v as Record<string,unknown>).length===names.length &&
+    Object.keys(v as Record<string,unknown>).every(k=>names.includes(k)) &&
+    names.every(k=>Object.prototype.hasOwnProperty.call(v,k)));
+  if (!shape(record,['contract','version','order','status','as_of','freshness','timeline','progress','courier','terminal'])) return false;
+  if (!shape(record.order,['label','origin_label','fulfillment'])) return false;
+  if (typeof record.status!=='string' || !EVENT_KINDS.includes(record.status as TrackingKind) || record.status==='reorganized')return false;
+  if (typeof record.terminal!=='boolean' || record.terminal !== (record.status==='delivered'||record.status==='cancelled'))return false;
+  const order=record.order as Record<string,unknown>;
+  if (typeof order.label!=='string'||order.label.length<1||order.label.length>32||
+    typeof order.origin_label!=='string'||order.origin_label.length<1||order.origin_label.length>40||
+    (order.fulfillment!=='delivery'&&order.fulfillment!=='pickup'))return false;
+  if (!iso(record.as_of) || typeof record.freshness!=='string' || !['fresh','stale','reconciling','unknown'].includes(record.freshness))return false;
+  if (!Array.isArray(record.timeline) || record.timeline.length>30)return false;
+  const ids=new Set<string>();
+  for(const row of record.timeline){
+    if (!shape(row,['id','kind','title','at'])) return false;
+    const t=row as Record<string,unknown>;
+    if(typeof t.id!=='string'||t.id.length<1||t.id.length>128|| !/^[A-Za-z0-9._:/-]+$/.test(t.id)||ids.has(t.id))return false;
+    ids.add(t.id);
+    if(typeof t.kind!=='string'|| !EVENT_KINDS.includes(t.kind as TrackingKind) ||
+      typeof t.title!=='string'||t.title!==TITLES[t.kind as TrackingKind]||!iso(t.at))return false;
+  }
+  if(record.courier!==null){
+    if(!shape(record.courier,['first_name']))return false;
+    const c=record.courier as Record<string,unknown>;
+    if(typeof c.first_name!=='string'||c.first_name.length<1||c.first_name.length>40||!/^[\p{L}\p{M}'-]+$/u.test(c.first_name))return false;
+  }
+  if(record.progress!==null){
+    if(!shape(record.progress,['status','current_stop_number','planned_customer_stop_number','total_physical_stops','stops_ahead','is_next_stop']))return false;
+    const p=record.progress as Record<string,unknown>;
+    const int=(v:unknown)=>typeof v==='number'&&Number.isInteger(v);
+    if(record.status!=='out_for_delivery'||record.freshness!=='fresh'||p.status!=='verified'||
+      !int(p.total_physical_stops)||Number(p.total_physical_stops)<1||Number(p.total_physical_stops)>300||
+      !int(p.planned_customer_stop_number)||Number(p.planned_customer_stop_number)<1||Number(p.planned_customer_stop_number)>Number(p.total_physical_stops)||
+      !int(p.stops_ahead)||Number(p.stops_ahead)<0||Number(p.stops_ahead)>=Number(p.total_physical_stops)||
+      typeof p.is_next_stop!=='boolean'||p.is_next_stop!==(p.stops_ahead===0))return false;
+    if(p.current_stop_number!==null&&(!int(p.current_stop_number)||Number(p.current_stop_number)<1||Number(p.current_stop_number)>Number(p.total_physical_stops)))return false;
+  }
+  return validateBasePublicProjection(value as PublicProjection);
+}
+
+export function validatePublicProjection(p: PublicProjection): boolean {
+  return validateStrictPublicProjection(p);
 }
