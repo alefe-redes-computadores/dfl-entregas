@@ -1,0 +1,24 @@
+DFL ENTREGAS → DFL SITE — R253 GATE 4 | IMPLEMENTAR SUA PARTE AGORA
+
+A R252 Entregas foi publicada na main, e a R253 está preparando a ponte de diagnóstico/contratos S2S. Já existe backend funcional condicionado a flags e explicitamente OFF para clientes.
+
+O Site NÃO precisa aguardar nova arquitetura nem mais uma cirurgia administrativa do Entregas para implementar a parte dele. Precisamos que ele execute uma macrocirurgia robusta com:
+
+1. /acompanhar isolada, interface premium mobile-first, histórico e progresso, estados expirado/indisponível/revogado, safe-area e retorno Android/PWA.
+2. Leitura imediata do token #t= na entrada e remoção imediata do fragmento antes de qualquer carregamento de scripts terceiros, analytics e requisições.
+3. POST /acompanhar/api/session: token troca servidor-servidor via HMAC e nonce, proteção contra abuso, cookie HttpOnly Secure SameSite com Path restrito, no-store, sem logar token; validação do payload de sucesso.
+4. GET /acompanhar/api/status: usa SOMENTE sessão limitada, nunca ID de pedido escolhido pelo navegador; faz POST S2S assinado para o Entregas, valida o JSON B e limpa imediatamente estado previamente exibido em qualquer erro/revogação.
+5. Sem acesso direto a Firestore do Entregas, sem service account administrativa, sem secrets no frontend.
+6. Preservar origem e autoridade dos pedidos do Site, inclusive Pendente e Agendado sem aceite; não confundir alocação/despacho.
+7. Construir testes de contrato em ambiente simulado e revisão de segurança; nenhuma mensagem real, nenhum link publicado ao cliente, nenhum novo módulo ativado.
+8. Não modificar checkout, financeiro, combos, DFL Assist, Firebase Rules ou mensageria comercial sem necessidade comprovada.
+
+Contratos reais no Entregas:
+- POST /api/integration/tracking/v1/authorize: {contract:'dfl.tracking.access',version:1,action:'exchange',opaque_token:'...'}
+- POST /api/integration/tracking/v1/status: {contract:'dfl.tracking.access',version:1,action:'status',scope_handle:'...'}
+- Assinatura x-dfl-tracking-timestamp/nonce/kid/signature; HMAC-SHA256 de método + caminho + hash do corpo + timestamp + nonce + kid + tenant.
+- Projeção B: {contract:'dfl.tracking.public',version:1,order,status,as_of,freshness,timeline,progress,courier,terminal} (detalhes dos enums/JSON no schema B).
+
+Consulte a documentação R253 Gate 4 publicada no Entregas para cenários, restrições e nomes candidatos das envs. Antes de ativar qualquer flag, faremos HOMOLOGAÇÃO CONJUNTA de tokens, revogação ativa, S2S e resposta pública com dados fictícios.
+
+Status solicitado ao Site: IMPLEMENTAR sua macrocirurgia interna agora e devolver os testes executados, commit e divergências concretas. A ativação pública fica para um gate separado.
