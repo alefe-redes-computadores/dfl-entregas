@@ -248,11 +248,12 @@ export async function issueGrant(input: { tenant: string; deliveryId: string; ac
     const expiresAt = new Date(Date.now() + input.ttlMinutes * 60_000).toISOString();
     tx.set(grant, {
       tenant_id: input.tenant, order_key: key, delivery_id: input.deliveryId,
-      generation, token_hash: tokenHash, status: 'active',
+      generation, token_hash: tokenHash, status: 'active', exchange_policy: 'single_use_v1',
       idempotency_key: input.idempotencyKey, expires_at: expiresAt,
       actor_uid: input.actorUid, issued_at: new Date().toISOString(),
     });
     tx.create(index, { tenant_id: input.tenant, grant_id: id, token_hash: tokenHash,
+      exchange_policy: 'single_use_v1', grant_generation: generation,
       expire_at: new Date(Date.now() + 24 * 60 * 60_000) });
     return { state: 'issued' as const, grant_id: id, expires_at: expiresAt, generation };
   });
@@ -275,23 +276,46 @@ export async function revokeGrant(input: { tenant: string; grantId: string; acto
     return { state: 'revoked' as const, already_revoked: false, revoked_at: revokedAt };
   });
 }
+/** R255: one link can create one session only. Index consumption and session creation
+ * are committed atomically; any transaction error fails closed without a session.
+ * Grants from the previous protocol are deliberately ineligible: their usage
+ * cannot be established with certainty, and customer access is still OFF.
+ */
 export async function exchangeToken(tenant: string, token: string) {
   if (!/^[a-zA-Z0-9_-]{40,100}$/.test(token)) return null;
-  const index = await idxRef(token).get();
-  const raw = (index.data() || {}) as Raw;
-  if (!index.exists || raw.tenant_id !== tenant || raw.token_hash !== hexSha256(token)) return null;
-  const grant = await grantRef(txt(raw.grant_id)).get();
-  const data = (grant.data() || {}) as Raw;
-  if (!grant.exists || data.status !== 'active' || data.tenant_id !== tenant ||
-    data.token_hash !== hexSha256(token) || !iso(data.expires_at) || Date.parse(txt(data.expires_at)) <= Date.now()) return null;
+  const hash = hexSha256(token);
+  const indexRef = idxRef(token);
   const session = randomSecret();
-  const expiresAt = new Date(Math.min(Date.now() + 30 * 60_000, Date.parse(txt(data.expires_at)))).toISOString();
-  await sessionRef(session).create({
-    tenant_id: tenant, grant_id: grant.id, grant_generation: data.generation,
-    expires_at: expiresAt, created_at: new Date().toISOString(),
-    expire_at: new Date(Date.now() + 24 * 60 * 60_000),
-  });
-  return { session_token: session, expires_at: expiresAt };
+  const sessionDoc = sessionRef(session);
+  try {
+    return await adminDb.runTransaction(async tx => {
+      const index = await tx.get(indexRef);
+      const raw = (index.data() || {}) as Raw;
+      if (!index.exists || raw.tenant_id !== tenant || raw.token_hash !== hash ||
+          raw.exchange_policy !== 'single_use_v1' ||
+          Object.prototype.hasOwnProperty.call(raw, 'consumed_at')) return null;
+      const grantId = txt(raw.grant_id);
+      if (!/^[a-f0-9]{64}$/.test(grantId)) return null;
+      const grant = await tx.get(grantRef(grantId));
+      const data = (grant.data() || {}) as Raw;
+      const now = Date.now();
+      if (!grant.exists || data.status !== 'active' || data.tenant_id !== tenant ||
+          data.exchange_policy !== 'single_use_v1' || data.token_hash !== hash ||
+          !Number.isInteger(data.generation) || data.generation !== raw.grant_generation ||
+          !iso(data.expires_at) || Date.parse(txt(data.expires_at)) <= now) return null;
+      const expiresAt = new Date(Math.min(now + 30 * 60_000, Date.parse(txt(data.expires_at)))).toISOString();
+      tx.update(indexRef, {consumed_at: new Date(now).toISOString()});
+      tx.create(sessionDoc, {
+        tenant_id: tenant, grant_id: grant.id, grant_generation: data.generation,
+        expires_at: expiresAt, created_at: new Date(now).toISOString(),
+        expire_at: new Date(now + 24 * 60 * 60_000),
+      });
+      return { session_token: session, expires_at: expiresAt };
+    });
+  } catch {
+    // Firestore uncertainty must never yield a successful authorization.
+    return null;
+  }
 }
 export async function querySession(tenant: string, session: string, c: CapabilityState) {
   if (!/^[a-zA-Z0-9_-]{40,100}$/.test(session)) return null;
