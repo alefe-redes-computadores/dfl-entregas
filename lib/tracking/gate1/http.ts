@@ -4,7 +4,7 @@ import { authorizedOwner, trackingCodeEnabled, trackingCustomerEnabled, tracking
   verifyTrackingSiteRequest, allowTokenExchangeAttempt, allowTrackingStatusAttempt } from './security';
 import { capabilities, canAccessCustomer, confirmedDelivery, issueGrant, revokeGrant,
   exchangeToken, querySession, resolveCanonicalOrder, reconcileConfirmedEvents, confirmInternalDelivery, hasCommercialAcceptance } from './storage';
-import { canonicalOrderKey, validatePublicProjection } from './core';
+import { canonicalOrderKey, validatePublicProjection, validateStrictPublicProjection } from './core';
 
 const json = (value: unknown, status = 200) => NextResponse.json(value, {
   status, headers: { 'cache-control':'no-store, max-age=0', pragma:'no-cache',
@@ -102,7 +102,7 @@ export async function status(req: NextRequest) {
     if (ctx.state !== 'ok') return err(ctx.state === 'invalid'?401:ctx.state === 'replay'?409:503);
     if (!(await allowTrackingStatusAttempt(p.data.scope_handle))) return err(429);
     const projection = await querySession(ctx.c.tenant,p.data.scope_handle,ctx.c);
-    if (!projection || !validatePublicProjection(projection)) return err();
+    if (!projection || !validateStrictPublicProjection(projection)) return err();
     return json(projection);
   } catch { return err(503); }
 }

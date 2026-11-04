@@ -1,0 +1,9 @@
+DFL ENTREGAS → DFL SITE — HOMOLOGAÇÃO GATE 5
+
+R253 está publicada no Entregas. R254 acrescenta uma prova autenticada servidor-servidor, independentemente do acesso público. O Site/main auditado em 04/11/2026 ainda não tinha /acompanhar na versão consultada; se você já avançou em branch/commit posterior, use essa versão como fonte atual.
+
+A próxima macrocirurgia do Site deve implementar /acompanhar com sessão HttpOnly, troca de token em POST sem cache, CORS/cookie/CSRF seguros, revogação de sessões e status usando dfl.tracking.public v1, validado estritamente. A prova S2S Gate 5 é o CHECK técnico antes de habilitar qualquer emissão de link ou WhatsApp.
+
+No backend Site, portar a lógica pura de buildBridgeProbe / verifyBridgeResponse em lib/tracking/gate5/bridge-protocol.ts e testar usando fixtures, sem portar dependências de Firebase Admin. Endpoint Entregas: POST /api/integration/tracking/v1/bridge, contrato dfl.tracking.bridge v1, assinado HMAC (mesmo esquema do Gate 4). Ver docs/DFL-R254-GATE5-PROVA-CONEXAO-SITE.md.
+
+Para evitar integração artificial, não marcar produção como E2E OK antes de testar uma requisição real em ambiente controlado, com chave de homologação e flags explicitamente autorizadas. O handshake não habilita clientes. Manter Gate1 customer OFF, links públicos OFF, WhatsApp OFF, Finance/Combo/checkout inalterados. Rodar TypeScript integral, regressões, privacidade, S2S replay, sessão revogada, Android/PWA, segurança e publicação seletiva.

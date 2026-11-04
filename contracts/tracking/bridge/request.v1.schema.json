@@ -1,0 +1,13 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"DFL Site bridge probe v1 request",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["contract","version","action","challenge"],
+  "properties":{
+    "contract":{"const":"dfl.tracking.bridge"},
+    "version":{"const":1},
+    "action":{"const":"probe"},
+    "challenge":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,96}$"}
+  }
+}

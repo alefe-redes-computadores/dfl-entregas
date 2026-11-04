@@ -1,0 +1,15 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"DFL Site bridge proof v1 response",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["contract","version","status","challenge_hash","server_time","proof"],
+  "properties":{
+    "contract":{"const":"dfl.tracking.bridge"},
+    "version":{"const":1},
+    "status":{"const":"reachable"},
+    "challenge_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "server_time":{"type":"string","format":"date-time"},
+    "proof":{"type":"string","pattern":"^[a-f0-9]{64}$"}
+  }
+}

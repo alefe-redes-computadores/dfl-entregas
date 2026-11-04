@@ -48,6 +48,15 @@ function keys() {
 export type TrackingAuthResult = 'ok' | 'invalid' | 'replay' | 'not_ready';
 export async function verifyTrackingSiteRequest(request: NextRequest, rawBody: string): Promise<TrackingAuthResult> {
   if (!trackingCustomerEnabled()) return 'not_ready';
+  return verifySignedTrackingRequest(request,rawBody);
+}
+/** R254: separately gated internal S2S probe; never enables customers. */
+export async function verifyTrackingBridgeRequest(request: NextRequest, rawBody: string): Promise<TrackingAuthResult> {
+  if (!trackingCodeEnabled() || process.env.DFL_TRACKING_BRIDGE_PROBE_CERTIFIED !== '1') return 'not_ready';
+  return verifySignedTrackingRequest(request,rawBody);
+}
+/** Both routes share the exact same signature, timestamp and nonce-replay policy. */
+async function verifySignedTrackingRequest(request: NextRequest,rawBody: string): Promise<TrackingAuthResult> {
   const tenant = trackingTenant(), configured = keys();
   if (!tenant || !configured) return 'not_ready';
   const timestamp = request.headers.get('x-dfl-tracking-timestamp') || '';
@@ -55,7 +64,8 @@ export async function verifyTrackingSiteRequest(request: NextRequest, rawBody: s
   const kid = request.headers.get('x-dfl-tracking-kid') || '';
   const signature = request.headers.get('x-dfl-tracking-signature') || '';
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(timestamp) || !/^[a-zA-Z0-9_-]{20,90}$/.test(nonce) ||
-      !/^[a-f0-9]{64}$/.test(signature) || !configured[kid] ||
+      !/^[a-f0-9]{64}$/.test(signature) || !Object.prototype.hasOwnProperty.call(configured,kid) ||
+      !Number.isFinite(Date.parse(timestamp)) ||
       Math.abs(Date.now() - Date.parse(timestamp)) > 120_000) return 'invalid';
   const valid = signTrackingRequest({
     method: request.method, path: request.nextUrl.pathname, body: rawBody,
@@ -74,6 +84,18 @@ export async function verifyTrackingSiteRequest(request: NextRequest, rawBody: s
     const code = String((error as { code?: unknown })?.code || '');
     return /6|already-exists|ALREADY_EXISTS/.test(code) ? 'replay' : 'not_ready';
   }
+}
+/** Signed response proof: no secret is returned or stored. Fail closed unless bridge flag is enabled. */
+export function signTrackingBridgeProof(input:{challengeHash:string;nonce:string;serverTime:string;kid:string}):string|null {
+  if (!trackingCodeEnabled() || process.env.DFL_TRACKING_BRIDGE_PROBE_CERTIFIED !== '1') return null;
+  const tenant=trackingTenant(),configured=keys();
+  if(!tenant||!configured||!Object.prototype.hasOwnProperty.call(configured,input.kid)||
+     !/^[a-f0-9]{64}$/.test(input.challengeHash)||
+     !/^[A-Za-z0-9_-]{20,90}$/.test(input.nonce)||
+     !Number.isFinite(Date.parse(input.serverTime)))return null;
+  const material=['DFL_TRACKING_BRIDGE_PROOF_V1','/api/integration/tracking/v1/bridge',
+    input.challengeHash,input.nonce,input.serverTime,tenant,input.kid].join('\n');
+  return createHmac('sha256',configured[input.kid]).update(material).digest('hex');
 }
 export async function allowTokenExchangeAttempt(request: NextRequest): Promise<boolean> {
   const tenant = trackingTenant();
