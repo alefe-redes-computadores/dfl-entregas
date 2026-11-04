@@ -8,6 +8,7 @@ import {
   Banknote,
   Bike,
   CheckCircle2,
+  ChevronRight,
   ChevronLeft,
   Clock3,
   CreditCard,
@@ -28,6 +29,7 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
+import { isSuperadminUid } from '@/lib/access/roles';
 import { toast } from '@/lib/operational-toast';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -83,6 +85,7 @@ function DeliveryDetailsContent() {
   const customer = useAppStore((state) =>
     state.customers.find((item) => item.id === delivery?.customer_id),
   );
+  const isTrackingOwner = isSuperadminUid(useAppStore((state) => state.user?.uid));
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const ifoodPendingConfirmations = useAppStore(
     (state) => state.ifoodPendingConfirmations,
@@ -402,6 +405,14 @@ function DeliveryDetailsContent() {
             Edição, exclusão e conclusão bloqueadas.
           </p>
         </section>
+      )}
+      {isTrackingOwner && (
+        <button type="button" onClick={() => router.push(`/mais/acompanhamento?id=${encodeURIComponent(delivery.id)}`)}
+          className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/[.045] px-4 text-left text-xs font-black text-cyan-200"
+        >
+          <span className="flex items-center gap-2"><ShieldCheck size={17}/> Acompanhamento · revisão interna</span>
+          <ChevronRight size={16} className="text-cyan-300" />
+        </button>
       )}
       {channel === 'site' && delivery.external_order_id && (
         <button type="button" onClick={() => void openDflAdmin()} disabled={openingAdmin} className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-sky-500/20 bg-sky-500/[0.07] px-4 py-3 text-left active:scale-[0.99] disabled:cursor-wait disabled:opacity-70">

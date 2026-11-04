@@ -107,6 +107,21 @@ export default function MaisPage() {
 
           {isDiagnosticsAdmin && <button
             type="button"
+            onClick={() => router.push('/mais/acompanhamento')}
+            className="flex w-full items-center gap-4 p-4 text-left transition-colors active:bg-zinc-800/50"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-300">
+              <ShieldCheck size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-zinc-100">Central de Acompanhamento</p>
+              <p className="text-xs text-zinc-500">Gate 1 interno · eventos, privacidade e confirmação segura</p>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
+          </button>}
+
+          {isDiagnosticsAdmin && <button
+            type="button"
             onClick={() => router.push('/mais/diagnostico')}
             className="flex w-full items-center gap-4 p-4 text-left transition-colors active:bg-zinc-800/50"
           >
