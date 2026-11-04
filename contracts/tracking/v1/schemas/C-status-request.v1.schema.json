@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.dfl.invalid/C-dfl-tracking-access-status-v1.schema.json",
+  "$comment": "Endereço de schema documental, sem endpoint implantado.",
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "dfl.tracking.access"
+    },
+    "version": {
+      "const": 1
+    },
+    "action": {
+      "const": "status"
+    },
+    "scope_handle": {
+      "type": "string",
+      "minLength": 22,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    }
+  },
+  "required": [
+    "contract",
+    "version",
+    "action",
+    "scope_handle"
+  ],
+  "additionalProperties": false
+}

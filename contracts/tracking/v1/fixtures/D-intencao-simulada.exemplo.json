@@ -1,0 +1,19 @@
+{
+  "contract": "dfl.messaging.intent",
+  "version": 1,
+  "tenant_id": "empresa-exemplo",
+  "canonical_order_key": "entregas:pedido-exemplo-24",
+  "source_event_id": "evt-exemplo-0301",
+  "transition_id": "transition-exemplo-0301",
+  "event_type": "delivery.assigned",
+  "origin_channel": "whatsapp",
+  "channel": "whatsapp",
+  "template_id": "allocation_information_v1",
+  "template_version": 1,
+  "recipient_reference": "contato-elegivel-interno",
+  "idempotency_key": "sha256-derivado-servidor-exemplo",
+  "occurred_at": "2026-11-04T21:00:00-03:00",
+  "expires_at": "2026-11-04T23:00:00-03:00",
+  "eligibility": {"eligible": false, "reason_code": "MODULE_OFF"},
+  "state": "dry_run"
+}

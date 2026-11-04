@@ -1,0 +1,6 @@
+{
+  "contract": "dfl.tracking.access",
+  "version": 1,
+  "action": "exchange",
+  "opaque_token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+}

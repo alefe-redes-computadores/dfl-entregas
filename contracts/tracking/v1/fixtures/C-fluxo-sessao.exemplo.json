@@ -1,0 +1,28 @@
+{
+  "contract": "dfl.tracking.access",
+  "version": 1,
+  "flow": [
+    {
+      "step": "browser_to_site",
+      "method": "POST",
+      "path": "/acompanhar/api/session",
+      "body": {"opaque_token": "[placeholder-sem-token-real]"}
+    },
+    {
+      "step": "site_to_entregas",
+      "method": "POST",
+      "path": "/api/integration/tracking/v1/authorize",
+      "server_auth": "dedicated-signed-request",
+      "body": {"contract": "dfl.tracking.access", "version": 1, "action": "exchange", "opaque_token": "[placeholder-sem-token-real]"}
+    },
+    {
+      "step": "entregas_to_site",
+      "body": {"authorized": true, "scope_handle": "[handle-opaco-ficticio]", "scope_expires_at": "2026-11-04T22:00:00-03:00"}
+    },
+    {
+      "step": "site_to_browser",
+      "response": "Cookie HttpOnly; Secure; SameSite=Lax; Path=/acompanhar/api; no-store. Nenhum token bruto retornado."
+    }
+  ],
+  "notes": "Protocolo fictício para revisão; não representa endpoints existentes e não contém segredo utilizável. Revogação revalidada em TODA chamada ao status."
+}

@@ -1,0 +1,21 @@
+{
+  "contract": "dfl.operational_event",
+  "version": 1,
+  "tenant_id": "empresa-exemplo",
+  "canonical_order_key": "site:1048",
+  "event_id": "evt-exemplo-recebido",
+  "transition_id": "trans-exemplo-recebido",
+  "event_type": "order.received",
+  "revision": 1,
+  "occurred_at": "2026-11-04T20:20:00-03:00",
+  "persisted_at": "2026-11-04T20:20:02-03:00",
+  "source_system": "dfl_site",
+  "actor_id": "system:site",
+  "correlation_id": null,
+  "route_id": null,
+  "route_revision": null,
+  "causal_event_id": null,
+  "payload": {
+    "source_event_id": "site-original-event-1048"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "contract": "dfl.tracking.access",
+  "version": 1,
+  "action": "issue",
+  "order": {
+    "canonical_order_key": "entregas:exemplo-1048",
+    "origin": "manual"
+  },
+  "idempotency_key": "fake-request-123456",
+  "requested_ttl_minutes": 120
+}

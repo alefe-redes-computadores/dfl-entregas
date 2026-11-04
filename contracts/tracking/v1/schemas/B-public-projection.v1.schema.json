@@ -1,0 +1,362 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.dfl.invalid/B-dfl-tracking-public-v1.schema.json",
+  "$comment": "Endereço de schema documental, sem endpoint implantado.",
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "dfl.tracking.public"
+    },
+    "version": {
+      "const": 1
+    },
+    "order": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "origin_label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "fulfillment": {
+          "type": "string",
+          "enum": [
+            "delivery",
+            "pickup"
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "origin_label",
+        "fulfillment"
+      ],
+      "additionalProperties": false
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "received",
+        "scheduled",
+        "confirmed",
+        "preparing",
+        "ready",
+        "assigned",
+        "out_for_delivery",
+        "next_stop",
+        "delivered",
+        "delivery_issue",
+        "cancelled"
+      ]
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 20,
+      "maxLength": 40,
+      "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+    },
+    "freshness": {
+      "type": "string",
+      "enum": [
+        "fresh",
+        "stale",
+        "reconciling",
+        "unknown"
+      ]
+    },
+    "timeline": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "received",
+              "scheduled",
+              "confirmed",
+              "preparing",
+              "ready",
+              "assigned",
+              "out_for_delivery",
+              "reorganized",
+              "next_stop",
+              "delivered",
+              "delivery_issue",
+              "cancelled"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 20,
+            "maxLength": 40,
+            "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "at"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "verified"
+            },
+            "current_stop_number": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 300
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "planned_customer_stop_number": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 300
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "total_physical_stops": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300
+            },
+            "stops_ahead": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 299
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "is_next_stop": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "status",
+            "current_stop_number",
+            "planned_customer_stop_number",
+            "total_physical_stops",
+            "stops_ahead",
+            "is_next_stop"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "is_next_stop": {
+                    "const": true
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "stops_ahead": {
+                    "const": 0
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "courier": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "first_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "pattern": "^[^0-9<>@#\\r\\n]+$"
+            }
+          },
+          "required": [
+            "first_name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "terminal": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "contract",
+    "version",
+    "order",
+    "status",
+    "as_of",
+    "freshness",
+    "timeline",
+    "progress",
+    "courier",
+    "terminal"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "freshness": {
+            "enum": [
+              "stale",
+              "reconciling",
+              "unknown"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "progress": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "received",
+              "scheduled",
+              "confirmed",
+              "preparing",
+              "ready",
+              "assigned",
+              "delivered",
+              "cancelled",
+              "delivery_issue"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "progress": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "delivered",
+              "cancelled"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "terminal": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "received",
+              "scheduled",
+              "confirmed",
+              "preparing",
+              "ready",
+              "assigned",
+              "out_for_delivery",
+              "next_stop"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "terminal": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "order": {
+            "properties": {
+              "fulfillment": {
+                "const": "pickup"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "progress": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

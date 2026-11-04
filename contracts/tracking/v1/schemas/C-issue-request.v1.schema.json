@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.dfl.invalid/C-issue-request.v1.schema.json",
+  "$comment": "Schema documental candidato; nenhum endpoint implantado.",
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "dfl.tracking.access"
+    },
+    "version": {
+      "const": 1
+    },
+    "action": {
+      "const": "issue"
+    },
+    "order": {
+      "type": "object",
+      "properties": {
+        "canonical_order_key": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 160,
+          "pattern": "^(?:site|entregas):[A-Za-z0-9._-]{1,140}$"
+        },
+        "origin": {
+          "enum": [
+            "site",
+            "whatsapp",
+            "manual",
+            "ifood",
+            "food99",
+            "other"
+          ]
+        }
+      },
+      "required": [
+        "canonical_order_key",
+        "origin"
+      ],
+      "additionalProperties": false
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 96,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "requested_ttl_minutes": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 1440
+    }
+  },
+  "required": [
+    "contract",
+    "version",
+    "action",
+    "order",
+    "idempotency_key",
+    "requested_ttl_minutes"
+  ],
+  "additionalProperties": false
+}

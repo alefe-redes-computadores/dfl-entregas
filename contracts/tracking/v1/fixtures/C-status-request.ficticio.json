@@ -1,0 +1,6 @@
+{
+  "contract": "dfl.tracking.access",
+  "version": 1,
+  "action": "status",
+  "scope_handle": "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH"
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.dfl.invalid/C-revoke-response.v1.schema.json",
+  "$comment": "Schema documental candidato; nenhum endpoint implantado.",
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "dfl.tracking.access"
+    },
+    "version": {
+      "const": 1
+    },
+    "grant_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "revoked": {
+      "const": true
+    },
+    "revoked_at": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 20,
+      "maxLength": 40,
+      "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+    }
+  },
+  "required": [
+    "contract",
+    "version",
+    "grant_id",
+    "revoked",
+    "revoked_at"
+  ],
+  "additionalProperties": false
+}

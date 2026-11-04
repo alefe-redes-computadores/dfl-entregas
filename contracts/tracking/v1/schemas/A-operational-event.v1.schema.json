@@ -1,0 +1,760 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.dfl.invalid/A-dfl-operational-event-v1.schema.json",
+  "$comment": "Endereço de schema documental, sem endpoint implantado.",
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "dfl.operational_event"
+    },
+    "version": {
+      "const": 1
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "canonical_order_key": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^(site|entregas):[^\\s]+$"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "transition_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "order.received",
+        "order.confirmed",
+        "order.scheduled",
+        "order.preparing",
+        "order.ready",
+        "delivery.assigned",
+        "delivery.courier_changed",
+        "route.started",
+        "delivery.out_for_delivery",
+        "route.reordered",
+        "route.completed",
+        "delivery.position_changed",
+        "delivery.next_stop",
+        "delivery.completed",
+        "delivery.failed",
+        "delivery.rescheduled",
+        "order.cancelled",
+        "delivery.pickup_ready"
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 20,
+      "maxLength": 40,
+      "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+    },
+    "persisted_at": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 20,
+      "maxLength": 40,
+      "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+    },
+    "source_system": {
+      "type": "string",
+      "enum": [
+        "dfl_site",
+        "dfl_entregas"
+      ]
+    },
+    "actor_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "correlation_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "route_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "route_revision": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "causal_event_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "contract",
+    "version",
+    "tenant_id",
+    "canonical_order_key",
+    "event_id",
+    "transition_id",
+    "event_type",
+    "revision",
+    "occurred_at",
+    "persisted_at",
+    "source_system",
+    "actor_id",
+    "correlation_id",
+    "route_id",
+    "route_revision",
+    "causal_event_id",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "order.received"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "source_event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "source_event_id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "order.confirmed"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "source_event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "confirmation_kind": {
+                "type": "string",
+                "enum": [
+                  "commercial_confirmed",
+                  "operator_confirmed"
+                ]
+              }
+            },
+            "required": [
+              "source_event_id",
+              "confirmation_kind"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "order.scheduled"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "source_event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "scheduled_for": {
+                "type": "string",
+                "format": "date-time",
+                "minLength": 20,
+                "maxLength": 40,
+                "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+              }
+            },
+            "required": [
+              "source_event_id",
+              "scheduled_for"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "order.preparing"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "source_event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "source_event_id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "order.ready"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "source_event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "source_event_id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "delivery.assigned"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "allocation_kind": {
+                "const": "route_staging"
+              },
+              "dispatch_confirmed": {
+                "const": false
+              }
+            },
+            "required": [
+              "allocation_kind",
+              "dispatch_confirmed"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "delivery.courier_changed"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "change_reason": {
+                "type": "string",
+                "enum": [
+                  "reassignment",
+                  "correction"
+                ]
+              },
+              "route_revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "change_reason",
+              "route_revision"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "route.started"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "start_evidence_at": {
+                "type": "string",
+                "format": "date-time",
+                "minLength": 20,
+                "maxLength": 40,
+                "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+              }
+            },
+            "required": [
+              "start_evidence_at"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "delivery.out_for_delivery"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "start_evidence_at": {
+                "type": "string",
+                "format": "date-time",
+                "minLength": 20,
+                "maxLength": 40,
+                "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+              }
+            },
+            "required": [
+              "start_evidence_at"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "route.reordered"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "route_revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "route_revision"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "route.completed"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "end_evidence_at": {
+                "type": "string",
+                "format": "date-time",
+                "minLength": 20,
+                "maxLength": 40,
+                "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+              }
+            },
+            "required": [
+              "end_evidence_at"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "delivery.position_changed"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "route_revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "route_revision"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "delivery.next_stop"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "route_revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "route_revision"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "delivery.completed"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "completion_evidence_at": {
+                "type": "string",
+                "format": "date-time",
+                "minLength": 20,
+                "maxLength": 40,
+                "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+              },
+              "outcome": {
+                "const": "delivered"
+              }
+            },
+            "required": [
+              "completion_evidence_at",
+              "outcome"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "delivery.failed"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "failure_evidence_at": {
+                "type": "string",
+                "format": "date-time",
+                "minLength": 20,
+                "maxLength": 40,
+                "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+              },
+              "failure_class": {
+                "type": "string",
+                "enum": [
+                  "attempt_failed",
+                  "permanently_unfulfilled"
+                ]
+              }
+            },
+            "required": [
+              "failure_evidence_at",
+              "failure_class"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "delivery.rescheduled"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "scheduled_for": {
+                "type": "string",
+                "format": "date-time",
+                "minLength": 20,
+                "maxLength": 40,
+                "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+              }
+            },
+            "required": [
+              "scheduled_for"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "order.cancelled"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "source_event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "cancellation_kind": {
+                "type": "string",
+                "enum": [
+                  "commercial",
+                  "operator_authorized"
+                ]
+              }
+            },
+            "required": [
+              "source_event_id",
+              "cancellation_kind"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "delivery.pickup_ready"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "ready_evidence_at": {
+                "type": "string",
+                "format": "date-time",
+                "minLength": 20,
+                "maxLength": 40,
+                "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+              }
+            },
+            "required": [
+              "ready_evidence_at"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ]
+}

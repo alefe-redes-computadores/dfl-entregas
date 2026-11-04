@@ -1,0 +1,19 @@
+{
+  "contract": "dfl.tracking.capabilities",
+  "version": 1,
+  "tenant_scope": "empresa-exemplo",
+  "supported_public_contracts": ["dfl.tracking.public.v1"],
+  "mode": "OFF",
+  "features": {
+    "public_tracking": false,
+    "issue_tracking_link": false,
+    "send_tracking_link": false,
+    "allocation_notice": false,
+    "dispatch_notice": false,
+    "next_stop_notice": false,
+    "completion_notice": false
+  },
+  "producer_registry_version": "site-existing-ops-v1",
+  "effective_at": "2026-11-04T08:50:00-03:00",
+  "blocked_reason_code": "NOT_HOMOLOGATED"
+}

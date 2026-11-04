@@ -1,0 +1,19 @@
+{
+  "contract": "dfl.operational_event",
+  "version": 1,
+  "tenant_id": "empresa-exemplo",
+  "canonical_order_key": "site:1048",
+  "event_id": "evt-exemplo-0001",
+  "transition_id": "transition-exemplo-0001",
+  "event_type": "delivery.assigned",
+  "revision": 3,
+  "occurred_at": "2026-11-04T20:45:00-03:00",
+  "persisted_at": "2026-11-04T20:45:01-03:00",
+  "source_system": "dfl_entregas",
+  "actor_id": "uid-interno-ficticio",
+  "correlation_id": "pedido-exemplo-1048",
+  "route_id": "rota-interna-exemplo",
+  "route_revision": 2,
+  "causal_event_id": null,
+  "payload": {"allocation_kind": "route_staging", "dispatch_confirmed": false}
+}

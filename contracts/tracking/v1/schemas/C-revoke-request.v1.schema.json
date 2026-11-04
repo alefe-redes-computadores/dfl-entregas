@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.dfl.invalid/C-revoke-request.v1.schema.json",
+  "$comment": "Schema documental candidato; nenhum endpoint implantado.",
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "dfl.tracking.access"
+    },
+    "version": {
+      "const": 1
+    },
+    "action": {
+      "const": "revoke"
+    },
+    "grant_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "reason": {
+      "enum": [
+        "admin_action",
+        "security_incident",
+        "order_cancelled",
+        "customer_request",
+        "policy_change"
+      ]
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 96,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    }
+  },
+  "required": [
+    "contract",
+    "version",
+    "action",
+    "grant_id",
+    "reason",
+    "idempotency_key"
+  ],
+  "additionalProperties": false
+}

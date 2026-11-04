@@ -1,0 +1,8 @@
+{
+  "contract": "dfl.tracking.access",
+  "version": 1,
+  "grant_id": "grant-demo-1048",
+  "opaque_token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "expires_at": "2026-11-04T14:00:00Z",
+  "status": "issued"
+}

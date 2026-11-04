@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.dfl.invalid/E-dfl-tracking-capabilities-v1.schema.json",
+  "$comment": "Endereço de schema documental, sem endpoint implantado.",
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "dfl.tracking.capabilities"
+    },
+    "version": {
+      "const": 1
+    },
+    "tenant_scope": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "supported_public_contracts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "const": "dfl.tracking.public.v1"
+      },
+      "uniqueItems": true
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "OFF",
+        "DRY_RUN",
+        "MANUAL",
+        "AUTOMATIC_CERTIFIED"
+      ]
+    },
+    "features": {
+      "type": "object",
+      "properties": {
+        "public_tracking": {
+          "type": "boolean"
+        },
+        "issue_tracking_link": {
+          "type": "boolean"
+        },
+        "send_tracking_link": {
+          "type": "boolean"
+        },
+        "allocation_notice": {
+          "type": "boolean"
+        },
+        "dispatch_notice": {
+          "type": "boolean"
+        },
+        "next_stop_notice": {
+          "type": "boolean"
+        },
+        "completion_notice": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "public_tracking",
+        "issue_tracking_link",
+        "send_tracking_link",
+        "allocation_notice",
+        "dispatch_notice",
+        "next_stop_notice",
+        "completion_notice"
+      ],
+      "additionalProperties": false
+    },
+    "producer_registry_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "effective_at": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 20,
+      "maxLength": 40,
+      "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+    },
+    "blocked_reason_code": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "contract",
+    "version",
+    "tenant_scope",
+    "supported_public_contracts",
+    "mode",
+    "features",
+    "producer_registry_version",
+    "effective_at",
+    "blocked_reason_code"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "OFF"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "features": {
+            "properties": {
+              "public_tracking": {
+                "const": false
+              },
+              "issue_tracking_link": {
+                "const": false
+              },
+              "send_tracking_link": {
+                "const": false
+              },
+              "allocation_notice": {
+                "const": false
+              },
+              "dispatch_notice": {
+                "const": false
+              },
+              "next_stop_notice": {
+                "const": false
+              },
+              "completion_notice": {
+                "const": false
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -418,6 +418,24 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
     }
   }
 
+  // DFL_R249_GATE1_CAPTURE — OFF por padrão, preserva fluxo existente.
+  // Captura no máximo 20 pedidos do Site já lidos por este reconciliador.
+  // Falha de auditoria futura NÃO bloqueia o relay logístico.
+  if (process.env.DFL_TRACKING_GATE1_ACTIVE === '1' &&
+      process.env.DFL_TRACKING_BACKGROUND_CAPTURE === '1' && trackingEnabled) {
+    try {
+      const { capabilities, reconcileConfirmedEvents } = await import('@/lib/tracking/gate1/storage');
+      const c = await capabilities();
+      if (c && !c.kill_switch && c.mode !== 'OFF') {
+        for (const item of siteDeliveries.slice(0, 20)) {
+          await reconcileConfirmedEvents(c.tenant, item.id);
+        }
+      }
+    } catch (error) {
+      console.warn('[tracking/gate1] captura adiada', error instanceof Error ? error.name : 'unknown');
+    }
+  }
+
   if (analyticsItems.length) {
     const syncedAt = new Date().toISOString();
     const batch = adminDb.batch();

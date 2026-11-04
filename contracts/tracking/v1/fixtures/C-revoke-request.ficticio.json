@@ -1,0 +1,8 @@
+{
+  "contract": "dfl.tracking.access",
+  "version": 1,
+  "action": "revoke",
+  "grant_id": "grant-demo-1048",
+  "reason": "admin_action",
+  "idempotency_key": "fake-revoke-123456"
+}

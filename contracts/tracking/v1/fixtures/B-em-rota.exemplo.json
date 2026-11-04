@@ -1,0 +1,24 @@
+{
+  "contract": "dfl.tracking.public",
+  "version": 1,
+  "order": {"label": "#1048", "origin_label": "Da Família Lanches", "fulfillment": "delivery"},
+  "status": "out_for_delivery",
+  "as_of": "2026-11-04T21:05:00-03:00",
+  "freshness": "fresh",
+  "timeline": [
+    {"id": "public-ex-1", "kind": "received", "title": "Pedido recebido", "at": "2026-11-04T20:20:00-03:00"},
+    {"id": "public-ex-2", "kind": "confirmed", "title": "Pedido confirmado", "at": "2026-11-04T20:30:00-03:00"},
+    {"id": "public-ex-3", "kind": "assigned", "title": "Organizado para entrega", "at": "2026-11-04T20:45:00-03:00"},
+    {"id": "public-ex-4", "kind": "out_for_delivery", "title": "Saiu para entrega", "at": "2026-11-04T21:05:00-03:00"}
+  ],
+  "progress": {
+    "status": "verified",
+    "current_stop_number": null,
+    "planned_customer_stop_number": 6,
+    "total_physical_stops": 7,
+    "stops_ahead": 1,
+    "is_next_stop": false
+  },
+  "courier": {"first_name": "Bruno"},
+  "terminal": false
+}

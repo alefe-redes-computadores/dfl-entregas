@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.dfl.invalid/D-dfl-messaging-intent-v1.schema.json",
+  "$comment": "Endereço de schema documental, sem endpoint implantado.",
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "dfl.messaging.intent"
+    },
+    "version": {
+      "const": 1
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "canonical_order_key": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^(site|entregas):[^\\s]+$"
+    },
+    "source_event_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "transition_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "order.received",
+        "order.confirmed",
+        "order.scheduled",
+        "order.preparing",
+        "order.ready",
+        "delivery.assigned",
+        "delivery.courier_changed",
+        "route.started",
+        "delivery.out_for_delivery",
+        "route.reordered",
+        "route.completed",
+        "delivery.position_changed",
+        "delivery.next_stop",
+        "delivery.completed",
+        "delivery.failed",
+        "delivery.rescheduled",
+        "order.cancelled",
+        "delivery.pickup_ready"
+      ]
+    },
+    "origin_channel": {
+      "type": "string",
+      "enum": [
+        "site",
+        "whatsapp",
+        "manual",
+        "ifood",
+        "marketplace_other"
+      ]
+    },
+    "channel": {
+      "const": "whatsapp"
+    },
+    "template_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "template_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "recipient_reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 128
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 20,
+      "maxLength": 40,
+      "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 20,
+      "maxLength": 40,
+      "pattern": "(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$"
+    },
+    "eligibility": {
+      "type": "object",
+      "properties": {
+        "eligible": {
+          "type": "boolean"
+        },
+        "reason_code": {
+          "type": "string",
+          "enum": [
+            "ELIGIBLE",
+            "MODULE_OFF",
+            "NOT_AUTHORIZED",
+            "CONSENT_MISSING",
+            "INVALID_CONTACT",
+            "PLATFORM_RESTRICTED",
+            "STALE_EVENT",
+            "DUPLICATE",
+            "UNCONFIRMED",
+            "MANUAL_REVIEW"
+          ]
+        }
+      },
+      "required": [
+        "eligible",
+        "reason_code"
+      ],
+      "additionalProperties": false
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "suppressed",
+        "dry_run",
+        "pending_review",
+        "eligible",
+        "queued",
+        "provider_accepted",
+        "sent",
+        "delivered",
+        "failed",
+        "expired",
+        "skipped"
+      ]
+    }
+  },
+  "required": [
+    "contract",
+    "version",
+    "tenant_id",
+    "canonical_order_key",
+    "source_event_id",
+    "transition_id",
+    "event_type",
+    "origin_channel",
+    "channel",
+    "template_id",
+    "template_version",
+    "recipient_reference",
+    "idempotency_key",
+    "occurred_at",
+    "expires_at",
+    "eligibility",
+    "state"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "dry_run"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "eligibility": {
+            "properties": {
+              "eligible": {
+                "const": false
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "origin_channel": {
+            "enum": [
+              "ifood",
+              "marketplace_other"
+            ]
+          }
+        }
+      },
+      "then": {
+        "$comment": "Runtime: marketplace OFF by default; schema cannot certify consent."
+      }
+    }
+  ]
+}
