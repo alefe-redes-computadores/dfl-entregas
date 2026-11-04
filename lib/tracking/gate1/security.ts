@@ -29,7 +29,20 @@ export async function authorizedOwner(request: NextRequest): Promise<string | nu
   if (!auth.startsWith('Bearer ') || auth.length > 8192) return null;
   try {
     const user = await adminAuth.verifyIdToken(auth.slice(7), true);
-    return isSuperadminUid(user.uid) ? user.uid : null;
+    // R256: separate one-off owner in the reused TEST Firebase only.
+    // The operational superadmin remains unchanged. This file is deployed
+    // ONLY on the homologation branch, never merged into the commercial main.
+    let testOwner = false;
+    const expected = process.env.DFL_TRACKING_HML_OWNER_UID || '';
+    if (process.env.DFL_TRACKING_HML_OWNER_OPT_IN === '1' &&
+        process.env.DFL_TRACKING_TENANT_ID === 'DFL_HML_A' &&
+        /^[A-Za-z0-9_-]{6,128}$/.test(expected) && user.uid === expected) {
+      try {
+        const account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '{}') as Record<string,unknown>;
+        testOwner = account.project_id === 'dfl-finance';
+      } catch { testOwner = false; }
+    }
+    return isSuperadminUid(user.uid) || testOwner ? user.uid : null;
   } catch { return null; }
 }
 function keys() {
