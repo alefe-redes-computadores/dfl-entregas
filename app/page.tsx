@@ -14,6 +14,7 @@ import { getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { firstValidTimestamp, saoPauloDateKey } from '@/lib/reports/time';
 import { OperationalRadar } from '@/components/home/OperationalRadar';
 import { OperationalAssistant } from '@/components/home/OperationalAssistant';
+import { OperationalDemandCard } from '@/components/home/OperationalDemandCard';
 import { ShiftBriefing } from '@/components/home/ShiftBriefing';
 import { OperationalCommandCenter } from '@/components/home/OperationalCommandCenter';
 import { OperationalDatePicker } from '@/components/home/OperationalDatePicker';
@@ -377,6 +378,7 @@ export default function HomePage() {
 
       <OperationalCommandCenter routes={routesDoDia} deliveries={deliveriesDoDia} />
       <OperationalAssistant dayDeliveries={deliveriesDoDia} dateKey={selectedDateKey} />
+      <OperationalDemandCard />
       <ShiftBriefing />
 
       {hasOperationSummary ? (

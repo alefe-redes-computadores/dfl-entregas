@@ -7,7 +7,8 @@ import { useAppStore } from '@/store/useAppStore';
 import { useHiddenInsightsToday } from '@/hooks/useHiddenInsightsToday';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
-import { assistantDestinations, searchAssistantSnapshot } from '@/lib/operation/assistant-intent';
+import { assistantDestinations } from '@/lib/operation/assistant-intent';
+import { parseAssistantTimeIntent, resolveAssistantEnter, searchAssistantSnapshotPremium } from '@/lib/operation/assistant-search-premium';
 import type { Delivery } from '@/types';
 import { useAssistantShortcuts } from '@/hooks/useAssistantShortcuts';
 import { assistantShortcutByCommand, assistantShortcutById, type AssistantShortcutId } from '@/lib/operation/assistant-shortcuts';
@@ -16,6 +17,9 @@ const examples = [
   { id: 'routes-building' as const, text: 'Rotas em montagem', icon: Bike },
   { id: 'stock-low' as const, text: 'Produtos abaixo do mínimo', icon: Boxes },
   { id: 'deliveries-pending' as const, text: 'Entregas pendentes', icon: PackageSearch },
+  { id: 'routes-street' as const, text: 'Rotas na rua', icon: Bike },
+  { id: 'purchases-open' as const, text: 'Montar compra', icon: Boxes },
+  { id: 'inbox-open' as const, text: 'Caixa de Entrada', icon: Inbox },
 ];
 
 export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries: readonly Delivery[]; dateKey: string }) {
@@ -24,9 +28,13 @@ export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries
   const customers = useAppStore(s => s.customers);
   const routes = useAppStore(s => s.routes);
   const products = useAppStore(s => s.stockProducts);
+  const motoboys = useAppStore(s => s.motoboys);
   const privacy = useAppStore(s => s.isPrivacyMode);
   const { hiddenIds, hideForToday } = useHiddenInsightsToday();
   const [value, setValue] = useState('');
+  const [examplesSeed, setExamplesSeed] = useState(0);
+  useEffect(() => { setExamplesSeed(Math.floor(Math.random() * 600)); }, []);
+  const examplesForSession = useMemo(() => Array.from({length: 3}, (_,i) => examples[(examplesSeed+i*2)%examples.length]), [examplesSeed]);
   const [focused, setFocused] = useState(false);
   const { shortcuts, toggleFavorite, remember } = useAssistantShortcuts();
   const [typedHint, setTypedHint] = useState('Pedido, motoboy, bacon, rota...');
@@ -35,8 +43,8 @@ export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries
     if (focused || value || typeof window === 'undefined') return;
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (reduce.matches) { setTypedHint('Pedido, motoboy, bacon, rota...'); return; }
-    const hints = ['Buscar um pedido...', 'Mostrar rotas em montagem...', 'Encontrar bacon no estoque...', 'Ver compras pendentes...'];
-    let current = 0;
+    const hints = ['Buscar um pedido...', 'Mostrar rotas em montagem...', 'Encontrar bacon no estoque...', 'Ver compras pendentes...', 'Consultar um cliente...', 'Localizar um motoboy...'];
+    let current = Math.floor(Math.random() * hints.length);
     let length = 0;
     let hold = 0;
     const timer = window.setInterval(() => {
@@ -50,8 +58,8 @@ export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries
     return () => window.clearInterval(timer);
   }, [focused, value]);
   const deferred = useDeferredValue(value.trim());
-  const suggestions = useMemo(() => assistantDestinations(deferred, dateKey), [deferred, dateKey]);
-  const found = useMemo(() => privacy ? [] : searchAssistantSnapshot(deferred, { deliveries, customers, routes, products }), [deferred, deliveries, customers, routes, products, privacy]);
+  const suggestions = useMemo(() => parseAssistantTimeIntent(deferred) ? [] : assistantDestinations(deferred, dateKey), [deferred, dateKey]);
+  const found = useMemo(() => privacy ? [] : searchAssistantSnapshotPremium(deferred, { deliveries, customers, routes, products, motoboys }, 8), [deferred, deliveries, customers, routes, products, motoboys, privacy]);
 
   const unrouted = useMemo(() => dayDeliveries.reduce((total, item) => total + Number(
     !item.completed && !item.route_id && !item.operational_dismissed_at && !item.scheduled_for &&
@@ -81,9 +89,14 @@ export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries
   };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (suggestions[0]) goTo(suggestions[0].href);
-    else if (found[0]) goTo(found[0].href);
-    else if (deferred) goTo(`/entregas?date=${encodeURIComponent(dateKey)}&q=${encodeURIComponent(deferred)}`);
+    const typed = value.trim();
+    if (!typed) return;
+    const destination = parseAssistantTimeIntent(typed) ? undefined : assistantDestinations(typed, dateKey)[0];
+    const ranked = privacy ? [] : searchAssistantSnapshotPremium(typed, { deliveries, customers, routes, products, motoboys }, 24);
+    const decision = resolveAssistantEnter(typed, ranked, destination?.href);
+    if (decision.state === 'choose') return; // Vários registros: operador escolhe qual abrir.
+    if (decision.href) goTo(decision.href);
+    else if (!parseAssistantTimeIntent(typed)) goTo(`/entregas?date=${encodeURIComponent(dateKey)}&q=${encodeURIComponent(typed)}`);
   };
 
   return (
@@ -103,7 +116,7 @@ export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries
 
       {!value.trim() ? <div className="mt-3 space-y-2">
         <div className="flex flex-wrap gap-1.5" aria-label="Sugestões de comandos">
-          {examples.map(({id, text, icon: Icon}) => <div key={id} className="inline-flex items-center rounded-xl border border-zinc-800 bg-zinc-900/70">
+          {examplesForSession.map(({id, text, icon: Icon}) => <div key={id} className="inline-flex items-center rounded-xl border border-zinc-800 bg-zinc-900/70">
             <button type="button" onClick={() => setValue(text)} className="flex min-h-10 items-center gap-1.5 px-2.5 py-1 text-[10px] font-semibold text-zinc-300 active:text-amber-300"><Icon size={13} />{text}</button>
             <button type="button" onClick={() => toggleFavorite(id)} aria-pressed={shortcuts.favorites.includes(id)} aria-label={`${shortcuts.favorites.includes(id) ? 'Desfavoritar' : 'Favoritar'}: ${text}`} className={`grid h-10 w-9 place-items-center border-l border-zinc-800 ${shortcuts.favorites.includes(id) ? 'text-amber-300' : 'text-zinc-600'}`}><Star size={13} fill={shortcuts.favorites.includes(id) ? 'currentColor' : 'none'} /></button>
           </div>)}
@@ -119,7 +132,7 @@ export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries
       </div> : <div className="mt-3 space-y-1.5" aria-live="polite">
         {suggestions.map(item => <button type="button" key={item.id} onClick={() => goTo(item.href)} className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 text-left"><Inbox size={16} className="shrink-0 text-amber-300"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-zinc-100">{item.title}</span><span className="block truncate text-[10px] text-zinc-500">{item.subtitle}</span></span><ChevronRight size={15} className="text-zinc-500" /></button>)}
         {found.map(item => <button type="button" key={item.id} onClick={() => goTo(item.href)} className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-zinc-800/80 px-3 text-left"><PackageSearch size={16} className="shrink-0 text-emerald-400"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-zinc-200">{item.title}</span><span className="block truncate text-[10px] text-zinc-500">{item.detail}</span></span><ChevronRight size={15} className="text-zinc-500" /></button>)}
-        {!suggestions.length && !found.length && <p className="px-1 text-[11px] text-zinc-500">Sem correspondência local. Use Enter para pesquisar na lista de entregas.</p>}
+        {!suggestions.length && !found.length && <p className="px-1 text-[11px] text-zinc-500">Sem correspondência local. Para horários, só mostramos pedidos com registro confiável; nenhuma data é inventada.</p>}
         {privacy && <p className="text-[10px] text-zinc-500">Modo privacidade: nomes e pedidos ocultos nesta busca.</p>}
       </div>}
 

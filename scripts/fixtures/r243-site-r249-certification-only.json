@@ -1,0 +1,158 @@
+{
+  "contract": "dfl_site_combo_order_v3_candidate",
+  "orderSchemaVersion": 3,
+  "state": "certification_only",
+  "authorization": {
+    "checkout": false,
+    "payment": false,
+    "persist": false,
+    "relay": false,
+    "print": false,
+    "production": false
+  },
+  "orderId": null,
+  "eventId": null,
+  "idempotencyKey": null,
+  "source": "admin_authenticated_server_quote",
+  "productId": "combo-2-uai-kuat",
+  "blueprintFingerprint": "v2-7a34e4d5",
+  "comboCount": 2,
+  "unitCount": 6,
+  "customizedUnitCount": 4,
+  "item": {
+    "productId": "combo-2-uai-kuat",
+    "quantity": 2,
+    "lineKind": "combo_with_independent_units",
+    "basePricePerComboCents": 6999,
+    "baseForOrderCents": 13998,
+    "extrasForOrderCents": 750,
+    "totalCents": 14748,
+    "units": [
+      {
+        "key": "c1:1:1",
+        "comboNumber": 1,
+        "componentId": "uai",
+        "componentLabel": "Uai",
+        "unitNumber": 1,
+        "groupQuantity": 2,
+        "addons": [
+          {
+            "id": "bacon",
+            "label": "Bacon",
+            "priceCents": 375
+          }
+        ],
+        "removals": [],
+        "note": "",
+        "extrasCents": 375
+      },
+      {
+        "key": "c1:1:2",
+        "comboNumber": 1,
+        "componentId": "uai",
+        "componentLabel": "Uai",
+        "unitNumber": 2,
+        "groupQuantity": 2,
+        "addons": [],
+        "removals": [
+          {
+            "id": "cebola",
+            "label": "Cebola"
+          }
+        ],
+        "note": "Molho separado e embalagem reforcada observacao-longa-observacao-longa-observacao-longa-observacao-longa-observacao-longa-",
+        "extrasCents": 0
+      },
+      {
+        "key": "c1:2:1",
+        "comboNumber": 1,
+        "componentId": "kuat-2l",
+        "componentLabel": "Kuat 2 L",
+        "unitNumber": 1,
+        "groupQuantity": 1,
+        "addons": [],
+        "removals": [],
+        "note": "",
+        "extrasCents": 0
+      },
+      {
+        "key": "c2:1:1",
+        "comboNumber": 2,
+        "componentId": "uai",
+        "componentLabel": "Uai",
+        "unitNumber": 1,
+        "groupQuantity": 2,
+        "addons": [
+          {
+            "id": "bacon",
+            "label": "Bacon",
+            "priceCents": 375
+          }
+        ],
+        "removals": [],
+        "note": "",
+        "extrasCents": 375
+      },
+      {
+        "key": "c2:1:2",
+        "comboNumber": 2,
+        "componentId": "uai",
+        "componentLabel": "Uai",
+        "unitNumber": 2,
+        "groupQuantity": 2,
+        "addons": [],
+        "removals": [
+          {
+            "id": "cebola",
+            "label": "Cebola"
+          }
+        ],
+        "note": "Molho separado e embalagem reforcada observacao-longa-observacao-longa-observacao-longa-observacao-longa-observacao-longa-",
+        "extrasCents": 0
+      },
+      {
+        "key": "c2:2:1",
+        "comboNumber": 2,
+        "componentId": "kuat-2l",
+        "componentLabel": "Kuat 2 L",
+        "unitNumber": 1,
+        "groupQuantity": 1,
+        "addons": [],
+        "removals": [],
+        "note": "",
+        "extrasCents": 0
+      }
+    ]
+  },
+  "receiptPreview": {
+    "widths": [
+      58,
+      80
+    ],
+    "printAuthorized": false,
+    "preview58": [
+      "NAO IMPRIMIR - demo 58mm"
+    ],
+    "preview80": [
+      "NAO IMPRIMIR - demo 80mm"
+    ]
+  },
+  "acceptance": {
+    "priceRecomputedOnServer": true,
+    "perUnitIdentityReconciled": true,
+    "legacyCheckoutIntact": true,
+    "receiverV3Supported": false,
+    "canonicalOrderPersistenceTested": false,
+    "signedRelayWithUnitFieldsTested": false,
+    "physicalPrinterTested": false,
+    "liveCheckoutReleased": false,
+    "status": "blocked",
+    "blockers": [
+      "SITE_ORDER_API_V2_REJECTS_UNIT_LINES",
+      "ENTREGAS_RECEIVER_V1_REJECTS_ORDER_V3",
+      "SERVER_TRANSACTIONAL_PERSISTENCE_V3_NOT_CERTIFIED",
+      "SIGNED_RELAY_AND_IDEMPOTENCY_V3_NOT_CERTIFIED",
+      "PHYSICAL_KITCHEN_PRINT_V3_NOT_CERTIFIED"
+    ]
+  }
+}

@@ -22,6 +22,8 @@ import { acknowledgeUnverifiedWrites, readWriteJournal, WRITE_JOURNAL_EVENT, wri
 import { ACTION_LATENCY_EVENT, actionLatencyDiagnosticText, clearActionLatencies, readActionLatencies, summarizeActionLatencies, type ActionLatencySample } from '@/lib/operation/action-latency';
 import { MessageTraceCard } from '@/components/diagnostics/MessageTraceCard';
 import { LegacyImportAuditCard } from '@/components/diagnostics/LegacyImportAuditCard'; // DFL_R202_LEGACY_AUDIT
+import { ComboV3CertificationPanel } from '@/components/integration/ComboV3CertificationPanel';
+import { ComboV3DispatchSimulationPanel } from '@/components/integration/ComboV3DispatchSimulationPanel';
 
 const DIAGNOSTICS_ADMIN_EMAIL = 'alefejohsefe@gmail.com';
 const SERVER_ORIGIN = (process.env.NEXT_PUBLIC_DFL_SERVER_ORIGIN?.trim() || 'https://dfl-entregas.vercel.app').replace(/\/+$/, '');
@@ -252,6 +254,8 @@ export default function OperationalDiagnosticsPage() {
       </header>
 
       <LegacyImportAuditCard />
+      <ComboV3CertificationPanel />
+      <ComboV3DispatchSimulationPanel />
 
       <section aria-label="Diário de confirmação operacional" className="mb-3 rounded-2xl border border-amber-500/20 bg-zinc-900/60 p-4">
         <h2 className="text-sm font-bold text-zinc-100">Confirmacões de operações neste aparelho</h2>
