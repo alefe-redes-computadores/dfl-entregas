@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Bike,
   CheckCircle2,
+  ClipboardCheck,
   ChevronRight,
   Clock3,
   Edit3,
@@ -24,6 +25,7 @@ import { groupDeliveriesByStop } from '@/lib/route-stops';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { sumDeliveryFinance } from '@/lib/delivery-finance';
 import { RouteDepartureChecklist } from '@/components/routes/RouteDepartureChecklist';
+import { isRouteDepartureReady, routeDepartureNeedsReview } from '@/lib/operation/route-departure-readiness';
 
 const fmt = (...values: TimestampLike[]) => {
   const date = firstValidTimestamp(...values);
@@ -60,6 +62,7 @@ export default function RouteDetailsPage() {
   );
   const physicalStops = useMemo(() => groupDeliveriesByStop(deliveries), [deliveries]);
   const startRoute = useAppStore((state) => state.startRoute);
+  const setRouteDepartureReady = useAppStore((state) => state.setRouteDepartureReady);
   const closeRoute = useAppStore((state) => state.closeRoute);
   const reopenRoute = useAppStore((state) => state.reopenRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
@@ -107,6 +110,19 @@ export default function RouteDetailsPage() {
     route.started_at,
     route.departure_time,
   );
+  const departureReady = isRouteDepartureReady(route, deliveries);
+  const departureNeedsReview = routeDepartureNeedsReview(route, deliveries);
+  const changeDepartureReady = async (ready: boolean) => {
+    if (busy) return;
+    if (!ready && !window.confirm('Voltar esta rota para montagem? A saída real não será alterada.')) return;
+    setBusy(true);
+    try {
+      await setRouteDepartureReady(route.id, ready);
+      toast.success(ready ? 'Rota conferida e pronta para sair.' : 'Rota voltou para montagem.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível confirmar a rota.');
+    } finally { setBusy(false); }
+  };
   const state =
     route.status === 'fechada'
       ? 'finalizada'
@@ -114,7 +130,7 @@ export default function RouteDetailsPage() {
         ? 'pronta'
         : routeStartedAt
           ? 'rua'
-          : 'montando';
+          : departureReady ? 'pronta-saida' : 'montando';
 
   const action = async (kind: 'start' | 'close' | 'reopen') => {
     if (busy) return;
@@ -229,7 +245,9 @@ export default function RouteDetailsPage() {
                     ? 'Pronta para finalizar'
                     : state === 'rua'
                       ? 'Na rua'
-                      : 'Montando'}
+                      : state === 'pronta-saida'
+                        ? 'Pronta para sair'
+                        : 'Montando'}
               </p>
               <span
                 className={`h-2 w-2 rounded-full ${
@@ -308,6 +326,14 @@ export default function RouteDetailsPage() {
             label="Criada"
             value={fmt(route.created_at, route.started_at, route.departure_time)}
           />
+          {route.departure_ready_at && <TimelineRow
+            label="Rota conferida para saída"
+            value={fmt(route.departure_ready_at)}
+          />}
+          {route.departure_ready_revoked_at && <TimelineRow
+            label="Conferência desfeita"
+            value={fmt(route.departure_ready_revoked_at)}
+          />}
           <TimelineRow
             label="Saída real"
             value={fmt(route.started_at, route.departure_time)}
@@ -439,6 +465,16 @@ export default function RouteDetailsPage() {
         </div>
       </section>
 
+      {route.status === 'aberta' && !routeStartedAt && <section className="space-y-2 rounded-2xl border border-amber-500/25 bg-amber-500/[.045] p-3">
+        <div className="flex items-center gap-2 text-sm font-black text-amber-100"><ClipboardCheck size={18}/> Conferência de saída</div>
+        <p className="text-xs text-zinc-400">{departureReady ? 'Rota pronta e conferida. Ainda não foi despachada.' : departureNeedsReview ? 'Houve alteração após a conferência. Revise os pedidos e confirme novamente.' : 'Confira a sequência e os pedidos antes de registrar a rota pronta.'}</p>
+        <button type="button" disabled={busy || (deliveries.length === 0 && !departureReady)}
+          onClick={() => void changeDepartureReady(!departureReady)}
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-500/15 text-xs font-black text-amber-100 disabled:opacity-35">
+          <ClipboardCheck size={17}/>{departureReady ? 'Voltar para montagem' : departureNeedsReview ? 'Reconfirmar rota pronta' : 'Marcar rota pronta para sair'}
+        </button>
+        <p className="text-[10px] text-zinc-500">Confirmação no servidor. Sem rede, nenhuma prontidão fictícia será publicada.</p>
+      </section>}
       {route.status === 'fechada' ? (
         <button
           disabled={busy}

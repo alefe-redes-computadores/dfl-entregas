@@ -4,7 +4,7 @@ import { authorizedOwner, trackingCodeEnabled, trackingCustomerEnabled, tracking
   verifyTrackingSiteRequest, allowTokenExchangeAttempt, allowTrackingStatusAttempt } from './security';
 import { capabilities, canAccessCustomer, confirmedDelivery, issueGrant, revokeGrant,
   exchangeToken, querySession, resolveCanonicalOrder, reconcileConfirmedEvents, confirmInternalDelivery, hasCommercialAcceptance } from './storage';
-import { canonicalOrderKey, validatePublicProjection, validateStrictPublicProjection } from './core';
+import { canonicalOrderKey, mayIssueNewTrackingGrant, validatePublicProjection, validateStrictPublicProjection } from './core';
 
 const json = (value: unknown, status = 200) => NextResponse.json(value, {
   status, headers: { 'cache-control':'no-store, max-age=0', pragma:'no-cache',
@@ -53,6 +53,7 @@ export async function issue(req: NextRequest) {
     if (!deliveryId) return err();
     const snap = await confirmedDelivery(deliveryId);
     if (!snap || canonicalOrderKey(snap.data) !== order.canonical_order_key ||
+      !mayIssueNewTrackingGrant(snap.data) ||
       (order.origin !== (snap.data.source_system === 'dfl_site' ? 'site' : snap.data.origin === 'ifood' ? 'ifood' : snap.data.origin === 'food99' ? 'food99' : 'manual')) ||
       !(await hasCommercialAcceptance(ctx.c.tenant,snap.data))) return err();
     // Materialize only evidence persisted by the existing operational source.

@@ -2,6 +2,8 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/test-r266-route-departure.cjs',
+  'scripts/test-r265-link-handoff.cjs',
   'scripts/test-r255-single-use-exchange.cjs',
   'scripts/test-r254-bridge-handshake.cjs',
   'scripts/test-r253-site-bridge.cjs',

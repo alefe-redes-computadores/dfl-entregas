@@ -12,6 +12,7 @@ import { firstValidTimestamp } from '@/lib/reports/time';
 import { OPERATION_BATCH, OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { isRouteDepartureReady } from '@/lib/operation/route-departure-readiness';
 import { deliveryCustomerCharge, deliveryEconomicValue } from '@/lib/delivery-finance';
 import { routeOutstandingPayment } from '@/lib/operation/routeCollection';
 import {
@@ -23,7 +24,7 @@ import {
   shiftOperationalDateKey,
 } from '@/lib/operational-time';
 
-type Filter = 'todas' | 'montando' | 'na-rua' | 'prontas' | 'finalizadas';
+type Filter = 'todas' | 'montando' | 'pronta-saida' | 'na-rua' | 'prontas' | 'finalizadas';
 export default function RoutesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -60,7 +61,7 @@ export default function RoutesPage() {
   };
   const [calendarMonth, setCalendarMonth] = useState(() => operationalDateFromKey(initialDateKey));
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [filter, setFilter] = useState<Filter>(() => { const initial = searchParams.get('filter'); return initial === 'montando' || initial === 'na-rua' || initial === 'prontas' || initial === 'finalizadas' ? initial : 'todas'; });
+  const [filter, setFilter] = useState<Filter>(() => { const initial = searchParams.get('filter'); return initial === 'montando' || initial === 'pronta-saida' || initial === 'na-rua' || initial === 'prontas' || initial === 'finalizadas' ? initial : 'todas'; });
   const [query, setQuery] = useState(() => searchParams.get('q')?.slice(0, 110) || '');
   const [visibleLimit, setVisibleLimit] = useState(OPERATION_FIRST_BATCH);
   useEffect(() => { setVisibleLimit(OPERATION_FIRST_BATCH); }, [selectedDate, filter, query]);
@@ -112,7 +113,7 @@ export default function RoutesPage() {
           ? 'prontas'
           : startedAt
             ? 'na-rua'
-            : 'montando';
+            : isRouteDepartureReady(route, linked) ? 'pronta-saida' : 'montando';
     const sortedAt = new Date(canonicalRouteDate(route) || '').getTime();
     return { route, linked, completed, state, sortedAt };
   }).filter(({ route, state }) => {
@@ -141,11 +142,16 @@ export default function RoutesPage() {
 
   const counts = useMemo(() => {
     // O contador percorre rotas uma vez; as paradas são consultadas no índice da R40.
-    const result = {montando: 0, rua: 0, prontas: 0, finalizadas: 0};
+    const result = {montando: 0, rua: 0, prontas: 0, finalizadas: 0, 'pronta-saida': 0};
     for (const route of dayRoutes) {
       if (route.status === 'fechada') { result.finalizadas++; continue; }
       if (route.status !== 'aberta') continue;
-      if (!canonicalRouteStartedAt(route)) { result.montando++; continue; }
+      if (!canonicalRouteStartedAt(route)) {
+        const linked = deliveriesByRoute.get(route.id) || [];
+        if (isRouteDepartureReady(route, linked)) result['pronta-saida']++;
+        else result.montando++;
+        continue;
+      }
       const linked = deliveriesByRoute.get(route.id) || [];
       if (linked.length > 0 && linked.every(delivery => delivery.completed)) result.prontas++;
       else result.rua++;
@@ -191,15 +197,16 @@ export default function RoutesPage() {
       <div className="flex items-center justify-between gap-3 text-center">
         <CompactMetric value={counts.montando} label="Montando" />
         <CompactMetric value={counts.rua} label="Na rua" tone="sky" />
-        <CompactMetric value={counts.prontas} label="Prontas" tone="green" />
+        <CompactMetric value={counts.prontas} label="Para finalizar" tone="green" />
         <CompactMetric value={counts.finalizadas} label="Finalizadas" tone="green" />
       </div>
     </section>
 
+    {counts['pronta-saida'] > 0 && <p className="rounded-xl border border-amber-500/20 bg-amber-500/[.04] px-3 py-2 text-[11px] font-bold text-amber-100">{counts['pronta-saida']} rota(s) conferida(s) aguardando saída real.</p>}
     <ContextualAssistantCard scope="rotas" signals={routeContextSignals({ dateKey: selectedDate, montando: counts.montando, rua: counts.rua, prontas: counts.prontas })}
       onAction={target => { if(target === 'prontas' || target === 'montando' || target === 'na-rua') { setQuery(''); setFilter(target); } }} />
     <div className="relative"><Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar rota ou entregador" className="dfl-search pl-11 pr-16"/>{query && <button type="button" onClick={() => setQuery('')} aria-label="Limpar busca de rotas" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-2 text-[10px] font-bold text-emerald-300">Limpar</button>}</div>
-    <div className="dfl-filter-row" role="group" aria-label="Filtrar rotas por situação">{([['todas','Todas'],['montando','Montando'],['na-rua','Na rua'],['prontas','Prontas'],['finalizadas','Finalizadas']] as const).map(([value,label]) => { const count = value === 'todas' ? dayRoutes.length : value === 'na-rua' ? counts.rua : counts[value]; return <button type="button" key={value} aria-pressed={filter === value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-3.5 py-2.5 text-xs font-bold transition-colors ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label} <span className="ml-1 text-[10px] tabular-nums opacity-70">{count}</span></button>; })}</div>
+    <div className="dfl-filter-row" role="group" aria-label="Filtrar rotas por situação">{([['todas','Todas'],['montando','Montando'],['pronta-saida','Prontas p/ sair'],['na-rua','Na rua'],['prontas','Para finalizar'],['finalizadas','Finalizadas']] as const).map(([value,label]) => { const count = value === 'todas' ? dayRoutes.length : value === 'na-rua' ? counts.rua : counts[value]; return <button type="button" key={value} aria-pressed={filter === value} onClick={() => setFilter(value)} className={`shrink-0 rounded-xl px-3.5 py-2.5 text-xs font-bold transition-colors ${filter === value ? 'bg-zinc-100 text-zinc-950' : 'border border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label} <span className="ml-1 text-[10px] tabular-nums opacity-70">{count}</span></button>; })}</div>
 
     <p aria-live="polite" className="px-1 text-[10px] text-zinc-500">{rows.length} rota{rows.length === 1 ? '' : 's'} neste filtro · {renderedRows.length} exibida{renderedRows.length === 1 ? '' : 's'}</p>
     <div className="flex flex-col gap-3">
@@ -209,8 +216,10 @@ export default function RoutesPage() {
         const stateLabel =
           state === 'na-rua'
             ? 'Na rua'
-            : state === 'prontas'
-              ? 'Pronta'
+            : state === 'pronta-saida'
+              ? 'Pronta para sair'
+              : state === 'prontas'
+                ? 'Pronta'
               : state === 'finalizadas'
                 ? 'Finalizada'
                 : 'Montando';

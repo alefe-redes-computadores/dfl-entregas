@@ -13,7 +13,53 @@ let stopCalls=0,moneyCalls=0,chargeCalls=0,paymentCalls=0;
 const rCount=260;
 const searchedDayRoutes=Array.from({length:rCount},(_,i)=>({id:`route-${i}`,name:`Rota ${i}`,motoboy_name:'Motoboy',status:i%5===0?'fechada':'aberta',day:i}));
 const deliveriesByRoute=new Map(searchedDayRoutes.map((r,i)=>[r.id,[{id:`${i}-a`,completed:i%3===0,value:10},{id:`${i}-b`,completed:true,value:20}]]));
-const env={searchedDayRoutes,deliveriesByRoute,filter:'todas',Date,Number,Boolean,Math,Map,Array,Set,console,
+// R266: usar o helper verdadeiro na simulação.
+const helperSource=fs.readFileSync('lib/operation/route-departure-readiness.ts','utf8');
+const helperJs=ts.transpileModule(helperSource,{
+  fileName:'route-departure-readiness.ts',
+  compilerOptions:{
+    module:ts.ModuleKind.CommonJS,
+    target:ts.ScriptTarget.ES2020
+  }
+}).outputText;
+const readyModule={exports:{}};
+vm.runInNewContext(helperJs,{
+  module:readyModule,
+  exports:readyModule.exports,
+  require:id=>{
+    if(id==='@/lib/integration/site-order')
+      return {isCancelledSiteDelivery:d=>
+        d.site_order_status==='Cancelado' ||
+        Boolean(d.operational_dismissed_at)};
+    throw Error('R49 dependência inesperada: '+id);
+  }
+});
+const {isRouteDepartureReady,routeDepartureSignature}=readyModule.exports;
+check(typeof isRouteDepartureReady==='function' &&
+      typeof routeDepartureSignature==='function',
+      'R266 helper real carregado');
+const readyFixture={
+  id:'rota-fixture-r266',
+  status:'aberta',
+  departure_ready_at:'2026-11-05T13:00:00Z'
+};
+const readyMembers=[{
+  id:'pedido-fixture',
+  route_id:readyFixture.id,
+  customer_id:'cliente-fixture',
+  address_string:'Rua Exemplo',
+  order_index:0
+}];
+readyFixture.departure_ready_signature=
+  routeDepartureSignature(readyFixture,readyMembers);
+readyFixture.departure_ready_count=1;
+check(isRouteDepartureReady(readyFixture,readyMembers),
+      'R266 conferência válida');
+check(!isRouteDepartureReady({
+        ...readyFixture,departure_ready_signature:'invalida'
+      },readyMembers),
+      'R266 conferência adulterada bloqueada');
+const env={searchedDayRoutes,deliveriesByRoute,filter:'todas',isRouteDepartureReady,Date,Number,Boolean,Math,Map,Array,Set,console,
  canonicalRouteStartedAt:r=>r.day%7===0?null:'2026-10-21T12:00:00Z',canonicalRouteDate:r=>new Date(2026,9,21,10,r.day).toISOString(),
  groupDeliveriesByStop:linked=>{stopCalls++;return linked.map(d=>[d.id])},
  deliveryEconomicValue:d=>{moneyCalls++;return d.value},deliveryCustomerCharge:d=>{chargeCalls++;return d.value},

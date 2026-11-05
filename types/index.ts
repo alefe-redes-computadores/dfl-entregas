@@ -276,6 +276,14 @@ export interface Route {
   started_by_uid?: string;
   started_by_name?: string;
   started_by_email?: string;
+  /** R266: confirmação da rota para saída, sem alterar preparo comercial. */
+  departure_ready_at?: string | null;
+  departure_ready_by_uid?: string | null;
+  departure_ready_signature?: string | null;
+  departure_ready_count?: number;
+  departure_ready_revision?: number;
+  departure_ready_revoked_at?: string | null;
+  departure_ready_last_confirmed_at?: string | null;
   end_time?: string;
   reopened_at?: string;
   auto_closed_at?: string;

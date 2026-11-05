@@ -77,13 +77,17 @@ async function run(){
   check(store.includes("import { createKeyedWriteQueue } from '@/lib/store/keyedWriteQueue';"),'store importa fila nova');
   check(store.includes('const queueEntityWrite = createKeyedWriteQueue();'),'fila compartilhada por escopo do store');
   const targets=[
-   ['routes','routeId',4],['motoboys','id',2],['customers','id',1],
+   ['routes','routeId',5],['motoboys','id',2],['customers','id',1],
    ['stock_suppliers','id',1],['team_members','id',1],['stock_products','id',1],['fuelings','id',2],
   ];
   for(const [collection,id,count] of targets){
     const re=new RegExp('queueEntityWrite\\(\\\''+collection+'\\\',\\s*'+id+'\\s*,\\s*\\(\\)\\s*=>','g');
     check((store.match(re)||[]).length===count,collection+' com '+count+' gravações serializadas');
   }
+  check(store.includes("setRouteDepartureReady: async (routeId, ready) =>"),
+    'R266: prontidão presente no store');
+  check(store.includes("await queueEntityWrite('routes', routeId, () => runTransaction(db, async tx => {"),
+    'R266: quinta escrita é transacional e serializada');
   // R95-R3: contrato reforçado de reabertura, exatamente uma vez.
   const reopenStart=store.indexOf('      reopenRoute: async (routeId) => {');
   const reopenEnd=store.indexOf('      reorderDelivery: async',reopenStart);

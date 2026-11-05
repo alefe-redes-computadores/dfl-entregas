@@ -64,6 +64,15 @@ export function canonicalOrderKey(d: Raw): string | null {
   const id = text(d.id);
   return id && id.length <= 120 ? `entregas:${id}` : null;
 }
+/** R265: a NEW customer link must never start from a terminal or externally fulfilled order.
+ * This only applies to issuing new links; existing sessions retain their proven lifecycle.
+ */
+export function mayIssueNewTrackingGrant(d: Raw): boolean {
+  if (d.completed === true || d.operational_dismissed_at != null || commercialState(d.site_order_status) === 'cancelled') return false;
+  if (d.origin === 'ifood' || d.origin === 'food99') return false;
+  if (d.fulfillment_mode != null && !['delivery','pickup'].includes(String(d.fulfillment_mode))) return false;
+  return true;
+}
 export function commercialState(v: unknown): TrackingStatus | null {
   const s = text(v, 60).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
   if (['pendente', 'recebido'].includes(s)) return 'received';
@@ -109,9 +118,10 @@ function statusFromSnapshot(s: ConfirmedSnapshot, events: TrackingEvent[]): Trac
   if (d.completed === true && iso(d.completed_at)) return 'delivered';
   if (Array.isArray(d.delivery_attempts) && d.delivery_attempts.length > 0 && d.completed !== true) return 'delivery_issue';
   const commercial = commercialState(d.site_order_status);
-  const started = Boolean(iso(s.route?.started_at) || iso(s.route?.departure_time));
+  const pickup = d.fulfillment_mode === 'pickup';
+  const started = !pickup && Boolean(iso(s.route?.started_at) || iso(s.route?.departure_time));
   if (started && text(d.route_id) && text(d.route_id) === text(s.route?.id)) return 'out_for_delivery';
-  if (text(d.route_id) && s.route) return 'assigned';
+  if (!pickup && text(d.route_id) && s.route) return 'assigned';
   if (commercial) return commercial === 'cancelled' ? 'cancelled' : commercial;
   if (events.some(event => event.kind === 'confirmed')) return 'confirmed';
   return d.scheduled_for ? 'scheduled' : 'received';
@@ -180,7 +190,7 @@ export function projectPublicTracking(s: ConfirmedSnapshot): PublicProjection {
   const origin_label = source === 'dfl_site' ? 'Loja' : origin === 'ifood' ? 'iFood' : origin === 'food99' ? '99Food' : 'Loja';
   const id = text(s.delivery.order_id || s.delivery.external_order_id || s.delivery.id, 30).replace(/[^a-zA-Z0-9_-]/g, '');
   const label = id ? `#${id}`.slice(0, 32) : 'Pedido';
-  const courier = s.showCourier && s.route && !terminal &&
+  const courier = s.delivery.fulfillment_mode !== 'pickup' && s.showCourier && s.route && !terminal &&
     typeof s.route.motoboy_name === 'string'
     ? s.route.motoboy_name.trim().split(/\s+/)[0].replace(/[^\p{L}\p{M}'-]/gu, '').slice(0, 40)
     : '';

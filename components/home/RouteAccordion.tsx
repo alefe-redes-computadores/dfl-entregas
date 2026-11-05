@@ -64,6 +64,7 @@ import {
   type LatLngPoint,
 } from '@/lib/maps';
 import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
+import { isRouteDepartureReady, routeDepartureNeedsReview } from '@/lib/operation/route-departure-readiness';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
 import { requestDeviceLocation, LocationFailure, type LocationFailureCode } from '@/lib/device-location';
@@ -169,6 +170,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const closingRoute = useAppStore((state) => state.closingRouteIds.includes(route.id));
   const reopenRoute = useAppStore((state) => state.reopenRoute);
   const startRoute = useAppStore((state) => state.startRoute);
+  const setRouteDepartureReady = useAppStore((state) => state.setRouteDepartureReady);
   const deleteRoute = useAppStore((state) => state.deleteRoute);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const allRoutes = useAppStore((state) => state.routes);
@@ -213,6 +215,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   const startedAt = routeStartedAt(route);
   const isNotStarted = route.status === 'aberta' && !startedAt;
+  const departureReady = isRouteDepartureReady(route, deliveries);
+  const departureNeedsReview = routeDepartureNeedsReview(route, deliveries);
   const isInProgress = route.status === 'aberta' && !!startedAt;
   const isCompleted = route.status === 'fechada';
   const hasSiteDelivery = deliveries.some(
@@ -467,6 +471,19 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     } finally {
       setActionBusy(false);
     }
+  };
+
+  const handleDepartureReady = async (ready: boolean) => {
+    if (actionBusy) return;
+    if (!ready && !window.confirm('Desfazer a conferência da rota e voltar à montagem?')) return;
+    setActionBusy(true);
+    try {
+      await setRouteDepartureReady(route.id, ready);
+      await safeRouteHaptic(true);
+      toast.success(ready ? 'Rota pronta para sair.' : 'Rota voltou à montagem.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível confirmar prontidão.');
+    } finally { setActionBusy(false); }
   };
 
   const handleStartRoute = async () => {
@@ -1196,6 +1213,16 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                 </div>
                 )}
               </div>
+            )}
+            {!isVirtualRoute && isNotStarted && totalDeliveries > 0 && (
+              <section className="space-y-2 rounded-[18px] border border-amber-500/20 bg-amber-500/[.035] p-3">
+                <p className="text-xs font-black text-amber-100">{departureReady ? 'Rota pronta para sair' : departureNeedsReview ? 'Conferência precisa ser refeita' : 'Rota em montagem'}</p>
+                <p className="text-[11px] text-zinc-400">{departureReady ? 'Conferida; falta despachar o motoboy.' : departureNeedsReview ? 'Os pedidos ou a sequência mudaram. Revise antes de sair.' : 'Confira os pedidos e registre a prontidão sem iniciar a rota.'}</p>
+                <button type="button" disabled={actionBusy} onClick={() => void handleDepartureReady(!departureReady)}
+                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 text-xs font-black text-amber-100 disabled:opacity-40">
+                  <ClipboardCheck size={16}/> {departureReady ? 'Voltar à montagem' : departureNeedsReview ? 'Reconfirmar rota pronta' : 'Marcar rota pronta'}
+                </button>
+              </section>
             )}
             {!isVirtualRoute && route.status === 'aberta' && totalDeliveries > 0 ? (
               !startedAt ? (

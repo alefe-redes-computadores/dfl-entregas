@@ -77,6 +77,7 @@ import {
   stockExitExceeds,
 } from '@/lib/stock-precision';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { isRouteDepartureReady, routeDepartureSignature, routeDepartureActiveDeliveries } from '@/lib/operation/route-departure-readiness';
 import { assertSiteRouteAllocation, siteInboxProjection } from '@/lib/operation/siteInboxPolicy';
 import { activeRouteDeliveries, canAutoCloseRoute } from '@/lib/route-closure-eligibility';
 import { groupStockSupplyItems, planStockSupplyLedger } from '@/lib/stock-supply-ledger';
@@ -241,6 +242,8 @@ interface AppState {
   getCustomerById: (customerId?: string) => Customer | undefined;
   addRoute: (route: Route) => Promise<void>;
   updateRoute: (routeId: string, data: Partial<Route>) => Promise<void>;
+  /** Persistência transacional; nunca confirmar prontidão apenas no cache offline. */
+  setRouteDepartureReady: (routeId: string, ready: boolean) => Promise<void>;
   startRoute: (routeId: string) => Promise<void>;
   deleteRoute: (routeId: string) => Promise<void>;
   addDelivery: (delivery: Delivery) => Promise<void>;
@@ -1047,6 +1050,52 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      setRouteDepartureReady: async (routeId, ready) => {
+        const current = get().routes.find(r => r.id === routeId);
+        if (!current || isSyntheticOperationalRoute(routeId)) throw new Error('Rota operacional inexistente.');
+        if (current.status !== 'aberta' || routeStartedAt(current)) {
+          throw new Error('Só uma rota em montagem pode ser marcada como pronta para sair.');
+        }
+        if (!get().user?.uid) throw new Error('Faça login antes de confirmar a rota.');
+        const items = get().deliveries.filter(d => d.route_id === routeId && !isCancelledSiteDelivery(d));
+        const active = routeDepartureActiveDeliveries(current, items);
+        if (ready && (!active.length || active.some(d => isSiteOrderAwaitingConfirmation(d) || isFutureScheduledDelivery(d)))) {
+          throw new Error('A rota precisa ter entregas liberadas e confirmadas para sair.');
+        }
+        const signature = ready ? routeDepartureSignature(current, items) : null;
+        if (ready && !signature) throw new Error('Não foi possível validar as entregas desta rota.');
+        const expectedUpdate = current.updated_at || null;
+        const now = new Date().toISOString();
+        const actorUid = get().user?.uid || null;
+        const ref = doc(db, 'routes', routeId);
+        // Firestore executa esta transação contra o servidor. Sem conexão,
+        // NÃO aparece confirmação fictícia, evitando divergência PWA x APK.
+        const patch = await queueEntityWrite('routes', routeId, () => runTransaction(db, async tx => {
+          const snapshot = await tx.get(ref);
+          if (!snapshot.exists()) throw new Error('Rota removida no servidor. Atualize a tela.');
+          const remote = snapshot.data() as Route;
+          if (remote.status !== 'aberta' || routeStartedAt(remote)) {
+            throw new Error('A rota já foi despachada ou encerrada em outro aparelho.');
+          }
+          if ((remote.updated_at || null) !== expectedUpdate) {
+            throw new Error('A rota mudou em outro aparelho. Atualize antes de confirmar.');
+          }
+          const fields: Partial<Route> = {
+            departure_ready_at: ready ? now : null,
+            departure_ready_by_uid: ready ? actorUid : null,
+            departure_ready_signature: ready ? signature : null,
+            departure_ready_count: ready ? active.length : 0,
+            departure_ready_revision: (remote.departure_ready_revision || 0) + 1,
+            departure_ready_revoked_at: ready ? null : now,
+            departure_ready_last_confirmed_at: ready ? now : remote.departure_ready_at || remote.departure_ready_last_confirmed_at || null,
+            updated_at: now,
+          };
+          tx.update(ref, sanitizeForFirebase(fields));
+          return fields;
+        }));
+        set(state => ({ routes: state.routes.map(r => r.id === routeId ? { ...r, ...patch } : r) }));
+      },
+
       startRoute: async (routeId) => {
         const previousRoutes = get().routes;
         const current = previousRoutes.find((route) => route.id === routeId);
@@ -1060,6 +1109,12 @@ export const useAppStore = create<AppState>()(
         if (routeDeliveries.some(isSiteOrderAwaitingConfirmation)) throw new Error('Há pedido do Site aguardando confirmação da loja. Confirme no Admin antes de iniciar a rota.');
         if (routeDeliveries.some((delivery) => isFutureScheduledDelivery(delivery))) {
           throw new Error('Há pedido agendado nesta rota que ainda não foi liberado para operação.');
+        }
+        // Rotas antigas continuam podendo iniciar diretamente. Se uma rota
+        // passou pela conferência R266, mudanças exigem reconferência antes da saída.
+        if (!routeStartedAt(current) && current.departure_ready_at &&
+            !isRouteDepartureReady(current, routeDeliveries)) {
+          throw new Error('A rota mudou após ser conferida. Marque pronta novamente antes de despachar.');
         }
         if (routeStartedAt(current)) {
           const result = await kickSiteRoute(routeId, {

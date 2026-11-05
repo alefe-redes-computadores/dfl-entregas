@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
-import { AlertTriangle, ArrowLeft, BookOpenCheck, ChevronDown, Copy, LockKeyhole, RefreshCw, Search, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BookOpenCheck, ChevronDown, Copy, Link2, LockKeyhole, RefreshCw, Search, ShieldCheck, XCircle } from 'lucide-react';
 import { auth } from '@/lib/firebase';
 import { useAppStore } from '@/store/useAppStore';
 import { isSuperadminUid } from '@/lib/access/roles';
@@ -17,6 +17,8 @@ import { TrackingGate2Certificate } from '@/components/tracking/TrackingGate2Cer
 const ORIGIN = 'https://dfl-entregas.vercel.app';
 const baseUrl=()=>Capacitor.isNativePlatform()?(process.env.NEXT_PUBLIC_DFL_SERVER_ORIGIN?.trim()||ORIGIN).replace(/\/+$/,''):'';
 const BASE = '/api/integration/tracking/v1';
+// Pinned public host; never accept operator-supplied URLs or forwarded host headers.
+const CUSTOMER_TRACKING_ORIGIN = 'https://dafamilialanches.com.br';
 type Filter = 'todas'|'site'|'manual'|'ifood'|'food99';
 const norm=(value:unknown)=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 function ControlPanel(){
@@ -35,6 +37,15 @@ function ControlPanel(){
   const [working,setWorking]=useState(false);
   const [failure,setFailure]=useState('');
   const [listOpen,setListOpen]=useState(!initialId);
+  // Secret is kept only in transient React memory until the owner copies it.
+  // NEVER persist in local/session storage, logs, history or render its value.
+  const [issuedLink,setIssuedLink]=useState<{url:string;grantId:string;deliveryId:string;expiresAt:string}|null>(null);
+  const [lastGrant,setLastGrant]=useState<{grantId:string;deliveryId:string}|null>(null);
+  useEffect(()=>{
+    const onHidden=()=>{if(document.visibilityState!=='visible')setIssuedLink(null);};
+    document.addEventListener('visibilitychange',onHidden);
+    return()=>document.removeEventListener('visibilitychange',onHidden);
+  },[]);
   const lastRequest=useRef(0);
   const lastCertificateRequest=useRef(0);
   const allowed=Boolean(isSuperadminUid(user?.uid));
@@ -65,7 +76,8 @@ function ControlPanel(){
       if(response.status===403)return {off:true} as const;
       throw new Error(`Consulta protegida indisponível (HTTP ${response.status}).`);
     }
-    return response.json() as Promise<{ok?:boolean;inspection?:TrackingInspection;certificate?:Gate2Certificate;result?:string}>;
+    return response.json() as Promise<{ok?:boolean;inspection?:TrackingInspection;certificate?:Gate2Certificate;result?:string;
+      opaque_token?:string;grant_id?:string;expires_at?:string;status?:string;revoked?:boolean}>;
   },[]);
   const inspect=useCallback(async(id:string)=>{
     if(!allowed || !id)return;
@@ -81,7 +93,8 @@ function ControlPanel(){
     finally{if(request===lastRequest.current)setLoading(false);}
   },[allowed,api]);
   useEffect(()=>{if(initialId&&allowed&&selectedId===initialId)void inspect(initialId);},[initialId,allowed,inspect,selectedId]);
-  const choose=(id:string)=>{setSelectedId(id);setListOpen(false);setInspection(null);setCertificate(null);setFailure('');void inspect(id);};
+  const choose=(id:string)=>{setSelectedId(id);setListOpen(false);setInspection(null);setCertificate(null);setFailure('');
+    setIssuedLink(null);setLastGrant(null);void inspect(id);};
   const certify=async()=>{
     if(!allowed||!selectedId||!inspection||certifying)return;
     const certificateRequest=++lastCertificateRequest.current;
@@ -95,6 +108,62 @@ function ControlPanel(){
     finally{if(certificateRequest===lastCertificateRequest.current)setCertifying(false);}
   };
   const copy=(text:string)=>{void navigator.clipboard.writeText(text).then(()=>toast.success('Prévia copiada, sem dados privados.')).catch(()=>toast.error('Cópia não disponível neste aparelho.'));};
+  const canIssueLink=Boolean(inspection && ['site','manual'].includes(inspection.delivery.origin) &&
+    inspection.delivery.state!=='delivered' && inspection.delivery.state!=='cancelled' &&
+    inspection.gate.code_enabled && inspection.gate.customer_access_certified && !inspection.gate.kill_switch &&
+    ['MANUAL','AUTOMATIC_CERTIFIED'].includes(inspection.gate.mode) &&
+    !inspection.readiness.signals.some(s=>s.severity==='blocker'));
+  const issuePrivateLink=async()=>{
+    if(!allowed||!inspection||!selectedId||!canIssueLink||working||issuedLink)return;
+    if(!window.confirm('Emitir um link privado de uso único para este pedido? Só compartilhe com o cliente correto. Não envia WhatsApp.'))return;
+    const currentSelection=selectedId, currentInspection=inspection;
+    const currentRequest=lastRequest.current;
+    const currentAccount=auth.currentUser?.uid;
+    setWorking(true);
+    try{
+      const answer=await api('/issue',{
+        contract:'dfl.tracking.access',version:1,action:'issue',
+        order:{canonical_order_key:currentInspection.delivery.canonical_order_key,origin:currentInspection.delivery.origin},
+        idempotency_key:crypto.randomUUID().replace(/-/g,''),requested_ttl_minutes:45,
+      });
+      if(currentRequest!==lastRequest.current||auth.currentUser?.uid!==currentAccount)throw new Error('A tela ou a conta mudou. Não compartilhe este link; solicite a revogação.');
+      if(!('opaque_token' in answer)||!/^[-_A-Za-z0-9]{43}$/.test(answer.opaque_token||'')||
+        !('grant_id' in answer)||!/^[a-f0-9]{64}$/.test(answer.grant_id||'')||
+        typeof answer.expires_at!=='string'||!Number.isFinite(Date.parse(answer.expires_at)))
+        throw new Error('Emissão não confirmada. Confira o grant no servidor antes de tentar novamente.');
+      const grantId=answer.grant_id as string;
+      setLastGrant({grantId,deliveryId:currentSelection});
+      setIssuedLink({url:`${CUSTOMER_TRACKING_ORIGIN}/acompanhar#t=${answer.opaque_token}`,grantId,deliveryId:currentSelection,
+        expiresAt:answer.expires_at});
+      toast.success('Link privado emitido. Toque em copiar para compartilhá-lo com o cliente.');
+    }catch(e){toast.error(e instanceof Error?e.message:'Não foi possível emitir acesso.');}
+    finally{setWorking(false);}
+  };
+  const copyPrivateLink=()=>{
+    if(!issuedLink||issuedLink.deliveryId!==selectedId)return;
+    const url=issuedLink.url;
+    // Clipboard call occurs directly in a user gesture; no token appears in rendered text.
+    void navigator.clipboard.writeText(url).then(()=>{
+      setIssuedLink(null);
+      toast.success('Link copiado. Envie somente ao cliente autorizado.');
+    }).catch(()=>toast.error('Cópia indisponível. Tente novamente ou revogue o acesso.'));
+  };
+  const revokePrivateLink=async()=>{
+    if(!lastGrant||working||!allowed||lastGrant.deliveryId!==selectedId)return;
+    if(!window.confirm('Revogar este acesso? O link e a sessão do cliente deixarão de funcionar.'))return;
+    const {grantId}=lastGrant;
+    setWorking(true);
+    try{
+      const response=await api('/revoke',{
+        contract:'dfl.tracking.access',version:1,action:'revoke',grant_id:grantId,
+        reason:'admin_action',idempotency_key:crypto.randomUUID().replace(/-/g,''),
+      });
+      if(!('revoked' in response)||response.revoked!==true)throw new Error('Revogação não confirmada; confira o servidor.');
+      setIssuedLink(null);setLastGrant(null);
+      toast.success('Acesso revogado no servidor.');
+    }catch(e){toast.error(e instanceof Error?e.message:'Não foi possível confirmar a revogação.');}
+    finally{setWorking(false);}
+  };
   const submit=async(action:'confirm'|'sync')=>{
     if(!allowed||!selectedId||working)return;
     const label=action==='confirm'?'confirmar o aceite operacional deste pedido':'reconciliar os eventos persistidos deste pedido';
@@ -124,6 +193,20 @@ function ControlPanel(){
     {loading&&<div role="status" className="rounded-2xl border border-zinc-800 p-4 text-xs text-zinc-400">Consultando somente os fatos confirmados no servidor...</div>}
     {failure&&<div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-200"><AlertTriangle size={17} className="mb-2"/>{failure}<p className="mt-2 text-zinc-400">O aplicativo operacional continua funcionando normalmente.</p></div>}
     {inspection&&<OwnerTrackingInspection value={inspection} busy={working} onCopy={copy} onConfirm={()=>void submit('confirm')} onSync={()=>void submit('sync')}/>}
+    {inspection&&<section className="space-y-2 rounded-2xl border border-amber-500/25 bg-amber-500/[.045] p-4">
+      <div className="flex items-center gap-2 text-sm font-black text-amber-100"><LockKeyhole size={16}/> Acesso privado do cliente</div>
+      <p className="text-[11px] leading-relaxed text-zinc-400">Emissão exclusiva do proprietário após aceite confirmado. Token usado uma vez, sem armazenamento ou envio automático. Requer ativação expressa do acompanhamento.</p>
+      <button type="button" disabled={!canIssueLink||working||Boolean(issuedLink)} onClick={()=>void issuePrivateLink()}
+        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-bold text-amber-100 disabled:opacity-35"><Link2 size={16}/> {working?'Conferindo servidor...':'Emitir link privado (45 min)'}</button>
+      {issuedLink&&issuedLink.deliveryId===selectedId&&<div className="space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[.045] p-3">
+        <p className="text-xs font-bold text-emerald-100">Link emitido — token oculto</p>
+        <p className="text-[11px] text-zinc-400">Copie diretamente para o cliente certo. Vence em {new Date(issuedLink.expiresAt).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'})}. Se sair da página antes de copiar, revogue o acesso.</p>
+        <button type="button" onClick={copyPrivateLink} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-3 text-xs font-black text-emerald-100"><Copy size={15}/> Copiar link para o cliente</button>
+      </div>}
+      {lastGrant&&lastGrant.deliveryId===selectedId&&<button type="button" disabled={working} onClick={()=>void revokePrivateLink()}
+        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-500/25 px-3 text-xs font-bold text-red-200 disabled:opacity-40"><XCircle size={16}/> Revogar último acesso emitido</button>}
+      {!canIssueLink&&<p className="text-[11px] text-zinc-500">Emissão bloqueada: confirme o pedido, sua origem e os gates de acesso. Nenhum pedido é enviado automaticamente.</p>}
+    </section>}
     {inspection&&<button type="button" disabled={certifying||loading} onClick={()=>void certify()} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/[.06] px-3 text-xs font-black text-cyan-100 disabled:opacity-40"><ShieldCheck size={16}/>{certifying?'Certificando evidências...':'Certificar contratos A–E neste pedido'}</button>}
     {certificate&&<TrackingGate2Certificate certificate={certificate}/>}
     <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4"><div className="flex items-center gap-2 text-xs font-black text-zinc-300"><BookOpenCheck size={16}/> Contrato do Site preservado</div><p className="mt-2 text-xs leading-relaxed text-zinc-500">A página pública será construída separadamente pelo Site. Copiar a prévia não emite credenciais, não registra vendas e não aciona a VPS.</p></section>

@@ -2,7 +2,7 @@ import 'server-only';
 import { adminDb } from '@/lib/integration/server/admin';
 import { hexSha256, randomSecret, trackingCustomerEnabled, trackingTenant, trackingCodeEnabled } from './security';
 import {
-  canonicalOrderKey, commercialState, iso, projectPublicTracking, sortUniqueEvents,
+  canonicalOrderKey, commercialState, iso, mayIssueNewTrackingGrant, projectPublicTracking, sortUniqueEvents,
   type Raw, type TrackingEvent, type TrackingKind, type PublicProjection,
 } from './core';
 
@@ -96,7 +96,7 @@ export function confirmedEventCandidates(d: Raw, route: Raw | null, manualAccept
     const at = iso(manualAcceptance.accepted_at);
     if (at) result.push(localEvent('confirmed', at, 'dfl_entregas', `manual-${txt(manualAcceptance.idempotency_key)}`, txt(manualAcceptance.actor_uid) || null));
   }
-  if (txt(d.route_id) && route && txt(d.route_id) === txt(route.id)) {
+  if (d.fulfillment_mode !== 'pickup' && txt(d.route_id) && route && txt(d.route_id) === txt(route.id)) {
     // A route link does not have an immutable assigned_at in legacy records.
     // Do NOT fabricate an 'assigned' event without that evidence.
     const assignedAt = iso(d.assigned_at);
@@ -234,7 +234,8 @@ export async function issueGrant(input: { tenant: string; deliveryId: string; ac
   const snap = await confirmedDelivery(input.deliveryId);
   if (!snap) return { state: 'invalid' as const };
   const key = canonicalOrderKey(snap.data);
-  if (!belongsToTenant(snap.data,input.tenant) || !key || !input.c.eligible_origins.includes(originOf(snap.data))) return { state: 'invalid' as const };
+  if (!belongsToTenant(snap.data,input.tenant) || !key || !input.c.eligible_origins.includes(originOf(snap.data)) ||
+      !mayIssueNewTrackingGrant(snap.data)) return { state: 'invalid' as const };
   const id = grantDocId(input.tenant, key);
   const plain = randomSecret();
   const tokenHash = hexSha256(plain);
