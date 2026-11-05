@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
-import { AlertTriangle, ArrowLeft, BookOpenCheck, ChevronDown, Copy, Link2, LockKeyhole, RefreshCw, Search, ShieldCheck, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BookOpenCheck, ChevronDown, Copy, Link2, LockKeyhole, RefreshCw, Share2, Search, ShieldCheck, XCircle } from 'lucide-react';
 import { auth } from '@/lib/firebase';
 import { useAppStore } from '@/store/useAppStore';
 import { isSuperadminUid } from '@/lib/access/roles';
@@ -148,6 +148,28 @@ function ControlPanel(){
       toast.success('Link copiado. Envie somente ao cliente autorizado.');
     }).catch(()=>toast.error('Cópia indisponível. Tente novamente ou revogue o acesso.'));
   };
+  const sharePrivateLink=async()=>{
+    if(!allowed||!issuedLink||issuedLink.deliveryId!==selectedId||working)return;
+    if(Date.parse(issuedLink.expiresAt)<=Date.now()){
+      setIssuedLink(null);
+      toast.error('Este link expirou. Revogue o acesso anterior antes de emitir outro.');
+      return;
+    }
+    if(!window.confirm('Compartilhar este acesso privado? Confira o destinatário no WhatsApp antes de enviar. O link abre o pedido do cliente e vale por até 45 minutos.'))return;
+    if(typeof navigator.share!=='function'){
+      toast.error('Compartilhamento indisponível neste aparelho. Use Copiar link.');
+      return;
+    }
+    const url=issuedLink.url;
+    try{
+      await navigator.share({title:'Da Família Lanches — acompanhar pedido',text:`Acompanhe seu pedido da Da Família Lanches: ${url}`});
+      setIssuedLink(null);
+      toast.success('Compartilhamento concluído no aparelho. Confirme o destinatário no WhatsApp.');
+    }catch(e){
+      if(e instanceof Error&&e.name==='AbortError')return;
+      toast.error('Não foi possível compartilhar. Use Copiar link.');
+    }
+  };
   const revokePrivateLink=async()=>{
     if(!lastGrant||working||!allowed||lastGrant.deliveryId!==selectedId)return;
     if(!window.confirm('Revogar este acesso? O link e a sessão do cliente deixarão de funcionar.'))return;
@@ -202,6 +224,7 @@ function ControlPanel(){
         <p className="text-xs font-bold text-emerald-100">Link emitido — token oculto</p>
         <p className="text-[11px] text-zinc-400">Copie diretamente para o cliente certo. Vence em {new Date(issuedLink.expiresAt).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'})}. Se sair da página antes de copiar, revogue o acesso.</p>
         <button type="button" onClick={copyPrivateLink} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-3 text-xs font-black text-emerald-100"><Copy size={15}/> Copiar link para o cliente</button>
+        <button type="button" onClick={()=>void sharePrivateLink()} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/[.08] px-3 text-xs font-black text-emerald-100"><Share2 size={15}/> Compartilhar link (escolher WhatsApp)</button>
       </div>}
       {lastGrant&&lastGrant.deliveryId===selectedId&&<button type="button" disabled={working} onClick={()=>void revokePrivateLink()}
         className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-500/25 px-3 text-xs font-bold text-red-200 disabled:opacity-40"><XCircle size={16}/> Revogar último acesso emitido</button>}
