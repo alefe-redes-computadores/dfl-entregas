@@ -5,7 +5,7 @@ ok(server.includes("delivery.drinks_manual_override === true")&&server.includes(
 ok(edit.includes('hydratedDeliveryId')&&edit.includes('drinks_manual_override: true'), 'formulário não reidrata nem perde correção');
 ok(stock.includes("previous=[...new Set")&&stock.includes("d.completed&&d.drinks"), 'último dia operacional com bebida');
 ok(review.includes('Nada será alterado sem sua confirmação')&&review.includes('Aplicar baixa'), 'revisão humana antes da baixa');
-ok(brief.includes('Conferência de abertura')&&brief.includes("/estoque?review=beverages"), 'abertura útil e acionável');
+ok(brief.includes('Conferência de abertura')&&brief.includes('A revisão de bebidas continua disponível no Estoque.') && !brief.includes("router.push('/estoque?review=beverages')"), 'abertura útil e acionável');
 ok(radar.includes('Silenciar radar hoje'), 'radar pode ser silenciado de uma vez');
 ok(wa.includes('1 parada física · pedidos e códigos separados')&&wa.includes("join(' + ')"), 'mensagem agrupada inequívoca');
 console.log('V73 INTELIGÊNCIA OPERACIONAL: 8 contratos aprovados.');

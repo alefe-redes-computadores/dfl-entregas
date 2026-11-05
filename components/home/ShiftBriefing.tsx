@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bike, GlassWater, PackageSearch, Play, Store } from 'lucide-react';
+import { Bike, PackageSearch, Play, Store } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, NotificationType } from '@capacitor/haptics';
@@ -119,10 +119,6 @@ export function ShiftBriefing() {
         </button>
       </div>
       {(beverageReview.length > 0 || stockAttention > 0 || addressReview.length > 0) && <div className="mt-3 grid grid-cols-2 gap-2 border-t border-emerald-500/10 pt-3">
-        {beverageReview.length > 0 && <button type="button" onClick={() => router.push('/estoque?review=beverages')} className="flex min-h-11 items-center gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[.06] px-3 text-left active:scale-[.98]">
-          <GlassWater size={15} className="shrink-0 text-sky-400" />
-          <span className="text-[10px] font-black text-zinc-300">{beverageReview.length} bebida{beverageReview.length === 1 ? '' : 's'} para revisar</span>
-        </button>}
         {stockAttention > 0 && <button type="button" onClick={() => router.push('/estoque')} className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[.05] px-3 text-left active:scale-[.98]">
           <PackageSearch size={15} className="shrink-0 text-amber-400" />
           <span className="text-[10px] font-black text-zinc-300">{stockAttention} saldo{stockAttention === 1 ? '' : 's'} para revisar</span>

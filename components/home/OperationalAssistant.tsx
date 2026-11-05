@@ -2,7 +2,7 @@
 
 import { type FormEvent, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Bike, Boxes, ChevronRight, Clock3, Inbox, PackageSearch, Search, Sparkles, Star, X } from 'lucide-react';
+import { ArrowRight, Bike, Boxes, ChevronDown, ChevronRight, Clock3, Inbox, PackageSearch, Search, Sparkles, Star, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useHiddenInsightsToday } from '@/hooks/useHiddenInsightsToday';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
@@ -36,6 +36,8 @@ export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries
   useEffect(() => { setExamplesSeed(Math.floor(Math.random() * 600)); }, []);
   const examplesForSession = useMemo(() => Array.from({length: 3}, (_,i) => examples[(examplesSeed+i*2)%examples.length]), [examplesSeed]);
   const [focused, setFocused] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const showSuggestions = expanded || Boolean(value.trim());
   const { shortcuts, toggleFavorite, remember } = useAssistantShortcuts();
   const [typedHint, setTypedHint] = useState('Pedido, motoboy, bacon, rota...');
   // O texto só é animado enquanto o campo está vazio, visível e sem foco.
@@ -100,21 +102,23 @@ export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries
   };
 
   return (
-    <section aria-label="DFL Assistente Operacional" className="dfl-assistant-premium overflow-hidden rounded-[24px] border border-amber-500/20 bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 p-3.5 shadow-[0_10px_35px_rgba(0,0,0,0.16)]">
-      <div className="mb-3 flex items-center gap-2.5">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-300"><Sparkles size={17} aria-hidden="true" /></span>
-        <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-[.15em] text-amber-300/80">DFL · Busca 360</p><h2 className="text-sm font-bold text-zinc-100">Assistente operacional</h2></div>
-        <span className="rounded-lg border border-emerald-500/20 px-2 py-1 text-[9px] font-bold text-emerald-400">Local · offline</span>
+    <section aria-label="DFL Assistente Operacional" className="dfl-assistant-premium overflow-hidden rounded-[22px] border border-amber-500/15 bg-gradient-to-r from-zinc-900/90 to-zinc-950 p-3 shadow-[0_6px_24px_rgba(0,0,0,0.12)]">
+      <div className="mb-2 flex items-center gap-2.5">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-300"><Sparkles size={17} aria-hidden="true" /></span>
+        <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[.14em] text-amber-300/75">DFL · Busca 360</p><h2 className="text-xs font-bold text-zinc-200">Buscar pedidos, rotas ou estoque</h2></div>
+        <button type="button" aria-expanded={expanded} aria-label={expanded?'Recolher atalhos da Busca 360':'Mostrar atalhos da Busca 360'} onClick={()=>setExpanded(x=>!x)} className="flex min-h-9 shrink-0 items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-950/50 px-2.5 text-[10px] font-bold text-zinc-400 active:scale-[.98]">
+          Atalhos <ChevronDown size={14} className={`transition-transform ${expanded?'rotate-180':''}`}/>
+        </button>
       </div>
 
-      <form onSubmit={submit} role="search" className={`flex min-h-12 items-center gap-2 rounded-2xl border bg-zinc-950/80 px-3 transition-colors ${focused ? 'border-amber-400/60 shadow-[0_0_16px_rgba(251,191,36,0.09)]' : 'border-zinc-700/70'}`}>
+      <form onSubmit={submit} role="search" className={`flex min-h-11 items-center gap-2 rounded-xl border bg-zinc-950/80 px-3 transition-colors focus-within:outline-none ${focused ? 'border-amber-400/45 shadow-[0_0_0_1px_rgba(251,191,36,0.08)]' : 'border-zinc-800'}`}>
         <Search size={17} className="shrink-0 text-amber-300/80" aria-hidden="true" />
-        <input type="search" value={value} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onChange={e => setValue(e.target.value)} placeholder={typedHint} aria-label="Buscar pedidos rotas e produtos ou digitar um comando" maxLength={110} className="h-12 min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-500" />
+        <input type="text" inputMode="search" enterKeyHint="search" autoComplete="off" value={value} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onChange={e => setValue(e.target.value)} placeholder={typedHint} aria-label="Buscar pedidos rotas e produtos ou digitar um comando" maxLength={110} className="h-11 min-w-0 flex-1 appearance-none rounded-none border-0 bg-transparent text-sm text-zinc-100 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 placeholder:text-zinc-500" />
         {value ? <button type="button" onClick={() => setValue('')} aria-label="Limpar busca" className="grid h-9 w-9 place-items-center text-zinc-400"><X size={17} /></button> : null}
         <button type="submit" disabled={!value.trim()} aria-label="Executar pesquisa" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-400 text-zinc-950 disabled:opacity-40"><ArrowRight size={17} /></button>
       </form>
 
-      {!value.trim() ? <div className="mt-3 space-y-2">
+      {showSuggestions && (!value.trim() ? <div className="mt-2.5 space-y-2">
         <div className="flex flex-wrap gap-1.5" aria-label="Sugestões de comandos">
           {examplesForSession.map(({id, text, icon: Icon}) => <div key={id} className="inline-flex items-center rounded-xl border border-zinc-800 bg-zinc-900/70">
             <button type="button" onClick={() => setValue(text)} className="flex min-h-10 items-center gap-1.5 px-2.5 py-1 text-[10px] font-semibold text-zinc-300 active:text-amber-300"><Icon size={13} />{text}</button>
@@ -134,14 +138,14 @@ export function OperationalAssistant({ dayDeliveries, dateKey }: { dayDeliveries
         {found.map(item => <button type="button" key={item.id} onClick={() => goTo(item.href)} className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-zinc-800/80 px-3 text-left"><PackageSearch size={16} className="shrink-0 text-emerald-400"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-zinc-200">{item.title}</span><span className="block truncate text-[10px] text-zinc-500">{item.detail}</span></span><ChevronRight size={15} className="text-zinc-500" /></button>)}
         {!suggestions.length && !found.length && <p className="px-1 text-[11px] text-zinc-500">Sem correspondência local. Para horários, só mostramos pedidos com registro confiável; nenhuma data é inventada.</p>}
         {privacy && <p className="text-[10px] text-zinc-500">Modo privacidade: nomes e pedidos ocultos nesta busca.</p>}
-      </div>}
+      </div>)}
 
-      {insight && !hiddenIds.has(insight.id) && !value.trim() && <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/15 bg-amber-500/[.045] p-3">
+      {expanded && insight && !hiddenIds.has(insight.id) && !value.trim() && <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/15 bg-amber-500/[.045] p-3">
         <Sparkles size={15} className="mt-0.5 shrink-0 text-amber-300" aria-hidden="true"/>
         <div className="min-w-0 flex-1"><p className="text-[11px] leading-relaxed text-zinc-300">{insight.text}</p><button type="button" onClick={() => router.push(insight.href)} className="mt-1.5 text-[11px] font-black text-amber-300 underline-offset-2 hover:underline">{insight.action}</button></div>
         <button type="button" onClick={() => hideForToday(insight.id)} aria-label="Dispensar sugestão de hoje" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-zinc-500"><X size={15}/></button>
       </div>}
-      <p className="mt-2.5 text-[9px] leading-relaxed text-zinc-600">Somente consulta e navegação. Não altera pedidos, rotas, pagamentos nem estoque.</p>
+      {expanded && <p className="mt-2.5 text-[9px] leading-relaxed text-zinc-600">Somente consulta e navegação. Não altera pedidos, rotas, pagamentos nem estoque.</p>}
     </section>
   );
 }

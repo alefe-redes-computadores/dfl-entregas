@@ -3,7 +3,8 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
-import { AlertTriangle, ArrowLeft, BookOpenCheck, ChevronDown, Copy, Link2, LockKeyhole, RefreshCw, Share2, Search, ShieldCheck, XCircle } from 'lucide-react';
+import { Haptics, NotificationType } from '@capacitor/haptics';
+import { AlertTriangle, ArrowLeft, BookOpenCheck, ChevronDown, ClipboardCheck, Copy, Link2, LockKeyhole, RefreshCw, Share2, Search, ShieldCheck, SlidersHorizontal, XCircle } from 'lucide-react';
 import { auth } from '@/lib/firebase';
 import { useAppStore } from '@/store/useAppStore';
 import { isSuperadminUid } from '@/lib/access/roles';
@@ -21,6 +22,14 @@ const BASE = '/api/integration/tracking/v1';
 const CUSTOMER_TRACKING_ORIGIN = 'https://dafamilialanches.com.br';
 type Filter = 'todas'|'site'|'manual'|'ifood'|'food99';
 const norm=(value:unknown)=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const filterVisual:Record<Filter,string>={
+  todas:'border-zinc-500/50 bg-zinc-800/80 text-zinc-100',
+  site:'border-sky-500/45 bg-sky-500/10 text-sky-300',
+  manual:'border-emerald-500/45 bg-emerald-500/10 text-emerald-300',
+  ifood:'border-red-500/45 bg-red-500/10 text-red-300',
+  food99:'border-amber-500/45 bg-amber-500/10 text-amber-300',
+};
+const deliveryOrigin=(d:{source_system?:string;origin?:string})=>d.source_system==='dfl_site'||d.origin==='site'?'site':d.origin==='ifood'?'ifood':d.origin==='food99'?'food99':'manual';
 function ControlPanel(){
   const router=useRouter();
   const params=useSearchParams();
@@ -36,6 +45,9 @@ function ControlPanel(){
   const [loading,setLoading]=useState(false);
   const [working,setWorking]=useState(false);
   const [failure,setFailure]=useState('');
+  const errorAreaRef=useRef<HTMLDivElement>(null);
+  const actionAreaRef=useRef<HTMLElement>(null);
+  const [actionError,setActionError]=useState('');
   const [listOpen,setListOpen]=useState(!initialId);
   // Secret is kept only in transient React memory until the owner copies it.
   // NEVER persist in local/session storage, logs, history or render its value.
@@ -46,6 +58,20 @@ function ControlPanel(){
     document.addEventListener('visibilitychange',onHidden);
     return()=>document.removeEventListener('visibilitychange',onHidden);
   },[]);
+  useEffect(()=>{
+    if(!failure)return;
+    toast.error(failure);
+    if(Capacitor.isNativePlatform())void Haptics.notification({type:NotificationType.Error}).catch(()=>{});
+    const handle=window.setTimeout(()=>errorAreaRef.current?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'}),80);
+    return()=>window.clearTimeout(handle);
+  },[failure]);
+  useEffect(()=>{
+    if(!actionError)return;
+    toast.error(actionError);
+    if(Capacitor.isNativePlatform())void Haptics.notification({type:NotificationType.Error}).catch(()=>{});
+    const handle=window.setTimeout(()=>actionAreaRef.current?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'}),80);
+    return()=>window.clearTimeout(handle);
+  },[actionError]);
   const lastRequest=useRef(0);
   const lastCertificateRequest=useRef(0);
   const allowed=Boolean(isSuperadminUid(user?.uid));
@@ -53,7 +79,7 @@ function ControlPanel(){
     const needle=norm(query.trim());
     return deliveries.filter(d=>{
       if(filter!=='todas'){
-        const o=d.source_system==='dfl_site'?'site':d.origin==='ifood'?'ifood':d.origin==='food99'?'food99':'manual';
+        const o=deliveryOrigin(d);
         if(o!==filter)return false;
       }
       return !needle||norm([d.order_id,d.external_order_id,d.id,d.customer_name].join(' ')).includes(needle);
@@ -113,13 +139,18 @@ function ControlPanel(){
     inspection.gate.code_enabled && inspection.gate.customer_access_certified && !inspection.gate.kill_switch &&
     ['MANUAL','AUTOMATIC_CERTIFIED'].includes(inspection.gate.mode) &&
     !inspection.readiness.signals.some(s=>s.severity==='blocker'));
+  // Aceite operacional confirmado pelo servidor, sem autorizar iFood/99Food.
+  // A origem manual continua dependente de capability e de comando explicito do owner.
+  const needsManualAcceptance=Boolean(inspection && inspection.delivery.origin==='manual' &&
+    !['delivered','cancelled'].includes(inspection.delivery.state) &&
+    inspection.readiness.signals.some(signal=>signal.code==='NOT_ACCEPTED'));
   const issuePrivateLink=async()=>{
     if(!allowed||!inspection||!selectedId||!canIssueLink||working||issuedLink)return;
     if(!window.confirm('Emitir um link privado de uso único para este pedido? Só compartilhe com o cliente correto. Não envia WhatsApp.'))return;
     const currentSelection=selectedId, currentInspection=inspection;
     const currentRequest=lastRequest.current;
     const currentAccount=auth.currentUser?.uid;
-    setWorking(true);
+    setActionError('');setWorking(true);
     try{
       const answer=await api('/issue',{
         contract:'dfl.tracking.access',version:1,action:'issue',
@@ -136,7 +167,7 @@ function ControlPanel(){
       setIssuedLink({url:`${CUSTOMER_TRACKING_ORIGIN}/acompanhar#t=${answer.opaque_token}`,grantId,deliveryId:currentSelection,
         expiresAt:answer.expires_at});
       toast.success('Link privado emitido. Toque em copiar para compartilhá-lo com o cliente.');
-    }catch(e){toast.error(e instanceof Error?e.message:'Não foi possível emitir acesso.');}
+    }catch(e){setActionError(e instanceof Error?e.message:'Não foi possível emitir acesso.');}
     finally{setWorking(false);}
   };
   const copyPrivateLink=()=>{
@@ -146,7 +177,7 @@ function ControlPanel(){
     void navigator.clipboard.writeText(url).then(()=>{
       setIssuedLink(null);
       toast.success('Link copiado. Envie somente ao cliente autorizado.');
-    }).catch(()=>toast.error('Cópia indisponível. Tente novamente ou revogue o acesso.'));
+    }).catch(()=>setActionError('Cópia indisponível. Tente novamente ou revogue o acesso.'));
   };
   const sharePrivateLink=async()=>{
     if(!allowed||!issuedLink||issuedLink.deliveryId!==selectedId||working)return;
@@ -174,7 +205,7 @@ function ControlPanel(){
     if(!lastGrant||working||!allowed||lastGrant.deliveryId!==selectedId)return;
     if(!window.confirm('Revogar este acesso? O link e a sessão do cliente deixarão de funcionar.'))return;
     const {grantId}=lastGrant;
-    setWorking(true);
+    setActionError('');setWorking(true);
     try{
       const response=await api('/revoke',{
         contract:'dfl.tracking.access',version:1,action:'revoke',grant_id:grantId,
@@ -183,7 +214,7 @@ function ControlPanel(){
       if(!('revoked' in response)||response.revoked!==true)throw new Error('Revogação não confirmada; confira o servidor.');
       setIssuedLink(null);setLastGrant(null);
       toast.success('Acesso revogado no servidor.');
-    }catch(e){toast.error(e instanceof Error?e.message:'Não foi possível confirmar a revogação.');}
+    }catch(e){setActionError(e instanceof Error?e.message:'Não foi possível confirmar a revogação.');}
     finally{setWorking(false);}
   };
   const submit=async(action:'confirm'|'sync')=>{
@@ -203,21 +234,30 @@ function ControlPanel(){
   };
   if(!allowed)return <div className="dfl-page"><LockKeyhole className="text-zinc-500"/><h1 className="mt-3 font-black text-zinc-100">Área administrativa restrita</h1><p className="mt-2 text-xs text-zinc-500">O acesso exige autenticação do proprietário.</p></div>;
   return <div className="dfl-page space-y-4 pb-28">
-    <header className="flex items-start gap-3"><button type="button" onClick={()=>router.push('/mais')} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900"><ArrowLeft size={18}/></button><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.15em] text-cyan-400">Gate 1 · R250 · Operação interna</p><h1 className="font-heading text-xl font-black text-zinc-100">Central de Acompanhamento</h1><p className="mt-1 text-xs text-zinc-500">Inspeção e simulação. Sem acesso público nem mensagens reais.</p></div></header>
-    <button type="button" onClick={()=>router.push('/mais/acompanhamento/ponte')} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/[.055] px-4 text-left text-xs font-bold text-sky-100"><span className="flex items-center gap-2"><ShieldCheck size={18}/> Ponte com Site · Verificação segura</span><span className="text-[10px] text-sky-300">Abrir</span></button>
-    <button type="button" onClick={()=>router.push('/mais/acompanhamento/auditoria')} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/[.05] px-4 text-left text-xs font-bold text-emerald-100"><span className="flex items-center gap-2"><ShieldCheck size={18}/> Auditoria de acompanhamento · até 20 pedidos</span><span className="text-[10px] text-emerald-300">Abrir</span></button>
-    <button type="button" onClick={()=>router.push('/mais/acompanhamento/laboratorio')} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-cyan-500/25 bg-cyan-500/[.06] px-4 text-left text-xs font-bold text-cyan-100"><span className="flex items-center gap-2"><BookOpenCheck size={18}/> Laboratório visual · 14 cenários fictícios</span><span className="text-[10px] text-cyan-300">Abrir</span></button>
-    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[.06] p-3"><div className="flex items-center gap-2 text-xs font-black text-amber-200"><ShieldCheck size={16}/> Modo de homologação protegido</div><p className="mt-1 text-[11px] leading-relaxed text-zinc-400">Esta central usa o cache para localizar pedidos, mas somente o servidor pode confirmar eventos. Sem tenant/configuração certificada, a inspeção será bloqueada. Links e WhatsApp permanecem OFF.</p></div>
+    <header className="flex items-start gap-3 pb-1">
+      <button type="button" onClick={()=>router.push('/mais')} aria-label="Voltar" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-zinc-800 bg-zinc-900/70"><ArrowLeft size={18}/></button>
+      <div className="min-w-0 flex-1"><p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[.13em] text-emerald-300"><ShieldCheck size={13}/> Acesso privado · Modo manual</p><h1 className="mt-0.5 font-heading text-xl font-black text-zinc-100">Acompanhamento</h1><p className="mt-1 text-[11px] leading-relaxed text-zinc-500">Confira pedidos e gerencie links de acesso, um de cada vez.</p></div>
+    </header>
     <section className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3"><button type="button" onClick={()=>setListOpen(v=>!v)} className="flex w-full items-center justify-between text-left"><span className="flex items-center gap-2 text-sm font-black text-zinc-100"><Search size={17}/> Selecionar pedido</span><ChevronDown className={`text-zinc-500 transition-transform ${listOpen?'rotate-180':''}`} size={17}/></button>
-      {listOpen&&<><div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3"><Search size={16} className="text-zinc-500"/><input aria-label="Buscar pedido" value={query} onChange={e=>setQuery(e.target.value.slice(0,100))} placeholder="ID ou cliente" className="min-h-11 w-full min-w-0 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"/></div><div className="flex gap-2 overflow-x-auto pb-1">{([['todas','Todos'],['site','Site'],['manual','Loja'],['ifood','iFood'],['food99','99Food']] as const).map(([key,label])=><button key={key} type="button" onClick={()=>setFilter(key)} className={`min-h-9 shrink-0 rounded-xl border px-3 text-xs font-bold ${filter===key?'border-cyan-500/40 bg-cyan-500/10 text-cyan-200':'border-zinc-800 text-zinc-400'}`}>{label}</button>)}</div><div className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain">{listed.map(d=><OwnerTrackingCard key={d.id} delivery={d} active={selectedId===d.id} onClick={()=>choose(d.id)}/>)}{listed.length===0&&<p className="p-4 text-center text-xs text-zinc-500">Nenhum pedido no cache com esses filtros.</p>}</div><p className="text-[10px] text-zinc-600">Até 80 resultados locais; não gera consultas adicionais por card.</p></>}
+      {listOpen&&<><div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 focus-within:border-emerald-500/40"><Search size={16} className="text-zinc-500"/><input aria-label="Buscar pedido" value={query} onChange={e=>setQuery(e.target.value.slice(0,100))} placeholder="ID ou cliente" className="min-h-11 w-full min-w-0 appearance-none border-0 bg-transparent text-sm text-zinc-100 outline-none ring-0 focus:outline-none focus:ring-0 placeholder:text-zinc-600"/></div><div className="flex gap-2 overflow-x-auto pb-1" aria-label="Filtrar origem">{([['todas','Todos'],['site','Site'],['manual','Loja'],['ifood','iFood'],['food99','99Food']] as const).map(([key,label])=><button key={key} type="button" aria-pressed={filter===key} onClick={()=>setFilter(key)} className={`min-h-9 shrink-0 rounded-xl border px-3 text-[11px] font-bold transition-colors ${filter===key?filterVisual[key]:'border-zinc-800 bg-zinc-950/40 text-zinc-500'}`}>{label}</button>)}</div><div className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain">{listed.map(d=><OwnerTrackingCard key={d.id} delivery={d} active={selectedId===d.id} onClick={()=>choose(d.id)}/>)}{listed.length===0&&<p className="p-4 text-center text-xs text-zinc-500">Nenhum pedido no cache com esses filtros.</p>}</div><p className="text-[10px] text-zinc-600">Até 80 resultados locais; não gera consultas adicionais por card.</p></>}
     </section>
-    {selected&&<div className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 p-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-zinc-100">{selected.order_id||selected.external_order_id||selected.id}</p><p className="truncate text-xs text-zinc-500">{selected.customer_name||'Cliente'}</p></div><button type="button" disabled={loading} onClick={()=>void inspect(selectedId)} className="flex min-h-10 shrink-0 items-center gap-2 rounded-xl bg-zinc-800 px-3 text-xs font-bold disabled:opacity-50"><RefreshCw size={15}/> Conferir</button></div>}
-    {loading&&<div role="status" className="rounded-2xl border border-zinc-800 p-4 text-xs text-zinc-400">Consultando somente os fatos confirmados no servidor...</div>}
-    {failure&&<div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-200"><AlertTriangle size={17} className="mb-2"/>{failure}<p className="mt-2 text-zinc-400">O aplicativo operacional continua funcionando normalmente.</p></div>}
-    {inspection&&<OwnerTrackingInspection value={inspection} busy={working} onCopy={copy} onConfirm={()=>void submit('confirm')} onSync={()=>void submit('sync')}/>}
-    {inspection&&<section className="space-y-2 rounded-2xl border border-amber-500/25 bg-amber-500/[.045] p-4">
+    {selected&&<section aria-label="Pedido selecionado" className="flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-zinc-900/55 p-3">
+      <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[.13em] text-emerald-400">Pedido selecionado</p><p className="mt-1 truncate text-sm font-black text-zinc-100">{selected.order_id||selected.external_order_id||selected.id}</p><div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-zinc-400"><span className="truncate">{selected.customer_name||'Cliente'}</span><span className={`rounded-md border px-1.5 py-0.5 font-bold ${filterVisual[deliveryOrigin(selected)]}`}>{deliveryOrigin(selected)==='site'?'Site':deliveryOrigin(selected)==='ifood'?'iFood':deliveryOrigin(selected)==='food99'?'99Food':'Loja'}</span><span>{selected.completed?'Finalizado':selected.route_id?'Em rota':'Aguardando'}</span></div></div>
+      <button type="button" disabled={loading} onClick={()=>void inspect(selectedId)} className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 text-[11px] font-bold text-emerald-200 disabled:opacity-50"><RefreshCw size={14} className={loading?'animate-spin':''}/> Conferir</button>
+    </section>}
+    {loading&&<div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-xs text-zinc-400"><RefreshCw size={15} className="animate-spin text-emerald-400"/> Conferindo dados confirmados no servidor...</div>}
+    {failure&&<div ref={errorAreaRef} role="alert" className="rounded-2xl border border-red-500/40 bg-red-500/[.07] p-4 text-xs text-red-200 ring-1 ring-red-500/15"><div className="flex items-center gap-2 font-bold"><AlertTriangle size={17}/> Não foi possível conferir</div><p className="mt-2 leading-relaxed">{failure}</p><p className="mt-2 text-zinc-400">As operações do aplicativo continuam disponíveis.</p></div>}
+    {inspection&&<section ref={actionAreaRef} className={`space-y-2 rounded-2xl border bg-amber-500/[.045] p-4 ${actionError?'border-red-500/50 ring-1 ring-red-500/20':'border-amber-500/25'}`}>
       <div className="flex items-center gap-2 text-sm font-black text-amber-100"><LockKeyhole size={16}/> Acesso privado do cliente</div>
-      <p className="text-[11px] leading-relaxed text-zinc-400">Emissão exclusiva do proprietário após aceite confirmado. Token usado uma vez, sem armazenamento ou envio automático. Requer ativação expressa do acompanhamento.</p>
+      <p className="text-[11px] leading-relaxed text-zinc-400">Exclusivo do proprietário. Link de uso único, sem WhatsApp automático. Só copie após conferir o pedido correto.</p>
+      {needsManualAcceptance&&<div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[.055] p-3">
+        <p className="mb-2 text-[11px] font-bold text-emerald-200">Pedido da Loja: aceite ainda não confirmado no servidor.</p>
+        <button type="button" disabled={working||loading} onClick={()=>void submit('confirm')}
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-3 text-xs font-black text-emerald-200 transition active:scale-[.99] disabled:opacity-40">
+          <ClipboardCheck size={16}/>{working?'Confirmando no servidor...':'Confirmar aceite manual deste pedido'}
+        </button>
+        <p className="mt-2 text-[10px] text-zinc-500">Apenas o proprietário pode registrar o aceite. Não envia WhatsApp nem cria link automaticamente.</p>
+      </div>}{actionError&&<p role="alert" className="rounded-xl border border-red-500/25 bg-red-500/[.08] p-2 text-[11px] font-bold text-red-200"><AlertTriangle size={13} className="mr-1 inline"/>{actionError}</p>}
       <button type="button" disabled={!canIssueLink||working||Boolean(issuedLink)} onClick={()=>void issuePrivateLink()}
         className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-bold text-amber-100 disabled:opacity-35"><Link2 size={16}/> {working?'Conferindo servidor...':'Emitir link privado (45 min)'}</button>
       {issuedLink&&issuedLink.deliveryId===selectedId&&<div className="space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[.045] p-3">
@@ -230,9 +270,19 @@ function ControlPanel(){
         className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-500/25 px-3 text-xs font-bold text-red-200 disabled:opacity-40"><XCircle size={16}/> Revogar último acesso emitido</button>}
       {!canIssueLink&&<p className="text-[11px] text-zinc-500">Emissão bloqueada: confirme o pedido, sua origem e os gates de acesso. Nenhum pedido é enviado automaticamente.</p>}
     </section>}
+    {inspection&&<details className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/35"><summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3.5 text-xs font-black text-zinc-200"><span className="flex items-center gap-2"><ClipboardCheck size={16} className="text-cyan-300"/> Diagnóstico e evidências do pedido</span><ChevronDown size={16} className="text-zinc-500 transition group-open:rotate-180"/></summary><div className="border-t border-zinc-800 p-2"><OwnerTrackingInspection value={inspection} busy={working} onCopy={copy} onConfirm={()=>void submit('confirm')} onSync={()=>void submit('sync')}/></div></details>}
     {inspection&&<button type="button" disabled={certifying||loading} onClick={()=>void certify()} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/[.06] px-3 text-xs font-black text-cyan-100 disabled:opacity-40"><ShieldCheck size={16}/>{certifying?'Certificando evidências...':'Certificar contratos A–E neste pedido'}</button>}
     {certificate&&<TrackingGate2Certificate certificate={certificate}/>}
-    <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4"><div className="flex items-center gap-2 text-xs font-black text-zinc-300"><BookOpenCheck size={16}/> Contrato do Site preservado</div><p className="mt-2 text-xs leading-relaxed text-zinc-500">A página pública será construída separadamente pelo Site. Copiar a prévia não emite credenciais, não registra vendas e não aciona a VPS.</p></section>
+    <details className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/30">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3.5 text-xs font-bold text-zinc-400"><span className="flex items-center gap-2"><SlidersHorizontal size={16}/> Ferramentas avançadas e contratos</span><ChevronDown size={16} className="transition group-open:rotate-180"/></summary>
+      <div className="space-y-2 border-t border-zinc-800 p-3">
+        <button type="button" onClick={()=>router.push('/mais/acompanhamento/ponte')} className="flex min-h-11 w-full items-center justify-between rounded-xl border border-sky-500/20 bg-sky-500/[.04] px-3 text-left text-[11px] font-bold text-sky-200"><span className="flex items-center gap-2"><ShieldCheck size={16}/> Ponte com Site · Verificação segura</span><ArrowLeft size={14} className="rotate-180"/></button>
+        <button type="button" onClick={()=>router.push('/mais/acompanhamento/auditoria')} className="flex min-h-11 w-full items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/[.04] px-3 text-left text-[11px] font-bold text-emerald-200"><span className="flex items-center gap-2"><ShieldCheck size={16}/> Auditoria de acompanhamento · até 20 pedidos</span><ArrowLeft size={14} className="rotate-180"/></button>
+        <button type="button" onClick={()=>router.push('/mais/acompanhamento/laboratorio')} className="flex min-h-11 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 text-left text-[11px] font-bold text-zinc-300"><span className="flex items-center gap-2"><BookOpenCheck size={16}/> Laboratório visual · 14 cenários fictícios</span><ArrowLeft size={14} className="rotate-180"/></button>
+        <div className="rounded-xl border border-amber-500/15 bg-amber-500/[.035] p-3"><div className="flex items-center gap-2 text-[11px] font-bold text-amber-200"><LockKeyhole size={14}/> Modo de homologação protegido</div><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">O servidor valida permissões, histórico e vínculo do pedido. A emissão permanece manual e sem disparo automático de WhatsApp.</p></div>
+        <p className="px-1 text-[10px] text-zinc-500"><BookOpenCheck size={13} className="mr-1 inline"/> Contrato do Site preservado. Ferramentas de diagnóstico não emitem links por conta própria.</p>
+      </div>
+    </details>
   </div>;
 }
 export default function AcompanhamentoAdminPage(){return <Suspense fallback={<div className="dfl-page p-4 text-xs text-zinc-400">Carregando controles...</div>}><ControlPanel/></Suspense>;}
