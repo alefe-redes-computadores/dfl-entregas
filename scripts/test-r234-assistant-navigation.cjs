@@ -43,7 +43,7 @@ const deliveries = read('app/entregas/page.tsx');
 const routes = read('app/rotas/page.tsx');
 const stock = read('app/estoque/page.tsx');
 const inbox = read('app/loja/caixa-de-entrada/page.tsx');
-assert.ok(home.includes('OperationalAssistant dayDeliveries={deliveriesDoDia}') && home.includes('legacyRadarOpen &&'), 'Home integra assistente e preserva Radar recolhido');
+assert.ok(home.includes('OperationalAssistant dayDeliveries={deliveriesDoDia}') && home.includes('homeToolsOpen &&') && !home.includes('legacyRadarOpen &&') && read('app/mais/page.tsx').includes('legacyRadarOpen &&'), 'Busca 360 recolhida na Home; Radar legado acessível em Mais');
 assert.ok(assistant.includes('useDeferredValue') && assistant.includes('useMemo') && !assistant.includes('fetch(') && !assistant.includes('onSnapshot('), 'busca local sem I/O');
 assert.ok(assistant.includes('privacy ? []') && assistant.includes('hideForToday'), 'privacidade e dispensa por dia');
 assert.ok(deliveries.includes("searchParams.get('q')") && deliveries.includes('paymentPending'), 'Entregas recebe filtro da Busca 360');

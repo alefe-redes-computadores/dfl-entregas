@@ -2,6 +2,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { BellRing,
   Activity,
   ChevronRight,
@@ -14,9 +15,11 @@ import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { UserAvatar } from '@/components/UserAvatar';
 import { isSuperadminUid } from '@/lib/access/roles';
+import { OperationalRadar } from '@/components/home/OperationalRadar';
 
 export default function MaisPage() {
   const router = useRouter();
+  const [legacyRadarOpen, setLegacyRadarOpen] = useState(false);
 
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
@@ -73,6 +76,16 @@ export default function MaisPage() {
           <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Somente administradores acessam os controles. O resumo não altera configurações.</p>
         </section>
       )}
+      <section aria-label="Análises históricas" className="rounded-[22px] border border-zinc-800 bg-zinc-900/30 p-2.5">
+        <button type="button" aria-expanded={legacyRadarOpen} aria-controls="dfl-legacy-radar-mais"
+          onClick={() => setLegacyRadarOpen(open => !open)}
+          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-2.5 text-left text-xs font-black text-zinc-300 active:bg-zinc-800/50">
+          <span className="flex items-center gap-2"><Activity size={16} className="text-sky-300" /> Radar legado · análises avançadas</span>
+          <ChevronRight size={16} className={`shrink-0 transition-transform ${legacyRadarOpen ? 'rotate-90' : ''}`} />
+        </button>
+        {legacyRadarOpen && <div id="dfl-legacy-radar-mais" className="border-t border-zinc-800 pt-3"><OperationalRadar /></div>}
+      </section>
+
 <section className="flex flex-col gap-2">
         <h2 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
           Sistema e dados

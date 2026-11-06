@@ -63,5 +63,5 @@ assert.match(intentMod.exports.assistantDestinations('buscar bacon na compra')[0
 assert.equal(intentMod.exports.assistantDestinations('compras')[0].href, '/estoque/compras');
 
 assert.ok(read('scripts/pre-apk.cjs').includes("'scripts/test-r235-contextual-assistant.cjs'"), 'suíte R235 registrada');
-assert.ok(read('app/page.tsx').includes('legacyRadarOpen &&') && read('app/page.tsx').includes('<OperationalAssistant'), 'Home R234 preservada e Radar não foi removido');
+assert.ok(read('app/page.tsx').includes('homeToolsOpen &&') && read('app/page.tsx').includes('<OperationalAssistant') && read('app/mais/page.tsx').includes('<OperationalRadar'), 'Home R234 preservada; Radar relocado e carregado sob demanda em Mais');
 console.log('R235: contratos de contexto, navegação, frequência, segurança, coexistência e offline OK');

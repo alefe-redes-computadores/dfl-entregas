@@ -14,12 +14,13 @@ must('store/useAppStore.ts',"'routes'","rotas no sync");
 must('store/useAppStore.ts',"'deliveries'","entregas no sync");
 must('store/useAppStore.ts',"'stock_movements'","movimentos no sync");
 must('store/useAppStore.ts',"'ifood_pending_confirmations'","iFood pendente no sync");
-must('store/useAppStore.ts','if (get().isSyncing) return','sync concorrente bloqueado');
+must('store/useAppStore.ts','if (initDataInFlight || get().isSyncing) return','sync concorrente bloqueado');
 
 console.log('--- HOME / OPERAÇÃO ---');
 must('app/page.tsx','useMemo','Home memoizada');
 must('app/page.tsx','OperationalCommandCenter','central operacional');
-must('app/page.tsx','ShiftBriefing','briefing de turno');
+must('app/loja/page.tsx','<ShiftBriefing />','briefing de turno na Loja, não na Home');
+must('app/page.tsx','homeToolsOpen &&','Home prioriza rotas sem painéis obrigatórios');
 must('lib/operational-time.ts','SYNTHETIC_OPERATIONAL_ROUTE_IDS','rotas sintéticas identificadas');
 must('lib/operational-time.ts','isSyntheticOperationalRoute','rota sintética não vira saída real');
 

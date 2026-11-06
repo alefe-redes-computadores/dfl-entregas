@@ -28,6 +28,7 @@ import { SiteAdminHub } from '@/components/store/SiteAdminHub';
 import { OperationalAttentionQueue } from '@/components/store/OperationalAttentionQueue';
 import { loadHolidayCalendar } from '@/lib/store/holidayCache';
 import { configuredMarketplaceMode, mergeMarketplacePreference } from '@/lib/operation/marketplace-modes';
+import { ShiftBriefing } from '@/components/home/ShiftBriefing';
 
 const DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
@@ -96,6 +97,7 @@ export default function LojaPage() {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showOpeningReview, setShowOpeningReview] = useState(false);
   const [showManagement, setShowManagement] = useState(false);
   useEffect(() => {
     try { setShowManagement(window.sessionStorage.getItem('dfl:loja:gestao') === 'open'); }
@@ -372,6 +374,18 @@ export default function LojaPage() {
             {isStoreOpen ? 'Encerrar' : 'Abrir agora'}
           </span>
         </button>
+      </section>
+
+      <section aria-label="Conferência opcional de abertura" className="rounded-2xl border border-zinc-800/80 bg-zinc-900/25 p-2">
+        <button type="button" aria-expanded={showOpeningReview} aria-controls="dfl-loja-opening-review"
+          onClick={() => setShowOpeningReview(open => !open)}
+          className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-[11px] font-black text-zinc-300 active:bg-zinc-800/40">
+          <ShieldCheck size={16} className="text-emerald-400" />
+          <span className="min-w-0 flex-1">Conferência de abertura</span>
+          <span className="text-[10px] font-medium text-zinc-500">Opcional</span>
+          <ChevronDown size={15} className={`transition-transform ${showOpeningReview ? 'rotate-180' : ''}`} />
+        </button>
+        {showOpeningReview && <div id="dfl-loja-opening-review" className="mt-2 border-t border-zinc-800/60 pt-3"><ShiftBriefing /></div>}
       </section>
 
       <section className="flex flex-col gap-3">

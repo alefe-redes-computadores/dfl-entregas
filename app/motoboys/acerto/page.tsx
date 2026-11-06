@@ -1,7 +1,7 @@
 'use client';
 import { Suspense,useEffect,useMemo,useRef,useState } from 'react';
 import { useRouter,useSearchParams } from 'next/navigation';
-import { ArrowDownLeft,ArrowUpRight,Banknote,CalendarDays,ChevronLeft,ChevronRight,Copy,Image as ImageIcon,Package,Plus,ReceiptText,Send,Trash2,X,ShieldCheck } from 'lucide-react';
+import { ArrowDownLeft,ArrowUpRight,Banknote,Bike,CalendarDays,ChevronLeft,ChevronRight,Copy,Image as ImageIcon,Package,Plus,ReceiptText,Send,Trash2,X,ShieldCheck } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
@@ -17,6 +17,7 @@ import { Directory, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { paintDflBrand, paintFittedText } from '@/lib/share-card-brand';
 import { activeRouteDeliveries } from '@/lib/route-closure-eligibility';
+import { settlementVisualLines } from '@/lib/motoboy-settlement-visual';
 
 const fromKey=(key:string)=>new Date(`${key}T12:00:00-03:00`);
 const shift=(key:string,days:number)=>{const date=fromKey(key);date.setDate(date.getDate()+days);return operationalDateKey(date);};
@@ -338,7 +339,15 @@ function Content(){
     }catch{toast.error('Não foi possível copiar o resumo.',{description:'Confira a permissão da área de transferência e tente novamente.'});}
     finally{copyInFlight.current=false;setCopyBusy(false);}
   };
-  // Compartilhamento unificado: texto e imagem quando suportado; cópia independente como alternativa.
+  // Compartilhamento da imagem é objetivo; o resumo completo continua no botão Copiar.
+  const summaryCompact = () => [
+    `🧾 *ACERTO DFL · ${motoboy.name}* · ${date.split('-').reverse().join('/')}`,
+    `📦 ${data.orderCount} pedidos · 🏍️ ${data.physicalDeliveryCount} paradas remuneradas · ${data.completedRoutes} rotas`,
+    `Diária bruta R$ ${money(data.fee.amount)} · Abatimentos − R$ ${money(data.totalVales)} · Acréscimos + R$ ${money(data.totalAdditions)}`,
+    `*Líquido R$ ${money(data.liquidFee)}* · ${settlementTitle}: R$ ${money(data.balance)}`,
+    'Confira os motivos de cada ajuste na imagem do comprovante. O resumo completo pode ser copiado no DFL.',
+  ].join('\n');
+  // Compartilhamento unificado: imagem discriminada e legenda curta; copia integral permanece independente.
   const image=async()=>{
     if(imageBusy)return;
     setImageBusy(true);
@@ -346,15 +355,23 @@ function Content(){
     // R233: altura sob demanda. A imagem não pode esconder as rotas ou
     // declarar inexistentes ajustes registrados no histórico.
     const settlementRouteRows=settlementRouteOrder(data.routeBreakdown);
-    const settlementImageRows=[
-      ...settlementRouteRows.map((item,index)=>({line:`${index+1}. ${item.label}: ${item.orderCount} pedidos · ${item.physicalDeliveryCount} paradas`,color:'#93c5fd'})),
-      ...displayAdjustments.map(item=>({line:`${item.direction==='addition'?'+':'−'} R$ ${money(item.amount)} · ${item.description?.trim()||adjustmentKindLabel(item)}`,color:item.direction==='addition'?'#6ee7b7':'#fda4af'})),
+    const visualAdjustments=settlementVisualLines(displayAdjustments);
+    // Os motivos vêm do snapshot autoritativo do acerto, não são recalculados.
+    // Cap de memória do canvas Android: mostrar até 72 linhas e indicar o excedente.
+    const settlementImageRows = [
+      // Prioridade do canvas: primeiro os motivos financeiros; rotas ficam depois.
+      {type:'header' as const,line:'ABATIMENTOS DISCRIMINADOS',color:'#fda4af',amount:`− R$ ${money(data.totalVales)}`},
+      ...visualAdjustments.deductions.map(item=>({type:'detail' as const,line:item.label,color:'#fda4af',amount:`− R$ ${money(item.amount)}`})),
+      {type:'header' as const,line:'ACRÉSCIMOS DISCRIMINADOS',color:'#6ee7b7',amount:`+ R$ ${money(data.totalAdditions)}`},
+      ...visualAdjustments.additions.map(item=>({type:'detail' as const,line:item.label,color:'#6ee7b7',amount:`+ R$ ${money(item.amount)}`})),
+      {type:'header' as const,line:`ROTAS · ${data.completedRoutes} CONCLUÍDAS`,color:'#93c5fd',amount:''},
+      ...settlementRouteRows.map((item,index)=>({type:'route' as const,line:`${index+1}. ${item.label}: ${item.orderCount} pedidos · ${item.physicalDeliveryCount} paradas`,color:'#cbd5e1',amount:''})),
     ];
-    if(!displayAdjustments.length && data.totalAdditions+data.totalVales>0)settlementImageRows.push({line:'Há ajustes registrados, mas os motivos não estão disponíveis.',color:'#fbbf24'});
-    if(!displayAdjustments.length && data.totalAdditions+data.totalVales===0)settlementImageRows.push({line:'Sem acréscimos ou abatimentos.',color:'#cbd5e1'});
-    const visibleImageRows=settlementImageRows.slice(0,16);
+    if(!displayAdjustments.length && data.totalAdditions+data.totalVales>0)settlementImageRows.push({type:'detail',line:'Motivos indisponíveis no registro anterior',color:'#fbbf24',amount:''});
+    if(!displayAdjustments.length && data.totalAdditions+data.totalVales===0)settlementImageRows.push({type:'detail',line:'Sem acréscimos ou abatimentos',color:'#cbd5e1',amount:''});
+    const visibleImageRows=settlementImageRows.slice(0,72);
     const imageExtraRows=settlementImageRows.length-visibleImageRows.length;
-    const settlementDetailHeight=Math.max(205,110+(visibleImageRows.length+(imageExtraRows>0?1:0))*35);
+    const settlementDetailHeight=Math.max(235,100+visibleImageRows.reduce((height,item)=>height+(item.type==='header'?61:53),0)+(imageExtraRows?55:0));
     const imageHeight=1340+settlementDetailHeight+84;
     const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=imageHeight;
     const ctx=canvas.getContext('2d');if(!ctx)return void toast.error('Não foi possível gerar a imagem.');
@@ -369,7 +386,7 @@ function Content(){
     label(fromKey(date).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}),65,283,'600 25px Arial','#94a3b8',860);
     round(48,321,984,157,27,'#10282b','#1c4141');
     const metric=(x:number,head:string,value:string)=>{label(head,x,369,'800 23px Arial','#94a3b8',280);label(value,x,427,'900 41px Arial','#f8fafc',280);};
-    metric(78,'PARADAS',String(data.physicalDeliveryCount));metric(393,'ROTAS',String(data.completedRoutes));metric(697,'DIÁRIA BRUTA',`R$ ${money(data.fee.amount)}`);
+    metric(78,'PEDIDOS',String(data.orderCount));metric(393,'PARADAS',String(data.physicalDeliveryCount));metric(697,'ROTAS',String(data.completedRoutes));
     round(48,505,984,355,30,'#171b20','#2c3339');
     label('COMPOSIÇÃO DA DIÁRIA',80,565,'900 28px Arial','#d4d4d8',900);
     const financeRow=(name:string,value:string,y:number,color='#f8fafc')=>{
@@ -392,20 +409,28 @@ function Content(){
     label(`R$ ${money(data.balance)}`,80,1238,'900 65px Arial','#ffffff',850);
     label(data.retainedCash>0?`Ainda com o motoboy: R$ ${money(data.retainedCash)}`:'Dinheiro da rota conferido no caixa',80,1290,'700 23px Arial','#e2e8f0',910);
 
-    // R186: fonte unica dos ajustes, sem recalculo de diaria ou duplicacao de vendas.
+    // R286: cada ajuste aparece em sua própria linha, com motivo e valor em colunas.
     round(48,1340,984,settlementDetailHeight,26,'#171b20','#2c3339');
-    label('ROTAS E AJUSTES DISCRIMINADOS',80,1390,'900 27px Arial','#f8fafc',915);
-    let detailY=1433;
+    label('CONFERÊNCIA DETALHADA · PEDIDOS ≠ PARADAS',80,1390,'900 25px Arial','#f8fafc',920);
+    let detailY=1454;
     visibleImageRows.forEach(item=>{
-      label(item.line,82,detailY,'600 21px Arial',item.color,900);
-      detailY+=35;
+      if(item.type==='header'){
+        ctx.fillStyle='#334155';ctx.fillRect(80,detailY-29,916,1);
+        label(item.line,82,detailY,'900 23px Arial',item.color,item.amount?620:906);
+        if(item.amount){ctx.font='900 24px Arial';ctx.fillStyle=item.color;ctx.textAlign='right';ctx.fillText(item.amount,995,detailY);ctx.textAlign='left';}
+        detailY+=61;
+        return;
+      }
+      label(item.line,85,detailY,'700 21px Arial',item.color,item.amount?615:900);
+      if(item.amount){ctx.font='800 23px Arial';ctx.fillStyle=item.color;ctx.textAlign='right';ctx.fillText(item.amount,994,detailY);ctx.textAlign='left';}
+      detailY+=53;
     });
-    if(imageExtraRows>0)label(`+ ${imageExtraRows} detalhes na mensagem textual`,82,detailY,'600 21px Arial','#fbbf24',900);
+    if(imageExtraRows>0)label(`+ ${imageExtraRows} linhas adicionais no resumo completo`,82,detailY,'700 20px Arial','#fbbf24',890);
 
     label('DFL ENTREGAS  •  RESUMO DE CONFERÊNCIA',60,imageHeight-32,'700 21px Arial','#7b919a',930);
     const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}.png`;
-    if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:summary(),files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem gerada. Escolha onde compartilhar.');return;}
-    const blob=await (await fetch(dataUrl)).blob();const file=new File([blob],filename,{type:'image/png'});if(navigator.share&&navigator.canShare?.({files:[file]})){await navigator.share({title:`Acerto · ${motoboy.name}`,text:summary(),files:[file]});return;}const link=document.createElement('a');link.download=filename;link.href=dataUrl;link.click();toast.info('Imagem baixada. Use Copiar resumo para enviar também o texto.');
+    if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:summaryCompact(),files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem gerada. Escolha onde compartilhar.');return;}
+    const blob=await (await fetch(dataUrl)).blob();const file=new File([blob],filename,{type:'image/png'});if(navigator.share&&navigator.canShare?.({files:[file]})){await navigator.share({title:`Acerto · ${motoboy.name}`,text:summaryCompact(),files:[file]});return;}const link=document.createElement('a');link.download=filename;link.href=dataUrl;link.click();toast.info('Imagem baixada. Use Copiar resumo para enviar também o texto.');
     }catch(error){if(error instanceof Error&&/cancel/i.test(error.message))return;console.error('[ACERTO] Falha ao gerar imagem:',error);toast.error('Não foi possível gerar ou compartilhar a imagem.');}finally{setImageBusy(false);}
   };
 
@@ -419,7 +444,12 @@ function Content(){
     {existing&&<div className="flex justify-end"><span className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-300"><ShieldCheck size={14}/>Fechado e protegido</span></div>}
     {existing&&<section className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.05] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-emerald-400">{typeof existing.settlement_gross_amount==='number'?'Acerto registrado':'Acerto registrado · legado'}</p><p className="mt-2 text-xl font-black text-emerald-300">R$ {money(existing.settlement_gross_amount ?? existing.amount)}</p><p className="mt-1 text-[10px] text-zinc-500">{typeof existing.settlement_gross_amount==='number'?'Custo operacional bruto do motoboy. O dinheiro recebido de clientes fica separado como liquidação de caixa.':'Valor originalmente registrado. Este acerto é anterior à separação entre custo bruto, abatimentos e caixa; o histórico não foi recalculado automaticamente.'}</p></section>}
 
-    <div className="grid grid-cols-2 gap-3"><Card icon={Package} label={data.orderCount===data.physicalDeliveryCount?"Entregas concluídas":`${data.orderCount} pedidos`} value={String(data.physicalDeliveryCount)} tone="sky"/><Card icon={Banknote} label="Recebido · antes do troco" value={`R$ ${money(data.cashTendered)}`} tone="amber"/></div>
+    <div className="grid grid-cols-2 gap-3" aria-label="Pedidos atendidos e paradas remuneradas">
+      <Card icon={Package} label="Pedidos atendidos" value={String(data.orderCount)} tone="sky"/>
+      <Card icon={Bike} label="Paradas físicas (diária)" value={String(data.physicalDeliveryCount)} tone="amber"/>
+    </div>
+    {data.groupedOrderCount>0 && <p className="-mt-2 rounded-xl border border-sky-500/15 bg-sky-500/[.04] px-3 py-2 text-[11px] leading-relaxed text-sky-200">{data.groupedOrderCount} pedido(s) compartilham parada. A remuneração usa {data.physicalDeliveryCount} paradas; pedidos e valores de venda continuam individuais.</p>}
+    <p className="-mt-1 px-1 text-[11px] text-zinc-500"><Banknote size={13} className="mr-1 inline text-emerald-400"/>Dinheiro recebido antes do troco: <strong className="text-zinc-200">R$ {money(data.cashTendered)}</strong></p>
 
     {(data.priorStoreCredit>0||data.priorMotoboyCredit>0)&&<section className="rounded-[22px] border border-amber-500/20 bg-amber-500/[.055] p-4"><p className="text-[9px] font-black uppercase tracking-[.15em] text-amber-400">Saldo trazido do acerto anterior</p><p className="mt-2 text-lg font-black text-amber-200">R$ {money(data.priorStoreCredit||data.priorMotoboyCredit)}</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{data.priorStoreCredit>0?`${motoboy.name} estava com este valor da loja. Ele será compensado automaticamente hoje.`:`A loja devia este valor a ${motoboy.name}. Ele será somado automaticamente ao acerto de hoje.`}</p></section>}
 

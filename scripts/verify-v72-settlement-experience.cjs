@@ -14,6 +14,6 @@ ok(page.includes("normalizeMoneyDraft(e.target.value)")&&page.includes('inputMod
 ok(page.includes("'all'|'none'|'partial'")&&page.includes("'separate'|'offset'|'manual'")&&page.includes('Quanto voltou fisicamente para a loja?'),'entrega integral parcial ou nenhuma');
 ok(analytics.includes('cashTendered')&&analytics.includes('cashChange')&&analytics.includes('cashHandedOverAmount'),'dinheiro recebido troco e caixa separados');
 ok(types.includes('settlement_cash_tendered?: number')&&types.includes('settlement_cash_change?: number'),'auditoria financeira persistida');
-ok(page.includes("text:summary()"),'compartilhamento inclui data e resumo descritivo');
+ok(page.includes("text:summaryCompact()") && page.includes('navigator.clipboard.writeText(summary())'),'imagem usa mensagem objetiva; cópia integral auditável mantida');
 ok(page.includes("financeRow('Acréscimos'")&&page.includes("'#34d399'")&&page.includes("financeRow('Abatimentos'")&&page.includes("'#fb7185'"),'imagem usa semântica verde e vermelha');
 console.log('V72 ACERTO INTELIGENTE: ZERO ERROS');

@@ -79,13 +79,16 @@ export function OperationalDemandCard() {
         <p className="flex items-center gap-1.5 text-[10px] text-zinc-400"><Users size={13} /> {signal.routeAssembly} rotas em montagem · {signal.routesOnStreet} na rua · {signal.pendingCommercial} aguardando confirmação comercial</p>
         <p className="flex items-center gap-1.5 text-[10px] text-zinc-400"><Clock3 size={13} /> Sincronização: {signal.freshness === 'fresh' ? 'recente' : signal.freshness} · amostra de {signal.sampledOrders} pedidos nas últimas 2h · confiança {signal.confidence}</p>
         {(signal.futureScheduled > 0 || signal.conflictingIdentities > 0 || signal.driverAssignmentUnknown > 0) && <p className="text-[10px] text-amber-300">{signal.futureScheduled} agendados futuros fora da fila · {signal.conflictingIdentities} identidades conflitantes · {signal.driverAssignmentUnknown} atribuições não confirmadas</p>}
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor="r246-override" className="text-[10px] font-bold text-zinc-400">Revisão manual (somente nesta tela)</label>
-          <select id="r246-override" value={override} onChange={event => setOverride(event.target.value as 'automatic' | 'review' | 'high')} className="h-10 min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200">
-            <option value="automatic">Automático</option>
-            <option value="review">Exigir revisão</option>
-            <option value="high">Marcar atenção alta</option>
-          </select>
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold text-zinc-400">Revisão manual · apenas nesta tela</p>
+          <div role="group" aria-label="Revisão manual da demanda" className="grid grid-cols-3 gap-1.5">
+            {([['automatic','Automático'],['review','Revisar'],['high','Atenção alta']] as const).map(([value,title]) => (
+              <button key={value} type="button" aria-pressed={override===value} onClick={() => setOverride(value)}
+                className={`min-h-11 rounded-xl border px-1.5 text-[10px] font-bold ${override===value ? 'border-amber-400/45 bg-amber-500/10 text-amber-200' : 'border-zinc-700 bg-zinc-950/60 text-zinc-400'}`}>
+                {title}
+              </button>
+            ))}
+          </div>
         </div>
         <p className="flex items-start gap-1.5 text-[10px] leading-relaxed text-zinc-500"><ShieldAlert size={13} className="mt-0.5 shrink-0" /> *Motoboy sem rota na rua não equivale a motoboy disponível. Este painel não confirma se o Site está aberto, não calcula ETA, não envia mensagens, não muda pedidos e não publica sinal de demanda.</p>
       </div>}

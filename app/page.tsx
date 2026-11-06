@@ -5,17 +5,15 @@ import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { useEffect, useMemo, useState } from 'react';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
 import { isSyntheticOperationalRoute } from '@/lib/operational-time';
-import { TrendingUp, Package, Eye, EyeOff, Filter, Users, Bike, ShoppingBag, Store, Clock3, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, Package, Eye, EyeOff, Filter, Users, Bike, ShoppingBag, Store, Clock3, CheckCircle2, Search, ChevronDown } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
 import { ClosedRoutesSection } from '@/components/home/ClosedRoutesSection';
 import type { Route } from '@/types';
 import { getFulfillmentMode, isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { firstValidTimestamp, saoPauloDateKey } from '@/lib/reports/time';
-import { OperationalRadar } from '@/components/home/OperationalRadar';
 import { OperationalAssistant } from '@/components/home/OperationalAssistant';
 import { OperationalDemandCard } from '@/components/home/OperationalDemandCard';
-import { ShiftBriefing } from '@/components/home/ShiftBriefing';
 import { OperationalCommandCenter } from '@/components/home/OperationalCommandCenter';
 import { OperationalDatePicker } from '@/components/home/OperationalDatePicker';
 import { deliveryEconomicValue, deriveDeliveryPaymentState } from '@/lib/delivery-finance';
@@ -54,7 +52,7 @@ export default function HomePage() {
   const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
 
   const [globalMotoboy, setGlobalMotoboy] = useState<string | null>(null);
-  const [legacyRadarOpen, setLegacyRadarOpen] = useState(false);
+  const [homeToolsOpen, setHomeToolsOpen] = useState(false);
   // R154_R2_ROUTE_FOCUS: compactacao voluntaria, nenhuma rota fica oculta sem acao explicita.
   const [compactOpenRoutes, setCompactOpenRoutes] = useState(false);
   // R90: balcão/retirada/99Food não montam dezenas de cards numa só pintura.
@@ -377,9 +375,20 @@ export default function HomePage() {
       />
 
       <OperationalCommandCenter routes={routesDoDia} deliveries={deliveriesDoDia} />
-      <OperationalAssistant dayDeliveries={deliveriesDoDia} dateKey={selectedDateKey} />
-      <OperationalDemandCard />
-      <ShiftBriefing />
+      <section aria-label="Ferramentas de consulta" className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-2">
+        <button type="button" aria-expanded={homeToolsOpen} aria-controls="dfl-home-tools"
+          onClick={() => setHomeToolsOpen(open => !open)}
+          className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-2.5 text-left text-xs font-black text-zinc-300 transition-colors active:bg-zinc-800/40">
+          <Search size={17} className="shrink-0 text-amber-400" />
+          <span className="min-w-0 flex-1">Busca 360 e leitura interna</span>
+          <span className="text-[10px] font-medium text-zinc-500">{homeToolsOpen ? 'Recolher' : 'Consultar'}</span>
+          <ChevronDown size={15} className={`shrink-0 transition-transform ${homeToolsOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {homeToolsOpen && <div id="dfl-home-tools" className="mt-2 space-y-3 border-t border-zinc-800/70 pt-3">
+          <OperationalAssistant dayDeliveries={deliveriesDoDia} dateKey={selectedDateKey} />
+          <OperationalDemandCard />
+        </div>}
+      </section>
 
       {hasOperationSummary ? (
       <section className="space-y-3">
@@ -399,8 +408,8 @@ export default function HomePage() {
             <p className="mt-2 font-heading text-xl font-black leading-none text-zinc-50">
               {totalEntregas}
             </p>
-            <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">
-              Entregas{pendingDeliveries > 0 ? ` · ${pendingDeliveries} pend.` : ''}
+            <p className="mt-1 truncate text-[9px] font-bold text-zinc-500">
+              Pedidos{pendingDeliveries > 0 ? ` · ${pendingDeliveries} pend.` : ''}
             </p>
           </a>
 
@@ -480,16 +489,6 @@ export default function HomePage() {
         </div>
       )}
 
-
-      {/* R234: o Radar legado é opcional. Não monta cálculo pesado ao fechar. */}
-      <section className="px-1">
-        <button type="button" aria-expanded={legacyRadarOpen} aria-controls="dfl-legacy-radar"
-          onClick={() => setLegacyRadarOpen(value => !value)}
-          className="min-h-9 text-[11px] font-semibold text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline">
-          {legacyRadarOpen ? 'Ocultar análises antigas' : 'Ver análises avançadas (Radar legado)'}
-        </button>
-        {legacyRadarOpen && <div id="dfl-legacy-radar" className="pt-2"><OperationalRadar /></div>}
-      </section>
 
       {storeOrdersDoDia.length > 0 && !globalMotoboy && (
         <section className="flex flex-col gap-3">

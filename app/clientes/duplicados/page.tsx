@@ -121,8 +121,18 @@ export default function CustomerDuplicatesPage() {
           return (
             <section
               key={key}
-              className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4"
+              className="rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-3"
             >
+              <details className="group">
+                <summary className="cursor-pointer list-none rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400" aria-label={`Comparar ${candidate.left.name} e ${candidate.right.name}`}>
+                  <div className="flex items-center gap-3 text-left">
+                    <GitMerge size={17} className="shrink-0 text-amber-400" />
+                    <span className="min-w-0 flex-1"><strong className="block truncate text-xs text-zinc-100">{candidate.left.name} · {candidate.right.name}</strong>
+                      <span className="mt-1 block text-[10px] text-zinc-500">{candidate.score}% de semelhança · Toque para comparar</span></span>
+                    <ChevronLeft size={16} className="shrink-0 -rotate-90 text-zinc-500 transition-transform group-open:rotate-90" />
+                  </div>
+                </summary>
+              <div className="mt-3 border-t border-zinc-800/70 pt-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-amber-400">
@@ -186,6 +196,8 @@ export default function CustomerDuplicatesPage() {
                   <ArrowRight size={12} />
                 </button>
               </div>
+              </div>
+              </details>
             </section>
           );
         })}
