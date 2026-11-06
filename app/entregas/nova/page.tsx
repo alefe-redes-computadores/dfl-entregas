@@ -124,8 +124,23 @@ export default function NovaEntregaPage() {
   const liveRecognition = useMemo(() => buildIfoodRecognitionSummary(liveParsedOrders), [liveParsedOrders]);
 
 
-    const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>('delivery');
+    // R285: a origem inicial e iFood; aplicar a preferencia ja na primeira renderizacao.
+    const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>(
+      () => defaultMarketplaceFulfillment(marketplaceModes, 'ifood'),
+    );
 const [routeId, setRouteId] = useState('');
+  // A configuracao pode chegar depois da primeira renderizacao (hydration Firestore).
+  // Nao reverter escolhas manuais e nem sobrescrever dados da Caixa / mesma parada.
+  const initialMarketplaceModeHydrated = useRef(false);
+  const marketplaceModeTouched = useRef(false);
+  useEffect(() => {
+    if (!hasHydrated || initialMarketplaceModeHydrated.current) return;
+    initialMarketplaceModeHydrated.current = true;
+    if (inboxDraftId || sameStopDeliveryId || marketplaceModeTouched.current || origin !== 'ifood') return;
+    const preferredMode = defaultMarketplaceFulfillment(marketplaceModes, 'ifood');
+    setFulfillmentMode(preferredMode);
+    if (preferredMode === 'external_delivery') setRouteId('');
+  }, [hasHydrated, marketplaceModes, inboxDraftId, sameStopDeliveryId, origin]);
   const routeSelectionTouched = useRef(false);
   const [isRouteDropdownOpen, setIsRouteDropdownOpen] = useState(false);
   const [orderId, setOrderId] = useState('');
@@ -721,10 +736,10 @@ const [routeId, setRouteId] = useState('');
         {isMarketplace && (
           <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label={`Quem entrega este pedido ${origin}`}>
             <button type="button" aria-pressed={fulfillmentMode==='delivery'}
-              onClick={()=>{setFulfillmentMode('delivery');setIsRouteDropdownOpen(false);setFormIssue(null)}}
+              onClick={()=>{marketplaceModeTouched.current=true;setFulfillmentMode('delivery');setIsRouteDropdownOpen(false);setFormIssue(null)}}
               className={`min-h-12 rounded-xl border px-2 text-[11px] font-black ${fulfillmentMode==='delivery'?'border-emerald-400/45 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}><Bike size={15} className="mx-auto mb-1"/>DFL entrega</button>
             <button type="button" aria-pressed={fulfillmentMode==='external_delivery'}
-              onClick={()=>{setFulfillmentMode('external_delivery');setRouteId('');setIsRouteDropdownOpen(false);setFormIssue(null)}}
+              onClick={()=>{marketplaceModeTouched.current=true;setFulfillmentMode('external_delivery');setRouteId('');setIsRouteDropdownOpen(false);setFormIssue(null)}}
               className={`min-h-12 rounded-xl border px-2 text-[11px] font-black ${fulfillmentMode==='external_delivery'?'border-violet-400/45 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}><ShoppingBag size={15} className="mx-auto mb-1"/>Parceira entrega</button>
           </div>
         )}
@@ -735,7 +750,7 @@ const [routeId, setRouteId] = useState('');
       <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/40 p-3"><div className="mb-3 px-1"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">02 · Origem</p><p className="mt-1 text-sm font-black text-zinc-200">De onde veio o pedido?</p></div><div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-zinc-800 bg-zinc-950/45 p-1 min-[400px]:grid-cols-4">
         <button
           type="button"
-          onClick={() => { setOrigin('ifood'); setFulfillmentMode(marketplaceModes?.ifood === 'platform' ? 'external_delivery' : 'delivery'); if (marketplaceModes?.ifood === 'platform') setRouteId(''); setFulfillmentOptionsOpen(false); }}
+          onClick={() => { marketplaceModeTouched.current = true; setOrigin('ifood'); setFulfillmentMode(marketplaceModes?.ifood === 'platform' ? 'external_delivery' : 'delivery'); if (marketplaceModes?.ifood === 'platform') setRouteId(''); setFulfillmentOptionsOpen(false); }}
           className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl px-1 text-[11px] min-[390px]:text-xs font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
           <Smartphone size={16} className="shrink-0" /> iFood
@@ -743,7 +758,7 @@ const [routeId, setRouteId] = useState('');
         <button
           type="button"
           onClick={() => {
-            setOrigin('food99');
+            marketplaceModeTouched.current = true; setOrigin('food99');
             setFulfillmentOptionsOpen(false);
             setFulfillmentMode(marketplaceModes?.food99 === 'dfl' ? 'delivery' : 'external_delivery');
             if (marketplaceModes?.food99 !== 'dfl') setRouteId('');
@@ -756,7 +771,7 @@ const [routeId, setRouteId] = useState('');
           <ShoppingBag size={16} className="shrink-0" /> 99Food
         </button>
         <button type="button" onClick={() => {
-            setOrigin('keeta'); setKeetaPaymentReviewed(false); setFulfillmentMode(defaultMarketplaceFulfillment(marketplaceModes,'keeta')); setFulfillmentOptionsOpen(false);
+            marketplaceModeTouched.current = true; setOrigin('keeta'); setKeetaPaymentReviewed(false); setFulfillmentMode(defaultMarketplaceFulfillment(marketplaceModes,'keeta')); setFulfillmentOptionsOpen(false);
             setRouteId(''); setOrderId(''); setIfoodId(''); setConfirmationCode('');
             setExtraIfoodOrders([]); setMagicText(''); setIsParserOpen(true); setHasIfoodSubsidy(false); setIfoodSubsidy('');
           }} className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl px-1 text-[11px] font-bold transition-all ${origin === 'keeta' ? 'bg-violet-500 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
@@ -765,7 +780,7 @@ const [routeId, setRouteId] = useState('');
         <button
           type="button"
           onClick={() => {
-            setOrigin('loja');
+            marketplaceModeTouched.current = true; setOrigin('loja');
             if (fulfillmentMode === 'external_delivery') setFulfillmentMode('delivery');
             setOrderId('');
             setIfoodId('');
