@@ -105,8 +105,10 @@ const sameExternalDelivery = (left: Delivery, right: Delivery) => {
   const rightIfood = (right.ifood_id || '').replace(/\D/g, '');
   if (leftIfood && rightIfood && leftIfood === rightIfood) return true;
   const left99 = left.origin === 'food99' ? (left.order_id || '').replace(/\D/g, '') : '';
+  const leftKeeta = left.origin === 'keeta' ? (left.order_id || '').trim().toUpperCase() : '';
   const right99 = right.origin === 'food99' ? (right.order_id || '').replace(/\D/g, '') : '';
-  if (!left99 || !right99 || left99 !== right99) return false;
+  const rightKeeta = right.origin === 'keeta' ? (right.order_id || '').trim().toUpperCase() : '';
+  if (!(left99 && right99 && left99 === right99) && !(leftKeeta && rightKeeta && leftKeeta === rightKeeta)) return false;
   const leftDate = deliveryDate(left);
   const rightDate = deliveryDate(right);
   return Boolean(leftDate && rightDate && dateKey(leftDate) === dateKey(rightDate));
@@ -1863,6 +1865,9 @@ export const useAppStore = create<AppState>()(
         if (delivery.origin === 'food99' && delivery.source_system !== 'dfl_site' && !canonicalId) {
           throw new Error('99Food precisa de numero comercial de seis digitos e data valida.');
         }
+        if (delivery.origin === 'keeta' && delivery.source_system !== 'dfl_site' && !canonicalId) {
+          throw new Error('Keeta precisa de numero comercial valido e data de criacao.');
+        }
         if (canonicalId) delivery = { ...delivery, id: canonicalId };
         const mutationKey = `delivery:add:${delivery.id}`;
         if (deliveryMutationLocks.has(mutationKey)) throw new Error('Este pedido ja esta sendo registrado. Aguarde a confirmacao.');
@@ -1945,6 +1950,9 @@ export const useAppStore = create<AppState>()(
           const canonical = deliveryImportDocumentId(item);
           if (item.origin === 'food99' && item.source_system !== 'dfl_site' && !canonical) {
             throw new Error('99Food exige ID comercial de seis digitos e data valida.');
+          }
+          if (item.origin === 'keeta' && item.source_system !== 'dfl_site' && !canonical) {
+            throw new Error('Keeta exige numero comercial valido e data de criacao.');
           }
           return canonical ? { ...item, id: canonical } : item;
         });

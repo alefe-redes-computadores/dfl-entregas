@@ -6,13 +6,13 @@ export function deliveryImportDocumentId(
   item: Pick<Delivery, 'origin' | 'source_system' | 'ifood_id' | 'order_id' | 'created_at' | 'createdAt'>,
 ): string | null {
   if (item.source_system === 'dfl_site') return null;
-  if (item.origin !== 'ifood' && item.origin !== 'food99') return null;
+  if (item.origin !== 'ifood' && item.origin !== 'food99' && item.origin !== 'keeta') return null;
   const ifoodId = String(item.ifood_id || '').replace(/\D/g, '');
   if (item.origin === 'ifood' && /^[0-9]{6,32}$/.test(ifoodId)) {
     return `dfl-import-v1-ifood-id-${ifoodId}`;
   }
   const order = String(item.order_id || '').trim().replace(/^#/, '');
-  if (item.origin === 'food99' ? !/^\d{6}$/.test(order) : !/^[a-zA-Z0-9]{1,32}$/.test(order)) return null;
+  if (item.origin === 'keeta' ? !/^[a-zA-Z0-9][a-zA-Z0-9-]{2,39}$/.test(order) : item.origin === 'food99' ? !/^\d{6}$/.test(order) : !/^[a-zA-Z0-9]{1,32}$/.test(order)) return null;
   const rawDate = item.created_at || item.createdAt;
   if (!rawDate) return null;
   const stamp = new Date(rawDate);

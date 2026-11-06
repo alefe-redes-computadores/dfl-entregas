@@ -162,6 +162,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const visualChannels = {
     ifood: { label: 'IFOOD', icon: UtensilsCrossed, rail: 'bg-red-500', shell: 'border-red-500/30 bg-red-500/10 text-red-400', badge: 'border-red-500/30 bg-red-500/[.10] text-red-300' },
     food99: { label: '99FOOD', icon: Bike, rail: 'bg-amber-400', shell: 'border-amber-400/30 bg-amber-400/10 text-amber-300', badge: 'border-amber-400/30 bg-amber-400/[.10] text-amber-200' },
+    keeta: { label: 'KEETA', icon: Bike, rail: 'bg-violet-400', shell: 'border-violet-400/30 bg-violet-400/10 text-violet-300', badge: 'border-violet-400/30 bg-violet-400/[.10] text-violet-200' },
     site: { label: 'SITE', icon: Globe2, rail: 'bg-sky-400', shell: 'border-sky-400/30 bg-sky-400/10 text-sky-300', badge: 'border-sky-400/30 bg-sky-400/[.10] text-sky-200' },
     store: { label: 'LOJA', icon: Store, rail: 'bg-emerald-400', shell: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300', badge: 'border-emerald-400/30 bg-emerald-400/[.10] text-emerald-200' },
     mixed: { label: 'MISTO', icon: Layers3, rail: 'bg-violet-400', shell: 'border-violet-400/30 bg-violet-400/10 text-violet-300', badge: 'border-violet-400/30 bg-violet-400/[.10] text-violet-200' },

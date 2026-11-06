@@ -2,7 +2,7 @@ import type { Delivery } from '@/types';
 import type { ParsedIfoodOrder } from '@/lib/ifood-order-parser';
 import { assessIfoodParseQuality } from '@/lib/ifood-parser-quality';
 
-export type DeliveryInboxSource = 'ifood' | 'food99' | 'whatsapp' | 'texto';
+export type DeliveryInboxSource = 'ifood' | 'food99' | 'keeta' | 'whatsapp' | 'texto';
 export type DeliveryInboxStatus =
   | 'review'
   | 'ready'
@@ -74,6 +74,7 @@ export function inferInboxSource(
   raw: string,
   parsed: ParsedIfoodOrder,
 ): DeliveryInboxSource {
+  if (/^(?:\s*keeta\b|\s*(?:canal|origem|plataforma)\s*[:\-]\s*keeta\b)/im.test(raw)) return 'keeta';
   if (/\b(?:99\s*food|food\s*99)\b/i.test(raw)) return 'food99';
   // Identificador comercial sem marca nao identifica a plataforma: pode ser WhatsApp.
   if (parsed.ifoodId || /\bifood\b/i.test(raw)) return 'ifood';
@@ -96,6 +97,7 @@ export function inboxSeedText(
 ) {
   const lines = [
     parsed.orderId && `Pedido: ${parsed.orderId}`,
+    parsed.drinks.length > 0 && `Bebidas: ${parsed.drinks.join(', ')}`,
     parsed.ifoodId && `ID iFood: ${parsed.ifoodId}`,
     parsed.confirmationCode &&
       `Código de confirmação: ${parsed.confirmationCode}`,
@@ -129,13 +131,15 @@ function confidenceFor(parsed: ParsedIfoodOrder) {
 
 function missingFieldsFor(source: DeliveryInboxSource, parsed: ParsedIfoodOrder) {
   const fields: string[] = [];
-  if (source === 'food99' && !/^\d{6}$/.test(parsed.orderId.trim())) fields.push('pedido 99Food (6 digitos)');
+  if (source === 'keeta' && !/^[a-z0-9][a-z0-9-]{2,39}$/i.test(parsed.orderId.trim())) fields.push('número do pedido Keeta');
+  else if (source === 'food99' && !/^\d{6}$/.test(parsed.orderId.trim())) fields.push('pedido 99Food (6 digitos)');
   else if (!parsed.orderId) fields.push('pedido');
   if (source === 'ifood' && !parsed.ifoodId) fields.push('ID iFood');
   if (!parsed.customerName) fields.push('cliente');
+  if (source === 'keeta' && !parsed.customerCharge) fields.push('valor Keeta');
   // A entrega pela 99 não precisa de endereço para uma rota DFL, mas o
   // endereço copiado continua sendo preservado quando existir.
-  if (source !== 'food99' && !parsed.address && !parsed.mapsLink) fields.push('endereço');
+  if (source !== 'food99' && source !== 'keeta' && !parsed.address && !parsed.mapsLink) fields.push('endereço');
   return fields;
 }
 
@@ -145,13 +149,13 @@ export function findInboxDuplicate(
   source: DeliveryInboxSource = parsed.ifoodId ? 'ifood' : 'texto',
 ) {
   const ifoodId = parsed.ifoodId.replace(/\D/g, '');
-  const orderId = parsed.orderId.replace(/\D/g, '');
+  const orderId = source === 'keeta' ? parsed.orderId.trim().toUpperCase() : parsed.orderId.replace(/\D/g, '');
   const name = normalizeInboxText(parsed.customerName);
   const address = normalizeInboxText(parsed.address);
 
   for (const delivery of deliveries) {
     const existingIfood = (delivery.ifood_id || '').replace(/\D/g, '');
-    const existingOrder = (delivery.order_id || '').replace(/\D/g, '');
+    const existingOrder = source === 'keeta' ? (delivery.order_id || '').trim().toUpperCase() : (delivery.order_id || '').replace(/\D/g, '');
 
     if (ifoodId && existingIfood === ifoodId) {
       return {
@@ -163,7 +167,7 @@ export function findInboxDuplicate(
     if (
       orderId &&
       existingOrder === orderId &&
-      (source === 'ifood' || source === 'food99') &&
+      (source === 'ifood' || source === 'food99' || source === 'keeta') &&
       delivery.origin === source
     ) {
       const incomingDay = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -273,8 +277,9 @@ export function createInboxDraft(
   dayKey: string,
   deliveries: Delivery[],
   index: number,
+  selectedSource?: DeliveryInboxSource,
 ): DeliveryInboxDraft {
-  const source = inferInboxSource(raw, parsed);
+  const source = selectedSource || inferInboxSource(raw, parsed);
   const duplicate = findInboxDuplicate(parsed, deliveries, source);
   const missingFields = missingFieldsFor(source, parsed);
   const now = new Date().toISOString();
@@ -293,7 +298,7 @@ export function createInboxDraft(
         : 'ready',
     rawText: inboxSeedText(parsed, raw),
     parsed,
-    confidence: confidenceFor(parsed),
+    confidence: source === 'keeta' ? (missingFields.length ? 65 : 96) : confidenceFor(parsed),
     missingFields,
     duplicateDeliveryId: duplicate?.id,
     duplicateReason: duplicate?.reason,

@@ -436,12 +436,14 @@ function DeliveryDetailsContent() {
                   ? 'bg-red-500/15 text-red-400'
                   : channel === 'food99'
                     ? 'bg-amber-400/15 text-amber-300'
+                  : channel === 'keeta'
+                    ? 'bg-violet-400/15 text-violet-300'
                   : channel === 'site'
                     ? 'bg-sky-500/15 text-sky-400'
                   : 'bg-emerald-500/15 text-emerald-400'
               }`}
             >
-              {channel === 'ifood' ? <Smartphone /> : channel === 'food99' ? <ShoppingBag /> : channel === 'site' ? <Globe2 /> : <Store />}
+              {channel === 'ifood' ? <Smartphone /> : channel === 'food99' ? <ShoppingBag /> : channel === 'keeta' ? <ShoppingBag /> : channel === 'site' ? <Globe2 /> : <Store />}
             </div>
 
             <div className="min-w-0">

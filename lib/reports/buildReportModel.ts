@@ -56,6 +56,7 @@ function normalizeOrigin(delivery: Delivery): ReportDelivery['originLabel'] {
   const raw = (delivery as Delivery & { origin?: string }).origin;
   if (raw === 'ifood') return 'iFood';
   if (raw === 'food99') return '99Food';
+  if (raw === 'keeta') return 'Keeta';
   if (raw === 'loja') return 'Loja';
   return 'Origem não registrada';
 }
@@ -76,6 +77,7 @@ function normalizeLogisticsProvider(delivery: Delivery): string {
   const mode = delivery.fulfillment_mode || 'delivery';
   if (mode === 'external_delivery') {
     if (delivery.logistics_provider === 'food99' || delivery.origin === 'food99') return '99Food';
+    if (delivery.logistics_provider === 'keeta' || delivery.origin === 'keeta') return 'Keeta';
     if (delivery.logistics_provider === 'ifood') return 'iFood';
     return 'Plataforma externa';
   }

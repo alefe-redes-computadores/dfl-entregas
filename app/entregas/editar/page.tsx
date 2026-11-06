@@ -22,6 +22,7 @@ import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidenc
 import { extractCoordinatesFromUrl } from '@/lib/maps';
 import { normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
+import { isKeetaCommercialId } from '@/lib/keeta-order';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { getFulfillmentMode } from '@/lib/delivery-mode';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
@@ -602,6 +603,10 @@ const [routeId, setRouteId] = useState('');
       showFormIssue('order', 'O pedido 99Food precisa ter seis dígitos.');
       return;
     }
+    if (origin === 'keeta' && (!isKeetaCommercialId(orderId) || fulfillmentMode !== 'external_delivery')) {
+      showFormIssue('order', 'Confira o número Keeta e mantenha entrega pela plataforma.');
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -649,9 +654,9 @@ const [routeId, setRouteId] = useState('');
       await updateDelivery(deliveryId, {
         route_id: fulfillmentMode === 'delivery' ? routeId : '',
         fulfillment_mode: fulfillmentMode,
-        logistics_provider: origin === 'food99' ? 'food99' : 'dfl',
+        logistics_provider: origin === 'keeta' ? 'keeta' : origin === 'food99' ? 'food99' : 'dfl',
         origin,
-        order_id: origin === 'ifood' || origin === 'food99' ? (orderId || undefined) : undefined,
+        order_id: origin === 'ifood' || origin === 'food99' || origin === 'keeta' ? (orderId || undefined) : undefined,
         ifood_id: origin === 'ifood' ? (ifoodId || undefined) : undefined,
         confirmation_code: origin === 'ifood' ? (confirmationCode || undefined) : undefined,
         // Nunca apaga um vínculo existente só porque o nome não foi resolvido.
@@ -789,6 +794,7 @@ const [routeId, setRouteId] = useState('');
           <p className="mt-1 text-sm font-black text-zinc-200">Como este pedido será atendido?</p>
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">Entrega usa rota e endereço; retirada e balcão permanecem fora da logística.</p>
         </div>
+        {origin === 'keeta' && <p className="mb-3 rounded-xl border border-violet-500/25 bg-violet-500/[.06] p-3 text-xs font-bold text-violet-200">Keeta · entrega por parceiro. Não há rota ou acerto DFL.</p>}
         <div className="grid grid-cols-3 gap-2">
           {([
             ['delivery', 'Entrega', Bike],
@@ -798,6 +804,7 @@ const [routeId, setRouteId] = useState('');
             <button
               key={mode}
               type="button"
+              disabled={origin === 'keeta'}
               onClick={() => {
                 setFulfillmentMode(mode);
                 setIsRouteDropdownOpen(false);
@@ -1065,6 +1072,13 @@ const [routeId, setRouteId] = useState('');
             </div>
           </div></section>
         )}
+        {origin === 'keeta' && (
+          <section id="dfl-delivery-order" className="rounded-[24px] border border-violet-400/25 bg-violet-500/[.06] p-4">
+            <p className="text-[10px] font-black uppercase tracking-wider text-violet-300">04 · Pedido Keeta</p>
+            <p className="mt-1 mb-3 text-[11px] text-zinc-400">Número original do pedido. Entrega parceira, sem rota DFL.</p>
+            <input type="text" maxLength={40} value={orderId} onChange={event=>setOrderId(event.target.value.replace(/[^a-zA-Z0-9-]/g,'').slice(0,40))} placeholder="Número comercial Keeta" className="h-12 w-full rounded-xl border border-violet-400/40 bg-zinc-950/60 px-3 font-mono font-bold text-zinc-100" />
+          </section>
+        )}
         {origin === 'food99' && (
           <section id="dfl-delivery-order" className="rounded-[24px] border border-amber-400/25 bg-amber-400/[.055] p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-300">04 · Pedido 99Food</p>
@@ -1158,7 +1172,7 @@ const [routeId, setRouteId] = useState('');
               className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
             />
           </div>
-          <LocationEvidencePreview address={streetAddress} mapsLink={mapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':'Loja'}/>
+          <LocationEvidencePreview address={streetAddress} mapsLink={mapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':origin==='keeta'?'Keeta':'Loja'}/>
           <NavigationLinkAssistance address={streetAddress} mapsLink={mapsLink} />
         </section>
 

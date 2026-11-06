@@ -5,10 +5,10 @@ export type DeliveryPaymentState =
   | 'collect_on_delivery'
   | 'pending';
 export type RouteStatus = 'aberta' | 'fechada';
-export type OrderOrigin = 'ifood' | 'food99' | 'loja';
+export type OrderOrigin = 'ifood' | 'food99' | 'keeta' | 'loja';
 export type IntegrationSourceSystem = 'dfl_site' | 'dfl_entregas';
 export type FulfillmentMode = 'delivery' | 'external_delivery' | 'pickup' | 'counter';
-export type LogisticsProvider = 'dfl' | 'ifood' | 'food99' | 'customer';
+export type LogisticsProvider = 'dfl' | 'ifood' | 'food99' | 'keeta' | 'customer';
 export type PaymentRuleType = 'fixed' | 'per_delivery' | 'fixed_plus_variable';
 export type MotoboyType = 'fixo' | 'avulso';
 export type FuelType = 'gasolina_comum' | 'gasolina_aditivada' | 'etanol' | 'diesel' | 'outro';

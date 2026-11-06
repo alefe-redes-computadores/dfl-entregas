@@ -9,6 +9,7 @@ const currency = (value: number) => new Intl.NumberFormat('pt-BR', { style:'curr
 const channels = {
   ifood: { name:'iFood', color:'bg-red-500', text:'text-red-300' },
   food99: { name:'99Food', color:'bg-amber-400', text:'text-amber-300' },
+  keeta: { name:'Keeta', color:'bg-violet-500', text:'text-violet-300' },
   loja: { name:'Loja', color:'bg-emerald-500', text:'text-emerald-300' },
 } as const;
 

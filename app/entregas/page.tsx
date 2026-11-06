@@ -36,7 +36,7 @@ import type { FulfillmentMode } from '@/types';
 import { OPERATION_BATCH, OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 
 type StatusFilter = 'todas' | 'pendentes' | 'concluidas' | 'incompletas' | 'canceladas';
-type OriginFilter = 'todas' | 'ifood' | 'food99' | 'loja';
+type OriginFilter = 'todas' | 'ifood' | 'food99' | 'keeta' | 'loja';
 type FulfillmentFilter = 'todas' | FulfillmentMode;
 
 const normalize = (value: unknown) =>
@@ -447,9 +447,9 @@ export default function DeliveriesPage() {
             <p className="mb-2 mt-3 text-[8px] font-black uppercase tracking-wider text-zinc-600">
               Origem
             </p>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-5 gap-1.5">
               {(
-                ['todas', 'ifood', 'food99', 'loja'] as OriginFilter[]
+                ['todas', 'ifood', 'food99', 'keeta', 'loja'] as OriginFilter[]
               ).map((value) => (
                 <button
                   key={value}
@@ -468,6 +468,8 @@ export default function DeliveriesPage() {
                       ? 'iFood'
                       : value === 'food99'
                         ? '99Food'
+                      : value === 'keeta'
+                        ? 'Keeta'
                       : 'Loja'}
                 </button>
               ))}
@@ -504,10 +506,12 @@ export default function DeliveriesPage() {
                       ? 'bg-red-500/10 text-red-400'
                       : delivery.origin === 'food99'
                         ? 'bg-amber-400/10 text-amber-300'
+                      : delivery.origin === 'keeta'
+                        ? 'bg-violet-400/10 text-violet-300'
                       : 'bg-emerald-500/10 text-emerald-400'
                   }`}
                 >
-                  {delivery.origin === 'ifood' ? <Smartphone size={19} /> : delivery.origin === 'food99' ? <ShoppingBag size={19} /> : <Store size={19} />}
+                  {delivery.origin === 'ifood' ? <Smartphone size={19} /> : delivery.origin === 'food99' || delivery.origin === 'keeta' ? <ShoppingBag size={19} /> : <Store size={19} />}
                 </div>
 
                 <div className="min-w-0 flex-1">

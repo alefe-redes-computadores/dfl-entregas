@@ -74,6 +74,8 @@ const parseDrinkItems = (raw?: string): ParsedDrinkItem[] => {
 
 const getOriginLabel = (delivery: Delivery): string => {
   if (delivery.origin === 'ifood') return 'iFood';
+  if (delivery.origin === 'keeta') return 'Keeta';
+  if (delivery.origin === 'food99') return '99Food';
   if (delivery.origin === 'loja') return 'Loja própria';
   return 'Origem não registrada';
 };

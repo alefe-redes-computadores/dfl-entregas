@@ -28,6 +28,7 @@ import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidenc
 import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrdersText } from '@/lib/ifood-order-parser';
 import { normalizeFood99Order } from '@/lib/food99-order';
+import { parseKeetaOrdersText, isKeetaCommercialId } from '@/lib/keeta-order';
 import { assessIfoodParseQuality, buildIfoodParseGuide, buildIfoodRecognitionSummary } from '@/lib/ifood-parser-quality';
 import { loadInboxDay, markInboxDraft } from '@/lib/delivery-inbox';
 import { deliverySearchMapLink } from '@/lib/operation/delivery-create-fastlane';
@@ -96,18 +97,21 @@ export default function NovaEntregaPage() {
   );
 
   const [origin, setOrigin] = useState<OrderOrigin>('ifood');
+  const [keetaPaymentReviewed,setKeetaPaymentReviewed] = useState(false);
   const isFood99 = origin === 'food99';
+  const isKeeta = origin === 'keeta';
   const [magicText, setMagicText] = useState('');
   const deferredMagicText = useDeferredValue(magicText);
   const [isParserOpen, setIsParserOpen] = useState(true);  const inboxParsedRef = useRef<ReturnType<typeof parseIfoodOrdersText>[number] | null>(null);
   const liveParsedOrders = useMemo(() => {
     if (deferredMagicText.trim().length < 2) return [];
+    if (isKeeta) return parseKeetaOrdersText(deferredMagicText);
     const base = parseIfoodOrdersText(deferredMagicText, {
       knownNeighborhoods,
       knownCustomerNames: customers.map((customer) => customer.name),
     });
     return isFood99 ? base.map(item => normalizeFood99Order(deferredMagicText, item)) : base;
-  }, [customers, knownNeighborhoods, deferredMagicText, isFood99]);
+  }, [customers, knownNeighborhoods, deferredMagicText, isFood99, isKeeta]);
   const liveParseQuality = useMemo(
     () => assessIfoodParseQuality(liveParsedOrders),
     [liveParsedOrders],
@@ -169,7 +173,7 @@ const [routeId, setRouteId] = useState('');
   const [extraIfoodOrders, setExtraIfoodOrders] = useState<ExtraIfoodOrderDraft[]>([]);
   const [activeDraftId, setActiveDraftId] = useState('primary');
   const activeExtra = origin === 'ifood' ? extraIfoodOrders.find((draft) => draft.id === activeDraftId) : undefined;
-  const isMarketplace = origin === 'ifood' || origin === 'food99';
+  const isMarketplace = origin === 'ifood' || origin === 'food99' || origin === 'keeta';
   const updateActiveExtra = (patch: Partial<ExtraIfoodOrderDraft>) =>
     setExtraIfoodOrders((current) => current.map((draft) => draft.id === activeDraftId ? {...draft, ...patch} : draft));
   const activeOrderId = activeExtra?.orderId ?? orderId;
@@ -249,10 +253,13 @@ const [routeId, setRouteId] = useState('');
     setIsParserOpen(false);
     inboxParsedRef.current = null;
     const parsed = draft.parsed;
-    const draftOrigin: OrderOrigin = draft.source === 'ifood' ? 'ifood' : draft.source === 'food99' ? 'food99' : 'loja';
+    const draftOrigin: OrderOrigin = draft.source === 'ifood' ? 'ifood' : draft.source === 'food99' ? 'food99' : draft.source === 'keeta' ? 'keeta' : 'loja';
     setOrigin(draftOrigin);
-    setFulfillmentMode(draftOrigin === 'food99' ? (marketplaceModes?.food99 === 'dfl' ? 'delivery' : 'external_delivery')
+    setKeetaPaymentReviewed(false);
+    setFulfillmentMode(draftOrigin === 'keeta' ? 'external_delivery'
+      : draftOrigin === 'food99' ? (marketplaceModes?.food99 === 'dfl' ? 'delivery' : 'external_delivery')
       : draftOrigin === 'ifood' && marketplaceModes?.ifood === 'platform' ? 'external_delivery' : 'delivery');
+    if (draftOrigin === 'keeta') setRouteId('');
     setOrderId(parsed.orderId || '');
     setIfoodId(draftOrigin === 'ifood' ? (parsed.ifoodId || '') : '');
     setConfirmationCode(draftOrigin === 'ifood' ? (parsed.confirmationCode || '') : '');
@@ -366,17 +373,18 @@ const [routeId, setRouteId] = useState('');
     setActiveDraftId('primary');
     if (!magicText.trim()) { toast.error('Cole o texto do pedido antes de processar.'); return; }
     if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
-    const parsedOrdersBase = inboxParsedRef.current
+    const parsedOrdersBase = isKeeta ? [] : inboxParsedRef.current
       ? [inboxParsedRef.current]
       : parseIfoodOrdersText(magicText,{
       knownNeighborhoods,
       knownCustomerNames:customers.map(customer=>customer.name),
     });
-    const parsedOrders = isFood99 ? parsedOrdersBase.map((item)=>normalizeFood99Order(magicText,item)) : parsedOrdersBase;
+    const parsedOrders = isKeeta ? parseKeetaOrdersText(magicText) : isFood99 ? parsedOrdersBase.map((item)=>normalizeFood99Order(magicText,item)) : parsedOrdersBase;
     inboxParsedRef.current = null; const parsed=parsedOrders[0]; const identified:string[]=[];
+    if (!parsed) {toast.error('Keeta: cole um pedido por vez. Revise números e valores no texto.');return}
     if(parsed.orderId){setOrderId(parsed.orderId);identified.push(`Nº #${parsed.orderId}`)}
-    if(!isFood99 && parsed.ifoodId){setIfoodId(parsed.ifoodId);identified.push(`ID ${parsed.ifoodId}`)}
-    if(!isFood99 && parsed.confirmationCode){setConfirmationCode(parsed.confirmationCode);identified.push(`Cód. ${parsed.confirmationCode}`)}
+    if(!isFood99 && !isKeeta && parsed.ifoodId){setIfoodId(parsed.ifoodId);identified.push(`ID ${parsed.ifoodId}`)}
+    if(!isFood99 && !isKeeta && parsed.confirmationCode){setConfirmationCode(parsed.confirmationCode);identified.push(`Cód. ${parsed.confirmationCode}`)}
     if(parsed.customerName){
       setCustomerName(parsed.customerName);
       const normalizedParsedName=parsed.customerName.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g,' ').trim();
@@ -397,6 +405,8 @@ const [routeId, setRouteId] = useState('');
     if(parsed.address){setStreetAddress(parsed.address);identified.push('Endereço')}
     if(parsed.mapsLink){setMapsLink(parsed.mapsLink);identified.push('Link Maps')}
     if(parsed.paymentMethod){setPaymentMethod(parsed.paymentMethod);setIsPaid(parsed.isPaid);if(parsed.paymentMethod!=='dinheiro'||parsed.isPaid)setChangeFor('');identified.push(parsed.isPaid?'Pago no app':'Pagamento')}
+    else if (isKeeta) setIsPaid(parsed.isPaid);
+    if (isKeeta) setKeetaPaymentReviewed(false);
     const charge=parsed.customerCharge||parsed.value;
     if(charge){setValue(formatCurrencyInput(charge.replace(/\D/g,'')));identified.push(`Cobrança R$ ${charge}`)}
     if(parsed.subsidy){setHasIfoodSubsidy(true);setIfoodSubsidy(formatCurrencyInput(parsed.subsidy.replace(/\D/g,'')));identified.push(`Cupom R$ ${parsed.subsidy}`)}else{setHasIfoodSubsidy(false);setIfoodSubsidy('')}
@@ -407,7 +417,9 @@ const [routeId, setRouteId] = useState('');
     if(parsedOrders.length>1){setExtraIfoodOrders(parsedOrders.slice(1).map((item,index)=>({id:`extra-${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,orderId:item.orderId,ifoodId:item.ifoodId,confirmationCode:item.confirmationCode,customerName:item.customerName||parsed.customerName,customerCharge:item.customerCharge||item.value||'',subsidy:item.subsidy,paymentMethod:item.paymentMethod||'dinheiro',isPaid:item.isPaid,changeFor:item.changeFor?formatCurrencyInput(item.changeFor.replace(/\D/g,'')):'',address:item.address||parsed.address,phone:item.phone||'',mapsLink:item.mapsLink||'',drinks:item.drinks.join(', '),observation:item.observations.join(' - '),notifyWhatsapp:false})));identified.push(`${parsedOrders.length} pedidos reconhecidos`)}else setExtraIfoodOrders([]);
     if(!identified.length){toast.error('Nenhum dado reconhecido no texto.');return}
     if(Capacitor.isNativePlatform())void Haptics.impact({style:ImpactStyle.Heavy}).catch(()=>undefined);
-    const parseQuality=isFood99
+    const parseQuality=isKeeta
+      ? (()=>{const issues=parsedOrders.map((item,index)=>({index,fields:[!isKeetaCommercialId(item.orderId)?'número Keeta':'',!item.customerName?'cliente':'',!item.customerCharge?'valor do pedido':''].filter(Boolean)})).filter(item=>item.fields.length>0);return {complete:parsedOrders.length-issues.length,review:issues.length,issues};})()
+      : isFood99
       ? (()=>{const issues=parsedOrders.map((item,index)=>({index,fields:[!/^\d{6}$/.test(item.orderId)?'pedido 99Food':'',!item.customerName?'cliente':''].filter(Boolean)})).filter(item=>item.fields.length>0);return {complete:parsedOrders.length-issues.length,review:issues.length,issues};})()
       : assessIfoodParseQuality(parsedOrders);
     const qualitySummary=parseQuality.review>0
@@ -536,6 +548,9 @@ const [routeId, setRouteId] = useState('');
       if (!review.valid) { showFormIssue('value', review.errors[0] || 'Revise a divisao do pagamento.'); return; }
     }
     if(origin==='food99'&&!/^\d{6}$/.test(orderId)){showFormIssue('order', 'Informe o número de 6 dígitos do pedido 99Food.');return}
+    if(origin==='keeta'&&!isKeetaCommercialId(orderId)){showFormIssue('order','Informe o número comercial do pedido Keeta (3 a 40 caracteres).');return}
+    if(origin==='keeta'&&fulfillmentMode!=='external_delivery'){showFormIssue('route','Pedidos Keeta com entrega parceira não entram na rota DFL.');return}
+    if(origin==='keeta'&&!keetaPaymentReviewed){toast.warning('Keeta: confirme o valor e a forma de pagamento antes de salvar.');return}
     if(fulfillmentMode==='delivery'&&!openRoutes.some(route=>route.id===routeId)){showFormIssue('route','Selecione uma rota aberta da operação de hoje.');return}
     const drafts=origin==='ifood'?[{id:'primary',orderId,ifoodId,confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:'',paymentMethod,isPaid,changeFor,address:streetAddress,phone,mapsLink,drinks,observation,notifyWhatsapp},...extraIfoodOrders]:[];
     if (origin === 'ifood') {
@@ -620,7 +635,7 @@ const [routeId, setRouteId] = useState('');
       }else{
         const customerAddress=fulfillmentMode==='delivery'?cleanStreet:streetAddress.trim();
         let customerId='';if(customerName.trim()){const r228r3CustomerAt=Date.now();try {customerId=await findOrCreateCustomer(customerName,{address:customerAddress||undefined,phone:rawPhone||undefined,mapsLink:mapsLink.trim()||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'confirmed');}catch(customerError){recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'failed');throw customerError;}}
-        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='food99'?'food99':'dfl',stop_group_id:stopGroupId,origin,order_id:origin==='food99'?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery',observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}toast.success(origin==='food99'?'Pedido 99Food cadastrado sem criar rota DFL.':stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='keeta'?'keeta':origin==='food99'?'food99':'dfl',stop_group_id:stopGroupId,origin,order_id:(origin==='food99'||origin==='keeta')?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery',observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}toast.success(origin==='keeta'?'Pedido Keeta cadastrado sem criar rota DFL.':origin==='food99'?'Pedido 99Food cadastrado sem criar rota DFL.':stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
         // MSG-M1: o pedido foi confirmado antes de chamar a ponte. Nunca desfazer a venda por falha de WhatsApp.
         if (origin === 'loja' && notifyWhatsapp && fulfillmentMode === 'delivery') {
           // Never delay the confirmed order while waiting on WhatsApp.
@@ -699,14 +714,14 @@ const [routeId, setRouteId] = useState('');
       {/* MODALIDADE OPERACIONAL — compacta */}
       <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/40 p-3">
         <div className="flex items-center justify-between gap-3">
-          <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">01 · Modalidade</p><p className="mt-1 text-sm font-black text-zinc-200">{fulfillmentMode==='delivery'?'Entrega':fulfillmentMode==='external_delivery'?'Entrega pela plataforma':fulfillmentMode==='pickup'?'Retirada na loja':'Balcão / presencial'}</p>{isFood99&&<p className="mt-1 text-[10px] text-amber-300">{fulfillmentMode === 'external_delivery' ? 'A plataforma entrega: sem rota e sem acerto de motoboy.' : 'Entrega DFL: endereço e rota serão necessários.'}</p>}</div>
-          {!isFood99&&<button type="button" onClick={()=>setFulfillmentOptionsOpen(v=>!v)} className="flex h-10 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-[11px] font-black text-zinc-400">Alterar <ChevronDown size={14} className={fulfillmentOptionsOpen?'rotate-180':''}/></button>}
+          <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">01 · Modalidade</p><p className="mt-1 text-sm font-black text-zinc-200">{fulfillmentMode==='delivery'?'Entrega':fulfillmentMode==='external_delivery'?'Entrega pela plataforma':fulfillmentMode==='pickup'?'Retirada na loja':'Balcão / presencial'}</p>{(isFood99||isKeeta)&&<p className="mt-1 text-[10px] text-amber-300">{fulfillmentMode === 'external_delivery' ? 'A plataforma entrega: sem rota e sem acerto de motoboy.' : 'Entrega DFL: endereço e rota serão necessários.'}</p>}</div>
+          {!isFood99&&!isKeeta&&<button type="button" onClick={()=>setFulfillmentOptionsOpen(v=>!v)} className="flex h-10 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-[11px] font-black text-zinc-400">Alterar <ChevronDown size={14} className={fulfillmentOptionsOpen?'rotate-180':''}/></button>}
         </div>
         {fulfillmentOptionsOpen&&(<div className="mt-3 grid grid-cols-3 gap-2">{([['delivery','Entrega',Bike],['pickup','Retirada',ShoppingBag],['counter','Balcão',Store]] as const).map(([mode,label,Icon])=><button key={mode} type="button" onClick={()=>{setFulfillmentMode(mode);setFulfillmentOptionsOpen(false);setIsRouteDropdownOpen(false)}} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl border px-2 text-[10px] font-black ${fulfillmentMode===mode?'border-amber-500/45 bg-amber-500/10 text-amber-400':'border-zinc-800 bg-zinc-950/30 text-zinc-500'}`}><Icon size={16}/>{label}</button>)}</div>)}
       </section>
 
       {/* SELETOR DE ORIGEM COMERCIAL */}
-      <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/40 p-3"><div className="mb-3 px-1"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">02 · Origem</p><p className="mt-1 text-sm font-black text-zinc-200">De onde veio o pedido?</p></div><div className="flex gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/45 p-1">
+      <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/40 p-3"><div className="mb-3 px-1"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">02 · Origem</p><p className="mt-1 text-sm font-black text-zinc-200">De onde veio o pedido?</p></div><div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-zinc-800 bg-zinc-950/45 p-1 min-[400px]:grid-cols-4">
         <button
           type="button"
           onClick={() => { setOrigin('ifood'); setFulfillmentMode(marketplaceModes?.ifood === 'platform' ? 'external_delivery' : 'delivery'); }}
@@ -718,6 +733,7 @@ const [routeId, setRouteId] = useState('');
           type="button"
           onClick={() => {
             setOrigin('food99');
+            setFulfillmentOptionsOpen(false);
             setFulfillmentMode(marketplaceModes?.food99 === 'dfl' ? 'delivery' : 'external_delivery');
             if (marketplaceModes?.food99 !== 'dfl') setRouteId('');
             setIfoodId('');
@@ -727,6 +743,13 @@ const [routeId, setRouteId] = useState('');
           className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl px-1 text-[11px] min-[390px]:text-xs font-bold transition-all ${origin === 'food99' ? 'bg-amber-400 text-zinc-950 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
           <ShoppingBag size={16} className="shrink-0" /> 99Food
+        </button>
+        <button type="button" onClick={() => {
+            setOrigin('keeta'); setKeetaPaymentReviewed(false); setFulfillmentMode('external_delivery'); setFulfillmentOptionsOpen(false);
+            setRouteId(''); setOrderId(''); setIfoodId(''); setConfirmationCode('');
+            setExtraIfoodOrders([]); setMagicText(''); setIsParserOpen(true); setHasIfoodSubsidy(false); setIfoodSubsidy('');
+          }} className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl px-1 text-[11px] font-bold transition-all ${origin === 'keeta' ? 'bg-violet-500 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <ShoppingBag size={16} className="shrink-0" /> Keeta
         </button>
         <button
           type="button"
@@ -751,7 +774,7 @@ const [routeId, setRouteId] = useState('');
           onClick={() => setIsParserOpen(true)}
           className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/5 text-xs font-bold text-red-400 active:scale-[0.98]"
         >
-          <Sparkles size={15} /> Colar outro pedido do {isFood99 ? '99Food' : 'iFood'}
+          <Sparkles size={15} /> Colar outro pedido do {isKeeta ? 'Keeta' : isFood99 ? '99Food' : 'iFood'}
         </button>
       )}
 
@@ -759,7 +782,7 @@ const [routeId, setRouteId] = useState('');
         <div className={`flex flex-col gap-3 rounded-[24px] border p-3.5 animate-in fade-in ${isFood99 ? 'border-amber-400/25 bg-gradient-to-b from-amber-400/[.08] to-zinc-900/40' : 'border-red-500/20 bg-gradient-to-b from-red-500/10 to-zinc-900/40'}`}>
           <div className="flex items-center justify-between">
             <span className={`flex items-center gap-1.5 text-xs font-bold ${isFood99 ? 'text-amber-300' : 'text-red-400'}`}>
-              <Sparkles size={14} className="text-amber-400" /> Leitor inteligente do {isFood99 ? '99Food' : 'iFood'}
+              <Sparkles size={14} className="text-amber-400" /> Leitor inteligente do {isKeeta ? 'Keeta' : isFood99 ? '99Food' : 'iFood'}
             </span>
             <button
               type="button"
@@ -786,7 +809,16 @@ const [routeId, setRouteId] = useState('');
               </div>
             </div>
           )}
-          {!isFood99 && magicText.trim().length > 0 && (
+          {isKeeta && magicText.trim().length > 0 && (
+            <section aria-label="Prévia do pedido Keeta" role="status" className="rounded-2xl border border-violet-400/25 bg-violet-500/[.06] p-3">
+              <p className="text-[10px] font-black uppercase tracking-wider text-violet-200">Keeta · conferir dados reconhecidos</p>
+              <p className="mt-1 text-[10px] text-zinc-400">Entrega por parceiro. Nº, cliente, valor e bebidas precisam ser revisados antes de salvar.</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {([['Pedido',liveParsedOrders[0]?.orderId||'Revisar'],['Cliente',liveParsedOrders[0]?.customerName||'Revisar'],['Valor',liveParsedOrders[0]?.customerCharge||'Revisar'],['Bebidas',liveParsedOrders[0]?.drinks.join(', ')||'Conferir']] as const).map(([label,info])=><div key={label} className="min-w-0 rounded-xl border border-zinc-800 bg-zinc-950/45 p-2"><b className="block text-[10px] text-violet-200">{label}</b><p className="mt-1 break-words text-[11px] text-zinc-200">{info}</p></div>)}
+              </div>
+            </section>
+          )}
+          {!isFood99 && !isKeeta && magicText.trim().length > 0 && (
             <div ref={parserGuideRef} aria-busy={parserUpdating} className="dfl-parser-guide sticky top-[calc(var(--dfl-safe-top)+8px)] z-20 rounded-2xl border border-zinc-700/80 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur-xl">
               <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[.14em] text-zinc-400">Guia de preenchimento</p><span className="text-[9px] font-bold text-zinc-600">fica visível com o teclado</span></div>
               <div className="mt-2 flex items-center justify-between gap-2">
@@ -821,13 +853,13 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/55 px-3 py-2 font-mono text-[10px] leading-relaxed text-zinc-500">{isFood99 ? 'Exemplo 99Food: 123456 · Cliente Maria · Pago no app · R$ 42,00' : 'Modelo iFood: #1234 12345678 · Cliente · Rua, número, bairro · Pago/Pix/Dinheiro'}</div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/55 px-3 py-2 font-mono text-[10px] leading-relaxed text-zinc-500">{isKeeta ? 'Exemplo Keeta: Pedido: K-12345 · Cliente: Maria · Total: R$ 42,00 · Bebidas: Kuat' : isFood99 ? 'Exemplo 99Food: 123456 · Cliente Maria · Pago no app · R$ 42,00' : 'Modelo iFood: #1234 12345678 · Cliente · Rua, número, bairro · Pago/Pix/Dinheiro'}</div>
 
           <textarea
-            aria-label={isFood99 ? 'Texto do pedido 99Food' : 'Texto do pedido iFood'}
+            aria-label={isKeeta ? 'Texto do pedido Keeta' : isFood99 ? 'Texto do pedido 99Food' : 'Texto do pedido iFood'}
             ref={parserInputRef}
             rows={3}
-            placeholder={isFood99 ? 'Cole aqui o pedido 99Food...' : 'Cole aqui o texto do iFood...'}
+            placeholder={isKeeta ? 'Cole o pedido Keeta para revisar os campos...' : isFood99 ? 'Cole aqui o pedido 99Food...' : 'Cole aqui o texto do iFood...'}
             value={magicText}
             onChange={(e) => setMagicText(e.target.value)}
             onFocus={()=>window.setTimeout(()=>parserInputRef.current?.scrollIntoView({behavior:'smooth',block:'center'}),180)}
@@ -840,7 +872,7 @@ const [routeId, setRouteId] = useState('');
             className={`min-h-11 w-full rounded-xl font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all ${isFood99 ? 'bg-amber-400 text-zinc-950 shadow-lg shadow-amber-500/10' : 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20'}`}
           >
             <Sparkles size={15} />
-            {isFood99 ? 'Preencher pedido 99Food' : liveParseQuality.review > 0 && liveRecognition.items.length > 0
+            {isKeeta ? 'Preencher e revisar pedido Keeta' : isFood99 ? 'Preencher pedido 99Food' : liveParseQuality.review > 0 && liveRecognition.items.length > 0
               ? 'Preencher e revisar o que falta'
               : 'Revisar e preencher pedido'}
           </button>
@@ -1012,6 +1044,20 @@ const [routeId, setRouteId] = useState('');
           </section>
         )}
 
+        {origin === 'keeta' && (
+          <section id="dfl-delivery-order" className="rounded-[24px] border border-violet-400/25 bg-violet-500/[.06] p-4 animate-in fade-in">
+            <p className="text-[10px] font-black uppercase tracking-widest text-violet-300">04 · Identificador Keeta</p>
+            <p className="mt-1 text-[11px] text-zinc-400">Número comercial da Keeta, sem ID nem código de confirmação iFood.</p>
+            <label className="mt-3 flex flex-col gap-1.5 text-[11px] font-bold text-zinc-200">Número do pedido*
+              <input type="text" inputMode="text" autoCapitalize="characters" maxLength={40} value={orderId} onChange={event=>setOrderId(event.target.value.replace(/[^a-zA-Z0-9-]/g,'').slice(0,40))} placeholder="Ex.: K-12345" className="h-12 w-full rounded-xl border border-violet-400/40 bg-zinc-950/60 px-3 font-mono text-sm font-black text-zinc-100 outline-none focus:border-violet-400" required />
+            </label>
+            <p className="mt-3 text-[10px] leading-relaxed text-violet-200">Entrega parceira por padrão · sem seleção de rota DFL. Confirme o valor e as bebidas no pedido original.</p>
+            <label className="mt-3 flex items-start gap-2 rounded-xl border border-violet-400/25 bg-zinc-950/50 p-3 text-[11px] leading-relaxed text-zinc-200">
+              <input type="checkbox" checked={keetaPaymentReviewed} onChange={event=>setKeetaPaymentReviewed(event.target.checked)} className="mt-0.5 accent-violet-500" />
+              Conferi o valor total, a forma de pagamento e se o pedido está pago na Keeta. Esses dados não são presumidos pelo leitor.
+            </label>
+          </section>
+        )}
         {origin === 'food99' && (
           <section id="dfl-delivery-order" className="rounded-[24px] border border-amber-400/25 bg-amber-400/[.055] p-4 animate-in fade-in">
             <div className="mb-3"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-300">04 · Identificador 99Food</p><p className="mt-1 text-[11px] text-zinc-500">Somente o número comercial de seis dígitos. Não existe código iFood.</p></div>
@@ -1152,7 +1198,7 @@ const [routeId, setRouteId] = useState('');
               className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
             />
           </div>
-          <LocationEvidencePreview address={activeAddress} mapsLink={activeMapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':'Loja'}/>
+          <LocationEvidencePreview address={activeAddress} mapsLink={activeMapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':origin==='keeta'?'Keeta':'Loja'}/>
           <NavigationLinkAssistance address={activeAddress} mapsLink={activeMapsLink} />
         </section>
 

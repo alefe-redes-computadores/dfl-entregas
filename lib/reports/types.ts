@@ -9,7 +9,7 @@ export type ReportDelivery = Delivery & {
   route: Route | null;
   customer: Customer | null;
   neighborhood: string | null;
-  originLabel: 'iFood' | '99Food' | 'Loja' | 'Origem não registrada';
+  originLabel: 'iFood' | '99Food' | 'Keeta' | 'Loja' | 'Origem não registrada';
   paymentLabel: string;
 };
 

@@ -34,6 +34,7 @@ import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { useAppStore } from "@/store/useAppStore";
 import { parseIfoodOrdersText } from "@/lib/ifood-order-parser";
 import { isFood99Text, normalizeFood99Order } from '@/lib/food99-order';
+import { isKeetaText, parseKeetaOrdersText } from '@/lib/keeta-order';
 import { knownOperationalNeighborhoods } from "@/lib/address-quality";
 import { dateKey } from "@/lib/operational-time";
 import {
@@ -51,6 +52,7 @@ import {
 const sourceMeta = {
   ifood: { label: "iFood", icon: ShoppingBag },
   food99: { label: "99Food", icon: ShoppingBag },
+  keeta: { label: "Keeta", icon: ShoppingBag },
   whatsapp: { label: "WhatsApp", icon: MessageCircle },
   texto: { label: "Texto", icon: FileText },
 };
@@ -69,6 +71,7 @@ export default function DeliveryInboxPage() {
   const today = dateKey(new Date());
 
   const [text, setText] = useState("");
+  const [importSource,setImportSource] = useState<'auto'|'ifood'|'food99'|'keeta'>('auto');
   const [drafts, setDrafts] = useState<DeliveryInboxDraft[]>([]);
   const [processing, setProcessing] = useState(false);
   const importLock = useRef(false);
@@ -152,16 +155,18 @@ export default function DeliveryInboxPage() {
         void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
       }
 
-      const parsedBase = parseIfoodOrdersText(raw, {
-        knownNeighborhoods: neighborhoods,
-        knownCustomerNames,
-      });
-      const parsed = isFood99Text(raw)
+      const chosenSource = importSource === 'auto'
+        ? (isKeetaText(raw) ? 'keeta' : isFood99Text(raw) ? 'food99' : 'ifood')
+        : importSource;
+      const parsedBase = chosenSource === 'keeta'
+        ? parseKeetaOrdersText(raw)
+        : parseIfoodOrdersText(raw, { knownNeighborhoods: neighborhoods, knownCustomerNames });
+      const parsed = chosenSource === 'food99'
         ? parsedBase.map((order) => normalizeFood99Order(raw, order))
         : parsedBase;
 
       if (!parsed.length) {
-        toast.error("Não consegui separar nenhum pedido.", {
+        toast.error(chosenSource === 'keeta' ? "Keeta: cole um pedido por vez e confira o número." : "Não consegui separar nenhum pedido.", {
           description:
             "O texto continua aqui para você ajustar sem perder nada.",
         });
@@ -175,6 +180,7 @@ export default function DeliveryInboxPage() {
           today,
           deliveries,
           index,
+          importSource === 'auto' ? undefined : importSource,
         ),
       );
 
@@ -365,6 +371,13 @@ export default function DeliveryInboxPage() {
           <button type="button" onClick={()=>setChannel('manual')} aria-pressed={channel==='manual'} className={`min-h-12 rounded-xl border text-xs font-black ${channel==='manual'?'border-violet-500/40 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}>Importar</button>
         </nav>
 
+        {channel === 'manual' && <section aria-label="Plataforma de origem do texto" className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-2.5">
+          <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-wider text-zinc-400">Origem do pedido copiado</p>
+          <div className="grid grid-cols-4 gap-1.5">
+            {([['auto','Auto'],['ifood','iFood'],['food99','99Food'],['keeta','Keeta']] as const).map(([key,label])=><button key={key} type="button" aria-pressed={importSource===key} onClick={()=>setImportSource(key)} className={`min-h-11 rounded-xl border px-1 text-[10px] font-black ${importSource===key?'border-violet-400/50 bg-violet-500/15 text-violet-100':'border-zinc-800 bg-zinc-950/40 text-zinc-400'}`}>{label}</button>)}
+          </div>
+          <p className="mt-2 px-1 text-[10px] leading-relaxed text-zinc-500">Keeta: retirada pelo parceiro, sem rota DFL. Informe o canal manualmente se o texto não citar a plataforma. Revise valor, cliente e bebidas antes de lançar.</p>
+        </section>}
         <ContextualAssistantCard scope="caixa de entrada" signals={inboxContextSignals({siteReady:siteBacklog.ready,siteReview:siteBacklog.review,siteCommercial:siteBacklog.commercial,manualReview:attentionCounts.review,manualDuplicates:attentionCounts.duplicates,manualReady:attentionCounts.ready})}
           onAction={target=>{if(target==='site'){setChannel('site');}else if(target==='manual-review'){setChannel('manual');setView('revisar');}else if(target==='manual-ready'){setChannel('manual');setView('prontos');}}} />
 
@@ -589,7 +602,7 @@ function DraftCard({
 
           <p className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">
             {draft.parsed.address ||
-              (draft.source === 'food99' ? 'Entrega pela plataforma · endereço não obrigatório' : 'Endereço ainda não identificado')}
+              (draft.source === 'food99' || draft.source === 'keeta' ? 'Entrega pela plataforma · endereço não obrigatório' : 'Endereço ainda não identificado')}
           </p>
 
           {(draft.parsed.orderId ||

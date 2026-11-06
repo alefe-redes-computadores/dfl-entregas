@@ -20,7 +20,14 @@ ok(types.includes("logistics_provider?: LogisticsProvider"), 'responsável logí
 ok(mode.includes("external_delivery") && !mode.includes("getFulfillmentMode(delivery) !== 'pickup'"), 'entrega da plataforma não é rota DFL');
 ok(parser.includes('orderId: labelled') && parser.includes("ifoodId: ''") && parser.includes("confirmationCode: ''"), 'pedido de seis dígitos não herda ID ou código iFood');
 ok(inbox.includes("return 'food99'") && inbox.includes("source !== 'food99'"), 'Caixa reconhece 99Food sem exigir endereço de rota');
-ok(inboxPage.includes('normalizeFood99Order') && inboxPage.includes('99Food / Texto'), 'Caixa normaliza o texto antes de criar rascunhos');
+ok(
+  inboxPage.includes("chosenSource === 'food99'") &&
+  inboxPage.includes("importSource === 'auto'") &&
+  inboxPage.includes('parsedBase.map((order) => normalizeFood99Order(raw, order))') &&
+  inboxPage.includes("['food99','99Food']") &&
+  inboxPage.includes('createInboxDraft(') &&
+  inboxPage.indexOf('normalizeFood99Order(raw, order)') < inboxPage.indexOf('createInboxDraft('),
+  'Caixa reconhece 99Food, normaliza antes do rascunho e preserva seleção da origem');
 ok(create.includes("marketplaceModes?.food99 === 'dfl'") && create.includes("'external_delivery'") && create.includes("logistics_provider:fulfillmentMode==='delivery'?'dfl'"), 'cadastro não cria rota ou motoboy para entrega 99');
 ok(create.includes("!/^\\d{6}$/.test(orderId)") && edit.includes("!/^\\d{6}$/.test(orderId)"), 'criação e edição validam os seis dígitos');
 ok(report.includes('totalDeliveries: dflLogisticsCurrent.length') && report.includes("if (raw === 'food99') return '99Food'"), 'receita/origem preservadas sem inflar entregas DFL');

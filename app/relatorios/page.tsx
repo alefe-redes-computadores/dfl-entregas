@@ -429,14 +429,14 @@ export default function RelatoriosPage() {
               }
             />
 
-            <p className="px-1 text-[11px] leading-relaxed text-zinc-500">99Food entregue pela plataforma entra nas vendas, não na produtividade dos motoboys DFL.</p>
-            <OriginChart data={model.origins.filter(bucket => ['iFood','99Food','Loja'].includes(bucket.label)).map(bucket => ({
-              origin: bucket.label === '99Food' ? 'food99' : bucket.label === 'iFood' ? 'ifood' : 'loja',
+            <p className="px-1 text-[11px] leading-relaxed text-zinc-500">99Food entregue pela plataforma entra nas vendas, não na produtividade dos motoboys DFL. A Keeta com entrega parceira segue a mesma regra.</p>
+            <OriginChart data={model.origins.filter(bucket => ['iFood','99Food','Keeta','Loja'].includes(bucket.label)).map(bucket => ({
+              origin: bucket.label === '99Food' ? 'food99' : bucket.label === 'Keeta' ? 'keeta' : bucket.label === 'iFood' ? 'ifood' : 'loja',
               count: bucket.count, total: bucket.revenue,
             }))}/>
             <ReportChartCard
               title="Responsável pela entrega"
-              description="Separa quem realizou a entrega: DFL ou plataforma. A venda 99Food continua na origem comercial mesmo sem rota DFL."
+              description="Separa quem realizou a entrega: DFL ou plataforma. Vendas Keeta e 99Food permanecem na origem comercial mesmo sem rota DFL."
               icon={<Bike size={18} />}
               data={model.logisticsProviders}
               dataKey="count"
