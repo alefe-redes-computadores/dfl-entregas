@@ -1,13 +1,13 @@
 /**
  * DFL ENTREGAS R242 — fail-closed boundary for Site order schemas and per-unit combo fields.
- * The currently deployed Site event is orderSchemaVersion <= 2. A future order
- * schema or unit-level fields MUST NOT be flattened into the legacy commercial
- * snapshot (which only supports item-level additions/observations).
+ * O Site publica orderSchemaVersion 3 com itens ainda compatíveis com a estrutura
+ * flat. Aceitar V3 NÃO habilita personalização por unidade: campos unit-level
+ * continuam bloqueados, sem achatamento/perda da escolha do cliente.
  *
  * This guard does not create orders, mutate data, or advertise a new capability.
  */
 export const SITE_COMBO_UNIT_PRODUCTION_SUPPORTED = false as const;
-export const SITE_LEGACY_ORDER_SCHEMA_MAX = 2 as const;
+export const SITE_LEGACY_ORDER_SCHEMA_MAX = 3 as const;
 
 const record = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);

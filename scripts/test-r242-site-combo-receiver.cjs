@@ -24,7 +24,7 @@ function loadTs(file,allowed={}){
 const guard=loadTs('lib/integration/site-combo-unit-guard.ts');
 const preview=loadTs('lib/integration/site-combo-unit-preview.ts');
 eq(guard.SITE_COMBO_UNIT_PRODUCTION_SUPPORTED,false,'production still OFF');
-eq(guard.SITE_LEGACY_ORDER_SCHEMA_MAX,2,'legacy order max v2');
+eq(guard.SITE_LEGACY_ORDER_SCHEMA_MAX,3,'site v3 flat-compatible, sem personalização unitária');
 eq(preview.SITE_COMBO_UNIT_PREVIEW_ENABLED,false,'preview feature OFF');
 eq(preview.SITE_COMBO_UNIT_PREVIEW_CONTRACT,'dfl_site_combo_units_preview_v1','matches R241 producer');
 eq(preview.SITE_COMBO_UNIT_PREVIEW_CAPABILITY,'dfl_site_combo_unit_lines_v1','capability name consistent');
@@ -101,7 +101,9 @@ const legacy={orderSchemaVersion:2,itens:[{id:'combo-7-uai',quantity:1,unitPrice
   selectedAddons:[{id:'bacon',name:'Bacon',price:3.75}],components:[{id:'uai',quantity:7}]}]};
 eq(guard.legacySiteOrderCanPreserveContent(legacy),true,'existing v2 accepted');
 eq(guard.legacySiteOrderCanPreserveContent({...legacy,orderSchemaVersion:1}),true,'existing v1 accepted');
-eq(guard.legacySiteOrderCanPreserveContent({...legacy,orderSchemaVersion:3}),false,'unrecognized future orderSchemaVersion v3 blocked');
+eq(guard.legacySiteOrderCanPreserveContent({...legacy,orderSchemaVersion:3}),true,'Site v3 flat passa pela guarda sem perda');
+eq(guard.legacySiteOrderCanPreserveContent({...legacy,orderSchemaVersion:4}),false,'future v4 permanece bloqueada');
+eq(guard.legacySiteOrderCanPreserveContent({...legacy,orderSchemaVersion:3,itens:[{id:'combo',unitSelections:[{unit:'c1:1'}]}]}),false,'V3 per-unit real bloqueada');
 eq(guard.legacySiteOrderCanPreserveContent({...legacy,orderSchemaVersion:2.5}),false,'fractional schema blocked');
 eq(guard.legacySiteOrderCanPreserveContent({...legacy,orderSchemaVersion:0}),false,'zero schema blocked');
 eq(guard.legacySiteOrderCanPreserveContent({...legacy,comboUnitReceiverDraft:fixture}),false,'top-level combo draft blocked');
@@ -124,12 +126,16 @@ const payload={orderId:'mock-r242',sourceSystem:'dfl_site',orderSchemaVersion:2,
  tipoEntrega:'pickup',deliverySnapshot:null,itens:legacy.itens,subtotal:69.99,taxaEntrega:0,desconto:0,cupom:null,
  rewardId:null,total:69.99,metodoPagamento:'pix',trocoPara:null,status:'Pendente',isAgendamento:false,statusUpdatedAt:null};
 eq(site.isDflSiteOrderPayloadV1(payload),true,'live validator accepts current Site v2 order');
-eq(site.isDflSiteOrderPayloadV1({...payload,orderSchemaVersion:3}),false,'live validator rejects not-yet-supported v3');
+eq(site.isDflSiteOrderPayloadV1({...payload,orderSchemaVersion:3}),true,'receptor aceita order.created v3 flat real');
+eq(site.isDflSiteOrderPayloadV1({...payload,orderSchemaVersion:4}),false,'receptor rejeita v4 futuro');
+eq(site.isDflSiteOrderPayloadV1({...payload,orderSchemaVersion:3,itens:[{id:'uai',unitCustomization:{}}]}),false,'receptor rejeita V3 com escolhas por unidade');
 eq(site.isDflSiteOrderPayloadV1({...payload,itens:[{...legacy.itens[0],unitCustomization:fixture}]}),false,'live validator rejects experimental unit content');
 const event={schema_version:1,event_type:'order.created',source_system:'dfl_site',entity_type:'order',entity_id:payload.orderId,payload};
 site.assertDflSiteOrderCreatedEvent(event);count++;
-no(()=>site.assertDflSiteOrderCreatedEvent({...event,payload:{...payload,orderSchemaVersion:3}}),/Payload DFL Site Order V1 inválido/,'created event v3 rejected before persistence');
+site.assertDflSiteOrderCreatedEvent({...event,payload:{...payload,orderSchemaVersion:3}});count++;
+no(()=>site.assertDflSiteOrderCreatedEvent({...event,payload:{...payload,orderSchemaVersion:4}}),/Payload DFL Site Order V1 inválido/,'created event v4 rejected before persistence');
 site.assertDflSiteOrderUpdatedEvent({...event,event_type:'order.updated'});count++;
+site.assertDflSiteOrderUpdatedEvent({...event,event_type:'order.updated',payload:{...payload,orderSchemaVersion:3}});count++;
 no(()=>site.assertDflSiteOrderUpdatedEvent({...event,event_type:'order.updated',payload:{...payload,comboUnitPlan:fixture}}),/Payload DFL Site Order V1 inválido/,'updated event with unit draft rejected');
 eq(site.commercialSnapshotFromSite(payload).schema_version,1,'legacy commercial projection stays schema v1');
 const inbox=read('lib/integration/server/siteOrderPersistence.ts');
