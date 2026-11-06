@@ -86,7 +86,7 @@ ok(page.includes('useMemo'),'no N cards listeners');
 ok(page.includes('slice(0,80)'),'bounded local selection');
 ok(page.includes('getIdToken'),'authenticated remote');
 ok(page.includes('Capacitor.isNativePlatform()'),'native API');
-ok(page.includes('window.confirm('),'manual mutation confirmation');
+ok(page.includes('StaffConfirmDialog')&&page.includes('pendingAction')&&!page.includes('window.confirm('),'owner premium confirmation without native prompt');
 ok(page.includes("value.gate.mode==='DRY_RUN'")===false,'gate checked in component');
 ok(!page.includes('NEXT_PUBLIC_DFL_TRACKING_S2S_KEYS'),'no secret in browser');
 const card=read('components/tracking/OwnerTrackingInspection.tsx');

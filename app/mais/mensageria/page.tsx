@@ -94,7 +94,7 @@ export default function MensageriaDiagnosticPage() {
         <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3.5"><Clock3 size={16} className="mb-2 text-amber-300"/><strong className="block text-2xl font-black tabular-nums">{data?pending:'—'}</strong><p className="mt-1 text-[10px] text-zinc-400">Em andamento</p></div>
         <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3.5"><AlertTriangle size={16} className="mb-2 text-rose-300"/><strong className="block text-2xl font-black tabular-nums">{data?failures:'—'}</strong><p className="mt-1 text-[10px] text-zinc-400">Falhas da ponte</p></div>
         <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3.5"><Truck size={16} className="mb-2 text-emerald-300"/><strong className="block text-sm font-black">{data?(reverseReady?'Conectada':'Verificar'):'—'}</strong><p className="mt-1 text-[10px] text-zinc-400">Logística → Site</p></div>
-        <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3.5"><ShieldCheck size={16} className="mb-2 text-sky-300"/><strong className="block text-sm font-black">{data?(data.gates.manualEnabled?'Em revisão':'OFF'):'—'}</strong><p className="mt-1 text-[10px] text-zinc-400">Avisos manuais</p></div>
+        <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3.5"><ShieldCheck size={16} className="mb-2 text-sky-300"/><strong className="block text-sm font-black">{data?(data.gates.manualEnabled?'Habilitado':'OFF'):'—'}</strong><p className="mt-1 text-[10px] text-zinc-400">Avisos manuais</p></div>
       </section>
 
       <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/50 p-4">
@@ -102,7 +102,7 @@ export default function MensageriaDiagnosticPage() {
         <div className="mt-3 rounded-xl bg-zinc-950/70 p-3 text-[11px] leading-relaxed text-zinc-400">
           {data ? failures>0 ? `Há ${failures} evento(s) com falha na outbox logística. Veja os motivos abaixo antes de reprocessar.` : pending>0 ? `Há ${pending} evento(s) aguardando ou em processamento na ponte.` : 'Nenhuma pendência detectada nas categorias monitoradas da ponte.' : 'Toque em “Consultar panorama” para carregar informações reais do servidor.'}
         </div>
-        <p className="mt-2 text-[10px] text-zinc-500">Esta tela não confirma entrega no WhatsApp. O status na ponte não é o status do provedor.</p>
+        <p className="mt-2 text-[10px] text-zinc-500">Piloto de mensagens e links privados de acompanhamento são funções diferentes. Aceite na fila não confirma recebimento pelo WhatsApp.</p>
       </section>
 
       {data && <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/50 p-4">

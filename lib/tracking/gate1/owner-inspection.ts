@@ -39,6 +39,6 @@ export async function inspectConfirmedOwnerDelivery(deliveryId: string): Promise
   }
   return inspectReadiness({delivery:snap.data,route:snap.route,canonicalKey:key,accepted,tenantValid:true,
     events,projection,codeEnabled:trackingCodeEnabled(),customerCertified:trackingCustomerEnabled(),
-    capability:company?{mode:company.mode,kill_switch:company.kill_switch,public_tracking:company.public_tracking,
+    capability:company?{mode:company.mode,kill_switch:company.kill_switch,public_tracking:company.public_tracking,issue_tracking_link:company.issue_tracking_link,
       origin_eligible:company.eligible_origins.includes(origin)}:null});
 }

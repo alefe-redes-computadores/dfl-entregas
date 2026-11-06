@@ -14,7 +14,7 @@ export type TrackingInspection = {
     fulfillment: 'delivery' | 'pickup' | 'counter' | 'external_delivery';
   };
   readiness: { level: ReadinessLevel; signals: ReadinessSignal[]; source: 'confirmed_server_snapshot'; last_confirmed_at: string | null };
-  gate: { code_enabled: boolean; customer_access_certified: boolean; mode: string; kill_switch: boolean; public_tracking: boolean; origin_eligible: boolean; site_connected: false; real_notifications: false };
+  gate: { code_enabled: boolean; customer_access_certified: boolean; mode: string; kill_switch: boolean; public_tracking: boolean; issue_tracking_link: boolean; origin_eligible: boolean; site_connected: false; real_notifications: false };
   public_projection: PublicProjection | null;
   events: Array<{id: string; kind: string; at: string; source: string}>;
 };
@@ -36,7 +36,7 @@ export function inspectReadiness(input: {
   delivery: Raw; route: Raw | null; canonicalKey: string; accepted: boolean;
   tenantValid: boolean; events: TrackingEvent[]; projection: PublicProjection | null;
   codeEnabled: boolean; customerCertified: boolean; capability: {
-    mode: string; kill_switch: boolean; public_tracking: boolean; origin_eligible: boolean;
+    mode: string; kill_switch: boolean; public_tracking: boolean; issue_tracking_link?: boolean; origin_eligible: boolean;
   } | null;
 }): TrackingInspection {
   const { delivery:d, route, events, projection } = input;
@@ -55,7 +55,7 @@ export function inspectReadiness(input: {
   if (projection && projection.freshness !== 'fresh') add('STALE_PROJECTION','warning','Dados desatualizados ou aguardando reconciliação');
   if (!input.codeEnabled || !input.capability || input.capability.mode === 'OFF' || input.capability.kill_switch)
     add('FEATURE_OFF','info','Novo acompanhamento permanece desligado por padrão');
-  if (!input.customerCertified) add('CUSTOMER_OFF','info','Acesso público e mensagens reais não certificados');
+  if (!input.customerCertified) add('CUSTOMER_OFF','info','Links de acompanhamento desativados neste ambiente (independente do piloto WhatsApp)');
   if (origin === 'ifood' || origin === 'food99') add('MARKETPLACE_POLICY','blocker','Compartilhamento de marketplace depende de autorização específica');
   if (input.capability && !input.capability.origin_eligible) add('ORIGIN_DISABLED','blocker','Origem não autorizada nas configurações');
   const hasBlocker = signals.some(signal=>signal.severity==='blocker');
@@ -68,7 +68,7 @@ export function inspectReadiness(input: {
     delivery:{canonical_order_key:input.canonicalKey,public_label:str(d.order_id || d.external_order_id || d.id,50),origin,state,fulfillment},
     readiness:{level:hasBlocker?'blocked':hasWarning?'needs_attention':'ready_for_internal_review',signals,source:'confirmed_server_snapshot',last_confirmed_at:lastConfirmed},
     gate:{code_enabled:input.codeEnabled,customer_access_certified:input.customerCertified,mode:input.capability?.mode||'OFF',
-      kill_switch:input.capability?.kill_switch!==false,public_tracking:input.capability?.public_tracking===true,
+      kill_switch:input.capability?.kill_switch!==false,public_tracking:input.capability?.public_tracking===true,issue_tracking_link:input.capability?.issue_tracking_link===true,
       origin_eligible:input.capability?.origin_eligible===true,site_connected:false,real_notifications:false},
     public_projection:projection,
     events:events.slice(-30).map(e=>({id:e.id,kind:e.kind,at:e.at,source:e.source})),

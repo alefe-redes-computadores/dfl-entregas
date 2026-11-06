@@ -1,0 +1,56 @@
+#!/usr/bin/env node
+'use strict';
+/** R295 — behavioral local test; no network, Firebase, WhatsApp or exposed secrets. */
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const ts=require('typescript');
+let count=0;
+const check=(condition,label)=>{assert.ok(condition,label);count++;console.log('OK R295-R2:',label);};
+const source=fs.readFileSync('lib/tracking/gate1/tracking-date-filter.ts','utf8');
+const js=ts.transpileModule(source,{fileName:'tracking-date-filter.ts',compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+const mod={exports:{}};
+new Function('require','module','exports',js)((id)=>{throw Error('Unexpected import '+id);},mod,mod.exports);
+const f=mod.exports;
+const today='2026-11-06';
+const make=s=>({created_at:s});
+check(f.trackingTodayKey(new Date('2026-11-06T02:30:00Z'))==='2026-11-05','fuso: UTC nao equivale a dia de Sao Paulo');
+check(f.trackingTodayKey(new Date('2026-11-06T03:30:00Z'))===today,'fuso: primeiro dia apos meia noite local');
+check(f.trackingShiftKey(today,-1)==='2026-11-05','ontem sem variar navegador');
+check(f.trackingShiftKey(today,-6)==='2026-10-31','sete dias em virada do mes');
+check(f.trackingShiftKey('2026-02-30',1)==='','data invalida rejeitada');
+check(f.trackingDeliveryDayKey(make('2026-11-05T23:59:00-03:00'))==='2026-11-05','criado ontem permanece ontem');
+check(f.matchingTrackingDate(make('2026-11-06T10:00:00-03:00'),'day',today),'hoje entra na selecao de hoje');
+check(!f.matchingTrackingDate(make('2026-11-05T23:59:00-03:00'),'day',today),'ontem excluido do filtro hoje');
+check(f.matchingTrackingDate(make('2026-11-05T23:59:00-03:00'),'week',today),'ontem dentro dos 7 dias');
+check(f.matchingTrackingDate(make('2026-10-31T00:01:00-03:00'),'week',today),'limite inferior dos 7 dias');
+check(!f.matchingTrackingDate(make('2026-10-30T23:59:00-03:00'),'week',today),'8 dias nao incluidos');
+check(!f.matchingTrackingDate(make('2026-11-07T00:01:00-03:00'),'week',today),'futuro nao contado no periodo encerrado');
+check(!f.matchingTrackingDate({created_at:''},'day',today),'sem data nao entra em hoje');
+check(f.matchingTrackingDate({},'all',today),'legado sem data recuperavel em Todos');
+check(f.trackingDeliveryDayKey({created_at:'invalido'})==='','data invalida nao vira hoje');
+const files=['app/mais/acompanhamento/page.tsx','components/messaging/MessagingOrderPicker.tsx','lib/tracking/gate1/readiness.ts','lib/tracking/gate1/owner-inspection.ts','lib/tracking/gate2/certification.ts','components/tracking/OwnerTrackingInspection.tsx','app/mais/acompanhamento/ponte/page.tsx','app/mais/mensageria/page.tsx','lib/tracking/gate1/tracking-date-filter.ts','components/tracking/TrackingGate2Certificate.tsx'];
+for(const file of files){
+ const raw=fs.readFileSync(file,'utf8');
+ const parsed=ts.createSourceFile(file,raw,ts.ScriptTarget.Latest,true,file.endsWith('.tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);
+ check(!parsed.parseDiagnostics.length,'sintaxe TS/TSX '+file+': '+parsed.parseDiagnostics.map(x=>x.messageText));
+}
+const panel=fs.readFileSync(files[0],'utf8');
+for(const text of ['StaffConfirmDialog','pendingAction','trackingDeliveryDayKey','matchingTrackingDate','OperationalDatePicker','aria-label="Período dos pedidos"',"onConfirm={()=>{const action=pendingAction",'canIssueLink','issueBlockReasons','issue_tracking_link === true','crypto.randomUUID().replace(/-/g','navigator.clipboard.writeText(url)','document.addEventListener(\'visibilitychange\',onHidden)'])check(panel.includes(text),'Acompanhamento preserva '+text);
+check(!panel.includes('window.confirm('),'nenhum dialogo branco nativo no acompanhamento');
+check(!panel.includes('localStorage.setItem')&&!panel.includes('sessionStorage.setItem'),'token efemero sem persistencia');
+check(!panel.includes('console.log(issuedLink)')&&!panel.includes('console.log(answer)'),'sem vazamento de token em log');
+const picker=fs.readFileSync(files[1],'utf8');
+check(picker.includes('todayOnly')&&picker.includes('trackingDeliveryDayKey(item)===today'),'picker de mensageria inicia em Hoje');
+check(picker.includes('Number(trackingDeliveryDayKey(b)===today)-Number(trackingDeliveryDayKey(a)===today)'),'pedidos de hoje antes do limite visual de 120');
+check(picker.includes('(norm ? deliveries : recent)')&&picker.includes('.slice(0, 120)')&&picker.includes('.slice(0, 15)'),'busca antiga e limite de renderizacao preservados');
+for(const text of ['fetch(', 'sendWhatsApp','getDocs(', 'onSnapshot(', 'setDoc(', 'runTransaction('])check(!picker.includes(text),'picker sem efeito colateral '+text);
+const server=fs.readFileSync('lib/tracking/gate1/owner-inspection.ts','utf8');
+const inspect=fs.readFileSync('lib/tracking/gate1/readiness.ts','utf8');
+const http=fs.readFileSync('lib/tracking/gate1/http.ts','utf8');
+check(server.includes('issue_tracking_link:company.issue_tracking_link')&&inspect.includes('issue_tracking_link:input.capability?.issue_tracking_link===true'),'flag real liberacao do link projetada pelo servidor owner');
+check(http.includes('!canAccessCustomer(ctx.c)')&&http.includes('hasCommercialAcceptance(ctx.c.tenant,snap.data)'),'regras servidor conservadas');
+check(fs.readFileSync('lib/tracking/gate2/certification.ts','utf8').includes('linkConfigured')&&fs.readFileSync('components/tracking/TrackingGate2Certificate.tsx','utf8').includes('verificar flags'),'certificado tecnico distingue link OFF de piloto WhatsApp');
+const test250=fs.readFileSync('scripts/test-r250-tracking-control.cjs','utf8');
+const test265=fs.readFileSync('scripts/test-r265-link-handoff.cjs','utf8');
+check(test250.includes('premium confirmation without native prompt')&&test265.includes('protected premium owner confirmation'),'testes legados fortalecidos com dialogo customizado');
+console.log(`R295-R2: ${count} verificacoes aprovadas. Sem requisicoes, persistencia ou mensagens.`);

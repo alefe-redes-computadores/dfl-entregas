@@ -15,12 +15,13 @@ export function certifyInspection(s:TrackingInspection):Gate2Certificate {
   const projectionValid=Boolean(s.public_projection&&validatePublicProjection(s.public_projection));
   const accepted=!s.readiness.signals.some(v=>v.code==='NOT_ACCEPTED');
   const blocking=s.readiness.signals.some(v=>v.severity==='blocker');
+  const linkConfigured=s.gate.code_enabled&&s.gate.customer_access_certified&&!s.gate.kill_switch&&s.gate.public_tracking&&s.gate.issue_tracking_link&&s.gate.origin_eligible&&['MANUAL','AUTOMATIC_CERTIFIED'].includes(s.gate.mode);
   const checks: CertificationCheck[]=[
     {id:'A',status:ledger&&accepted?'ok':'attention',title:'Eventos confirmados',detail:ledger&&accepted?'Há evidências persistidas no servidor.':'Falta comprovar aceite ou histórico de eventos.'},
     {id:'B',status:projectionValid?'ok':'attention',title:'Projeção pública sanitizada',detail:projectionValid?'Contrato B estruturalmente válido.':'Dados insuficientes para uma projeção validada.'},
-    {id:'C',status:'off',title:'Acesso protegido',detail:'Links e sessões públicas não são certificados por esta inspeção.'},
-    {id:'D',status:'off',title:'Mensageria seletiva',detail:'Nenhuma mensagem é enviada pelo laboratório.'},
-    {id:'E',status:s.gate.kill_switch||s.gate.mode==='OFF'?'ok':'attention',title:'Configuração conservadora',detail:s.gate.kill_switch||s.gate.mode==='OFF'?'Proteções OFF/kill-switch registradas.':'Revisar configuração antes de qualquer homologação externa.'},
+    {id:'C',status:linkConfigured?'attention':'off',title:'Acesso protegido',detail:linkConfigured?'Configuração de link presente; este teste não valida emissão ou sessão real. Confira o pedido na área Acesso privado.':'Link não habilitado nesta configuração. Isso é independente do piloto WhatsApp.'},
+    {id:'D',status:'off',title:'Mensageria seletiva',detail:'Este laboratório não envia mensagens. O piloto WhatsApp é verificado separadamente na Mensageria.'},
+    {id:'E',status:s.gate.kill_switch||s.gate.mode==='OFF'?'ok':'attention',title:'Configuração conservadora',detail:s.gate.kill_switch||s.gate.mode==='OFF'?'Proteções OFF/kill-switch registradas.':'Modo ativo nesta empresa; a emissão exige regras e aceite por pedido.'},
   ];
   return {contract:'dfl.tracking.gate2.certificate',version:1,source:'confirmed_server_snapshot',canonical_order_key:s.delivery.canonical_order_key,
     checks,operational_review:blocking?'blocked':'reviewable',public_activated:false,messages_sent:false,
