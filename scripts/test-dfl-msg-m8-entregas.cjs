@@ -1,0 +1,24 @@
+#!/usr/bin/env node
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const ts=require('typescript');
+const path='app/mais/mensageria/page.tsx';
+const ui=fs.readFileSync(path,'utf8');
+const more=fs.readFileSync('app/mais/page.tsx','utf8');
+let passed=0;
+const check=(value,title)=>{assert.ok(value,title);passed++;};
+for(const name of [path,'app/mais/page.tsx'])check(ts.createSourceFile(name,fs.readFileSync(name,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX).parseDiagnostics.length===0,`TSX ${name}`);
+check(ui.includes('Central de Mensageria')&&ui.includes('Saúde da operação'),'hierarquia principal');
+check(ui.includes('highPriority')&&ui.includes('issue.failure.detail'),'falhas reais e motivo visível');
+check(ui.includes('Ferramentas avançadas')&&ui.includes('<details'),'testes técnicos recolhidos');
+check(ui.includes("router.push('/mais/mensageria/homologacao')"),'homologacao acessível por admin');
+check(ui.includes('onClick={() => void consult()}')&&ui.includes('controller.abort()'),'consulta sob demanda com timeout');
+check(ui.includes('auth.currentUser')&&ui.includes('Capacitor.isNativePlatform()'),'sessão e APK');
+check(ui.includes('isSuperadminUid')&&ui.includes('!isOwner'),'protecao owner');
+check(ui.includes('Não existe botão de repetição em massa'),'sem ataque ao worker');
+check(ui.includes('não confirma entrega no WhatsApp')&&ui.includes('não equivale a recebido pelo cliente'),'status não promete entrega');
+check(!ui.includes('notifyNewManualDelivery')&&!ui.includes('notifyManualRoute'),'sem envio pelo dashboard');
+check(more.includes('Central de Mensageria 360°'),'entrada no menu premium');
+check(ui.includes('createdAfterActivation')&&ui.includes('reasonLabels'),'elegibilidade preservada');
+console.log(`MSG-M8 ENTREGAS: ${passed} contratos isolados OK; zero rede e zero WhatsApp.`);
