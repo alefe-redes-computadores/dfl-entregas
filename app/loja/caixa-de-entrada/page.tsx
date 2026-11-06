@@ -370,7 +370,7 @@ export default function DeliveryInboxPage() {
 
         {channel==='site'?<>
           <SitePlanningPreview />
-          <div className="space-y-3"><FutureRoutePlanPanel/><ReservationAuditPanel/><SiteInboxPanel focusedId={focusedSiteOrder}/></div></>:<div className="space-y-4">
+          <div className="space-y-3"><FutureRoutePlanPanel/><ReservationAuditPanel/><SiteInboxPanel focusedId={focusedSiteOrder} openHistoryOnLoad={params.get('historico')==='1'}/></div></>:<div className="space-y-4">
         {/* R133_TRIAGEM_CAIXA: UI nao altera rascunhos nem importacao. */}
         <section aria-label="Triagem de pedidos importados" className="rounded-[20px] border border-sky-500/20 bg-sky-500/[.04] p-3">
           <div className="grid grid-cols-3 gap-2 text-center">

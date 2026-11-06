@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronLeft,
+  ChevronDown,
   Clock3,
   Copy,
   ExternalLink,
@@ -51,6 +52,12 @@ const normalize = (value: unknown) =>
 
 const money = (value = 0) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+// R282: abreviação somente visual; nunca altera ID usado em cópia, busca ou integração.
+const compactOrderReference = (value?: string | null) => {
+  const ref = String(value || '').trim();
+  return ref.length > 12 ? `${ref.slice(0, 3)}…${ref.slice(-7)}` : ref;
+};
 
 const waitingLabel = (value?: string) => {
   if (!value) return 'Horário não registrado';
@@ -128,6 +135,9 @@ export default function ConfirmacoesPage() {
   const [batchText, setBatchText] = useState('');
   const [isBatchSaving, setIsBatchSaving] = useState(false);
   const [manualView, setManualView] = useState<'pending' | 'resolved'>('pending');
+  const [manualSectionOpen, setManualSectionOpen] = useState(true);
+  const [operationalSectionOpen, setOperationalSectionOpen] = useState(true);
+  const [manualSearch, setManualSearch] = useState('');
   const [pendingDeleteManual, setPendingDeleteManual] = useState<IfoodPendingConfirmation | null>(null);
   const [deletingManual, setDeletingManual] = useState(false);
   const [manualBusyIds, setManualBusyIds] = useState<Set<string>>(() => new Set());
@@ -360,10 +370,15 @@ export default function ConfirmacoesPage() {
     [ifoodPendingConfirmations, requestedRouteId],
   );
 
-  const visibleManualConfirmations =
-    manualView === 'pending'
-      ? pendingManualConfirmations
-      : resolvedManualConfirmations;
+  const visibleManualConfirmations = (manualView === 'pending'
+    ? pendingManualConfirmations
+    : resolvedManualConfirmations).filter((item) => {
+    const tokens = normalize(manualSearch.trim()).split(/\s+/).filter(Boolean);
+    if (!tokens.length) return true;
+    const fields = normalize([item.customer_name, item.order_id, item.ifood_id, item.confirmation_code]
+      .filter(Boolean).join(' '));
+    return tokens.every((token) => fields.includes(token));
+  });
 
   const CODE_REVIEW_MARKER='[iFood] Último código informado não funcionou. Conferir novamente com o cliente.';
 
@@ -690,17 +705,17 @@ export default function ConfirmacoesPage() {
         </button>
       </header>
 
-      <section className="rounded-[26px] border border-red-500/15 bg-gradient-to-br from-red-500/[0.07] to-zinc-950 p-5">
+      <section className="rounded-[20px] border border-red-500/15 bg-gradient-to-br from-red-500/[0.06] to-zinc-950 px-3.5 py-3">
         <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-400">
-            <ShieldCheck size={23} />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 text-red-400">
+            <ShieldCheck size={17} />
           </div>
 
           <div>
-            <h2 className="font-heading text-base font-black text-zinc-100">
+            <h2 className="font-heading text-[13px] font-black text-zinc-100">
               Fila operacional
             </h2>
-            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+            <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-400">
               A central organiza os pedidos que ainda estão abertos no DFL. Abrir o portal não
               marca uma confirmação externa como concluída.
             </p>
@@ -824,7 +839,15 @@ export default function ConfirmacoesPage() {
       </div>
 
       {ifoodPendingConfirmations.length > 0 && (
-        <section className="space-y-3">
+        <section aria-label="Confirmações externas do iFood" className="space-y-2 rounded-[22px] border border-zinc-800/90 bg-zinc-900/25 p-2.5">
+          <button type="button" aria-expanded={manualSectionOpen} aria-controls="r282-external-confirmations"
+            onClick={() => setManualSectionOpen((value) => !value)}
+            className="flex min-h-12 w-full items-center gap-3 rounded-xl px-2 py-1 text-left transition-colors active:bg-zinc-800/50">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-500/10 text-red-300"><ShieldCheck size={17}/></span>
+            <span className="min-w-0 flex-1"><strong className="block text-[13px] font-black text-zinc-100">Portal iFood · confirmações</strong><small className="block text-[10px] text-zinc-500">{pendingManualConfirmations.length} pendentes · {resolvedManualConfirmations.length} no histórico</small></span>
+            <ChevronDown size={17} className={`shrink-0 text-zinc-400 transition-transform ${manualSectionOpen ? 'rotate-180' : ''}`}/>
+          </button>
+          {manualSectionOpen && <div id="r282-external-confirmations" className="space-y-3 border-t border-zinc-800/80 pt-3">
           <div className="flex items-end justify-between gap-3 px-1">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-red-400">
@@ -867,6 +890,15 @@ export default function ConfirmacoesPage() {
             </button>
           </div>
 
+          <div className="flex min-h-11 items-center gap-2 rounded-xl border border-zinc-700/70 bg-zinc-950/60 px-3 focus-within:border-red-500/40">
+            <Search size={15} className="shrink-0 text-zinc-500"/>
+            <input type="search" aria-label="Buscar confirmação externa por cliente, pedido, ID ou código"
+              placeholder="Cliente, pedido, ID ou código" value={manualSearch}
+              onChange={(event) => setManualSearch(event.target.value)}
+              className="min-w-0 flex-1 bg-transparent text-xs text-zinc-100 outline-none placeholder:text-zinc-600"/>
+            {manualSearch && <button type="button" onClick={() => setManualSearch('')} aria-label="Limpar busca das confirmações externas" className="min-h-10 px-1 text-[10px] font-bold text-red-300">Limpar</button>}
+          </div>
+          <p role="status" className="px-1 text-[10px] text-zinc-500">{visibleManualConfirmations.length} registro{visibleManualConfirmations.length === 1 ? '' : 's'} nesta seleção · busca local</p>
           {manualView === 'pending' && (
             <div className="grid grid-cols-2 gap-2">
               {[
@@ -912,7 +944,7 @@ export default function ConfirmacoesPage() {
                 <>
                   <CheckCircle2 size={28} className="mx-auto text-emerald-500/70" />
                   <p className="mt-3 text-sm font-black text-zinc-300">
-                    Nenhuma confirmação pendente
+                    {manualSearch ? 'Nenhuma confirmação encontrada' : 'Nenhuma confirmação pendente'}
                   </p>
                   <p className="mt-1 text-[11px] text-zinc-600">
                     Não há pedidos aguardando confirmação externa neste filtro.
@@ -922,7 +954,7 @@ export default function ConfirmacoesPage() {
                 <>
                   <TimerReset size={28} className="mx-auto text-zinc-700" />
                   <p className="mt-3 text-sm font-black text-zinc-400">
-                    Histórico vazio
+                    {manualSearch ? 'Nenhum registro encontrado' : 'Histórico vazio'}
                   </p>
                   <p className="mt-1 text-[11px] text-zinc-600">
                     As pendências resolvidas aparecerão aqui.
@@ -969,9 +1001,9 @@ export default function ConfirmacoesPage() {
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-[11px] text-zinc-500">
+                      <p title={item.order_id || undefined} className="mt-1 truncate text-[11px] text-zinc-500">
                         {item.order_id
-                          ? `Pedido #${item.order_id}`
+                          ? `Pedido #${compactOrderReference(item.order_id)}`
                           : 'Pedido sem número'}
                       </p>
                       <p className="mt-1 text-[9px] text-zinc-700">
@@ -1002,7 +1034,7 @@ export default function ConfirmacoesPage() {
                       <span className="block text-[9px] font-black uppercase tracking-wide text-zinc-600">
                         ID iFood
                       </span>
-                      <strong className="mt-1 block font-mono text-xs text-zinc-200">
+                      <strong className="mt-1 block truncate font-mono text-xs text-zinc-200">
                         {item.ifood_id || 'Não informado'}
                       </strong>
                     </button>
@@ -1093,10 +1125,19 @@ export default function ConfirmacoesPage() {
               );
             })
           )}
+          </div>}
         </section>
       )}
 
-      <div className="flex flex-col gap-3">
+      <section aria-label="Fila operacional de pedidos iFood" className="space-y-2 rounded-[22px] border border-zinc-800/90 bg-zinc-900/25 p-2.5">
+        <button type="button" aria-expanded={operationalSectionOpen} aria-controls="r282-operational-confirmations"
+          onClick={() => setOperationalSectionOpen((value) => !value)}
+          className="flex min-h-12 w-full items-center gap-3 rounded-xl px-2 py-1 text-left transition-colors active:bg-zinc-800/50">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-300"><ShoppingBag size={17}/></span>
+          <span className="min-w-0 flex-1"><strong className="block text-[13px] font-black text-zinc-100">Pedidos operacionais</strong><small className="block text-[10px] text-zinc-500">{queue.length} na seleção · não confirma automaticamente no iFood</small></span>
+          <ChevronDown size={17} className={`shrink-0 text-zinc-400 transition-transform ${operationalSectionOpen ? 'rotate-180' : ''}`}/>
+        </button>
+        {operationalSectionOpen && <div id="r282-operational-confirmations" className="space-y-3 border-t border-zinc-800/80 pt-3">
         {queue.map(({ delivery, customer, confirmation, created }) => {
           const state = stateMeta[confirmation.state];
           const mode = getFulfillmentMode(delivery);
@@ -1126,7 +1167,7 @@ export default function ConfirmacoesPage() {
                   </div>
 
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
-                    <span>{delivery.order_id ? `Pedido #${delivery.order_id}` : 'Pedido sem número'}</span>
+                    <span title={delivery.order_id || undefined} className="max-w-full truncate">{delivery.order_id ? `Pedido #${compactOrderReference(delivery.order_id)}` : 'Pedido sem número'}</span>
                     <span>•</span>
                     <span className="inline-flex items-center gap-1">
                       <ModeIcon size={10} />
@@ -1236,7 +1277,8 @@ export default function ConfirmacoesPage() {
             </p>
           </div>
         )}
-      </div>
+        </div>}
+      </section>
 
 
       {pendingDeleteManual && (

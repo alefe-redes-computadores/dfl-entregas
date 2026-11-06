@@ -36,7 +36,7 @@ const siteStep = (state: Extract<SiteInboxState, 'confirmar'|'pronto'|'aguardar_
 
 
 type SiteRow = ReturnType<typeof siteInboxProjection>['rows'][number];
-export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
+export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:string|null;openHistoryOnLoad?:boolean}) {
   const router = useRouter();
   const deliveries = useAppStore(state=>state.deliveries);
   const routes = useAppStore(state=>state.routes);
@@ -55,13 +55,19 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   const [filter,setFilter]=useState<'all'|'pronto'|'confirmar'|'aguardar_agenda'|'revisar'>('all');
   const [search,setSearch]=useState('');
   const deferredSearch = useDeferredValue(search);
-  const [historyOpen,setHistoryOpen]=useState(false);
+  const [historyOpen,setHistoryOpen]=useState(openHistoryOnLoad);
   // R166_HISTORY_FILTER: sem consulta extra ao Firestore.
   const [historySearch,setHistorySearch]=useState('');
   const deferredHistorySearch = useDeferredValue(historySearch);
   const [historyStatus,setHistoryStatus]=useState<'todos'|'cancelado'|'retirado_operacao'|'entregue'|'tentativa'>('todos');
   const [historyLimit,setHistoryLimit]=useState(10);
   const history=useMemo(()=>siteHistoryRows(deliveries, 200),[deliveries]);
+  const historyCounts=useMemo(()=>({
+    cancelado:history.filter(item=>siteHistoryKind(item)==='cancelado').length,
+    retirado_operacao:history.filter(item=>siteHistoryKind(item)==='retirado_operacao').length,
+    entregue:history.filter(item=>siteHistoryKind(item)==='entregue').length,
+    tentativa:history.filter(item=>siteHistoryKind(item)==='tentativa').length,
+  }),[history]);
   // A comparação é apenas visual. Sem arquivar automaticamente pedidos reais.
   const manualRows=useMemo(()=>deliveries.filter(item=>item.origin==='loja' && item.source_system!=='dfl_site')
     .filter(item=>{const t=Date.parse(item.created_at||item.createdAt||'');return Number.isFinite(t)&&Math.abs(clock-t)<7*86400_000;})
@@ -244,6 +250,34 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
       </div>
       <p className="px-1 text-[10px] text-zinc-500" role="status">{displayed.length} pedido{displayed.length===1?'':'s'} nesta seleção. Busca local, sem nova consulta.</p>
     </section>
+  {/* R281: histórico não compete com a fila ativa; IDs integrais ficam na tela de detalhes. */}
+    <section aria-label="Histórico de pedidos do Site" className="rounded-[20px] border border-zinc-800 bg-zinc-900/30 p-2.5">
+      <button type="button" aria-expanded={historyOpen} onClick={()=>setHistoryOpen(value=>!value)} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-left">
+        <History size={17} className="shrink-0 text-zinc-400"/>
+        <span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Histórico do Site</strong><small className="block text-[10px] font-normal text-zinc-500">{history.length} registros · cancelamentos, arquivamentos e entregas</small></span>
+        <ChevronDown size={15} className={`shrink-0 text-zinc-400 transition-transform ${historyOpen?'rotate-180':''}`}/>
+      </button>
+      {historyOpen&&<div className="mt-2 space-y-2 border-t border-zinc-800 pt-3">
+        <p className="px-1 text-[10px] leading-relaxed text-zinc-500">Registros disponíveis no Entregas. O histórico comercial completo continua no Admin do Site.</p>
+        <input type="search" value={historySearch} onChange={event=>{setHistorySearch(event.target.value);setHistoryLimit(10);}} placeholder="Buscar número, cliente ou motivo" aria-label="Buscar histórico do Site" className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs text-zinc-100" />
+        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Filtrar histórico do Site">
+          {([['todos','Todos'],['cancelado','Cancelados'],['retirado_operacao','Arquivados'],['entregue','Entregues'],['tentativa','Tentativas']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={historyStatus===key} onClick={()=>{setHistoryStatus(key);setHistoryLimit(10);}} className={`min-h-10 shrink-0 rounded-xl border px-3 text-[10px] font-bold ${historyStatus===key?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}>{label} · {key==='todos'?history.length:historyCounts[key]}</button>)}
+        </div>
+        <p role="status" className="px-1 text-[10px] text-zinc-500">{filteredHistory.length} registro{filteredHistory.length===1?'':'s'} nesta seleção</p>
+        {filteredHistory.slice(0,historyLimit).map(item=><article key={item.id} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/50 p-3">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wider text-sky-300">Site · #{siteHistoryCompactId(item)}</p><p className="mt-1 truncate text-[13px] font-bold text-zinc-100">{item.customer_name||'Cliente do Site'}</p></div>
+            <div className="shrink-0 text-right"><p className="text-xs font-black text-zinc-100 tabular-nums">{amount(Number(item.customer_charge??item.value))}</p><p className="mt-1 text-[10px] text-zinc-500">{siteHistoryTime(item)}</p></div>
+          </div>
+          <p className="mt-2 text-[11px] font-semibold text-zinc-300">{siteHistoryLabel(item)}</p>
+          <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">{siteHistoryDetail(item)}</p>
+          <details className="mt-2 text-[10px] text-zinc-400"><summary className="w-fit cursor-pointer font-semibold text-sky-300">Mostrar ID completo</summary><code className="mt-1 block break-all select-text font-mono text-zinc-300">{item.external_order_id||item.order_id||item.id}</code></details>
+          <button type="button" onClick={()=>router.push(`/entregas/details?id=${encodeURIComponent(item.id)}`)} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700/70 bg-zinc-900/50 text-[11px] font-bold text-zinc-200"><ArrowUpRight size={14}/> Ver detalhes do pedido</button>
+        </article>)}
+        {filteredHistory.length>historyLimit&&<button type="button" className="min-h-11 w-full rounded-xl border border-zinc-700 text-xs font-bold text-zinc-300" onClick={()=>setHistoryLimit(v=>v+10)}>Ver mais registros</button>}
+        {!filteredHistory.length&&<p className="p-3 text-[11px] text-zinc-500">Nenhum registro corresponde aos filtros.</p>}
+      </div>}
+    </section>
     {!shown.length?<div className="rounded-2xl border border-dashed border-zinc-800 p-7 text-center"><CheckCircle2 size={24} className="mx-auto text-emerald-400"/><p className="mt-2 text-xs font-bold text-zinc-300">Nenhum pedido nesta seleção</p><p className="mt-1 text-[10px] text-zinc-500">Novos pedidos entram automaticamente quando a sincronização chegar.</p></div>:null}
     {shown.map(({delivery,state,duplicate}:SiteRow)=>{
       const expanded=editing===delivery.id;
@@ -293,34 +327,6 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
       </article>;
     })}
     {displayed.length>shown.length&&<button type="button" onClick={()=>setLimit(v=>nextProgressiveCount(displayed.length,v))} className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900/50 text-xs font-bold text-zinc-300">Mostrar mais · {shown.length} de {displayed.length}</button>}
-  {/* R281: histórico não compete com a fila ativa; IDs integrais ficam na tela de detalhes. */}
-    <section aria-label="Histórico de pedidos do Site" className="rounded-[20px] border border-zinc-800 bg-zinc-900/30 p-2.5">
-      <button type="button" aria-expanded={historyOpen} onClick={()=>setHistoryOpen(value=>!value)} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-left">
-        <History size={17} className="shrink-0 text-zinc-400"/>
-        <span className="min-w-0 flex-1 text-xs font-bold text-zinc-200">Histórico do Site <span className="font-normal text-zinc-500">· {history.length} registros</span></span>
-        <ChevronDown size={15} className={`shrink-0 text-zinc-400 transition-transform ${historyOpen?'rotate-180':''}`}/>
-      </button>
-      {historyOpen&&<div className="mt-2 space-y-2 border-t border-zinc-800 pt-3">
-        <p className="px-1 text-[10px] leading-relaxed text-zinc-500">Registros disponíveis no Entregas. O histórico comercial completo continua no Admin do Site.</p>
-        <input type="search" value={historySearch} onChange={event=>{setHistorySearch(event.target.value);setHistoryLimit(10);}} placeholder="Buscar número, cliente ou motivo" aria-label="Buscar histórico do Site" className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs text-zinc-100" />
-        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Filtrar histórico do Site">
-          {([['todos','Todos'],['cancelado','Cancelados'],['retirado_operacao','Arquivados'],['entregue','Entregues'],['tentativa','Tentativas']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={historyStatus===key} onClick={()=>{setHistoryStatus(key);setHistoryLimit(10);}} className={`min-h-10 shrink-0 rounded-xl border px-3 text-[10px] font-bold ${historyStatus===key?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}>{label}</button>)}
-        </div>
-        <p role="status" className="px-1 text-[10px] text-zinc-500">{filteredHistory.length} registro{filteredHistory.length===1?'':'s'} nesta seleção</p>
-        {filteredHistory.slice(0,historyLimit).map(item=><article key={item.id} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/50 p-3">
-          <div className="flex min-w-0 items-start justify-between gap-3">
-            <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wider text-sky-300">Site · #{siteHistoryCompactId(item)}</p><p className="mt-1 truncate text-[13px] font-bold text-zinc-100">{item.customer_name||'Cliente do Site'}</p></div>
-            <div className="shrink-0 text-right"><p className="text-xs font-black text-zinc-100 tabular-nums">{amount(Number(item.customer_charge??item.value))}</p><p className="mt-1 text-[10px] text-zinc-500">{siteHistoryTime(item)}</p></div>
-          </div>
-          <p className="mt-2 text-[11px] font-semibold text-zinc-300">{siteHistoryLabel(item)}</p>
-          <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">{siteHistoryDetail(item)}</p>
-          <details className="mt-2 text-[10px] text-zinc-400"><summary className="w-fit cursor-pointer font-semibold text-sky-300">Mostrar ID completo</summary><code className="mt-1 block break-all select-text font-mono text-zinc-300">{item.external_order_id||item.order_id||item.id}</code></details>
-          <button type="button" onClick={()=>router.push(`/entregas/details?id=${encodeURIComponent(item.id)}`)} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700/70 bg-zinc-900/50 text-[11px] font-bold text-zinc-200"><ArrowUpRight size={14}/> Ver detalhes do pedido</button>
-        </article>)}
-        {filteredHistory.length>historyLimit&&<button type="button" className="min-h-11 w-full rounded-xl border border-zinc-700 text-xs font-bold text-zinc-300" onClick={()=>setHistoryLimit(v=>v+10)}>Ver mais registros</button>}
-        {!filteredHistory.length&&<p className="p-3 text-[11px] text-zinc-500">Nenhum registro corresponde aos filtros.</p>}
-      </div>}
-    </section>
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/35 p-3 text-[10px] leading-relaxed text-zinc-500"><AlertCircle size={14} className="mr-1 inline"/>Acesso offline: você pode conferir pedidos já sincronizados, mas precisa de conexão para confirmar a alocação. Retiradas, balcão e cancelamentos não entram nesta fila logística.</div>
   </section>;
 }

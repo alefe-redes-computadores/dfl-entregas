@@ -414,6 +414,20 @@ export default function LojaPage() {
           <ChevronRight size={16} className="shrink-0 text-zinc-700" />
         </button>
 
+        {/* R282: atalhos da operação diária; confirmações externas não são ações da Loja. */}
+        <nav aria-label="Acesso rápido a confirmações e histórico" className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => router.push('/confirmacoes')}
+            className="flex min-h-[74px] min-w-0 items-center gap-2 rounded-[17px] border border-red-500/20 bg-red-500/[.045] px-3 text-left transition-colors active:bg-red-500/10">
+            <ShieldCheck size={18} className="shrink-0 text-red-400"/>
+            <span className="min-w-0"><strong className="block text-[12px] font-black text-zinc-100">Confirmar iFood</strong><small className="mt-0.5 block text-[10px] leading-snug text-zinc-500">Pendências e portal</small></span>
+          </button>
+          <button type="button" onClick={() => router.push('/loja/caixa-de-entrada?aba=site&historico=1')}
+            className="flex min-h-[74px] min-w-0 items-center gap-2 rounded-[17px] border border-sky-500/20 bg-sky-500/[.045] px-3 text-left transition-colors active:bg-sky-500/10">
+            <Inbox size={18} className="shrink-0 text-sky-400"/>
+            <span className="min-w-0"><strong className="block text-[12px] font-black text-zinc-100">Histórico do Site</strong><small className="mt-0.5 block text-[10px] leading-snug text-zinc-500">Pedidos e registros</small></span>
+          </button>
+        </nav>
+
         <div className="grid grid-cols-2 gap-2">
           <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir entregas: ${dashboardData.totalEntregas} no período`} className="group relative min-h-[96px] overflow-hidden rounded-[18px] border border-amber-500/20 bg-gradient-to-br from-amber-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
             <div className="flex items-center justify-between">
@@ -484,7 +498,7 @@ export default function LojaPage() {
 
           <button onClick={() => router.push('/confirmacoes')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
             <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-400"><ShieldCheck size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">iFood</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Confirmações pendentes e portal</p>
+            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Central iFood</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Confirmações e portal externo</p>
           </button>
           </>)}
         </div>
