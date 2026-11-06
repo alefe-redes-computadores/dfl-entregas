@@ -1,0 +1,22 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),vm=require('node:vm'),crypto=require('node:crypto'),ts=require('typescript');
+const input=(name)=>ts.transpileModule(fs.readFileSync(name,'utf8'),{fileName:name,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true},reportDiagnostics:true}).outputText;
+const now=Date.now();
+const record={id:'dfl-12345678-1234-1234-1234-123456789abc',origin:'loja',source_system:'dfl_entregas',notify_whatsapp:true,manual_messaging_opt_in_v1:true,phone:'(34) 99999-9999',customer_name:'Cliente de teste',fulfillment_mode:'delivery',created_at:new Date(now-2000).toISOString(),value:42};
+const env={DFL_MANUAL_MESSAGING_ENABLED:'true',DFL_MANUAL_MESSAGING_SCOPE:'canary',DFL_MESSAGING_PILOT_PHONE_E164:'5534999999999',DFL_MANUAL_MESSAGING_ACTIVATED_AT:new Date(now-60000).toISOString(),DFL_SITE_INTEGRATION_URL:'https://dafamilialanches.com.br',DFL_INTEGRATION_SIGNING_SECRET:'M7_TEST_SECRET'};
+let calls=[];
+const db={collection:(name)=>{assert.equal(name,'deliveries');return {doc:(id)=>({get:async()=>({exists:true,id,data:()=>record})})}}};
+function load(name,dependencies){const exports={};vm.runInNewContext(input(name),{exports,require:(n)=>{if(n in dependencies)return dependencies[n];throw Error('Unexpected module '+n)},process:{env},console,Date,URL,AbortController,setTimeout,clearTimeout,fetch:async(url,opts)=>{calls.push({url,opts});return {ok:true,status:200,json:async()=>({ok:true,queued:true})}},Buffer,Math,Number,RegExp,JSON,Set},{timeout:3500});return exports;}
+const policy=load('lib/integration/manualMessagingPolicy.ts',{});
+const bridge=load('lib/integration/server/manualMessaging.ts',{'server-only':{},'node:crypto':crypto,'./admin':{adminDb:db},'../manualMessagingPolicy':policy});
+(async()=>{let n=0,r;
+r=await bridge.notifyNewManualDelivery(record.id);assert.equal(r.status,'queued');assert.equal(calls.length,1);n+=2;
+const h=calls[0].opts.headers,b=calls[0].opts.body;assert.equal(h['x-dfl-signature'],crypto.createHmac('sha256',env.DFL_INTEGRATION_SIGNING_SECRET).update(`${h['x-dfl-timestamp']}.${b}`,'utf8').digest('hex'));n++;
+env.DFL_MANUAL_MESSAGING_SCOPE='all';r=await bridge.notifyNewManualDelivery(record.id);assert.equal(r.status,'off');assert.equal(calls.length,1);n+=2;
+env.DFL_MANUAL_MESSAGING_SCOPE='';r=await bridge.notifyNewManualDelivery(record.id);assert.equal(r.status,'off');n++;
+env.DFL_MANUAL_MESSAGING_SCOPE='canary';record.phone='(34) 98888-8888';r=await bridge.notifyNewManualDelivery(record.id);assert.equal(r.status,'skipped');assert.equal(r.reason,'not_pilot_phone');assert.equal(calls.length,1);n+=3;
+record.phone='(34) 99999-9999';env.DFL_MESSAGING_PILOT_PHONE_E164='';r=await bridge.notifyNewManualDelivery(record.id);assert.equal(r.status,'off');n++;
+env.DFL_MESSAGING_PILOT_PHONE_E164='5534999999999';env.DFL_MANUAL_MESSAGING_ACTIVATED_AT=new Date(now+60000).toISOString();r=await bridge.notifyNewManualDelivery(record.id);assert.equal(r.status,'skipped');assert.equal(r.reason,'predates_rollout');n+=2;
+env.DFL_MANUAL_MESSAGING_ACTIVATED_AT=new Date(now-60000).toISOString();record.origin='ifood';r=await bridge.notifyNewManualDelivery(record.id);assert.equal(r.status,'skipped');assert.equal(calls.length,1);n+=2;
+console.log(`MSG-M7 ENTREGAS: ${n} contratos hermeticos OK (escopo canary, bloqueios e HMAC, zero rede real).`);
+})().catch(e=>{console.error(e);process.exitCode=1;});

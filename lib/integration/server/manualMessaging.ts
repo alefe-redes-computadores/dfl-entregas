@@ -11,7 +11,13 @@ const activationTime = () => {
   // New orders only: a rollout boundary must be explicitly configured.
   return value && Number.isFinite(ms) ? ms : null;
 };
-const enabled = () => process.env.DFL_MANUAL_MESSAGING_ENABLED === 'true' && activationTime() !== null;
+const pilotNumber=()=>{
+  const value=process.env.DFL_MESSAGING_PILOT_PHONE_E164?.trim()||'';
+  return /^55[1-9]\d{9,10}$/.test(value)?value:null;
+};
+// M7 CANARY: o flag geral sozinho NAO ativa envio. Scope exato + allowlist sao obrigatorios.
+const enabled = () => process.env.DFL_MANUAL_MESSAGING_ENABLED === 'true' &&
+  process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' && pilotNumber()!==null && activationTime() !== null;
 const createdAfterActivation = (delivery: ManualDeliveryRecord) => {
   const created = Date.parse(String(delivery.created_at || delivery.createdAt || ''));
   const activated = activationTime();
@@ -31,6 +37,8 @@ async function forward(delivery: ManualDeliveryRecord, reason: ManualMessageReas
   if (!createdAfterActivation(delivery)) return {status:'skipped',reason:'predates_rollout'};
   const plan = planManualMessage({delivery,reason,route});
   if (!plan.eligible) return {status:'skipped',reason:plan.reason};
+  // Nao enviar a clientes reais durante a homologacao, mesmo com opt-in.
+  if(plan.phone!==pilotNumber())return {status:'skipped',reason:'not_pilot_phone'};
   const target = siteEndpoint();
   if (!target) return {status:'failed',reason:'bridge_configuration_invalid'};
   const event = {
@@ -79,7 +87,10 @@ export async function notifyManualRoute(input:{routeId:string;reason:string}):Pr
   // Janela limitada de concorrência: não serializar dezenas de requisições na saída.
   // O ingest aplica idempotência por evento/pedido, inclusive em retries.
   const candidates=snapshot.docs.map(doc=>({...doc.data(),id:doc.id} as ManualDeliveryRecord))
-    .filter(d=>createdAfterActivation(d) && planManualMessage({delivery:d,reason,route}).eligible);
+    .filter(d=>createdAfterActivation(d) && (()=>{
+      const plan=planManualMessage({delivery:d,reason,route});
+      return plan.eligible && plan.phone===pilotNumber();
+    })());
   eligible=candidates.length;
   for(let offset=0;offset<candidates.length;offset+=6){
     const outcomes=await Promise.all(candidates.slice(offset,offset+6).map(d=>forward(d,reason,route)));

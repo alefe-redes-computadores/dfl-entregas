@@ -11,7 +11,7 @@ import { isSuperadminUid } from '@/lib/access/roles';
 type Status = {ok:boolean;pilotEnabled:boolean;phoneConfigured:boolean;bridgeConfigured:boolean;
   alreadyUsedToday:boolean;previousOutcome:string|null;note?:string};
 type ActionResult={ok:boolean;code:string;mode?:string;stage?:string;queued?:boolean;duplicate?:boolean;
-  whatsappSent?:boolean;deliveryUnknown?:boolean;dailyLimitReached?:boolean;note?:string};
+  whatsappSent?:boolean;deliveryUnknown?:boolean;dailyLimitReached?:boolean;workerWake?:string;note?:string};
 const descriptions:Record<string,string>={
   BRIDGE_HMAC_VERIFIED:'Site recebeu a assinatura do Entregas e confirmou a autenticidade. Nenhuma mensagem foi criada.',
   TEST_ENQUEUED:'Teste fictício registrado na fila do Supabase. Ainda NÃO significa WhatsApp entregue.',
@@ -109,7 +109,7 @@ export default function HomologacaoMensageria(){
           </div>
         </div>}
       </section>
-      {result&&<section role="status" className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[.06] p-4"><p className="flex items-center gap-2 text-sm font-bold text-emerald-300"><CheckCircle2 size={18}/>{result.code}</p><p className="mt-2 text-xs text-zinc-300">{descriptions[result.code]||result.note||'Solicitação concluída.'}</p></section>}
+      {result&&<section role="status" className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[.06] p-4"><p className="flex items-center gap-2 text-sm font-bold text-emerald-300"><CheckCircle2 size={18}/>{result.code}</p><p className="mt-2 text-xs text-zinc-300">{descriptions[result.code]||result.note||'Solicitação concluída.'}</p>{result.workerWake&&result.workerWake!=='not_applicable'&&<p className="mt-2 text-[11px] text-amber-200">{result.workerWake==='acknowledged'?'Fast lane acionada. Verifique o recebimento.':result.workerWake==='not_configured'?'Worker sem configuracao no Site. Fila preservada; revisar servidor.':'Worker ainda nao confirmou processamento. Nao repita o teste; consulte a fila.'}</p>}</section>}
       {error&&<p role="alert" className="flex gap-2 rounded-2xl border border-red-400/25 bg-red-500/10 p-4 text-xs text-red-200"><CircleAlert size={17} className="shrink-0"/>{error}</p>}
       <p className="text-[11px] text-zinc-500">A aprovação do Supabase não prova recebimento do WhatsApp. O número de teste e os segredos nunca são mostrados nesta tela. Sem ações em massa, timers ou listeners.</p>
     </>}
