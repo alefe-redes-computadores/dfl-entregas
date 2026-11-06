@@ -27,7 +27,24 @@ export function OperationalAttentionQueue({orders,selectedDateKey,onFinance}:{or
   const [query,setQuery]=useState('');
   const [filter,setFilter]=useState<AttentionKind|'all'>('all');const [showAll,setShowAll]=useState(false);
   const [additionalLimit,setAdditionalLimit]=useState(20);
-  const tasks=useMemo(()=>operationalAttentionTasks(orders).sort((a,b)=>kindPriority[a.kind]-kindPriority[b.kind] || a.customer.localeCompare(b.customer,'pt-BR')),[orders]);
+  const urgentDeliveryIds = useMemo(() => new Set(orders.filter(item => item.is_urgent === true).map(item => item.id)), [orders]);
+  const tasks=useMemo(()=>{
+    const meta=new Map(orders.map(item=>[item.id,{
+      urgent:item.is_urgent===true,
+      created:Date.parse(item.created_at || item.createdAt || ''),
+    }]));
+    return operationalAttentionTasks(orders).sort((a,b)=>{
+      const category=kindPriority[a.kind]-kindPriority[b.kind];
+      if(category)return category;
+      const urgent=Number(Boolean(meta.get(b.deliveryId)?.urgent))-Number(Boolean(meta.get(a.deliveryId)?.urgent));
+      if(urgent)return urgent;
+      const aCreated=meta.get(a.deliveryId)?.created;
+      const bCreated=meta.get(b.deliveryId)?.created;
+      const aTime=aCreated!==undefined&&Number.isFinite(aCreated)?aCreated:Number.MAX_SAFE_INTEGER;
+      const bTime=bCreated!==undefined&&Number.isFinite(bCreated)?bCreated:Number.MAX_SAFE_INTEGER;
+      return aTime-bTime || a.customer.localeCompare(b.customer,'pt-BR') || a.deliveryId.localeCompare(b.deliveryId);
+    });
+  },[orders]);
   const counts=useMemo(()=>tasks.reduce((acc,task)=>{acc[task.kind]++;return acc;},{site_confirmation:0,site_dispatch:0,pix_pending:0,collect:0} as Record<AttentionKind,number>),[tasks]);
   const effectiveFilter = filter !== 'all' && counts[filter] === 0 ? 'all' : filter;
   const visible=useMemo(()=>{
@@ -73,7 +90,7 @@ export function OperationalAttentionQueue({orders,selectedDateKey,onFinance}:{or
       <p role="status" aria-live="polite" className="mt-2 text-[11px] text-zinc-400">{visible.length} {visible.length===1?'ação encontrada':'ações encontradas'} · {new Set(visible.map(item=>item.deliveryId)).size} pedidos</p>
       <div className="mt-2.5 max-h-[min(48dvh,440px)] space-y-2 overflow-y-auto overscroll-contain pr-0.5" aria-label="Lista de pendências filtradas">
       {shown.map(task=><button key={task.key} type="button" onClick={()=>navigate(task.kind)} aria-label={`${labels[task.kind]} · ${task.customer} · ${money(task.amount)} · ${actionLabels[task.kind]}`} className="flex min-h-16 w-full items-center gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/35 px-3 py-2.5 text-left transition-colors hover:border-zinc-700 active:bg-zinc-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
-        <span className="min-w-0 flex-1"><span className={`inline-flex rounded-md px-1.5 py-0.5 text-[9px] font-black ${statusStyles[task.kind]}`}>{labels[task.kind]}</span><strong className="mt-1 block truncate text-xs font-bold text-zinc-100">{task.customer}{task.orderRef?` · #${task.orderRef.slice(-10)}`:''}</strong><span className="mt-0.5 block truncate text-[10px] text-zinc-500">{task.address||'Endereço não informado'}<span className="ml-1 font-semibold text-zinc-300">· {money(task.amount)}</span></span></span>
+        <span className="min-w-0 flex-1"><span className={`inline-flex rounded-md px-1.5 py-0.5 text-[9px] font-black ${statusStyles[task.kind]}`}>{labels[task.kind]}</span>{urgentDeliveryIds.has(task.deliveryId)&&<span className="ml-1 inline-flex rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black text-amber-200">URGENTE</span>}<strong className="mt-1 block truncate text-xs font-bold text-zinc-100">{task.customer}{task.orderRef?` · #${task.orderRef.slice(-10)}`:''}</strong><span className="mt-0.5 block truncate text-[10px] text-zinc-500">{task.address||'Endereço não informado'}<span className="ml-1 font-semibold text-zinc-300">· {money(task.amount)}</span></span></span>
         <span className="flex max-w-[40%] shrink-0 flex-col items-end gap-1"><span className="text-right text-[10px] font-bold leading-tight text-zinc-300">{actionLabels[task.kind]}</span><ChevronRight size={16} className="text-zinc-500"/></span>
       </button>)}
       </div>

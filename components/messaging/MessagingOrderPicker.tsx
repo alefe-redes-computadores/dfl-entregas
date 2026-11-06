@@ -11,13 +11,23 @@ type Props = { deliveries: readonly Delivery[]; selectedId: string; onSelect: (i
 export function MessagingOrderPicker({ deliveries, selectedId, onSelect }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const recent = useMemo(() => [...deliveries]
-    .sort((a, b) => String(b.created_at || b.createdAt || '').localeCompare(String(a.created_at || a.createdAt || '')))
-    .slice(0, 120), [deliveries]);
+  // Apenas uma ordenação VISUAL. O servidor continua decidindo elegibilidade real.
+  const manualOptedIn = (item: Delivery) => item.source_system !== 'dfl_site' &&
+    item.origin === 'loja' && item.notify_whatsapp === true &&
+    item.manual_messaging_opt_in_v1 === true && item.fulfillment_mode === 'delivery';
+  const priority = (item: Delivery) => manualOptedIn(item) ? 0 : item.source_system === 'dfl_site' ? 2 : 1;
+  const compare = (a: Delivery, b: Delivery) =>
+    priority(a) - priority(b) || Number(Boolean(a.completed)) - Number(Boolean(b.completed)) ||
+    Number(b.is_urgent === true) - Number(a.is_urgent === true) ||
+    String(b.created_at || b.createdAt || '').localeCompare(String(a.created_at || a.createdAt || '')) ||
+    a.id.localeCompare(b.id);
+  const recent = useMemo(() => [...deliveries].sort(compare).slice(0, 120), [deliveries]);
   const norm = search.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const matches = useMemo(() => recent.filter(item => !norm || [item.customer_name, item.order_id, item.external_order_id, item.id, item.phone]
-    .filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(norm)).slice(0, 15), [recent, norm]);
-  const current = recent.find(item => item.id === selectedId);
+  const matches = useMemo(() => (norm ? deliveries : recent)
+    .filter(item => !norm || [item.customer_name, item.order_id, item.external_order_id, item.id, item.phone]
+      .filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(norm))
+    .sort(compare).slice(0, 15), [deliveries, recent, norm]);
+  const current = deliveries.find(item => item.id === selectedId);
   return <section aria-label="Escolher pedido para diagnóstico" className="rounded-2xl border border-sky-500/15 bg-sky-500/[.035] p-3">
     <div className="flex items-start justify-between gap-2">
       <div className="min-w-0"><p className="text-xs font-black text-zinc-100">Selecionar pedido sincronizado</p>
@@ -40,7 +50,7 @@ export function MessagingOrderPicker({ deliveries, selectedId, onSelect }: Props
         </button>)}
         {!matches.length && <p className="p-3 text-xs text-zinc-500">Nenhum pedido encontrado nos registros recentes deste aparelho.</p>}
       </div>
-      <p className="px-1 text-[10px] text-zinc-500">Busca local nos 120 pedidos recentes. A confirmação de elegibilidade continua sendo feita pelo servidor.</p>
+      <p className="px-1 text-[10px] text-zinc-500">Lista inicial prioriza pedidos manuais com consentimento, urgentes e recentes. A pesquisa percorre todos os pedidos sincronizados. Só o servidor confirma elegibilidade e envio.</p>
     </div>}
   </section>;
 }

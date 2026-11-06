@@ -527,12 +527,30 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
       const newStatus = pendingGroupedDeliveries.length > 0 || !delivery.completed;
       if (!newStatus) {
+        // R290: feedback enquanto confirma o Firestore, sem duplicar transições.
+        completionBusyRef.current = true;
+        setCompletionBusy(true);
+        const reopenToastId = `dfl-reopen:${delivery.id}`;
+        const reopenNotice = window.setTimeout(() => {
+          toast.loading('Reabrindo entrega…', {
+            id: reopenToastId,
+            description: 'Confirmando alteração no servidor. Não toque novamente.',
+            duration: Infinity,
+          });
+        }, 650);
         try {
           await updateDelivery(delivery.id, { completed: false });
-          toast.success('Baixa desfeita.');
+          toast.success('Baixa desfeita e confirmada.', { duration: 2000 });
         } catch (error) {
           console.error('Erro ao desfazer baixa:', error);
-          toast.error('Não foi possível desfazer a baixa.');
+          toast.error('Não foi possível desfazer a baixa.', {
+            description: 'A confirmação do servidor falhou. Confira a conexão e tente novamente.',
+          });
+        } finally {
+          window.clearTimeout(reopenNotice);
+          toast.dismiss(reopenToastId);
+          completionBusyRef.current = false;
+          setCompletionBusy(false);
         }
         return;
       }

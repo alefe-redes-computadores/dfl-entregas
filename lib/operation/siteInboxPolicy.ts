@@ -49,10 +49,21 @@ export function siteInboxProjection(deliveries: readonly Delivery[], now = Date.
       rows.push({delivery: active[0].delivery, state:'revisar', duplicate:true});
     } else rows.push(active[0]);
   }
+  // R290: só a apresentação muda. Duplicidade nunca vira autorização comercial.
+  // Prontos antes de pendências bloqueadas; urgente primeiro dentro do mesmo estado;
+  // FIFO usa CRIAÇÃO do pedido, não o último evento de sincronização do Site.
+  const queueStatePriority: Record<State,number> = {pronto:0,revisar:1,confirmar:2,aguardar_agenda:3};
   rows.sort((a,b) => {
-    const aDate = Date.parse(a.delivery.site_order_last_event_at || a.delivery.created_at || a.delivery.createdAt || '');
-    const bDate = Date.parse(b.delivery.site_order_last_event_at || b.delivery.created_at || b.delivery.createdAt || '');
-    return (Number.isFinite(aDate) ? aDate : 0) - (Number.isFinite(bDate) ? bDate : 0) || a.delivery.id.localeCompare(b.delivery.id);
+    if (Boolean(a.duplicate) !== Boolean(b.duplicate)) return a.duplicate ? -1 : 1;
+    const stateDifference = queueStatePriority[a.state] - queueStatePriority[b.state];
+    if (stateDifference) return stateDifference;
+    const urgentDifference = Number(b.delivery.is_urgent === true) - Number(a.delivery.is_urgent === true);
+    if (urgentDifference) return urgentDifference;
+    const aDate = Date.parse(a.delivery.created_at || a.delivery.createdAt || a.delivery.site_order_last_event_at || '');
+    const bDate = Date.parse(b.delivery.created_at || b.delivery.createdAt || b.delivery.site_order_last_event_at || '');
+    const aTime = Number.isFinite(aDate) ? aDate : Number.MAX_SAFE_INTEGER;
+    const bTime = Number.isFinite(bDate) ? bDate : Number.MAX_SAFE_INTEGER;
+    return aTime - bTime || a.delivery.id.localeCompare(b.delivery.id);
   });
   let ready=0, commercial=0, scheduled=0, review=0, duplicates=0;
   for (const row of rows) {
