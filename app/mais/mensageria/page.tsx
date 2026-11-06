@@ -6,6 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { auth } from '@/lib/firebase';
 import { useAppStore } from '@/store/useAppStore';
 import { isSuperadminUid } from '@/lib/access/roles';
+import { MessagingOrderPicker } from '@/components/messaging/MessagingOrderPicker';
 
 type Reason = 'delivery_not_found' | string;
 type Diagnostics = {
@@ -40,6 +41,7 @@ function Gate({ title, yes, subtitle }: { title: string; yes: boolean; subtitle:
 export default function MensageriaDiagnosticPage() {
   const router = useRouter();
   const isOwner = isSuperadminUid(useAppStore(s => s.user?.uid));
+  const deliveries = useAppStore(s => s.deliveries);
   const [deliveryId, setDeliveryId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -117,13 +119,14 @@ export default function MensageriaDiagnosticPage() {
         <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-xs font-bold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 [&::-webkit-details-marker]:hidden"><span className="flex items-center gap-2"><Settings2 size={17} className="text-amber-300"/> Ferramentas avançadas</span><span className="flex items-center gap-1 text-[10px] font-medium text-zinc-500">Diagnóstico e homologação <ChevronDown size={15} className="transition-transform group-open:rotate-180"/></span></summary>
         <div className="space-y-3 border-t border-zinc-800 px-4 pb-4 pt-3">
           <p className="text-[11px] leading-relaxed text-zinc-400">A consulta de pedido e os testes de autenticação ficam separados do acompanhamento diário. Nenhuma consulta dispara mensagens.</p>
+          <MessagingOrderPicker deliveries={deliveries} selectedId={deliveryId} onSelect={setDeliveryId} />
           {data && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Gate title="Avisos manuais" yes={data.gates.manualEnabled} subtitle={data.gates.manualEnabled?'Habilitados pelo servidor':'Desativados. Sem disparo para clientes.'}/>
             <Gate title="Janela de ativação" yes={data.gates.manualActivationValid} subtitle="Pedidos antigos ficam excluídos."/>
             <Gate title="Destino manual do Site" yes={data.gates.manualSiteTargetConfigured} subtitle="Configuração presente, sem expor segredos."/>
             <Gate title="Ponte logística" yes={reverseReady} subtitle="Integração reversa e assinatura do Site."/>
           </div>}
-          <label htmlFor="dfl-m4-id" className="block text-xs font-bold text-zinc-200">ID interno da entrega (opcional)</label>
+          <label htmlFor="dfl-m4-id" className="block text-xs font-bold text-zinc-200">ID interno (alternativa para pedido não encontrado na lista)</label>
           <input id="dfl-m4-id" type="text" autoComplete="off" spellCheck={false} value={deliveryId} onChange={event => setDeliveryId(event.target.value.slice(0,128))} placeholder="dfl-..." className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"/>
           <button type="button" onClick={() => void consult()} disabled={busy} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 text-xs font-bold text-zinc-100 disabled:opacity-50"><RefreshCw size={15}/>{busy?'Consultando…':'Verificar pontes e pedido'}</button>
           {data?.delivery && <div className="rounded-xl bg-zinc-950 p-3">

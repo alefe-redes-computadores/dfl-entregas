@@ -13,6 +13,7 @@ import { toast } from '@/lib/operational-toast';
 import { OPERATION_FIRST_BATCH, nextProgressiveCount } from '@/lib/operation/progressiveWindow';
 import { siteHistoryRows, siteHistoryLabel, siteHistoryDetail, siteHistoryKind, siteHistoryCompactId, siteHistoryTime } from '@/lib/operation/site-order-history-r161';
 import { siteManualReviewCandidates, siteManualArchiveReason } from '@/lib/operation/site-manual-review-r280';
+import { siteOrderDisplayReference } from '@/lib/operation/site-order-presentation';
 import type { Delivery } from '@/types';
 
 const captions: Record<Extract<SiteInboxState, 'confirmar'|'pronto'|'aguardar_agenda'|'revisar'>,string> = {
@@ -266,11 +267,11 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
         <p role="status" className="px-1 text-[10px] text-zinc-500">{filteredHistory.length} registro{filteredHistory.length===1?'':'s'} nesta seleção</p>
         {filteredHistory.slice(0,historyLimit).map(item=><article key={item.id} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/50 p-3">
           <div className="flex min-w-0 items-start justify-between gap-3">
-            <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wider text-sky-300">Site · #{siteHistoryCompactId(item)}</p><p className="mt-1 truncate text-[13px] font-bold text-zinc-100">{item.customer_name||'Cliente do Site'}</p></div>
+            <div className="min-w-0 flex-1"><p className="text-[11px] font-black text-sky-300">{siteOrderDisplayReference(item)}</p><p className="mt-0.5 text-[9px] text-zinc-600">Referência operacional · {siteHistoryCompactId(item)}</p><p className="mt-1 truncate text-[13px] font-bold text-zinc-100">{item.customer_name||'Cliente do Site'}</p></div>
             <div className="shrink-0 text-right"><p className="text-xs font-black text-zinc-100 tabular-nums">{amount(Number(item.customer_charge??item.value))}</p><p className="mt-1 text-[10px] text-zinc-500">{siteHistoryTime(item)}</p></div>
           </div>
           <p className="mt-2 text-[11px] font-semibold text-zinc-300">{siteHistoryLabel(item)}</p>
-          <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">{siteHistoryDetail(item)}</p>
+          <details className="mt-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-2.5 py-2 text-[10px] text-zinc-400"><summary className="cursor-pointer font-semibold text-zinc-300">Ver ocorrência e motivo</summary><p className="mt-2 break-words leading-relaxed">{siteHistoryDetail(item)}</p></details>
           <details className="mt-2 text-[10px] text-zinc-400"><summary className="w-fit cursor-pointer font-semibold text-sky-300">Mostrar ID completo</summary><code className="mt-1 block break-all select-text font-mono text-zinc-300">{item.external_order_id||item.order_id||item.id}</code></details>
           <button type="button" onClick={()=>router.push(`/entregas/details?id=${encodeURIComponent(item.id)}`)} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700/70 bg-zinc-900/50 text-[11px] font-bold text-zinc-200"><ArrowUpRight size={14}/> Ver detalhes do pedido</button>
         </article>)}
@@ -286,7 +287,7 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
       const requiresManualReview=!duplicate&&possibleManual.length>0&&!independentOrders.includes(delivery.id);
       return <article key={delivery.id} className={`scroll-mt-28 rounded-[20px] border p-3.5 ${tones[state]}`}>
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wide">{duplicate?'Possível pedido duplicado · revisar origem':captions[state]}</p><h3 className="mt-1 truncate text-sm font-black text-zinc-100">{delivery.customer_name||'Cliente do Site'}</h3><p className="mt-0.5 text-[10px] text-zinc-400">Site · #{siteHistoryCompactId(delivery)}</p><details className="mt-1 text-[10px] text-zinc-400"><summary className="w-fit cursor-pointer font-semibold text-sky-300">Mostrar ID completo</summary><code className="mt-1 block break-all select-text font-mono text-zinc-300">{delivery.external_order_id||delivery.order_id||delivery.id}</code></details></div>
+          <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wide">{duplicate?'Possível pedido duplicado · revisar origem':captions[state]}</p><h3 className="mt-1 truncate text-sm font-black text-zinc-100">{delivery.customer_name||'Cliente do Site'}</h3><p className="mt-0.5 text-[11px] font-semibold text-sky-300">{siteOrderDisplayReference(delivery)}</p><p className="mt-0.5 text-[9px] text-zinc-600">Site · #{siteHistoryCompactId(delivery)}</p><details className="mt-1 text-[10px] text-zinc-400"><summary className="w-fit cursor-pointer font-semibold text-sky-300">Mostrar ID completo</summary><code className="mt-1 block break-all select-text font-mono text-zinc-300">{delivery.external_order_id||delivery.order_id||delivery.id}</code></details></div>
           <span className="shrink-0 text-sm font-black text-zinc-100">{amount(Number(delivery.customer_charge??delivery.value))}</span>
         </div>
         {duplicate&&<p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-200">Foram encontrados registros com o mesmo ID externo. Confira e concilie os pedidos antes de alocar uma rota.</p>}
