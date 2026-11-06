@@ -75,6 +75,11 @@ export default function MensageriaDiagnosticPage() {
       <h1 className="font-heading text-2xl font-black text-zinc-50">Mensageria do Entregas</h1>
       <p className="text-xs leading-relaxed text-zinc-400">Veja por que um pedido não gerou aviso. Não envia WhatsApp, não reprocessa eventos e não modifica o banco.</p>
     </header>
+    {isOwner && <button type="button" onClick={() => router.push('/mais/mensageria/homologacao')}
+      className="flex min-h-12 w-full items-center justify-between rounded-2xl border border-amber-400/25 bg-gradient-to-r from-amber-400/10 to-zinc-900 px-4 text-left text-xs font-black text-amber-200">
+      <span className="flex items-center gap-2"><ShieldCheck size={17}/> Homologar ponte e bot com segurança</span>
+      <span aria-hidden="true">›</span>
+    </button>}
     {!isOwner ? <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"><LockKeyhole size={16} className="inline"/> Diagnósticos disponíveis somente ao superadministrador.</p> : <>
       <section className="space-y-3 rounded-[22px] border border-zinc-800 bg-zinc-900/55 p-4">
         <label htmlFor="dfl-m4-id" className="block text-xs font-bold text-zinc-200">ID interno da entrega (opcional)</label>
