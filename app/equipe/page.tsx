@@ -19,6 +19,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { matchesOperationSearch } from '@/lib/operation/searchR99';
 import type { TeamMember, TeamMemberRole } from '@/types';
+import { PremiumChoicePicker } from '@/components/ui/PremiumChoicePicker';
 
 const roles: Array<[TeamMemberRole, string]> = [
   ['administracao', 'Administração'],
@@ -444,19 +445,9 @@ export default function TeamPage() {
                 className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-sm outline-none focus:border-violet-500"
               />
 
-              <select
-                value={form.role}
-                onChange={(event) =>
-                  setForm({ ...form, role: event.target.value as TeamMemberRole })
-                }
-                className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-sm outline-none focus:border-violet-500"
-              >
-                {roles.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              <PremiumChoicePicker label="Função da equipe" value={form.role}
+                onChange={value => setForm(previous => ({...previous, role:value as TeamMemberRole}))}
+                options={roles.map(([value,label])=>({value,label}))} />
 
               <textarea
                 rows={3}

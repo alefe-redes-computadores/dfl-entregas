@@ -18,6 +18,7 @@ import { toast } from '@/lib/operational-toast';
 
 import { useAppStore } from '@/store/useAppStore';
 import type { OperationalExpenseType } from '@/types';
+import { PremiumChoicePicker } from '@/components/ui/PremiumChoicePicker';
 
 const OPTIONS: Array<{
   value: OperationalExpenseType;
@@ -223,19 +224,8 @@ function Content() {
 
         {(type === 'motoboy' || type === 'frete') && (
           <Field label="Motoboy relacionado">
-            <select
-              value={motoboyId}
-              onChange={(event) => setMotoboyId(event.target.value)}
-              className="dfl-search px-3.5"
-            >
-              <option value="">Sem vínculo</option>
-              {activeMotoboys.map((motoboy) => (
-                <option key={motoboy.id} value={motoboy.id}>
-                  {motoboy.name}
-                  {!motoboy.active ? ' · inativo (histórico)' : ''}
-                </option>
-              ))}
-            </select>
+            <PremiumChoicePicker label="Motoboy relacionado" value={motoboyId} onChange={setMotoboyId}
+              options={[{value:'',label:'Sem vínculo'},...activeMotoboys.map(motoboy=>({value:motoboy.id,label:`${motoboy.name}${!motoboy.active ? ' · inativo (histórico)' : ''}`}))]} />
           </Field>
         )}
 

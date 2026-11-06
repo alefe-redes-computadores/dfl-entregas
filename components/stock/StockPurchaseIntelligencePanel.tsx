@@ -4,12 +4,13 @@ import { useMemo, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Share } from '@capacitor/share';
-import { ArrowDownUp, ChevronDown, ClipboardCopy, FileText, Info, Share2, Store, TrendingDown } from 'lucide-react';
+import { ChevronDown, ClipboardCopy, FileText, Info, Share2, Store, TrendingDown } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { exportStockMarketPdf } from '@/lib/stock-market-pdf';
 import { buildStockPurchaseForecast, stockSupplierPurchaseText, stockVendorSpecificLines } from '@/lib/stock-purchase-forecast';
 import type { StockMarketRow } from '@/lib/stock-market-list';
+import { PremiumChoicePicker } from '@/components/ui/PremiumChoicePicker';
 
 type Props = {
   rows: readonly StockMarketRow[];
@@ -154,14 +155,10 @@ export function StockPurchaseIntelligencePanel({ rows, checked, invalid }: Props
         )}
       </div>
       {expanded && !summaryIsEmpty && <div className="border-t border-zinc-800/80 bg-zinc-950/35 p-3.5">
-        <label htmlFor="r97-supplier" className="mb-1.5 block text-[10px] font-bold text-zinc-300">Roteiro para</label>
-        <div className="relative">
-          <select id="r97-supplier" value={chosenValid} onChange={event => { setSupplierKey(event.target.value); setShown(8); pulse(); }} className="h-12 w-full appearance-none rounded-xl border border-zinc-700 bg-zinc-900 px-3 pr-10 text-xs font-bold text-zinc-100 outline-none focus:border-amber-500/70">
-            <option value="">Melhores preços registrados por produto</option>
-            {supplierKeys.map(item => <option key={item.key} value={item.key}>{item.name}</option>)}
-          </select>
-          <ArrowDownUp size={15} className="pointer-events-none absolute right-3 top-4 text-amber-400"/>
-        </div>
+        <p className="mb-1.5 text-[10px] font-bold text-zinc-300">Roteiro para</p>
+        <PremiumChoicePicker id="r97-supplier" label="Roteiro por fornecedor" value={chosenValid}
+          onChange={value => { setSupplierKey(value); setShown(8); pulse(); }}
+          options={[{value:'',label:'Melhores preços registrados por produto'},...supplierKeys.map(item=>({value:item.key,label:item.name}))]} />
         <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900/55 p-3">
           <p className="text-[10px] font-bold text-zinc-200">{chosenValid ? 'Histórico específico deste fornecedor' : 'Roteiro sugerido com base no menor histórico'}</p>
           <p className="mt-1 text-[11px] text-zinc-400">{selectedLines.length} produto(s) com preço · {money(supplierTotal)} estimados</p>

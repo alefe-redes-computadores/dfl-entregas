@@ -17,7 +17,7 @@ ok(store.includes('moveStopToIndex(pending, deliveryId, rawTarget)')&&store.incl
 ok(card.includes("style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}")&&card.includes('Origem ${channelStyle.label}')&&!card.includes('<ChannelIcon size={11} aria-hidden="true" />{channelStyle.label}'),'identidade lateral vertical sem selo debaixo do nome');
 ok(stock.includes('data-stock-product={product.id} role="group" tabIndex={0}')&&stock.includes('onClick={(event)=>{if((event.target as HTMLElement).closest')&&stock.includes("event.stopPropagation();open()"),'card abre movimentação; nome abre detalhes com propagação isolada');
 ok(card.includes('Registrar tentativa (sem dar baixa)')&&card.includes('delivery_attempts: appendDeliveryAttempt')&&card.includes('A entrega permanece pendente'),'tentativa registrada como histórico, sem conclusão');
-ok(card.includes('pendingGroupedDeliveries.map(item => <option')&&card.includes('attemptTargetId'),'parada agrupada permite escolher pedido individual');
+ok(card.includes('pendingGroupedDeliveries.map(item => ({value:item.id')&&card.includes('attemptTargetId')&&card.includes('label="Pedido desta parada"'),'parada agrupada permite escolher pedido individual');
 ok(card.includes('attemptMoveLast')&&card.includes('void saveAttempt()'),'tentativa pode sugerir mover parada por motor existente');
 ok(!/onSnapshot\(|getDocs\(|runTransaction\(/.test([card,route,stock].join('\n')),'UI sem consultas remotas novas');
 function load(file,deps={}){const src=ts.transpileModule(read(file),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;const mod={exports:{}};vm.runInNewContext(`(function(require,module,exports){${src}

@@ -28,6 +28,7 @@ import {
   supplyTotal,
 } from '@/lib/stock-supply';
 import type { StockSupply, StockSupplyStatus } from '@/types';
+import { PremiumChoicePicker } from '@/components/ui/PremiumChoicePicker';
 
 const monthKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
@@ -566,5 +567,5 @@ function Metric({
 }
 
 function PurchaseFilter({label,value,setValue,options}:{label:string;value:string;setValue:(value:string)=>void;options:[string,string][]}) {
-  return <label className="mt-4 block"><span className="mb-1.5 block text-[9px] font-black uppercase tracking-[.14em] text-zinc-600">{label}</span><select value={value} onChange={event=>setValue(event.target.value)} className="dfl-search px-3.5">{options.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>;
+  return <div className="mt-4"><span className="mb-1.5 block text-[9px] font-black uppercase tracking-[.14em] text-zinc-600">{label}</span><PremiumChoicePicker label={label} value={value} onChange={setValue} options={options.map(([key,name])=>({value:key,label:name}))}/></div>;
 }

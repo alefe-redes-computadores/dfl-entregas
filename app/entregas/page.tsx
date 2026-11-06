@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { datedOperationKey, datedOperationHref } from '@/lib/operation/dated-operation-navigation';
 import {
   AlertTriangle,
   Bike,
@@ -83,20 +84,17 @@ export default function DeliveriesPage() {
   const globalSelectedDate = useAppStore((state) => state.selectedDate);
   const setGlobalSelectedDate = useAppStore((state) => state.setSelectedDate);
   const today = dateKey(new Date());
-  const initialDateKey =
-    initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)
-      ? initialDate
-      : dateKey(globalSelectedDate);
+  const initialDateKey = datedOperationKey(initialDate, dateKey(globalSelectedDate));
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
 
-  const selectedDate = dateKey(globalSelectedDate);
+  const selectedDate = datedOperationKey(initialDate, dateKey(globalSelectedDate));
 
   useEffect(() => {
     if (
       initialDate &&
-      /^\d{4}-\d{2}-\d{2}$/.test(initialDate) &&
+      datedOperationKey(initialDate, '') === initialDate &&
       dateKey(useAppStore.getState().selectedDate) !== initialDate
     ) {
       setGlobalSelectedDate(
@@ -107,10 +105,11 @@ export default function DeliveriesPage() {
   const setSelectedDate = (key: string | ((value: string) => string)) => {
     const next =
       typeof key === 'function'
-        ? key(dateKey(useAppStore.getState().selectedDate))
+        ? key(selectedDate)
         : key;
 
     setGlobalSelectedDate(operationalDateFromKey(next));
+    router.replace(datedOperationHref('/entregas', searchParams.toString(), next), { scroll: false });
   };
   const [calendarMonth, setCalendarMonth] = useState(() => operationalDateFromKey(initialDateKey));
   const [calendarOpen, setCalendarOpen] = useState(false);

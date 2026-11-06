@@ -8,8 +8,6 @@ import { BellRing,
   ChevronRight,
   LogOut,
   ShieldCheck,
-  Store,
-  SlidersHorizontal,
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
@@ -65,15 +63,24 @@ export default function MaisPage() {
         </div>
       </section>
       {isDiagnosticsAdmin && (
-        <section aria-label="Resumo administrativo da operação" className="rounded-[22px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.07] to-zinc-950 p-3.5">
-          <div className="mb-3 flex items-center gap-2"><SlidersHorizontal size={17} className="text-sky-300"/><h2 className="text-sm font-black text-zinc-100">Preferências operacionais</h2></div>
-          <div className="grid grid-cols-2 gap-2 text-[11px]">
-            <span className="rounded-xl border border-zinc-800/80 bg-zinc-900/70 px-3 py-2 text-zinc-300">Rotas: {operationalSettings.routeReminderEnabled !== false ? 'avisos ativos' : 'avisos pausados'}</span>
-            <span className="rounded-xl border border-zinc-800/80 bg-zinc-900/70 px-3 py-2 text-zinc-300">Fechamento: {operationalSettings.autoCloseCompletedRoutes !== false ? 'automático' : 'manual'}</span>
+        <section aria-label="Gestão e integrações" className="space-y-3">
+          <div className="px-1">
+            <p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-400">Gestão e integrações</p>
+            <h2 className="mt-1 text-sm font-black text-zinc-100">Ferramentas administrativas</h2>
           </div>
-          <button type="button" onClick={() => router.push('/loja')} className="mt-3 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 text-left text-xs font-black text-sky-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400"><span className="flex items-center gap-2"><Store size={15}/> Configurar na Minha Loja</span><ChevronRight size={16}/></button>
-          <button type="button" onClick={() => router.push('/mais/mensageria')} className="mt-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 text-left text-xs font-black text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"><span>Central de Mensageria 360°</span><ChevronRight size={16}/></button>
-          <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Somente administradores acessam os controles. O resumo não altera configurações.</p>
+          <button type="button" onClick={() => router.push('/mais/mensageria')}
+            className="flex min-h-16 w-full items-center justify-between gap-3 rounded-[20px] border border-amber-400/25 bg-amber-400/[.07] px-4 text-left active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
+            <span className="min-w-0"><strong className="block text-sm font-black text-amber-200">Central de Mensageria 360°</strong><small className="mt-1 block text-[10px] text-zinc-400">Envios, pendências e falhas · acesso administrativo</small></span>
+            <ChevronRight size={18} className="shrink-0 text-amber-300" />
+          </button>
+          <div className="rounded-[20px] border border-sky-500/15 bg-zinc-900/40 px-3.5 py-3">
+            <p className="text-[10px] font-black uppercase tracking-wide text-sky-300">Estado operacional</p>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+              <span className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-2.5 text-zinc-300">Avisos das rotas: {operationalSettings.routeReminderEnabled !== false ? 'ativos' : 'pausados'}</span>
+              <span className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-2.5 text-zinc-300">Fechamento: {operationalSettings.autoCloseCompletedRoutes !== false ? 'automático' : 'manual'}</span>
+            </div>
+            <p className="mt-2 text-[10px] text-zinc-500">Configurações de abertura e operação continuam exclusivamente em Minha Loja.</p>
+          </div>
         </section>
       )}
       <section aria-label="Análises históricas" className="rounded-[22px] border border-zinc-800 bg-zinc-900/30 p-2.5">
@@ -88,7 +95,7 @@ export default function MaisPage() {
 
 <section className="flex flex-col gap-2">
         <h2 className="px-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-          Sistema e dados
+          Ferramentas e sistema
         </h2>
 
         <div className="flex flex-col overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/40">

@@ -9,6 +9,7 @@ import {
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import type { OperationalExpenseType } from '@/types';
+import { PremiumChoicePicker } from '@/components/ui/PremiumChoicePicker';
 
 const OPTIONS:Array<{value:OperationalExpenseType;label:string;description:string;Icon:typeof Bike}>=[
   {value:'motoboy',label:'Motoboy',description:'Diária, complemento, ajuda ou custo ligado ao entregador',Icon:Bike},
@@ -47,7 +48,7 @@ export default function NewExpensePage(){
     <section className="space-y-3 rounded-[24px] border border-zinc-800/80 bg-zinc-900/35 p-4">
       <Field label="Descrição"><input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: diária do João, troca de óleo, taxa..." className="dfl-search px-3.5"/></Field>
       <div className="grid grid-cols-2 gap-3"><Field label="Valor"><input value={amount} onChange={e=>setAmount(e.target.value.replace(/[^\d.,]/g,''))} inputMode="decimal" placeholder="0,00" className="dfl-search px-3.5"/></Field><Field label="Quando"><input type="datetime-local" value={occurredAt} onChange={e=>setOccurredAt(e.target.value)} className="dfl-search px-2.5 text-[11px]"/></Field></div>
-      {needsMotoboy&&<Field label="Motoboy relacionado · opcional"><select value={motoboyId} onChange={e=>setMotoboyId(e.target.value)} className="dfl-search px-3.5"><option value="">Sem vínculo</option>{activeMotoboys.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>}
+      {needsMotoboy&&<Field label="Motoboy relacionado · opcional"><PremiumChoicePicker label="Motoboy relacionado" value={motoboyId} onChange={setMotoboyId} options={[{value:'',label:'Sem vínculo'},...activeMotoboys.map(m=>({value:m.id,label:m.name}))]} /></Field>}
       <Field label="Observação · opcional"><textarea value={observation} onChange={e=>setObservation(e.target.value)} rows={3} placeholder="Detalhe útil para lembrar depois" className="w-full resize-none rounded-[16px] border border-zinc-800/80 bg-zinc-950/55 px-3.5 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-rose-500/50"/></Field>
     </section>
 

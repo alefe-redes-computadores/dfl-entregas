@@ -17,6 +17,7 @@ import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidenc
 import { locationEvidence } from '@/lib/location-evidence';
 import { appendDeliveryAttempt, deliveryAttemptLabel, deliveryAttemptSummary, DELIVERY_ATTEMPT_REASONS, DELIVERY_ATTEMPT_NOTE_SUGGESTIONS } from '@/lib/delivery-attempts';
 import type { DeliveryAttemptReason } from '@/lib/delivery-attempts';
+import { PremiumChoicePicker } from '@/components/ui/PremiumChoicePicker';
 import { appendConfirmedReturnVisit } from '@/lib/delivery-return-visits';
 import { buildNavigationLinks } from '@/lib/navigation-links';
 import { useAppStore } from '@/store/useAppStore';
@@ -1397,11 +1398,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 </details>
               ) : <p className="mt-3 text-[10px] text-zinc-500">Primeira tentativa deste pedido. O histórico ficará disponível aqui.</p>;
             })()}
-            {pendingGroupedDeliveries.length > 1 && <label className="mt-4 block text-[11px] font-bold text-zinc-300">Pedido desta parada
-              <select value={attemptTargetId} onChange={event => setAttemptTargetId(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100">
-                {pendingGroupedDeliveries.map(item => <option key={item.id} value={item.id}>{item.customer_name || getCustomerById(item.customer_id)?.name || item.order_id || item.id}{item.order_id ? ` · #${item.order_id}` : ''}</option>)}
-              </select>
-            </label>}
+            {pendingGroupedDeliveries.length > 1 && <div className="mt-4 space-y-2">
+              <p className="text-[11px] font-bold text-zinc-300">Pedido desta parada</p>
+              <PremiumChoicePicker label="Pedido desta parada" value={attemptTargetId} onChange={setAttemptTargetId}
+                options={pendingGroupedDeliveries.map(item => ({value:item.id,label:`${item.customer_name || getCustomerById(item.customer_id)?.name || item.order_id || item.id}${item.order_id ? ` · #${item.order_id}` : ''}`}))} />
+            </div>}
             {(() => {
               const target = pendingGroupedDeliveries.find(item => item.id === attemptTargetId);
               const history = target?.delivery_attempts || [];
@@ -1414,11 +1415,12 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 {!!target?.redelivery_visits?.length && <p className="mt-2 text-[10px] text-zinc-400">{target.redelivery_visits.length} retorno(s) físico(s) confirmado(s) neste pedido</p>}
               </div> : null;
             })()}
-            <label className="mt-4 block text-[11px] font-bold text-zinc-300">Motivo
-              <select value={attemptReason} onChange={event => setAttemptReason(event.target.value as DeliveryAttemptReason)} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100">
-                {DELIVERY_ATTEMPT_REASONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
-            </label>
+            <div className="mt-4 space-y-2">
+              <p className="text-[11px] font-bold text-zinc-300">Motivo da tentativa</p>
+              <PremiumChoicePicker label="Motivo da tentativa" value={attemptReason}
+                onChange={value => setAttemptReason(value as DeliveryAttemptReason)}
+                options={DELIVERY_ATTEMPT_REASONS.map(item => ({value:item.value,label:item.label}))} />
+            </div>
             <label className="mt-3 block text-[11px] font-bold text-zinc-300">Observação (opcional)
               <textarea rows={3} maxLength={240} value={attemptNote} onChange={event => setAttemptNote(event.target.value)} placeholder="Ex.: interfone sem resposta; combinar nova tentativa" className="mt-1 w-full resize-none rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-100 outline-none focus:border-amber-500" />
             </label>
