@@ -13,7 +13,15 @@ const ok = (condition, message) => {assert.ok(condition, message); checks++;};
 ok(site.includes('Pedidos do Site') && site.includes('projection.total'), 'Caixa preserva contador principal');
 ok(!site.includes('projection.scheduled+projection.review'), 'Caixa nao repete grades de numeros');
 ok(site.includes('projection.ready') && site.includes('projection.commercial') && site.includes('projection.review'), 'Filtros seguem completos');
-ok(site.includes('Pedido #{delivery.external_order_id'), 'Pedido individual continua identificado');
+ok(
+  site.includes('Pedido #{delivery.external_order_id') ||
+  (site.includes('Site · #{siteHistoryCompactId(delivery)}') &&
+    site.includes('Mostrar ID completo') &&
+    site.includes('{delivery.external_order_id||delivery.order_id||delivery.id}') &&
+    site.includes('{item.external_order_id||item.order_id||item.id}') &&
+    read('lib/operation/site-order-history-r161.ts').includes('raw.slice(-8).toUpperCase()')),
+  'Pedido individual identificado: código curto e ID integral acessível'
+);
 ok(site.includes('allocate(delivery.id'), 'Alocacao transacional preservada');
 ok(command.includes('siteInboxSummary(siteInbox)'), 'Home resume apenas contagens relevantes');
 ok(

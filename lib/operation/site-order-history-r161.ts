@@ -46,3 +46,14 @@ export function siteHistoryRows(deliveries: readonly Delivery[], limit = 30): De
       String(a.operational_dismissed_at || a.completed_at || a.site_order_status_updated_at || a.updated_at || a.created_at || ''))
     || a.id.localeCompare(b.id)).slice(0,Math.max(0,limit));
 }
+
+/** Referência curta somente visual; detalhes preservam o ID integral. */
+export function siteHistoryCompactId(item: Delivery): string {
+  const raw = String(item.external_order_id || item.order_id || item.id || '').trim();
+  return raw ? raw.slice(-8).toUpperCase() : 'SEM ID';
+}
+export function siteHistoryTime(item: Delivery): string {
+  return historyDate(item.operational_dismissed_at || item.completed_at ||
+    item.site_order_status_updated_at || item.site_order_last_event_at ||
+    item.updated_at || item.created_at || item.createdAt);
+}

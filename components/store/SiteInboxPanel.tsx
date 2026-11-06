@@ -3,7 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
-import { AlertCircle, CalendarClock, ChevronDown, CheckCircle2, Inbox, MapPin, Plus, Route as RouteIcon, ShieldCheck, ShoppingBag, X } from 'lucide-react';
+import { AlertCircle, CalendarClock, ChevronDown, CheckCircle2, Inbox, MapPin, Plus, Route as RouteIcon, ShieldCheck, ShoppingBag, X, History, Link2, ArrowUpRight } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { dateKey, routeOperationalDateKey } from '@/lib/operational-time';
 import { siteInboxProjection, type SiteInboxState } from '@/lib/operation/siteInboxPolicy';
@@ -11,7 +11,8 @@ import { searchSiteInboxRows, openRouteWorkload, siteAllocationPreflight } from 
 import { acknowledgeSiteOrders } from '@/lib/site-order-inbox';
 import { toast } from '@/lib/operational-toast';
 import { OPERATION_FIRST_BATCH, nextProgressiveCount } from '@/lib/operation/progressiveWindow';
-import { siteHistoryRows, siteHistoryLabel, siteHistoryDetail, siteHistoryKind } from '@/lib/operation/site-order-history-r161';
+import { siteHistoryRows, siteHistoryLabel, siteHistoryDetail, siteHistoryKind, siteHistoryCompactId, siteHistoryTime } from '@/lib/operation/site-order-history-r161';
+import { siteManualReviewCandidates, siteManualArchiveReason } from '@/lib/operation/site-manual-review-r280';
 import type { Delivery } from '@/types';
 
 const captions: Record<Extract<SiteInboxState, 'confirmar'|'pronto'|'aguardar_agenda'|'revisar'>,string> = {
@@ -61,6 +62,17 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   const [historyStatus,setHistoryStatus]=useState<'todos'|'cancelado'|'retirado_operacao'|'entregue'|'tentativa'>('todos');
   const [historyLimit,setHistoryLimit]=useState(10);
   const history=useMemo(()=>siteHistoryRows(deliveries, 200),[deliveries]);
+  // A comparação é apenas visual. Sem arquivar automaticamente pedidos reais.
+  const manualRows=useMemo(()=>deliveries.filter(item=>item.origin==='loja' && item.source_system!=='dfl_site')
+    .filter(item=>{const t=Date.parse(item.created_at||item.createdAt||'');return Number.isFinite(t)&&Math.abs(clock-t)<7*86400_000;})
+    .sort((a,b)=>String(b.created_at||b.createdAt||'').localeCompare(String(a.created_at||a.createdAt||''))).slice(0,36),[deliveries,clock]);
+  const matchesBySite=useMemo(()=>new Map(projection.rows.map(row=>[
+    row.delivery.id,siteManualReviewCandidates(row.delivery,manualRows,clock)
+  ])),[projection.rows,manualRows,clock]);
+  const [independentOrders,setIndependentOrders]=useState<string[]>([]);
+  const [reconciliationMode,setReconciliationMode]=useState(false);
+  const [manualReferenceId,setManualReferenceId]=useState('');
+  const [manualReferenceConfirmed,setManualReferenceConfirmed]=useState(false);
   const filteredHistory=useMemo(()=>{
     const needle=deferredHistorySearch.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     return history.filter(item=>{
@@ -90,13 +102,22 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   const [archiveReason,setArchiveReason]=useState('');
   const [archiveBusy,setArchiveBusy]=useState(false);
   const archiveLock=useRef(false);
-  const requestArchive=(delivery:Delivery)=>{
+  const clearArchive=()=>{setArchiveId(null);setArchiveReason('');setReconciliationMode(false);setManualReferenceId('');setManualReferenceConfirmed(false);};
+  const requestArchive=(delivery:Delivery,mode:'archive'|'manual'='archive')=>{
     if (archiveLock.current || delivery.source_system!=='dfl_site' || delivery.route_id?.trim() || delivery.completed || delivery.operational_dismissed_at) return;
-    setArchiveReason('');setArchiveId(delivery.id);
+    clearArchive();setReconciliationMode(mode==='manual');setArchiveId(delivery.id);
   };
   const confirmArchive=async()=>{
     if(!archiveId || archiveLock.current)return;
-    const reason=archiveReason.trim();
+    const linked=manualRows.find(item=>item.id===manualReferenceId);
+    if(reconciliationMode && (!linked || !manualReferenceConfirmed)){
+      toast.warning('Escolha a entrega manual correta e confirme a comparação.');return;
+    }
+    if(reconciliationMode && deliveries.some(item=>item.id!==archiveId && item.source_system==='dfl_site' &&
+      item.operational_dismissal_reason?.includes(`ref-manual=${manualReferenceId};`))){
+      toast.warning('Esta entrega manual já foi referenciada por outro pedido do Site.');return;
+    }
+    const reason=reconciliationMode ? siteManualArchiveReason(manualReferenceId) : archiveReason.trim();
     if(reason.length<8){toast.warning('Informe um motivo de pelo menos 8 caracteres.');return;}
     const live=deliveries.find(item=>item.id===archiveId);
     if(!live || live.source_system!=='dfl_site' || live.route_id?.trim() || live.completed || live.operational_dismissed_at){
@@ -105,8 +126,8 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
     archiveLock.current=true;setArchiveBusy(true);
     try{
       await archiveSiteDelivery(archiveId,reason);
-      setEditing(null);setArchiveId(null);setArchiveReason('');
-      toast.success('Pedido arquivado na operação.',{description:'O histórico foi mantido. O status comercial no Site não foi cancelado.'});
+      setEditing(null);clearArchive();
+      toast.success('Pedido preservado no histórico.',{description:'Sem nova rota, sem cancelar no Site e sem informar entrega ao cliente.'});
     }catch(error){toast.error('Não foi possível arquivar.',{description:error instanceof Error?error.message:'Confira a sincronização.'});}
     finally{archiveLock.current=false;setArchiveBusy(false);}
   };
@@ -173,40 +194,36 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
   return <section className="space-y-3" aria-label="Pedidos recebidos do Site">
     {archiveId && typeof document !== 'undefined' && createPortal(<div className="fixed inset-0 z-[340] flex items-center justify-center overflow-hidden bg-black/80 px-3 pt-[max(16px,env(safe-area-inset-top))] pb-[max(20px,env(safe-area-inset-bottom))]" role="dialog" aria-modal="true" aria-label="Confirmar arquivamento operacional">
       <div className="max-h-[calc(100dvh-24px)] w-full max-w-md space-y-3 overflow-y-auto overscroll-contain rounded-3xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl">
-        <h3 className="text-base font-black text-zinc-100">Arquivar pedido da operação?</h3>
-        <p className="text-xs leading-relaxed text-zinc-300">O pedido sairá da Caixa ativa e continuará no histórico operacional. <strong>Isso não cancela o pedido no Site, não avisa o cliente e não registra entrega.</strong> Use somente após conferir a situação comercial.</p>
-        <label className="block text-xs font-bold text-zinc-200">Motivo obrigatório
+        <h3 className="text-base font-black text-zinc-100">{reconciliationMode?'Já lancei este pedido manualmente':'Arquivar pedido da operação?'}</h3>
+        <p className="text-xs leading-relaxed text-zinc-300">{reconciliationMode?'Compare com a entrega manual real. Isto só arquiva a cópia do Site na operação; não mexe na rota existente, no pagamento nem no cliente.':'O pedido sairá da Caixa ativa e continuará no histórico operacional.'} <strong>Não cancela o Site, não envia mensagens e não registra entrega.</strong></p>
+        {reconciliationMode?<div className="space-y-2">
+          <p className="text-[11px] font-bold text-zinc-200">Escolha a entrega manual correspondente</p>
+          <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-zinc-800 p-2">
+            {manualRows.map(item=>{
+              const match=siteManualReviewCandidates(deliveries.find(row=>row.id===archiveId)!,[item],clock)[0];
+              const chosen=manualReferenceId===item.id;
+              return <button key={item.id} type="button" disabled={archiveBusy} onClick={()=>{setManualReferenceId(item.id);setManualReferenceConfirmed(false);}}
+                aria-pressed={chosen} className={`min-h-12 w-full rounded-xl border px-3 py-2 text-left ${chosen?'border-emerald-400/50 bg-emerald-500/10':'border-zinc-800 bg-zinc-950/70'}`}>
+                <span className="block truncate text-[11px] font-bold text-zinc-100">{item.customer_name||'Lançamento manual'} · {amount(Number(item.customer_charge??item.value))}</span>
+                <span className="mt-0.5 block truncate text-[10px] text-zinc-400">#{item.id.slice(-8).toUpperCase()}{match?' · Dados semelhantes':''} · {item.route_id?.trim()?'Com rota':'Sem rota'}</span>
+              </button>;
+            })}
+            {!manualRows.length&&<p className="p-3 text-[11px] text-amber-300">Nenhum lançamento manual recente encontrado. Não é possível conciliar sem escolher um registro real.</p>}
+          </div>
+          <label className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[.06] p-3 text-[11px] leading-relaxed text-zinc-200">
+            <input type="checkbox" className="mt-0.5 accent-emerald-500" checked={manualReferenceConfirmed} onChange={event=>setManualReferenceConfirmed(event.target.checked)} disabled={!manualReferenceId||archiveBusy}/>
+            Conferi o pedido, o valor e o cliente. É o mesmo pedido que já lancei manualmente; não quero outra rota.
+          </label>
+        </div>:<label className="block text-xs font-bold text-zinc-200">Motivo obrigatório
           <textarea value={archiveReason} onChange={event=>setArchiveReason(event.target.value.slice(0,240))} rows={3} maxLength={240} placeholder="Descreva por que este pedido será arquivado..." className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-100" disabled={archiveBusy}/>
-        </label>
-        <p className="text-[10px] text-zinc-500">Mínimo 8 caracteres · {archiveReason.trim().length}/240</p>
+          <span className="mt-1 block text-[10px] font-normal text-zinc-500">Mínimo 8 caracteres · {archiveReason.trim().length}/240</span>
+        </label>}
         <div className="flex gap-2">
-          <button type="button" disabled={archiveBusy} onClick={()=>{setArchiveId(null);setArchiveReason('');}} className="min-h-11 flex-1 rounded-xl border border-zinc-700 text-xs font-bold text-zinc-200">Voltar</button>
-          <button type="button" disabled={archiveBusy||archiveReason.trim().length<8} onClick={()=>void confirmArchive()} className="min-h-11 flex-1 rounded-xl border border-amber-500/40 bg-amber-500/15 text-xs font-black text-amber-200 disabled:opacity-40">{archiveBusy?'Arquivando...':'Confirmar arquivamento'}</button>
+          <button type="button" disabled={archiveBusy} onClick={clearArchive} className="min-h-11 flex-1 rounded-xl border border-zinc-700 text-xs font-bold text-zinc-200">Voltar</button>
+          <button type="button" disabled={archiveBusy||(reconciliationMode?!(manualReferenceId&&manualReferenceConfirmed):archiveReason.trim().length<8)} onClick={()=>void confirmArchive()} className="min-h-11 flex-1 rounded-xl border border-amber-500/40 bg-amber-500/15 text-xs font-black text-amber-200 disabled:opacity-40">{archiveBusy?'Registrando...':reconciliationMode?'Preservar no histórico':'Confirmar arquivamento'}</button>
         </div>
       </div>
     </div>, document.body)}
-
-  {/* R161_SITE_HISTORY: somente leitura, sem restaurar ou alterar documentos. */}
-    <section aria-label="Histórico de pedidos do Site" className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-2.5">
-      <button type="button" aria-expanded={historyOpen} onClick={()=>setHistoryOpen(value=>!value)} className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2 text-left text-[11px] font-bold text-zinc-200">
-        <span>Histórico do Site · {history.length} registro{history.length===1?'':'s'}</span><ChevronDown size={15} className={historyOpen?'rotate-180':''}/>
-      </button>
-      {historyOpen&&<div className="mt-2 space-y-2 border-t border-zinc-800 pt-2">
-        <p className="text-[10px] leading-relaxed text-zinc-500">Somente registros ainda presentes neste dispositivo. Uma tentativa não confirma entrega; registros excluídos fisicamente não podem ser reconstruídos aqui.</p>
-        <input type="search" value={historySearch} onChange={event=>{setHistorySearch(event.target.value);setHistoryLimit(10);}} placeholder="Buscar número, cliente ou motivo" aria-label="Buscar histórico do Site" className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs text-zinc-100" />
-        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Filtrar histórico do Site">
-          {([['todos','Todos'],['cancelado','Cancelados'],['retirado_operacao','Arquivados'],['entregue','Entregues'],['tentativa','Tentativas']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={historyStatus===key} onClick={()=>{setHistoryStatus(key);setHistoryLimit(10);}} className={`min-h-10 shrink-0 rounded-xl border px-3 text-[10px] font-bold ${historyStatus===key?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-700 text-zinc-400'}`}>{label}</button>)}
-        </div>
-        <p role="status" className="text-[10px] text-zinc-500">{filteredHistory.length} registro{filteredHistory.length===1?'':'s'} nesta seleção.</p>
-        {filteredHistory.slice(0,historyLimit).map(item=><button type="button" key={item.id} onClick={()=>router.push(`/entregas/details?id=${encodeURIComponent(item.id)}`)} className="flex min-h-12 w-full flex-col items-start rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-left">
-          <span className="text-[11px] font-bold text-zinc-100">#{item.external_order_id||item.order_id||item.id} · {siteHistoryLabel(item)}</span>
-          <span className="mt-1 text-[10px] text-zinc-400">{siteHistoryDetail(item)}</span>
-        </button>)}
-        {filteredHistory.length>historyLimit&&<button type="button" className="min-h-11 w-full rounded-xl border border-zinc-700 text-xs font-bold text-zinc-300" onClick={()=>setHistoryLimit(v=>v+10)}>Ver mais registros</button>}
-        {!filteredHistory.length&&<p className="p-3 text-[11px] text-zinc-500">Nenhum registro corresponde aos filtros nos dados carregados.</p>}
-      </div>}
-    </section>
-
     <div className="flex items-center gap-3 rounded-[20px] border border-emerald-500/15 bg-emerald-500/[.045] px-3.5 py-3">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-300"><Inbox size={18}/></span>
       <div className="min-w-0 flex-1">
@@ -231,17 +248,26 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
     {shown.map(({delivery,state,duplicate}:SiteRow)=>{
       const expanded=editing===delivery.id;
       const step=siteStep(state,duplicate);
+      const possibleManual=matchesBySite.get(delivery.id)||[];
+      const requiresManualReview=!duplicate&&possibleManual.length>0&&!independentOrders.includes(delivery.id);
       return <article key={delivery.id} className={`scroll-mt-28 rounded-[20px] border p-3.5 ${tones[state]}`}>
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wide">{duplicate?'Possível pedido duplicado · revisar origem':captions[state]}</p><h3 className="mt-1 truncate text-sm font-black text-zinc-100">{delivery.customer_name||'Cliente do Site'}</h3><p className="mt-0.5 truncate font-mono text-[10px] text-zinc-400">Pedido #{delivery.external_order_id||delivery.order_id||delivery.id}</p></div>
+          <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wide">{duplicate?'Possível pedido duplicado · revisar origem':captions[state]}</p><h3 className="mt-1 truncate text-sm font-black text-zinc-100">{delivery.customer_name||'Cliente do Site'}</h3><p className="mt-0.5 text-[10px] text-zinc-400">Site · #{siteHistoryCompactId(delivery)}</p><details className="mt-1 text-[10px] text-zinc-400"><summary className="w-fit cursor-pointer font-semibold text-sky-300">Mostrar ID completo</summary><code className="mt-1 block break-all select-text font-mono text-zinc-300">{delivery.external_order_id||delivery.order_id||delivery.id}</code></details></div>
           <span className="shrink-0 text-sm font-black text-zinc-100">{amount(Number(delivery.customer_charge??delivery.value))}</span>
         </div>
         {duplicate&&<p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-200">Foram encontrados registros com o mesmo ID externo. Confira e concilie os pedidos antes de alocar uma rota.</p>}
+        {requiresManualReview&&<div className="mt-2 space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/[.07] p-3">
+          <p className="text-[11px] font-bold text-amber-200">Possível lançamento manual encontrado</p>
+          <p className="text-[10px] leading-relaxed text-zinc-300">{possibleManual.length} registro(s) com valor e cliente/telefone semelhantes. Confirme antes de criar outra rota; isso não é uma duplicidade comprovada.</p>
+          <button type="button" onClick={()=>requestArchive(delivery,'manual')} className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-zinc-950/45 text-[11px] font-bold text-amber-200"><Link2 size={14}/> Já cadastrei este pedido</button>
+          <button type="button" onClick={()=>setIndependentOrders(items=>items.includes(delivery.id)?items:[...items,delivery.id])} className="min-h-10 w-full rounded-xl border border-zinc-700 text-[11px] font-bold text-zinc-300">Conferi: é outro pedido · liberar rota</button>
+        </div>}
         <p className="mt-2 flex items-start gap-1 text-[11px] text-zinc-400"><MapPin size={13} className="mt-0.5 shrink-0"/>{delivery.address_string||'Endereço não informado'}</p>
         {delivery.scheduled_for&&<p className="mt-1 flex items-center gap-1 text-[10px] text-sky-300"><CalendarClock size={13}/> Agendado: {delivery.scheduled_label||new Date(delivery.scheduled_for).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'})}</p>}
         <p className="mt-2 text-[10px] leading-relaxed text-zinc-400" role="status"><span className="font-bold text-zinc-200">{step.title}.</span> {step.hint}</p>
-        {state==='pronto'?<button type="button" onClick={()=>begin(delivery)} aria-expanded={expanded} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-xs font-black text-emerald-200"><RouteIcon size={16}/>{expanded?'Fechar escolha de rota':'Escolher rota'}<ChevronDown size={15}/></button>:
+        {state==='pronto'?<button type="button" disabled={requiresManualReview} onClick={()=>begin(delivery)} aria-expanded={expanded} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-xs font-black text-emerald-200 disabled:opacity-35"><RouteIcon size={16}/>{expanded?'Fechar escolha de rota':'Escolher rota'}<ChevronDown size={15}/></button>:
         <button type="button" onClick={()=>router.push('/loja?site=pending')} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/50 text-xs font-bold text-zinc-200"><ShoppingBag size={15}/>{step.action}</button>}
+        {!duplicate && !requiresManualReview && manualRows.length>0 && !delivery.route_id?.trim() && !delivery.completed && !delivery.operational_dismissed_at && <button type="button" onClick={()=>requestArchive(delivery,'manual')} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.05] px-3 text-[11px] font-bold text-amber-200"><Link2 size={14}/> Já cadastrei manualmente · conciliar</button>}
         {!duplicate && !delivery.route_id?.trim() && !delivery.completed && !delivery.operational_dismissed_at && <button type="button" onClick={()=>requestArchive(delivery)} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-xl border border-zinc-700/70 bg-zinc-950/35 px-3 text-[11px] font-bold text-zinc-400" aria-label={`Arquivar operacionalmente pedido ${delivery.external_order_id||delivery.order_id||delivery.id}`}>
           Arquivar da operação · preservar histórico
         </button>}
@@ -267,6 +293,34 @@ export function SiteInboxPanel({focusedId}:{focusedId?:string|null}) {
       </article>;
     })}
     {displayed.length>shown.length&&<button type="button" onClick={()=>setLimit(v=>nextProgressiveCount(displayed.length,v))} className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900/50 text-xs font-bold text-zinc-300">Mostrar mais · {shown.length} de {displayed.length}</button>}
+  {/* R281: histórico não compete com a fila ativa; IDs integrais ficam na tela de detalhes. */}
+    <section aria-label="Histórico de pedidos do Site" className="rounded-[20px] border border-zinc-800 bg-zinc-900/30 p-2.5">
+      <button type="button" aria-expanded={historyOpen} onClick={()=>setHistoryOpen(value=>!value)} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-left">
+        <History size={17} className="shrink-0 text-zinc-400"/>
+        <span className="min-w-0 flex-1 text-xs font-bold text-zinc-200">Histórico do Site <span className="font-normal text-zinc-500">· {history.length} registros</span></span>
+        <ChevronDown size={15} className={`shrink-0 text-zinc-400 transition-transform ${historyOpen?'rotate-180':''}`}/>
+      </button>
+      {historyOpen&&<div className="mt-2 space-y-2 border-t border-zinc-800 pt-3">
+        <p className="px-1 text-[10px] leading-relaxed text-zinc-500">Registros disponíveis no Entregas. O histórico comercial completo continua no Admin do Site.</p>
+        <input type="search" value={historySearch} onChange={event=>{setHistorySearch(event.target.value);setHistoryLimit(10);}} placeholder="Buscar número, cliente ou motivo" aria-label="Buscar histórico do Site" className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs text-zinc-100" />
+        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Filtrar histórico do Site">
+          {([['todos','Todos'],['cancelado','Cancelados'],['retirado_operacao','Arquivados'],['entregue','Entregues'],['tentativa','Tentativas']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={historyStatus===key} onClick={()=>{setHistoryStatus(key);setHistoryLimit(10);}} className={`min-h-10 shrink-0 rounded-xl border px-3 text-[10px] font-bold ${historyStatus===key?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}>{label}</button>)}
+        </div>
+        <p role="status" className="px-1 text-[10px] text-zinc-500">{filteredHistory.length} registro{filteredHistory.length===1?'':'s'} nesta seleção</p>
+        {filteredHistory.slice(0,historyLimit).map(item=><article key={item.id} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/50 p-3">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wider text-sky-300">Site · #{siteHistoryCompactId(item)}</p><p className="mt-1 truncate text-[13px] font-bold text-zinc-100">{item.customer_name||'Cliente do Site'}</p></div>
+            <div className="shrink-0 text-right"><p className="text-xs font-black text-zinc-100 tabular-nums">{amount(Number(item.customer_charge??item.value))}</p><p className="mt-1 text-[10px] text-zinc-500">{siteHistoryTime(item)}</p></div>
+          </div>
+          <p className="mt-2 text-[11px] font-semibold text-zinc-300">{siteHistoryLabel(item)}</p>
+          <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">{siteHistoryDetail(item)}</p>
+          <details className="mt-2 text-[10px] text-zinc-400"><summary className="w-fit cursor-pointer font-semibold text-sky-300">Mostrar ID completo</summary><code className="mt-1 block break-all select-text font-mono text-zinc-300">{item.external_order_id||item.order_id||item.id}</code></details>
+          <button type="button" onClick={()=>router.push(`/entregas/details?id=${encodeURIComponent(item.id)}`)} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700/70 bg-zinc-900/50 text-[11px] font-bold text-zinc-200"><ArrowUpRight size={14}/> Ver detalhes do pedido</button>
+        </article>)}
+        {filteredHistory.length>historyLimit&&<button type="button" className="min-h-11 w-full rounded-xl border border-zinc-700 text-xs font-bold text-zinc-300" onClick={()=>setHistoryLimit(v=>v+10)}>Ver mais registros</button>}
+        {!filteredHistory.length&&<p className="p-3 text-[11px] text-zinc-500">Nenhum registro corresponde aos filtros.</p>}
+      </div>}
+    </section>
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/35 p-3 text-[10px] leading-relaxed text-zinc-500"><AlertCircle size={14} className="mr-1 inline"/>Acesso offline: você pode conferir pedidos já sincronizados, mas precisa de conexão para confirmar a alocação. Retiradas, balcão e cancelamentos não entram nesta fila logística.</div>
   </section>;
 }
