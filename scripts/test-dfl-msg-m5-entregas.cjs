@@ -1,0 +1,18 @@
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict'),ts=require('typescript');
+const route=fs.readFileSync('app/api/integration/messaging-diagnostics/route.ts','utf8');
+const page=fs.readFileSync('app/mais/mensageria/page.tsx','utf8');
+const legacy=fs.readFileSync('scripts/test-dfl-msg-m4-entregas.cjs','utf8');
+let total=0;const ok=(v,m)=>{assert.ok(v,m);total++};
+for(const [p,kind] of [['app/api/integration/messaging-diagnostics/route.ts',ts.ScriptKind.TS],['app/mais/mensageria/page.tsx',ts.ScriptKind.TSX]])ok(!ts.createSourceFile(p,fs.readFileSync(p,'utf8'),ts.ScriptTarget.Latest,true,kind).parseDiagnostics.length,'AST '+p);
+ok(route.includes('recentReverseOutboxIssues(12)'),'amostra 12');
+ok(route.includes('isSuperadminUid(decoded.uid)'),'somente owner');
+ok(route.indexOf('verifyIdToken(authorization.slice(7), true)')<route.indexOf('recentReverseOutboxIssues(12)'),'auth antes Firestore');
+ok(route.includes("code:'auth_block'") && route.includes("code:'config_block'"),'causas impeditivas');
+ok(route.includes("code:'transient'") && route.includes("code:'unknown'"),'causas transitórias e desconhecidas');
+ok(route.includes('eventType:issue.eventType.slice(0,60)') && !route.includes('eventId:issue.eventId'),'sem IDs brutos na resposta');
+ok(!/\.update\(|\.set\(|\.delete\(|notifyManualRoute\(|notifyNewManualDelivery\(/.test(route),'sem mutações');
+ok(page.includes('Últimas falhas da ponte') && page.includes('issue.failure.detail'),'mostra motivo da falha');
+ok(page.includes('Não existe botão de repetição em massa'),'sem congestionar worker');
+ok(legacy.includes('recentReverseOutboxIssues:async'),'teste M4 adaptado');
+console.log(`MSG-M5 ENTREGAS: ${total} contratos aprovados, OFF e sem rede.`);
