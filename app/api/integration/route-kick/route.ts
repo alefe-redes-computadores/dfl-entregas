@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/integration/server/admin';
+import { isSuperadminUid } from '@/lib/access/roles';
+import { notifyManualRoute } from '@/lib/integration/server/manualMessaging';
 import { reconcileReverseTrackingOutbox } from '@/lib/integration/server/reverseReconciler';
 import { drainReverseIntegrationEventIds } from '@/lib/integration/server/reverseRelay';
 
@@ -57,8 +59,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let manualOwner = false;
   try {
-    await adminAuth.verifyIdToken(authorization.slice(7));
+    const decoded = await adminAuth.verifyIdToken(authorization.slice(7));
+    manualOwner = isSuperadminUid(decoded.uid);
   } catch {
     return json(
       req,
@@ -103,6 +107,10 @@ export async function POST(req: NextRequest) {
      * analytics=false é intencional:
      * iniciar rota não deve acordar relatórios.
      */
+    // Manual channel starts independently; Site relay success semantics remain unchanged.
+    const manualMessagingTask = manualOwner
+      ? notifyManualRoute({routeId, reason}).catch(() => ({status:'failed' as const,eligible:0,queued:0,duplicates:0,failed:1,reason:'bridge_failed'}))
+      : Promise.resolve({status:'off' as const,eligible:0,queued:0,duplicates:0,failed:0});
     const reconciliation =
       await reconcileReverseTrackingOutbox({
         tracking: true,
@@ -116,8 +124,12 @@ export async function POST(req: NextRequest) {
       reconciliation.eventIds,
     );
 
+    // Manual notifications do not change Site relay acknowledgment semantics.
+    const manualMessaging = await manualMessagingTask;
+
     const result = {
       ok: reconciliation.ok && relay.ok,
+      manualMessaging,
       routeId,
       reason,
       reconciliation,

@@ -431,6 +431,8 @@ export interface Delivery {
   is_urgent?: boolean;
   phone?: string;
   notify_whatsapp?: boolean;
+  /** Autorização explícita pós-MSG-M1 para mensagens automáticas; legado não autoriza. */
+  manual_messaging_opt_in_v1?: boolean;
   customer_name?: string;
   /** Preserva a venda, mas exclui ranking/recorrência de cliente. */
   exclude_customer_metrics?: boolean;

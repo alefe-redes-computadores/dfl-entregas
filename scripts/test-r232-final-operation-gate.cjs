@@ -37,7 +37,9 @@ ok(new Set(Array.from({length:900},()=>withFallback())).size===900,'WebView anti
 const page=read('app/entregas/nova/page.tsx');
 ok(page.includes("import { createManualDeliveryId } from '@/lib/operation/manual-delivery-id';"),'cadastro usa fonte única de IDs');
 ok(page.includes('deliveriesToCreate.push({id:createManualDeliveryId()'),'multi-pedido gera ID próprio por linha');
-ok(page.includes('try {await addDelivery({id:createManualDeliveryId()'),'cadastro individual usa ID sem colisão de relógio');
+const inlineManualId=page.includes('try {await addDelivery({id:createManualDeliveryId()');
+const reusedManualId=page.includes('const manualDeliveryId = createManualDeliveryId();try {await addDelivery({id:manualDeliveryId,') && page.includes('void kickManualCreated(manualDeliveryId).then(');
+ok(inlineManualId || reusedManualId,'cadastro individual usa ID sem colisão de relógio');
 ok(!page.includes('id:Date.now().toString()') && !page.includes('id:index===0?Date.now().toString()'),'caminhos antigos de ID temporal excluídos');
 const store=read('store/useAppStore.ts');
 ok(store.includes('const canonicalId = deliveryImportDocumentId(delivery);')&&store.includes('if (canonicalId) delivery = { ...delivery, id: canonicalId };'),'iFood/99Food permanecem sob identidade comercial canônica');
