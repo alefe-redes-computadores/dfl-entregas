@@ -271,6 +271,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   // ID e a autoridade; nome so e fallback para rotas legadas. Sem consultas remotas.
   const motoboyObj = motoboys.find((m) => m.id === route.motoboy_id) || motoboys.find((m) => m.name === route.motoboy_name);
   const ifoodConfirmationMode = motoboyObj?.ifood_confirmation_mode || 'store';
+  const messageDetailMode = motoboyObj?.message_detail_mode === 'guided' ? 'guided' : 'compact';
   // Faturamento comercial, distinto de dinheiro a receber e do custo do motoboy.
   const routeRevenue = useMemo(() => deliveries.reduce((total, delivery) =>
     total + (isCancelledSiteDelivery(delivery) ? 0 : deliveryEconomicValue(delivery)), 0), [deliveries]);
@@ -606,7 +607,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     try {
       await safeRouteHaptic();
       const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-      const result = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute(), ifoodConfirmationMode);
+      const result = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute(), ifoodConfirmationMode, messageDetailMode);
       if (result.hasFuzzyAddresses && result.fuzzyList.length > 0 && msgType === 1) {
         setCurrentFuzzyList(result.fuzzyList);
         setPendingActionType('copy1');
@@ -645,7 +646,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     setRouteCopyBusy(true);
     try {
       const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-      const prepared = messages || (await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute(), ifoodConfirmationMode)).messages;
+      const prepared = messages || (await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute(), ifoodConfirmationMode, messageDetailMode)).messages;
       await copyGeneratedRouteMessage(msgType, prepared);
     } catch (error) {
       console.error('[ROUTE COPY]', error);
@@ -662,7 +663,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
     setRouteCardBusy(true);
     try {
       const storeAddr = storeSettings?.storeAddress || 'Patos de Minas, MG';
-      const generated = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute(), ifoodConfirmationMode);
+      const generated = await generateRouteMessages(route, pendingDeliveries, storeAddr, getCustomerById, getPreviousRoute(), ifoodConfirmationMode, messageDetailMode);
       const message = mode === 'checklist' ? (generated.messages[1] || '') : [generated.messages[0], generated.messages[1]].filter(Boolean).join('\n\n');
       if (mode === 'full' && generated.hasFuzzyAddresses) {
         toast.error('Confira os endereços incompletos antes de compartilhar.', { description: 'Use o texto da rota para revisar os endereços e o link de navegação.' });
@@ -686,7 +687,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       const card = await buildRouteShareCard(route, pendingDeliveries, storeAddr, {
         origin: storePoint ? `${storePoint.lat},${storePoint.lng}` : null,
         stops: stopPoints,
-      }, ifoodConfirmationMode);
+      }, ifoodConfirmationMode, messageDetailMode);
       const filename = `rota-${route.id}-${Date.now()}.png`;
       if (Capacitor.isNativePlatform()) {
         const saved = await Filesystem.writeFile({ path: `dfl-rotas/${filename}`, data: card.dataUrl.split(',')[1], directory: Directory.Cache, recursive: true });

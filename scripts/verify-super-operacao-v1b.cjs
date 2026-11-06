@@ -10,7 +10,7 @@ const c=[
  ['card Dinheiro no sheet',f.route.includes('Dinheiro da rota')],
  ['clipboard msg3',f.route.includes('messages[msgType - 1]') && f.route.includes('navigator.clipboard.writeText(message)')],
  ['msg2 sem troco da bag no rótulo',f.route.includes('Somente texto') && f.route.includes('handleCopyMessage(2)')],
- ['msg3 gerada',f.wa.includes('DINHEIRO DA ROTA · Rota')&&f.wa.includes("msg3.join('\\n')")],
+  ['msg3 gerada',f.wa.includes('DINHEIRO DA ROTA · Rota')&&f.wa.includes("(messageDetailMode === 'guided' ? msg3 : compactMoney).join(")&&f.wa.includes('changePlan.flow.expectedPhysicalReturn')],
  ['motor financeiro único',f.change.includes("routeCashFlow")],
  ['telefone central',f.phone.includes('normalizeBrazilPhone')&&f.nova.includes('formatBrazilPhone')&&f.edit.includes('formatBrazilPhone')],
  ['customer central',f.customer.includes('formatBrazilPhone')],

@@ -71,6 +71,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const ifoodConfirmationMode = useAppStore((state) => (state.motoboys.find(item => item.id === route.motoboy_id) || state.motoboys.find(item => item.name === route.motoboy_name))?.ifood_confirmation_mode || 'store');
+  const messageDetailMode = useAppStore((state) => (state.motoboys.find(item => item.id === route.motoboy_id) || state.motoboys.find(item => item.name === route.motoboy_name))?.message_detail_mode === 'guided' ? 'guided' : 'compact');
   const isExpanded = useAppStore((state) => isDeliveryExpanded(state.deliveries, delivery.id));
   const groupedDeliveries = stopDeliveries?.length ? stopDeliveries : [delivery];
   const navigationLinks = useMemo(() => buildNavigationLinks(delivery.address_string, delivery.maps_link), [delivery.address_string, delivery.maps_link]);
@@ -284,7 +285,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
     copyBusyRef.current = true;
     setCopyBusy(true);
     try {
-      const copied = await copyDeliveryToClipboard(delivery, customer?.name, isIfood ? delivery.confirmation_code : customer?.last_confirmation_code, groupedDeliveries, typeof delivery.order_index === 'number' ? delivery.order_index + 1 : undefined, ifoodConfirmationMode);
+      const copied = await copyDeliveryToClipboard(delivery, customer?.name, isIfood ? delivery.confirmation_code : customer?.last_confirmation_code, groupedDeliveries, typeof delivery.order_index === 'number' ? delivery.order_index + 1 : undefined, ifoodConfirmationMode, messageDetailMode);
       if (copied) toast.success('Entrega copiada!');
       else toast.error('Não foi possível copiar a entrega.', { description: 'Tente novamente. Nenhum pedido foi alterado.' });
     } finally {
@@ -301,7 +302,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
       const copied = await copyDeliveryToClipboard(
         item, name, item.origin === 'ifood' ? item.confirmation_code : undefined,
         [item], typeof item.order_index === 'number' ? item.order_index + 1 : undefined,
-        ifoodConfirmationMode,
+        ifoodConfirmationMode, messageDetailMode,
       );
       if (copied) toast.success('Pedido individual copiado!');
       else toast.error('Não foi possível copiar este pedido.');

@@ -509,6 +509,8 @@ export interface Motoboy {
   internal_owner_verified?: boolean;
   /** Responsavel por confirmar no portal: ausente = loja (legado). */
   ifood_confirmation_mode?: 'store' | 'motoboy';
+  /** Compacta por padrao; orientada para entregador em treinamento. Nao muda quem confirma no iFood. */
+  message_detail_mode?: 'compact' | 'guided';
   createdAt?: string;
   updated_at?: string;
 }

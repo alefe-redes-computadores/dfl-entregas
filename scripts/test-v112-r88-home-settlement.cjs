@@ -55,7 +55,7 @@ ok(card.includes('IFOOD  /  MOTOBOY CONFIRMA')&&card.includes('IFOOD  /  LOJA CO
 ok(card.includes('ifoodVisibleOrders.forEach')&&card.includes('CODIGO: ${codeLabel}')&&card.includes('ID: ${idLabel}'),'imagem lista IDs e codigos individuais');
 ok(card.includes('driverConfirmsIfood ?')&&card.includes('confirmacao-entrega-propria.ifood.com.br'),'portal na imagem so para motoboy');
 ok(card.includes('ifoodPanelHeight + 34'),'imagem reserva area dinamica');
-ok(card.includes('driverConfirmsIfood ? 128 : 0') && card.includes('Codigo salvo no DFL NAO confirma no portal'),'R85: reserva de 128px usada para orientacoes reais de confirmacao');
+ok(card.includes('detailedIfoodInstructions ? 128 : 0') && card.includes('Codigo salvo no DFL NAO confirma no portal'),'R85: reserva de 128px usada para orientacoes reais de confirmacao');
 ok(home.includes('!extractLatLngFromMapsUrl(delivery.maps_link)') && home.includes('!/\\b\\d{1,5}\\b/'),'R77: numero e coordenadas continuam validados');
 ok(pre.includes('scripts/test-v112-r88-home-settlement.cjs'),'teste incluido no preapk');
 for(const file of ['components/home/OperationalCommandCenter.tsx','components/layout/Header.tsx','app/motoboys/acerto/page.tsx','lib/route-share-card.ts']){

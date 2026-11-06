@@ -80,7 +80,7 @@ async function run() {
   assert.match(copied, /12345678/);
   assert.match(copied, /87654321/);
   assert.match(copied, /https:\/\//);
-  assert.match(copied, /CÓDIGO DE 4 DÍGITOS/);
+  assert.match(copied, /Pedir código de 4 dígitos/i);
   assert.equal(await copyDeliveryToClipboard(first, 'Maria', '', [first, { ...second, is_paid: false, payment_method: 'dinheiro', customer_charge: 30 }]), true);
   assert.match(copied, /Alguns pedidos pagos · cobrar R\$ 30,00 dos pendentes/);
   assert.doesNotMatch(copied, /Pagamento misto/);

@@ -42,7 +42,7 @@ for(const call of ['ifoodPortalLines(groupedOrders, true)','ifoodPortalLines([de
 }
 check(whatsapp.includes("lines.push('', '🌐 *Abrir portal de confirmação:*', IFOOD_DRIVER_CONFIRMATION_URL)"), 'link ao final da instrucao');
 check(whatsapp.includes('Abrir o link não confirma') === false || whatsapp.includes('Salvar o código no DFL ou abrir o link não confirma'), 'confirmacao externa diferenciada do DFL');
-check(whatsapp.includes('PEDIR O CÓDIGO') && whatsapp.includes('ifood_id'), 'ID e coleta individual preservados');
+check(whatsapp.includes('Pedir código de 4 dígitos') && whatsapp.includes('ifood_id'), 'ID e coleta individual preservados');
 check(pre.includes("'scripts/test-r221-mobile-route-ux.cjs'"), 'R221 integrada ao PRE-APK');
 const semantics = read('scripts/verify-action-semantics-v24-2.cjs');
 check(semantics.includes("route.includes('safe-bottom') && route.includes('max-h-[calc(100dvh-12px)]') && route.includes('overscroll-contain')"), 'V24.2 valida altura responsiva, rolagem e safe-bottom');

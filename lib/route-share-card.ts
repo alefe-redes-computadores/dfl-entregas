@@ -5,6 +5,7 @@ import { routeStartedAt } from '@/lib/operational-time';
 import { firstValidTimestamp } from '@/lib/reports/time';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 import { paintDflBrand, paintFittedText } from '@/lib/share-card-brand';
+import { driverStopCollectionLabel } from '@/lib/operation/driver-message-policy';
 
 export type RouteShareCard = { dataUrl: string; usedRealMap: boolean };
 
@@ -44,14 +45,13 @@ function roundBox(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.fill();
 }
 
-const operationalMoney = (value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
 export async function buildRouteShareCard(
   route: Route,
   deliveries: Delivery[],
   storeAddress: string,
   explicitCoordinates?: { origin?: string | null; stops?: Record<string, string | null> },
   ifoodConfirmationMode: 'store' | 'motoboy' = 'store',
+  messageDetailMode: 'compact' | 'guided' = 'compact',
 ): Promise<RouteShareCard> {
   const groups = groupDeliveriesByStop(deliveries);
   const origin = explicitCoordinates?.origin || coordinates(storeAddress);
@@ -70,6 +70,7 @@ export async function buildRouteShareCard(
   const ifoodOrders = deliveries.filter(item => item.origin === 'ifood');
   const ifoodVisibleOrders = ifoodOrders.slice(0, 7);
   const driverConfirmsIfood = ifoodConfirmationMode === 'motoboy' && ifoodOrders.length > 0;
+  const detailedIfoodInstructions = driverConfirmsIfood && messageDetailMode === 'guided';
   // Sem link clicável dentro do PNG: o link clicável segue no texto compartilhado.
   const ifoodPanelHeight = ifoodOrders.length ? 105 + ifoodVisibleOrders.length * 34 + (ifoodOrders.length > 7 ? 28 : 0) : 0;
   const drinkGroups = new Map<string, number>();
@@ -81,7 +82,7 @@ export async function buildRouteShareCard(
   const drinks = [...drinkGroups.entries()].map(([name, count]) => `${count}× ${name}`);
   const stopsHeight = groups.length * 116;
   const mapHeight = map ? 320 : 0;
-  const checklistHeight = 196 + (drinks.length ? 46 + Math.min(drinks.length, 5) * 36 : 0) + (driverConfirmsIfood ? 128 : 0) + (ifoodPanelHeight ? ifoodPanelHeight + 34 : 0);
+  const checklistHeight = 196 + (drinks.length ? 46 + Math.min(drinks.length, 5) * 36 : 0) + (detailedIfoodInstructions ? 128 : 0) + (ifoodPanelHeight ? ifoodPanelHeight + 34 : 0);
   const requestedHeight = 457 + mapHeight + 25 + stopsHeight + checklistHeight + 105;
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
@@ -104,9 +105,9 @@ export async function buildRouteShareCard(
   text(`Emitida ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${departure ? '  •  Saída ' + departure.toLocaleTimeString('pt-BR', {timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}) : ''}`, 56, 300, '600 23px Arial', '#7b929c');
   roundBox(ctx, 48, 324, 984, 95, 23, '#13292c');
   text(`${paid} pagos`, 74, 362, '900 31px Arial', '#6ee7b7');
-  text(`${chargeable.length} a cobrar`, 328, 362, '900 31px Arial', '#fbbf24');
+  text(`${chargeable.length + pendingPix.length} a receber`, 328, 362, '900 31px Arial', '#fbbf24');
   text(`${pendingCodes} códigos`, 675, 362, '900 31px Arial', '#93c5fd');
-  text(`${pendingPix.length} Pix pendente  •  ${cashOrders.length} dinheiro  •  ${cardOrders.length} cartão`, 75, 400, '600 24px Arial', '#cbd5e1');
+  text(`${pendingPix.length} Pix: cobrar via QR/chave  •  ${cashOrders.length} dinheiro  •  ${cardOrders.length} maquininha`, 75, 400, '600 24px Arial', '#cbd5e1');
   let y = 457;
   if (map) {
     ctx.save();ctx.beginPath();ctx.roundRect(48, y, 984, 300, 24);ctx.clip();ctx.drawImage(map, 48, y, 984, 300);ctx.restore();
@@ -118,16 +119,16 @@ export async function buildRouteShareCard(
     if (y + 108 >= canvas.height - checklistHeight - 110) { skipped += 1; return; }
     const stop = group.representative;
     const unpaid = group.deliveries.filter(item => deriveDeliveryPaymentState(item) !== 'paid');
-    const toCollect = unpaid.filter(item => item.payment_method !== 'pix');
-    const pix = unpaid.filter(item => item.payment_method === 'pix');
-    const collectAmount = toCollect.reduce((sum, item) => sum + Math.max(0, Number(item.customer_charge ?? item.value) || 0), 0);
-    const pixAmount = pix.reduce((sum, item) => sum + Math.max(0, Number(item.customer_charge ?? item.value) || 0), 0);
+    const pendingCharges = unpaid.map(item => ({
+      payment_method: item.payment_method,
+      amount: Math.max(0, Number(item.customer_charge ?? item.value) || 0),
+    }));
     const names = [...new Set(group.deliveries.map(item => item.customer_name || '').filter(Boolean))];
     const neighborhood = canonicalizeOperationalAddress(stop.address_string || '').neighborhood || stop.address_string || 'Destino';
     const drink = group.deliveries.map(item => item.drinks?.trim()).filter(Boolean).join(' + ');
     const code = group.deliveries.some(item => item.origin === 'ifood' && !item.confirmation_code);
-    const status = collectAmount > 0 ? `COBRAR ${operationalMoney(collectAmount)}` : pixAmount > 0 ? `PIX PENDENTE ${operationalMoney(pixAmount)}` : 'PAGO';
-    const tone = collectAmount > 0 || pixAmount > 0 ? '#fbbf24' : '#34d399';
+    const status = driverStopCollectionLabel(pendingCharges);
+    const tone = pendingCharges.length ? '#fbbf24' : '#34d399';
     roundBox(ctx, 48, y, 984, 106, 20, '#152028');
     roundBox(ctx, 62, y + 20, 64, 63, 16, '#223342');
     text(String(index + 1).padStart(2, '0'), 74, y + 63, '900 28px Arial', '#7dd3fc');
@@ -149,7 +150,7 @@ export async function buildRouteShareCard(
   // R88: cada pedido leva seu proprio ID e codigo; dados ausentes sao pendencias.
   if (ifoodOrders.length) {
     const panelY = y + 188 + (drinks.length ? 80 + (Math.min(drinks.length, 5) - 1) * 36 : 0);
-    roundBox(ctx, 72, panelY, 935, ifoodPanelHeight + (driverConfirmsIfood ? 128 : 0), 18, driverConfirmsIfood ? '#321a23' : '#173039');
+    roundBox(ctx, 72, panelY, 935, ifoodPanelHeight + (detailedIfoodInstructions ? 128 : 0), 18, driverConfirmsIfood ? '#321a23' : '#173039');
     text(driverConfirmsIfood ? 'IFOOD  /  MOTOBOY CONFIRMA' : 'IFOOD  /  LOJA CONFIRMA', 92, panelY + 32, '900 25px Arial', driverConfirmsIfood ? '#fda4af' : '#7dd3fc');
     text(driverConfirmsIfood ? 'Portal: confirmacao-entrega-propria.ifood.com.br' : 'Coletar o codigo e informar a loja', 92, panelY + 62, '700 23px Arial', '#ffffff');
     text('ID e codigo sao individuais por pedido.', 92, panelY + 87, '600 18px Arial', '#cbd5e1');
@@ -166,7 +167,7 @@ export async function buildRouteShareCard(
     }
     // R85: reservar e usar 128 px somente quando o portal cabe ao motoboy.
     // Registrar o codigo no DFL NAO confirma a entrega na plataforma.
-    if (driverConfirmsIfood) {
+    if (detailedIfoodInstructions) {
       const footerY = panelY + ifoodPanelHeight + 13;
       text('1  Pedir o codigo de 4 digitos ao cliente', 92, footerY + 24, '700 22px Arial', '#fef2f2', 875);
       text('2  Confirmar cada ID + codigo no portal iFood', 92, footerY + 56, '700 22px Arial', '#fef2f2', 875);

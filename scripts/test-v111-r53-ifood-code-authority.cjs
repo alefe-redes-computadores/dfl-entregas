@@ -61,7 +61,7 @@ const make=(id,c)=>({id,customer_id:'c1',customer_name:'Cliente '+id,address_str
   const oldCode=make('d1',undefined);
   const one=await whatsapp.generateRouteMessages(route,[oldCode],'Rua 20',getCustomer);
   assert.equal(one.success,true); cases++;
-  assert.ok(one.messages.join('\n').includes('PEGAR CÓDIGO')); cases++;
+  assert.ok(/pedir código/i.test(one.messages.join('\n'))); cases++;
   assert.ok(!/🔑[^\n]*9999/.test(one.messages.join('\n')),'customer historical code must never be displayed'); cases++;
   const all=[make('d1','1234'),make('d2',undefined)];
   const grouped=await whatsapp.generateRouteMessages(route,all,'Rua 20',getCustomer);
@@ -70,14 +70,14 @@ const make=(id,c)=>({id,customer_id:'c1',customer_name:'Cliente '+id,address_str
   assert.ok(groupText.includes('1234'),'one order retains its code'); cases++;
   assert.ok(!/🔑[^\n]*9999/.test(groupText),'sibling order cannot inherit customer code'); cases++;
   assert.ok(groupText.includes('pedir código'),'missing code identified for second order'); cases++;
-  assert.ok(groupText.includes('Confirmações necessárias'),'checklist includes missing group'); cases++;
+  assert.ok(grouped.messages[1].includes('código(s) iFood a solicitar'),'checklist compacto destaca cada código pendente'); cases++;
   assert.equal((grouped.messages[1].match(/pedir código/g)||[]).length,1,'only sibling is missing'); cases++;
   let captured='';
   Object.defineProperty(globalThis,'navigator',{configurable:true,value:{clipboard:{writeText:async value=>{captured=value;}}}});
   assert.equal(await whatsapp.copyDeliveryToClipboard(oldCode,customer.name,'9999'),true);cases++;
-  assert.ok(captured.includes('PEGAR O CÓDIGO')&&!/🔑[^\n]*9999/.test(captured),'individual copy never copies legacy customer code');cases++;
+  assert.ok(captured.includes('Pedir código')&&!/🔑[^\n]*9999/.test(captured),'individual copy never copies legacy customer code');cases++;
   assert.equal(await whatsapp.copyDeliveryToClipboard(all[0],customer.name,'9999',all),true);cases++;
-  assert.ok(captured.includes('1234')&&!/🔑[^\n]*9999/.test(captured)&&captured.includes('PEDIR O CÓDIGO'),'group copy keeps codes per order');cases++;
+  assert.ok(captured.includes('1234')&&!/🔑[^\n]*9999/.test(captured)&&captured.includes('Pedir código'),'group copy keeps codes per order');cases++;
   const many=Array.from({length:600},(_,i)=>({...make('id'+i,i%2===0?'1234':undefined),address_string:'Rua 10, '+(Math.floor(i/3)+1)}));
   stopCalls=0;
   const manyMessages=await whatsapp.generateRouteMessages(route,many,'Rua 20',getCustomer);
