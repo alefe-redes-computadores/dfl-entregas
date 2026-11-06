@@ -219,7 +219,7 @@ interface AppState {
     autoCloseCompletedRoutes?: boolean;
     notificationPreferences?: NotificationPreferences;
     /** Plataforma entrega ou DFL entrega; ausencia preserva o padrao anterior. */
-    marketplaceDeliveryModes?: { ifood: 'dfl' | 'platform'; food99: 'dfl' | 'platform' };
+    marketplaceDeliveryModes?: { ifood: 'dfl' | 'platform'; food99: 'dfl' | 'platform'; keeta?: 'dfl' | 'platform' };
     purchasePlanningTime?: string;
     stockReviewTime?: string;
     /** Categorias personalizadas do acerto, sincronizadas no documento da loja. */

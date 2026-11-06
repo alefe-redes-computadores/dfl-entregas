@@ -376,7 +376,7 @@ export default function DeliveryInboxPage() {
           <div className="grid grid-cols-4 gap-1.5">
             {([['auto','Auto'],['ifood','iFood'],['food99','99Food'],['keeta','Keeta']] as const).map(([key,label])=><button key={key} type="button" aria-pressed={importSource===key} onClick={()=>setImportSource(key)} className={`min-h-11 rounded-xl border px-1 text-[10px] font-black ${importSource===key?'border-violet-400/50 bg-violet-500/15 text-violet-100':'border-zinc-800 bg-zinc-950/40 text-zinc-400'}`}>{label}</button>)}
           </div>
-          <p className="mt-2 px-1 text-[10px] leading-relaxed text-zinc-500">Keeta: retirada pelo parceiro, sem rota DFL. Informe o canal manualmente se o texto não citar a plataforma. Revise valor, cliente e bebidas antes de lançar.</p>
+          <p className="mt-2 px-1 text-[10px] leading-relaxed text-zinc-500">{importSource==='keeta'?'Keeta: confirme número, cliente, valor e bebidas. O modo de entrega será escolhido no cadastro.':importSource==='auto'?'Detecção automática por origem explícita; revise os campos antes de lançar.':'O texto é classificado pelo canal selecionado; revise os dados antes de lançar.'}</p>
         </section>}
         <ContextualAssistantCard scope="caixa de entrada" signals={inboxContextSignals({siteReady:siteBacklog.ready,siteReview:siteBacklog.review,siteCommercial:siteBacklog.commercial,manualReview:attentionCounts.review,manualDuplicates:attentionCounts.duplicates,manualReady:attentionCounts.ready})}
           onAction={target=>{if(target==='site'){setChannel('site');}else if(target==='manual-review'){setChannel('manual');setView('revisar');}else if(target==='manual-ready'){setChannel('manual');setView('prontos');}}} />
@@ -411,7 +411,7 @@ export default function DeliveryInboxPage() {
                 Cole seus pedidos
               </h2>
               <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
-                Cole pedidos de iFood, 99Food ou mensagens. Revise antes de lançar;
+                Cole pedidos de iFood, 99Food, Keeta ou mensagens. Revise antes de lançar;
                 nada vira entrega automaticamente.
               </p>
             </div>

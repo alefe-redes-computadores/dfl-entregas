@@ -411,6 +411,7 @@ export default function RelatoriosPage() {
               description="Registros antigos sem origem permanecem como “Origem não registrada”; nunca viram iFood por suposição."
               icon={<Store size={18} />}
               data={model.origins}
+              channelColors
               dataKey="count"
               valueLabel="Pedidos"
               onExplore={() =>

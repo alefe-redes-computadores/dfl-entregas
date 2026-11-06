@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import {
   Bar,
+  Cell,
   BarChart,
   CartesianGrid,
   Line,
@@ -27,6 +28,8 @@ interface ReportChartCardProps {
   onExplore: () => void;
   onSelectBucket?: (bucket: ReportBucket) => void;
   footer?: string;
+  /** Identidade das plataformas; somente o gráfico de origem usa essa paleta. */
+  channelColors?: boolean;
 }
 
 export function ReportChartCard({
@@ -41,6 +44,7 @@ export function ReportChartCard({
   onExplore,
   onSelectBucket,
   footer,
+  channelColors = false,
 }: ReportChartCardProps) {
   const formatter = valueFormatter ?? ((value: number) => String(value));
   const chartData = data.map((item) => ({
@@ -48,6 +52,7 @@ export function ReportChartCard({
     chartValue: item[dataKey] ?? 0,
   }));
 
+  const originColors: Record<string,string> = { 'iFood':'#ef4444', '99Food':'#facc15', Keeta:'#8b5cf6', Loja:'#10b981' };
   const mobileCategoryBars = chartType === 'bar' && chartData.length >= 6;
   const visibleBars = mobileCategoryBars ? chartData.slice(0, 8) : chartData;
 
@@ -172,7 +177,9 @@ export function ReportChartCard({
                   labelStyle={{ color: '#e4e4e7', fontWeight: 700 }}
                   formatter={(value) => [formatter(Number(value ?? 0)), valueLabel]}
                 />
-                <Bar dataKey="chartValue" fill="#38bdf8" radius={[5, 5, 0, 0]} />
+                <Bar dataKey="chartValue" fill="#38bdf8" radius={[5, 5, 0, 0]}>
+                  {channelColors && visibleBars.map(bucket => <Cell key={bucket.key} fill={originColors[bucket.label] || '#71717a'} />)}
+                </Bar>
               </BarChart>
             )}
           </ResponsiveContainer>

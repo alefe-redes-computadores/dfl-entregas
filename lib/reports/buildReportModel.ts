@@ -78,7 +78,7 @@ function normalizeLogisticsProvider(delivery: Delivery): string {
   if (mode === 'external_delivery') {
     if (delivery.logistics_provider === 'food99' || delivery.origin === 'food99') return '99Food';
     if (delivery.logistics_provider === 'keeta' || delivery.origin === 'keeta') return 'Keeta';
-    if (delivery.logistics_provider === 'ifood') return 'iFood';
+    if (delivery.logistics_provider === 'ifood' || delivery.origin === 'ifood') return 'iFood';
     return 'Plataforma externa';
   }
   if (mode === 'pickup') return 'Retirada pelo cliente';

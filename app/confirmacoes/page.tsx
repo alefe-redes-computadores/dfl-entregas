@@ -815,7 +815,7 @@ export default function ConfirmacoesPage() {
         {query && <button type="button" onClick={() => setQuery('')} aria-label="Limpar busca de confirmações" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-2 text-[10px] font-bold text-red-300">Limpar</button>}
       </div>
 
-      <div className="flex gap-2 overflow-x-auto no-scrollbar">
+      <nav aria-label="Estado das confirmações" className="flex gap-2 overflow-x-auto no-scrollbar">
         {(
           [
             ['all', 'Todos'],
@@ -836,7 +836,7 @@ export default function ConfirmacoesPage() {
             {label}
           </button>
         ))}
-      </div>
+      </nav>
 
       {ifoodPendingConfirmations.length > 0 && (
         <section aria-label="Confirmações externas do iFood" className="space-y-2 rounded-[22px] border border-zinc-800/90 bg-zinc-900/25 p-2.5">

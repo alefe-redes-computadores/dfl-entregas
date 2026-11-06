@@ -41,6 +41,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import type { Delivery, OrderOrigin, Customer, FulfillmentMode } from '@/types';
+import { defaultMarketplaceFulfillment } from '@/lib/operation/marketplace-modes';
 import { hasOwnerIdentity, ownerContextFlags, type OwnerOrderContext } from '@/lib/owner-order-context';
 
 type ExtraIfoodOrderDraft = { id:string; orderId:string; ifoodId:string; confirmationCode:string; customerName:string; customerCharge:string; subsidy:string; paymentMethod:Delivery['payment_method']; isPaid:boolean; changeFor:string; address:string; phone:string; mapsLink:string; drinks:string; observation:string; notifyWhatsapp:boolean; };
@@ -256,10 +257,10 @@ const [routeId, setRouteId] = useState('');
     const draftOrigin: OrderOrigin = draft.source === 'ifood' ? 'ifood' : draft.source === 'food99' ? 'food99' : draft.source === 'keeta' ? 'keeta' : 'loja';
     setOrigin(draftOrigin);
     setKeetaPaymentReviewed(false);
-    setFulfillmentMode(draftOrigin === 'keeta' ? 'external_delivery'
-      : draftOrigin === 'food99' ? (marketplaceModes?.food99 === 'dfl' ? 'delivery' : 'external_delivery')
-      : draftOrigin === 'ifood' && marketplaceModes?.ifood === 'platform' ? 'external_delivery' : 'delivery');
-    if (draftOrigin === 'keeta') setRouteId('');
+    const defaultMode = defaultMarketplaceFulfillment(marketplaceModes, draftOrigin);
+    setFulfillmentMode(defaultMode);
+    if (defaultMode === 'external_delivery') setRouteId('');
+    // R284: preferência 99Food continua explícita e regressiva: marketplaceModes?.food99 === 'dfl'.
     setOrderId(parsed.orderId || '');
     setIfoodId(draftOrigin === 'ifood' ? (parsed.ifoodId || '') : '');
     setConfirmationCode(draftOrigin === 'ifood' ? (parsed.confirmationCode || '') : '');
@@ -549,7 +550,7 @@ const [routeId, setRouteId] = useState('');
     }
     if(origin==='food99'&&!/^\d{6}$/.test(orderId)){showFormIssue('order', 'Informe o número de 6 dígitos do pedido 99Food.');return}
     if(origin==='keeta'&&!isKeetaCommercialId(orderId)){showFormIssue('order','Informe o número comercial do pedido Keeta (3 a 40 caracteres).');return}
-    if(origin==='keeta'&&fulfillmentMode!=='external_delivery'){showFormIssue('route','Pedidos Keeta com entrega parceira não entram na rota DFL.');return}
+    // Keeta pode usar rota DFL quando escolhida; os mesmos guards de rota/endereço valem para todos os canais.
     if(origin==='keeta'&&!keetaPaymentReviewed){toast.warning('Keeta: confirme o valor e a forma de pagamento antes de salvar.');return}
     if(fulfillmentMode==='delivery'&&!openRoutes.some(route=>route.id===routeId)){showFormIssue('route','Selecione uma rota aberta da operação de hoje.');return}
     const drafts=origin==='ifood'?[{id:'primary',orderId,ifoodId,confirmationCode,customerName,customerCharge:value,subsidy:hasIfoodSubsidy?ifoodSubsidy:'',paymentMethod,isPaid,changeFor,address:streetAddress,phone,mapsLink,drinks,observation,notifyWhatsapp},...extraIfoodOrders]:[];
@@ -635,7 +636,7 @@ const [routeId, setRouteId] = useState('');
       }else{
         const customerAddress=fulfillmentMode==='delivery'?cleanStreet:streetAddress.trim();
         let customerId='';if(customerName.trim()){const r228r3CustomerAt=Date.now();try {customerId=await findOrCreateCustomer(customerName,{address:customerAddress||undefined,phone:rawPhone||undefined,mapsLink:mapsLink.trim()||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'confirmed');}catch(customerError){recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'failed');throw customerError;}}
-        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='keeta'?'keeta':origin==='food99'?'food99':'dfl',stop_group_id:stopGroupId,origin,order_id:(origin==='food99'||origin==='keeta')?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery',observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}toast.success(origin==='keeta'?'Pedido Keeta cadastrado sem criar rota DFL.':origin==='food99'?'Pedido 99Food cadastrado sem criar rota DFL.':stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='keeta'?'keeta':origin==='food99'?'food99':'customer',stop_group_id:stopGroupId,origin,order_id:(origin==='food99'||origin==='keeta')?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery',observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}toast.success(origin==='keeta'?`Pedido Keeta cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:origin==='food99'?`Pedido 99Food cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
         // MSG-M1: o pedido foi confirmado antes de chamar a ponte. Nunca desfazer a venda por falha de WhatsApp.
         if (origin === 'loja' && notifyWhatsapp && fulfillmentMode === 'delivery') {
           // Never delay the confirmed order while waiting on WhatsApp.
@@ -715,8 +716,18 @@ const [routeId, setRouteId] = useState('');
       <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/40 p-3">
         <div className="flex items-center justify-between gap-3">
           <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-500">01 · Modalidade</p><p className="mt-1 text-sm font-black text-zinc-200">{fulfillmentMode==='delivery'?'Entrega':fulfillmentMode==='external_delivery'?'Entrega pela plataforma':fulfillmentMode==='pickup'?'Retirada na loja':'Balcão / presencial'}</p>{(isFood99||isKeeta)&&<p className="mt-1 text-[10px] text-amber-300">{fulfillmentMode === 'external_delivery' ? 'A plataforma entrega: sem rota e sem acerto de motoboy.' : 'Entrega DFL: endereço e rota serão necessários.'}</p>}</div>
-          {!isFood99&&!isKeeta&&<button type="button" onClick={()=>setFulfillmentOptionsOpen(v=>!v)} className="flex h-10 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-[11px] font-black text-zinc-400">Alterar <ChevronDown size={14} className={fulfillmentOptionsOpen?'rotate-180':''}/></button>}
+          {!isMarketplace&&<button type="button" onClick={()=>setFulfillmentOptionsOpen(v=>!v)} className="flex h-10 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 text-[11px] font-black text-zinc-400">Alterar <ChevronDown size={14} className={fulfillmentOptionsOpen?'rotate-180':''}/></button>}
         </div>
+        {isMarketplace && (
+          <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label={`Quem entrega este pedido ${origin}`}>
+            <button type="button" aria-pressed={fulfillmentMode==='delivery'}
+              onClick={()=>{setFulfillmentMode('delivery');setIsRouteDropdownOpen(false);setFormIssue(null)}}
+              className={`min-h-12 rounded-xl border px-2 text-[11px] font-black ${fulfillmentMode==='delivery'?'border-emerald-400/45 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}><Bike size={15} className="mx-auto mb-1"/>DFL entrega</button>
+            <button type="button" aria-pressed={fulfillmentMode==='external_delivery'}
+              onClick={()=>{setFulfillmentMode('external_delivery');setRouteId('');setIsRouteDropdownOpen(false);setFormIssue(null)}}
+              className={`min-h-12 rounded-xl border px-2 text-[11px] font-black ${fulfillmentMode==='external_delivery'?'border-violet-400/45 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}><ShoppingBag size={15} className="mx-auto mb-1"/>Parceira entrega</button>
+          </div>
+        )}
         {fulfillmentOptionsOpen&&(<div className="mt-3 grid grid-cols-3 gap-2">{([['delivery','Entrega',Bike],['pickup','Retirada',ShoppingBag],['counter','Balcão',Store]] as const).map(([mode,label,Icon])=><button key={mode} type="button" onClick={()=>{setFulfillmentMode(mode);setFulfillmentOptionsOpen(false);setIsRouteDropdownOpen(false)}} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl border px-2 text-[10px] font-black ${fulfillmentMode===mode?'border-amber-500/45 bg-amber-500/10 text-amber-400':'border-zinc-800 bg-zinc-950/30 text-zinc-500'}`}><Icon size={16}/>{label}</button>)}</div>)}
       </section>
 
@@ -724,7 +735,7 @@ const [routeId, setRouteId] = useState('');
       <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/40 p-3"><div className="mb-3 px-1"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">02 · Origem</p><p className="mt-1 text-sm font-black text-zinc-200">De onde veio o pedido?</p></div><div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-zinc-800 bg-zinc-950/45 p-1 min-[400px]:grid-cols-4">
         <button
           type="button"
-          onClick={() => { setOrigin('ifood'); setFulfillmentMode(marketplaceModes?.ifood === 'platform' ? 'external_delivery' : 'delivery'); }}
+          onClick={() => { setOrigin('ifood'); setFulfillmentMode(marketplaceModes?.ifood === 'platform' ? 'external_delivery' : 'delivery'); if (marketplaceModes?.ifood === 'platform') setRouteId(''); setFulfillmentOptionsOpen(false); }}
           className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl px-1 text-[11px] min-[390px]:text-xs font-bold transition-all ${origin === 'ifood' ? 'bg-red-500 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
           <Smartphone size={16} className="shrink-0" /> iFood
@@ -745,7 +756,7 @@ const [routeId, setRouteId] = useState('');
           <ShoppingBag size={16} className="shrink-0" /> 99Food
         </button>
         <button type="button" onClick={() => {
-            setOrigin('keeta'); setKeetaPaymentReviewed(false); setFulfillmentMode('external_delivery'); setFulfillmentOptionsOpen(false);
+            setOrigin('keeta'); setKeetaPaymentReviewed(false); setFulfillmentMode(defaultMarketplaceFulfillment(marketplaceModes,'keeta')); setFulfillmentOptionsOpen(false);
             setRouteId(''); setOrderId(''); setIfoodId(''); setConfirmationCode('');
             setExtraIfoodOrders([]); setMagicText(''); setIsParserOpen(true); setHasIfoodSubsidy(false); setIfoodSubsidy('');
           }} className={`min-w-0 flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl px-1 text-[11px] font-bold transition-all ${origin === 'keeta' ? 'bg-violet-500 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>
@@ -1051,7 +1062,7 @@ const [routeId, setRouteId] = useState('');
             <label className="mt-3 flex flex-col gap-1.5 text-[11px] font-bold text-zinc-200">Número do pedido*
               <input type="text" inputMode="text" autoCapitalize="characters" maxLength={40} value={orderId} onChange={event=>setOrderId(event.target.value.replace(/[^a-zA-Z0-9-]/g,'').slice(0,40))} placeholder="Ex.: K-12345" className="h-12 w-full rounded-xl border border-violet-400/40 bg-zinc-950/60 px-3 font-mono text-sm font-black text-zinc-100 outline-none focus:border-violet-400" required />
             </label>
-            <p className="mt-3 text-[10px] leading-relaxed text-violet-200">Entrega parceira por padrão · sem seleção de rota DFL. Confirme o valor e as bebidas no pedido original.</p>
+            <p className="mt-3 text-[10px] leading-relaxed text-violet-200">{fulfillmentMode==='delivery'?'Entrega DFL selecionada: confirme rota, endereço e valor.':'Entrega parceira selecionada: sem rota DFL.'} Confirme as bebidas no pedido original.</p>
             <label className="mt-3 flex items-start gap-2 rounded-xl border border-violet-400/25 bg-zinc-950/50 p-3 text-[11px] leading-relaxed text-zinc-200">
               <input type="checkbox" checked={keetaPaymentReviewed} onChange={event=>setKeetaPaymentReviewed(event.target.checked)} className="mt-0.5 accent-violet-500" />
               Conferi o valor total, a forma de pagamento e se o pedido está pago na Keeta. Esses dados não são presumidos pelo leitor.
@@ -1065,7 +1076,7 @@ const [routeId, setRouteId] = useState('');
               <span className="text-xs font-bold text-amber-200">Nº do pedido*</span>
               <input type="text" inputMode="numeric" placeholder="Ex: 123456" maxLength={6} value={orderId} onChange={(event)=>setOrderId(event.target.value.replace(/\D/g,'').slice(0,6))} className={`h-12 rounded-xl border-2 bg-zinc-900/80 px-3 text-base font-black tracking-wider text-zinc-50 outline-none ${orderId.length===6?'border-emerald-500/50':'border-amber-400/45 focus:border-amber-300'}`} required />
             </label>
-            <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/15 bg-zinc-950/40 p-3 text-[10px] leading-relaxed text-zinc-400"><ShoppingBag size={15} className="mt-0.5 shrink-0 text-amber-300"/><span>Venda e cliente entram nos relatórios. Logística, parada e produtividade ficam atribuídas à <strong className="text-amber-200">99Food</strong>, não ao motoboy DFL.</span></div>
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/15 bg-zinc-950/40 p-3 text-[10px] leading-relaxed text-zinc-400"><ShoppingBag size={15} className="mt-0.5 shrink-0 text-amber-300"/><span>Venda e cliente entram nos relatórios. {fulfillmentMode==='delivery'?'A logística e a produtividade ficam com a DFL.':'A logística é da 99Food, sem rota ou acerto DFL.'}</span></div>
           </section>
         )}
 

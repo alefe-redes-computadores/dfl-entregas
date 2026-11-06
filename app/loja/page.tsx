@@ -27,6 +27,7 @@ import { extractLatLngFromMapsUrl, parseCoordinateString } from '@/lib/maps';
 import { SiteAdminHub } from '@/components/store/SiteAdminHub';
 import { OperationalAttentionQueue } from '@/components/store/OperationalAttentionQueue';
 import { loadHolidayCalendar } from '@/lib/store/holidayCache';
+import { configuredMarketplaceMode, mergeMarketplacePreference } from '@/lib/operation/marketplace-modes';
 
 const DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
@@ -774,6 +775,7 @@ export default function LojaPage() {
           <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">Fechamento: {autoCloseActive ? 'automático' : 'manual'}</span>
           <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">99Food: {(storeSettings.marketplaceDeliveryModes?.food99 || 'platform') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
           <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">iFood: {(storeSettings.marketplaceDeliveryModes?.ifood || 'dfl') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
+          <span className="col-span-2 rounded-xl border border-violet-500/20 bg-violet-500/[.06] px-3 py-2 text-violet-200">Keeta: {configuredMarketplaceMode(storeSettings.marketplaceDeliveryModes, 'keeta') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
         </div>
         {quickPreferenceBusy && <p role="status" className="px-4 pb-2 text-[11px] text-sky-300">Salvando preferência no sistema…</p>}
 
@@ -783,15 +785,25 @@ export default function LojaPage() {
             <section className="rounded-2xl border border-amber-500/20 bg-zinc-950/50 p-3">
               <p className="text-xs font-black text-zinc-100">Entrega por plataforma</p>
               <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">Defina se a plataforma entrega o pedido ou se a DFL precisa de endereço e rota. A alteração vale para novos cadastros; históricos não mudam.</p>
-              {(['ifood','food99'] as const).map(source => {
-                const mode = storeSettings.marketplaceDeliveryModes?.[source] || (source === 'food99' ? 'platform' : 'dfl');
-                return <div key={source} className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
-                  <p className={`text-xs font-bold ${source === 'food99' ? 'text-amber-300' : 'text-red-300'}`}>{source === 'food99' ? '99Food' : 'iFood'}</p>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    {(['platform','dfl'] as const).map(next => <button key={next} type="button" disabled={storeSettingsBusy||quickPreferenceBusy||mode===next} aria-pressed={mode===next} onClick={() => void saveQuickPreference({marketplaceDeliveryModes:{ifood:storeSettings.marketplaceDeliveryModes?.ifood || 'dfl',food99:storeSettings.marketplaceDeliveryModes?.food99 || 'platform',[source]:next}})} className={`min-h-11 rounded-xl border px-2 text-[11px] font-bold ${mode===next?'border-amber-400/45 bg-amber-400/10 text-amber-200':'border-zinc-700 text-zinc-400'}`}>{next === 'platform' ? 'Plataforma entrega' : 'DFL entrega'}</button>)}
+              {(['ifood','food99','keeta'] as const).map(source => {
+                const mode = configuredMarketplaceMode(storeSettings.marketplaceDeliveryModes, source);
+                const accent = source === 'ifood' ? 'text-red-300' : source === 'food99' ? 'text-amber-300' : 'text-violet-300';
+                return <div key={source} className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={`text-xs font-black ${accent}`}>{source === 'ifood' ? 'iFood' : source === 'food99' ? '99Food' : 'Keeta'}</p>
+                    <span className="text-[10px] font-semibold text-zinc-500">{mode === 'platform' ? 'Sem rota DFL' : 'Com rota DFL'}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2" role="group" aria-label={`Modo padrão de entrega ${source}`}>
+                    {(['dfl','platform'] as const).map(next => <button key={next} type="button"
+                      disabled={storeSettingsBusy||quickPreferenceBusy||mode===next} aria-pressed={mode===next}
+                      onClick={() => void saveQuickPreference({ marketplaceDeliveryModes: mergeMarketplacePreference(storeSettings.marketplaceDeliveryModes,source,next) })}
+                      className={`min-h-12 rounded-xl border px-2 text-[11px] font-black transition-colors disabled:opacity-60 ${mode===next?'border-amber-400/45 bg-amber-400/10 text-amber-200':'border-zinc-700 bg-zinc-950/40 text-zinc-400'}`}>
+                      {next === 'dfl' ? 'DFL entrega' : 'Parceira entrega'}
+                    </button>)}
                   </div>
                 </div>;
               })}
+              <p className="px-1 text-[10px] leading-relaxed text-zinc-500">O padrão é aplicado apenas ao cadastrar. Alterar aqui não reclassifica entregas, pagamentos ou acertos anteriores.</p>
             </section>
             <div className="flex flex-col gap-2">
               <AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" />

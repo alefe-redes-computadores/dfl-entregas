@@ -31,7 +31,7 @@ export function OriginChart({ data }: OriginChartProps) {
       return <div key={row.origin} className="min-w-0" aria-label={`${style.name}: ${row.count} pedidos, ${pct}%`}>
         <div className="flex min-w-0 items-center gap-2 text-[11px]"><span className={`w-[56px] shrink-0 font-black ${style.text}`}>{style.name}</span><span className="min-w-0 flex-1 truncate text-zinc-500">{row.count} pedido{row.count===1?'':'s'}</span><span className="shrink-0 font-black tabular-nums text-zinc-200">{pct}%</span></div>
         <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-zinc-800" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Participação ${style.name}`}><div className={`h-full rounded-full ${style.color}`} style={{width:`${Math.min(100,Math.max(0,pct))}%`}}/></div>
-        {showValues && <p className="mt-1 break-words text-right text-[11px] font-bold tabular-nums text-emerald-300">{currency(Math.max(0,row.total))}</p>}
+        {showValues && <p className={`mt-1 break-words text-right text-[11px] font-bold tabular-nums ${style.text}`}>{currency(Math.max(0,row.total))} <span className="font-medium text-zinc-500">· Ticket médio {currency(row.count ? Math.max(0,row.total)/row.count : 0)}</span></p>}
       </div>;
     })}</div>
     {leadingPercent>0&&<p className="mt-3 flex items-start gap-2 border-t border-zinc-800/70 pt-3 text-[11px] leading-relaxed text-zinc-400"><TrendingUp size={14} className="mt-0.5 shrink-0 text-sky-400"/>Maior canal: <strong className="text-zinc-200">{channels[leading.origin as keyof typeof channels]?.name||'Canal'}</strong> · {leadingPercent}% dos pedidos</p>}
