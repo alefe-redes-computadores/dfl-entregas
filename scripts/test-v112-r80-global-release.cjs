@@ -10,14 +10,18 @@ for(const file of ['lib/navigation-links.ts','lib/location-evidence.ts','compone
 const card=read('components/home/DeliveryCard.tsx');const route=read('components/home/RouteAccordion.tsx');
 const store=read('store/useAppStore.ts');const preview=read('components/deliveries/LocationEvidencePreview.tsx');
 ok(card.includes('void moveStop(0)')&&card.includes('void moveStop(pendingCount-1)'),'acoes ir primeiro e deixar por ultimo usam motor real');
-ok(card.includes('disabled={reorderBusy || orderLocked || (position || 1) <= 1}')&&card.includes('disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount}'),'posicoes e fixacao bloqueiam movimentacao ilegal');
+ok(card.includes('disabled={reorderBusy || (position || 1) <= 1}')&&card.includes('disabled={reorderBusy || (position || 1) >= pendingCount}'),'limites e operacao concorrente bloqueiam movimentacao ilegal');
 ok(card.includes('Mover parada expandida')&&card.includes('role="group" aria-label="Subir ou descer parada"')&&!card.includes('onPointerMove={handleReorderPointerMove}'),'setas presentes e alça de arraste removida');
 ok(card.includes('max-w-[54%]')&&card.includes('[overflow-wrap:anywhere]')&&card.includes('min-w-0 flex-1 flex-col'),'cabecalho pode expandir verticalmente sem cortar nome nem valor');
 ok(route.includes('role="status" aria-live="polite"')&&route.includes('Aguardando confirmação do fechamento')&&route.includes('autoCloseCompletedRoutes !== false'),'fechamento comunica estado sem simular ACK remoto');
 ok(store.includes('keepPinnedStopPositions(pending, finalPendingIds)')&&store.includes('moveStopToIndex(pending, deliveryId, rawTarget)')&&store.includes('canAutoCloseRoute(route, routeDeliveries)'),'motor transacional agrupado e fechamento preservados');
 ok(read('components/layout/BottomNav.tsx').includes('useMemo(() => siteInboxProjection(deliveries).total, [deliveries])'),'badge da caixa evita reprocessamento em render isolado');
 ok(read('components/reports/SummaryCard.tsx').includes('[overflow-wrap:anywhere]')&&!read('components/reports/SummaryCard.tsx').includes('whitespace-nowrap font-black'),'valores grandes nao forcam overflow');
-ok(read('app/mais/page.tsx').includes('break-all text-sm'),'dados de perfil nao estouram na tela estreita');
+ok((() => {
+ const page = read('app/mais/page.tsx');
+ return page.includes('min-w-0') &&
+   /(?:break-all|break-words|\[overflow-wrap:anywhere\])/.test(page);
+})(),'dados de perfil nao estouram na tela estreita');
 ok(preview.includes('buildNavigationLinks(address,mapsLink)')&&preview.includes('Navegar · Waze')&&preview.includes('Navegar · Maps')&&preview.includes('{open&&<div'),'atalhos para navegacao sob demanda, sem carregar mapas em massa');
 ok(card.includes('Navegar com Maps')&&card.includes('Navegar com Waze')&&card.includes('navigationLinks &&'),'card expandido tambem oferece navegacao Maps/Waze');
 ok(read('components/deliveries/MiniMap.tsx').includes("evidence.kind === 'coordinate' ? mapsLink : undefined"),'iframe nao confia em coordenada de link nao reconhecido');

@@ -53,6 +53,7 @@ export default function LojaPage() {
   const updateStoreSettings = useAppStore((state) => state.updateStoreSettings);
   const routeAlertsEnabled = useAppStore((state) => state.routeAlertsEnabled);
   const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
+  const routeOrderingMode = storeSettings.routeOrderingMode === 'smart' ? 'smart' : 'manual';
   const routeReminderActive = storeSettings.routeReminderEnabled !== false;
   const autoCloseActive = storeSettings.autoCloseCompletedRoutes !== false;
   // R197: preferências remotas têm gravação única e feedback somente após persistência.
@@ -779,12 +780,13 @@ export default function LojaPage() {
         >
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Configurações</p>
-            <p className="mt-1 text-sm font-black text-zinc-200">Origem, alertas e automação</p>
+            <p className="mt-1 text-sm font-black text-zinc-200">Logística, plataformas e preferências</p>
           </div>
           <ChevronDown size={18} className={`text-zinc-600 transition-transform ${isSettingsOpen ? 'rotate-180' : ''}`} />
         </button>
         {/* R197: leitura do estado real; não dispara escrita nem consulta remota. */}
         <div aria-label="Resumo das preferências operacionais" className="grid grid-cols-2 gap-2 px-3 pb-3 text-[10px] font-semibold">
+          <span className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.045] px-3 py-2 text-emerald-200">Ordem: {routeOrderingMode === 'smart' ? 'inteligente' : 'manual'}</span>
           <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">Rotas: {routeReminderActive ? 'lembretes ativos' : 'lembretes pausados'}</span>
           <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">Fechamento: {autoCloseActive ? 'automático' : 'manual'}</span>
           <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">99Food: {(storeSettings.marketplaceDeliveryModes?.food99 || 'platform') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
@@ -796,6 +798,24 @@ export default function LojaPage() {
         {isSettingsOpen && (
           <div className="flex flex-col gap-4 rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-4">
             <button type="button" onClick={()=>router.push('/mais/notificacoes')} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] px-3 text-left text-xs font-bold text-emerald-300">Personalizar notificações, horários e categorias <ChevronRight size={16}/></button>
+            <section aria-label="Ordenação das entregas" className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.045] p-3.5">
+              <div className="flex items-center gap-2"><Bike size={17} className="text-emerald-400" /><h3 className="text-sm font-black text-zinc-100">Ordem das entregas</h3></div>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">Escolha como novas entregas entram nas rotas. Ajustes manuais confirmados nunca serão reorganizados automaticamente.</p>
+              <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label="Modo de ordenação das rotas">
+                {(['manual', 'smart'] as const).map(mode => (
+                  <button key={mode} type="button" aria-pressed={routeOrderingMode === mode}
+                    disabled={quickPreferenceBusy || storeSettingsBusy || storeToggleBusy || routeOrderingMode === mode}
+                    onClick={() => void saveQuickPreference({ routeOrderingMode: mode })}
+                    className={`min-h-[72px] rounded-2xl border px-3 py-2.5 text-left transition-colors active:scale-[.99] disabled:opacity-75 ${routeOrderingMode === mode ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-200' : 'border-zinc-700 bg-zinc-950/50 text-zinc-300'}`}>
+                    <span className="block text-xs font-black">{mode === 'manual' ? 'Manual' : 'Inteligente'}</span>
+                    <span className="mt-1 block text-[10px] leading-snug opacity-75">{mode === 'manual' ? 'Chegada e movimentos definidos por você' : 'Sugestão automática na inserção de novos pedidos'}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">A mudança não altera o histórico nem reorganiza rotas prontas. Na opção inteligente, a distância é considerada somente quando houver origem e localizações suficientes. Se uma rota foi movida manualmente, sua sequência tem prioridade.</p>
+            </section>
+            <details className="group rounded-[20px] border border-zinc-800/80 bg-zinc-950/35" open>
+              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 text-sm font-black text-zinc-100">Plataformas parceiras <ChevronDown size={17} className="text-zinc-400 transition-transform group-open:rotate-180" /></summary>
             <section className="rounded-2xl border border-amber-500/20 bg-zinc-950/50 p-3">
               <p className="text-xs font-black text-zinc-100">Entrega por plataforma</p>
               <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">Defina se a plataforma entrega o pedido ou se a DFL precisa de endereço e rota. A alteração vale para novos cadastros; históricos não mudam.</p>
@@ -819,6 +839,10 @@ export default function LojaPage() {
               })}
               <p className="px-1 text-[10px] leading-relaxed text-zinc-500">O padrão é aplicado apenas ao cadastrar. Alterar aqui não reclassifica entregas, pagamentos ou acertos anteriores.</p>
             </section>
+            </details>
+            <details className="group rounded-[20px] border border-zinc-800/80 bg-zinc-950/35">
+              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 text-sm font-black text-zinc-100">Origem e navegação <ChevronDown size={17} className="text-zinc-400 transition-transform group-open:rotate-180" /></summary>
+              <div className="px-3.5 pb-3.5">
             <div className="flex flex-col gap-2">
               <AddressAutocomplete value={storeAddress} onChange={setStoreAddress} placeholder="Rua, Número, Bairro, Cidade - MG" label="Endereço Base (Origem)" />
               <p className="px-1 text-[11px] font-medium text-zinc-400">Origem das rotas. Informe rua e número ou salve um ponto exato no mapa.</p>
@@ -831,7 +855,11 @@ export default function LojaPage() {
               <LocationPermissionGuide code={locationFailure} />
               <div className="grid grid-cols-[1fr_auto] gap-2"><input value={storeLocationReference} onChange={e=>setStoreLocationReference(e.target.value)} placeholder="Coordenadas ou link completo do Maps" className="h-11 min-w-0 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-xs text-zinc-200 outline-none focus:border-sky-500"/><button type="button" onClick={applyStoreReference} className="rounded-xl border border-zinc-700 px-3 text-[10px] font-black text-zinc-300">Usar</button></div>
             </div>
-
+              </div>
+            </details>
+            <details className="group rounded-[20px] border border-zinc-800/80 bg-zinc-950/35">
+              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 text-sm font-black text-zinc-100">Alertas e automações <ChevronDown size={17} className="text-zinc-400 transition-transform group-open:rotate-180" /></summary>
+              <div className="space-y-2 px-3 pb-3">
             <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-500"><AlertTriangle size={18} /></div>
@@ -862,6 +890,8 @@ export default function LojaPage() {
               </div>
             </div>
 
+              </div>
+            </details>
             <button onClick={handleSaveAllSettings} disabled={storeSettingsBusy || storeToggleBusy} aria-busy={storeSettingsBusy} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white active:scale-95"><Check size={16} /> Salvar configurações</button>
           </div>
         )}

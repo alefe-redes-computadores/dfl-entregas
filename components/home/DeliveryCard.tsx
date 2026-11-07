@@ -634,10 +634,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   const moveStop = async (targetIndex: number) => {
     if (!canReorder || reorderBusyRef.current) return;
-    if (orderLocked) {
-      toast.info('Destrave esta parada antes de mudar sua posição.');
-      return;
-    }
+    // Decisao manual explicita: permite reordenar urgentes e pins legados.
     const currentIndex = Math.max(0, (position || 1) - 1);
     const boundedTarget = Math.max(0, Math.min(targetIndex, pendingCount - 1));
     if (boundedTarget === currentIndex) {
@@ -1106,8 +1103,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                          className="grid h-10 min-w-[40px] flex-1 place-items-center rounded-xl border border-zinc-700 bg-zinc-950/80 text-zinc-300 active:bg-zinc-800"
                        ><Pencil size={16} /></Link>
                       {canReorder && <div role="group" aria-label="Subir ou descer parada" className="flex min-w-[80px] flex-[2_1_80px] items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]">
-                        <button type="button" aria-label="Mover uma posição para cima" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={event=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 min-w-[40px] flex-1 place-items-center text-sky-200 disabled:opacity-30"><ArrowUp size={14}/></button>
-                        <button type="button" aria-label="Mover uma posição para baixo" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={event=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 min-w-[40px] flex-1 place-items-center text-sky-200 disabled:opacity-30"><ArrowDown size={14}/></button>
+                        <button type="button" aria-label="Mover uma posição para cima" disabled={reorderBusy || (position || 1) <= 1} onClick={event=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 min-w-[40px] flex-1 place-items-center text-sky-200 disabled:opacity-30"><ArrowUp size={14}/></button>
+                        <button type="button" aria-label="Mover uma posição para baixo" disabled={reorderBusy || (position || 1) >= pendingCount} onClick={event=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 min-w-[40px] flex-1 place-items-center text-sky-200 disabled:opacity-30"><ArrowDown size={14}/></button>
                       </div>}
                       <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();toggleDeliveryExpansion(delivery.id,true);}} aria-label="Expandir detalhes da parada" className="grid h-10 min-w-[40px] flex-1 place-items-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-300"><Maximize2 size={15}/></button>
                     </div>
@@ -1221,13 +1218,13 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       {canManageStop && <button type="button" onClick={(event)=>void toggleStopLock(event)} disabled={reorderBusy} className={`rounded-lg border px-2 py-1 text-[10px] font-black ${orderLocked ? 'border-amber-500/35 bg-amber-500/10 text-amber-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}>{orderLocked ? 'Destravar' : 'Fixar'}</button>}
                     <span className="mr-auto text-[10px] font-semibold text-zinc-400">{orderLocked ? 'Parada fixada · destrave para mover' : canReorder ? `Parada ${position} de ${pendingCount}` : 'Sequência de parada'}</span>
                     {canReorder && <div className="flex items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]" role="group" aria-label="Mover parada expandida">
-                      <button type="button" data-no-card-swipe="true" aria-label="Subir parada expandida" title="Subir uma parada" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowUp size={15}/></button>
+                      <button type="button" data-no-card-swipe="true" aria-label="Subir parada expandida" title="Subir uma parada" disabled={reorderBusy || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowUp size={15}/></button>
                       <span className="h-4 w-px bg-sky-500/20"/>
-                      <button type="button" data-no-card-swipe="true" aria-label="Descer parada expandida" title="Descer uma parada" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowDown size={15}/></button>
+                      <button type="button" data-no-card-swipe="true" aria-label="Descer parada expandida" title="Descer uma parada" disabled={reorderBusy || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowDown size={15}/></button>
                     </div>}
                     {canReorder && <button type="button" data-no-card-swipe="true" onClick={(event)=>{event.stopPropagation();setMoveSheetOpen(true);}} className="min-h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-bold text-zinc-200">Mover para…</button>}
-                    {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(0);}} className="min-h-10 rounded-xl border border-emerald-500/25 bg-emerald-500/[.07] px-3 text-[11px] font-black text-emerald-300 disabled:opacity-35">Ir primeiro</button>}
-                    {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(pendingCount-1);}} className="min-h-10 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 text-[11px] font-black text-amber-300 disabled:opacity-35">Deixar por último</button>}
+                    {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(0);}} className="min-h-10 rounded-xl border border-emerald-500/25 bg-emerald-500/[.07] px-3 text-[11px] font-black text-emerald-300 disabled:opacity-35">Ir primeiro</button>}
+                    {canReorder && <button type="button" data-no-card-swipe="true" disabled={reorderBusy || (position || 1) >= pendingCount} onClick={(event)=>{event.stopPropagation();void moveStop(pendingCount-1);}} className="min-h-10 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 text-[11px] font-black text-amber-300 disabled:opacity-35">Deixar por último</button>}
                   </div></details>}
               <details className="mx-3 mb-3 rounded-2xl border border-zinc-800/85 bg-zinc-950/40 px-3 py-2.5">
                 <summary className="cursor-pointer text-[11px] font-semibold text-zinc-300">Histórico e localização</summary>

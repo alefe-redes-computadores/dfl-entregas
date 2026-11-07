@@ -113,8 +113,12 @@ export function groupDeliveriesByStop(
   // Uma parada totalmente concluída vai abaixo das pendentes, mesmo que
   // antes fosse urgente e estivesse fixada. Nunca mexer na ordem relativa
   // das paradas que ainda possuem pelo menos um pedido pendente.
-  return [...groups.values()].sort((a, b) =>
-    Number(a.pending.length === 0) - Number(b.pending.length === 0));
+  const orderedGroups = [...groups.values()];
+  const activeStops = orderedGroups.filter((group) => group.pending.length > 0);
+  const finishedStops = orderedGroups.filter((group) => group.pending.length === 0);
+  // Mesmo uma parada urgente/fixada termina no historico quando TODOS
+  // os pedidos estao concluidos. A ordem ativa e preservada sem novo sort.
+  return [...activeStops, ...finishedStops];
 }
 
 /**

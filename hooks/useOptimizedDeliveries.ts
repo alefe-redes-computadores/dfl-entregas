@@ -35,6 +35,8 @@ export function useOptimizedDeliveries(
     }
 
     const groups = groupDeliveriesByStop(deliveries);
+    // Baixa otimista: paradas sem pedidos pendentes ficam abaixo de todas
+    // as ativas, inclusive as marcadas como urgentes no Firestore.
     // groupDeliveriesByStop já aplica a prioridade operacional. Não há leitura
     // remota nem geocoding aqui: montar/editar a rota permanece instantâneo.
     const sortedDeliveries = groups.flatMap((group) => group.deliveries);

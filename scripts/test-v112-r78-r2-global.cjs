@@ -8,7 +8,7 @@ for(const p of ['components/home/DeliveryCard.tsx','app/loja/page.tsx','componen
 }
 const card=read('components/home/DeliveryCard.tsx'),chart=read('components/reports/Charts/OriginChart.tsx'),report=read('components/reports/ReportChartCard.tsx');
 check(card.includes('role="group" aria-label="Subir ou descer parada" className="flex'),'setas visiveis no Android');
-check(card.includes('disabled={reorderBusy || orderLocked || (position || 1) <= 1}')&&card.includes('disabled={reorderBusy || orderLocked || (position || 1) >= pendingCount}'),'setas com trava e limites');
+check(card.includes('disabled={reorderBusy || (position || 1) <= 1}')&&card.includes('disabled={reorderBusy || (position || 1) >= pendingCount}'),'setas com operacao concorrente e limites');
 check(card.includes('Mover parada expandida')&&card.includes('Subir parada expandida')&&card.includes('Descer parada expandida'),'card expandido reorganiza sem precisar minimizar');
 check(card.includes('aria-label="Minimizar esta parada"')&&!card.includes('toggleDeliveryExpansion(item.id, false)'),'somente operador minimiza; outros cards permanecem');
 check(card.includes('setMoveSheetOpen(true)')&&card.includes('toggleStopLock')&&card.includes("route.status === 'aberta' && !delivery.completed"),'Mover/Fixar protegem entregas concluídas');
@@ -18,7 +18,7 @@ check(chart.includes("'iFood'")&&chart.includes("'99Food'")&&chart.includes("'Lo
 check(report.includes('h-[210px]')&&report.includes('min-w-0 w-full overflow-hidden')&&report.includes('sm:h-[250px]')&&report.includes('break-words'),'graficos e textos responsivos sem extravasar');
 check(!/onSnapshot\(|getDocs\(|runTransaction\(/.test([card,chart,report].join('\n')),'polimento sem novas consultas Firestore');
 const test103=read('scripts/verify-v103-mobile-cards.cjs');
-check(test103.includes('Seta subir respeita trava')&&test103.includes('Seta descer respeita trava')&&test103.includes('Reordenação visível no Android'),'V103 permanece ativo e mais rigoroso');
+check(test103.includes('Seta subir respeita operação concorrente')&&test103.includes('Seta descer respeita operação concorrente')&&test103.includes('Reordenação visível no Android'),'V103 permanece ativo e mais rigoroso');
 const notify=read('lib/native/notifications.ts'),stock=read('app/estoque/compras/page.tsx'),bot=read('components/motoboys/MotoboyForm.tsx');
 check(notify.includes('LocalNotifications.checkPermissions()')&&notify.includes('queueOwnerSchedule(')&&notify.includes('ensureNotificationChannel()'),'notificacao com permissao, serializacao e canal existentes');
 check(stock.includes('addStockSupply(')&&bot.includes('ifood_confirmation_mode:ifoodMode'),'compras e responsabilidade motoboy preservadas');

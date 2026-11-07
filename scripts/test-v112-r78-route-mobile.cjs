@@ -11,7 +11,7 @@ const card=read('components/home/DeliveryCard.tsx'),store=read('app/loja/page.ts
 ok(card.includes('moveDeliveryToIndex(route.id, delivery.id, boundedTarget)'),'reordenacao usa store existente por parada');
 ok(card.includes("route.status === 'aberta' && !delivery.completed")&&card.includes('pendingCount > 1'),'nao move rota fechada ou parada concluida');
 ok(card.includes('role="group" aria-label="Subir ou descer parada" className="flex')&&!card.includes('rounded-xl border border-zinc-800 bg-zinc-950 sm:flex'),'setas voltaram ao Android');
-ok(card.includes('Mover uma posição para cima')&&card.includes('Mover uma posição para baixo')&&card.includes('disabled={reorderBusy || orderLocked ||'),'setas acessiveis, bloqueio por trava e estado');
+ok(card.includes('Mover uma posição para cima')&&card.includes('Mover uma posição para baixo')&&card.includes('disabled={reorderBusy || (position || 1) <= 1}'),'setas acessiveis, bloqueio por operacao e limites');
 ok(card.includes('setMoveSheetOpen(true)')&&card.includes('toggleStopLock')&&card.includes('moveSheetOpen'),'move sheet e fixar permanecem');
 ok(!card.includes('toggleDeliveryExpansion(item.id, false)')&&!card.includes('if (delivery.is_expanded) toggleDeliveryExpansion(delivery.id, false)'), 'abrir um cartão não fecha os demais nem reinicializa ao montar');
 ok(card.includes('toggleDeliveryExpansion(delivery.id, !isExpanded)'),'minimizar continua explícito');

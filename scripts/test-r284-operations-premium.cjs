@@ -42,7 +42,7 @@ const state=read('store/useAppStore.ts');
 ok(state.includes('marketplaceDeliveryModes?:')&&state.includes("keeta?: 'dfl' | 'platform'"),'configurações opcionais em documento existente');
 const loja=read('app/loja/page.tsx');
 ok(loja.includes("(['ifood','food99','keeta'] as const)")&&loja.includes('mergeMarketplacePreference'),'três padrões persistentes sem perda');
-ok(loja.includes('Origem, alertas e automação')&&loja.includes('Entrega por plataforma'),'hierarquia da Loja preservada');
+ok(loja.includes('Logística, plataformas e preferências')&&loja.includes('Entrega por plataforma')&&loja.includes('Ordenação das entregas')&&loja.includes('routeOrderingMode'),'hierarquia da Loja preservada');
 ok(loja.includes('min-h-12')&&loja.includes('aria-pressed={mode===next}'),'controles premium com tamanho tátil');
 const create=read('app/entregas/nova/page.tsx');
 ok(create.includes("defaultMarketplaceFulfillment(marketplaceModes, draftOrigin)") && create.includes("defaultMarketplaceFulfillment(marketplaceModes,'keeta')"),'rascunho e Keeta respeitam preferência');

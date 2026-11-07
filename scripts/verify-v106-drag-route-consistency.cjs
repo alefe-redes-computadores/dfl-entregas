@@ -7,8 +7,8 @@ const hook=fs.readFileSync('hooks/useOptimizedDeliveries.ts','utf8');
 const checks=[
  ['alça e pointer capture retirados do pacote mobile', !/handleReorderPointerDown|setPointerCapture\(event.pointerId\)|<GripVertical/.test(card)],
  ['setas estão visíveis no Android', /role="group" aria-label="Subir ou descer parada" className="flex/.test(card)],
- ['seta subir protege trava e limite', /disabled=\{reorderBusy \|\| orderLocked \|\| \(position \|\| 1\) <= 1\}/.test(card)],
- ['seta descer protege trava e limite', /disabled=\{reorderBusy \|\| orderLocked \|\| \(position \|\| 1\) >= pendingCount\}/.test(card)],
+ ['seta subir protege operação concorrente e limite', /disabled=\{reorderBusy \|\| \(position \|\| 1\) <= 1\}/.test(card)],
+ ['seta descer protege operação concorrente e limite', /disabled=\{reorderBusy \|\| \(position \|\| 1\) >= pendingCount\}/.test(card)],
  ['reordenar somente dentro da mesma rota', /await moveDeliveryToIndex\(route.id, delivery.id, boundedTarget\)/.test(card)],
  ['gravação é guardada contra toque duplo', /if \(!canReorder \|\| reorderBusyRef.current\) return/.test(card)],
  ['pedidos no mesmo endereço continuam agrupados', /groupDeliveriesByStop\(deliveries\)/.test(hook) && /stopDeliveries=\{stopGroup\.deliveries\}/.test(route)],

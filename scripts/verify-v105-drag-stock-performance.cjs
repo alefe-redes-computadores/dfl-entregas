@@ -14,7 +14,7 @@ const pipeline = read('components/home/RouteAccordion.tsx');
 // R81: controls intentionally have no drag handle or pointer gesture.
 assert.doesNotMatch(card, /handleReorderPointerDown|<GripVertical size=\{16\}|setPointerCapture\(event.pointerId\)/);
 assert.match(card, /role="group" aria-label="Subir ou descer parada"/);
-assert.match(card, /disabled=\{reorderBusy \|\| orderLocked \|\| \(position \|\| 1\) <= 1\}/);
+assert.match(card, /disabled=\{reorderBusy \|\| \(position \|\| 1\) <= 1\}/);
 assert.match(card, /data-dfl-stop-index=\{canReorder \? position : undefined\}/);
 assert.match(store, /const groups = groupDeliveriesByStop\(pending\)/);
 assert.match(store, /const orderedIds = moveStopToIndex\(pending, deliveryId, rawTarget\)/);

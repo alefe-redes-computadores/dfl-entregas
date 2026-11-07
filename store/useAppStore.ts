@@ -119,14 +119,24 @@ async function autoOrganizeLoadedRouteAfterInsert(
   routeId: string,
   deliveries: Delivery[],
   customers: Customer[],
-  settings: { storeLatitude?: number; storeLongitude?: number },
+  settings: { storeLatitude?: number; storeLongitude?: number; routeOrderingMode?: 'manual' | 'smart' },
 ) {
-  if (!routeId) return;
+  if (!routeId || settings.routeOrderingMode !== 'smart') return;
+  // Prioridade absoluta a qualquer ordem manual confirmada nesta rota.
+  // Não rearranjar parcialmente a lista após inserir um novo pedido.
+  if (deliveries.some((delivery) => delivery.route_id === routeId && !delivery.completed &&
+    delivery.order_source === 'manual' && Boolean(delivery.order_updated_at))) return;
   const items = deliveries
     .filter((delivery) => delivery.route_id === routeId && !delivery.completed && !isCancelledSiteDelivery(delivery))
     .sort((a, b) => (a.order_index ?? 999999) - (b.order_index ?? 999999));
   const groups = groupDeliveriesByStop(items);
   if (groups.length < 2) return;
+
+  // R294: prioridade e ordem manual sao autoridades persistidas. O antigo
+  // incremental gravava ordem 'smart' no Firestore sem conciliar o snapshot
+  // local; reiniciar o app parecia embaralhar uma rota ja organizada.
+  // A nova entrega nao autoriza recalcular uma rota manualmente ordenada.
+  if (items.some((item) => item.order_source === 'manual' && item.order_updated_at)) return;
 
   const origin = validOriginPoint(settings.storeLatitude, settings.storeLongitude);
   if (!origin) return;
@@ -175,6 +185,13 @@ async function autoOrganizeLoadedRouteAfterInsert(
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   if (!updates.length) return;
 
+  // Se o gerente reordenou durante o calculo da insercao, cancelar o lote.
+  // Uma leitura do estado atual evita gravar em cima de indices manuais.
+  const latestRouteItems = useAppStore.getState().deliveries.filter(
+    (item) => item.route_id === routeId && !item.completed && !isCancelledSiteDelivery(item),
+  );
+  if (latestRouteItems.some((item) => item.order_source === 'manual' && item.order_updated_at)) return;
+
   const batch = writeBatch(db);
   updates.forEach((update) => batch.update(doc(db, 'deliveries', update.id), sanitizeForFirebase(update)));
   await batch.commit();
@@ -215,6 +232,7 @@ interface AppState {
     storeLatitude?: number;
     storeLongitude?: number;
     storeMapsLink?: string;
+    routeOrderingMode?: 'manual' | 'smart';
     routeReminderEnabled?: boolean;
     autoCloseCompletedRoutes?: boolean;
     notificationPreferences?: NotificationPreferences;
@@ -269,6 +287,7 @@ interface AppState {
         order_source?: 'manual' | 'smart';
         order_updated_at?: string;
       };
+      manualMoveOverride?: boolean;
     },
   ) => Promise<void>;
   toggleDeliveryExpansion: (id: string, isExpanded: boolean) => void;
@@ -476,6 +495,7 @@ export const useAppStore = create<AppState>()(
         schedule: defaultSchedule,
         pauses: [],
         holidaysOverrides: {},
+        routeOrderingMode: 'manual',
         routeReminderEnabled: true,
         autoCloseCompletedRoutes: true,
         notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
@@ -1885,7 +1905,7 @@ export const useAppStore = create<AppState>()(
           ...delivery,
           // Urgência entra no topo e fica fixada até destravamento explícito.
           order_index: delivery.is_urgent ? automaticIndex : delivery.order_index ?? automaticIndex,
-          order_locked: delivery.is_urgent ? true : delivery.order_locked,
+          order_locked: delivery.order_locked === true && !delivery.is_urgent,
           order_source: delivery.is_urgent ? 'manual' : delivery.order_source || 'smart',
           order_updated_at: delivery.order_updated_at || now,
           createdAt: delivery.createdAt || delivery.created_at || now,
@@ -1981,7 +2001,7 @@ export const useAppStore = create<AppState>()(
           return {
             ...delivery,
             order_index: delivery.is_urgent ? nextIndex : delivery.order_index ?? nextIndex,
-            order_locked: delivery.is_urgent ? true : delivery.order_locked,
+            order_locked: delivery.order_locked === true && !delivery.is_urgent,
             order_source: delivery.is_urgent ? 'manual' : delivery.order_source || 'smart',
             order_updated_at: delivery.order_updated_at || now,
             createdAt: delivery.createdAt || delivery.created_at || now,
@@ -2250,10 +2270,14 @@ export const useAppStore = create<AppState>()(
           ...(urgentPlacementNeeded
             ? {
                 order_index: urgentTopIndex,
-                order_locked: true,
+                order_locked: false,
                 order_source: 'manual' as const,
                 order_updated_at: now,
               }
+            : {}),
+          // Ao retirar urgencia, retirar tambem a fixacao herdada da prioridade.
+          ...(urgencyChanged && updatedData.is_urgent === false
+            ? { order_locked: false, order_updated_at: now }
             : {}),
           ...(isCompleting ? { completed_at: now } : {}),
           ...(isCompleting && !isDeliveryFulfillment(deliveryToUpdate) && deliveryToUpdate.source_system !== 'dfl_site'
@@ -2891,7 +2915,7 @@ export const useAppStore = create<AppState>()(
         await get().setDeliveryOrder(
           routeId,
           orderedIds,
-          { metadata: { order_source: 'manual', order_updated_at: new Date().toISOString() } },
+          { manualMoveOverride: true, metadata: { order_source: 'manual', order_updated_at: new Date().toISOString() } },
         );
       },
 
@@ -2923,7 +2947,11 @@ export const useAppStore = create<AppState>()(
 
         // Fixações são aplicadas na autoridade de escrita, para que arraste,
         // setas e otimizador não movam a primeira parada travada.
-        const protectedIds = keepPinnedStopPositions(pending, finalPendingIds);
+        // O operador decide a ordem explicita. Apenas os automatismos respeitam pins.
+        // Isso tambem recupera paradas legadas fixadas indevidamente por urgencia.
+        const protectedIds = options?.manualMoveOverride
+          ? finalPendingIds
+          : keepPinnedStopPositions(pending, finalPendingIds);
         const orderedPending = protectedIds.map((id) => pendingById.get(id)!);
         if (new Set(protectedIds).size !== pending.length) {
           throw new Error('A sequência contém IDs repetidos ou pedidos ausentes.');
@@ -2946,7 +2974,9 @@ export const useAppStore = create<AppState>()(
         }
 
         const now = new Date().toISOString();
-        const metadata = options?.metadata;
+        const metadata = options?.manualMoveOverride
+          ? { ...options.metadata, order_locked: false, order_source: 'manual' as const }
+          : options?.metadata;
         const orderUpdatedAt =
           metadata?.order_updated_at || now;
 

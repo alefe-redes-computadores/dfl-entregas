@@ -50,7 +50,7 @@ const route=read('components/home/RouteAccordion.tsx');
 ok(card.includes('data-dfl-stop-id={delivery.id}') && route.includes('previousStopPositions'),'identidade de parada permite animação sem trocar conteúdo');
 ok(route.includes('useLayoutEffect(') && route.includes('element.animate([') && route.includes("prefers-reduced-motion: reduce"),'FLIP anima deslocamento e respeita acessibilidade');
 ok(card.includes('Posição atualizada localmente · confirmando no servidor')&&card.includes('reorderBusyRef.current = false'),'posição local e confirmação remota distintas');
-ok(card.includes('disabled={reorderBusy || orderLocked || (position || 1) <= 1}'),'reordenação concorrente bloqueada até confirmação');
+ok(card.includes('disabled={reorderBusy || (position || 1) <= 1}'),'reordenação concorrente bloqueada até confirmação');
 const purchase=read('components/stock-supplies/StockSupplyForm.tsx');
 ok(purchase.includes('purchaseConfirmationTimer.current = setTimeout(')&&purchase.includes('clearTimeout(purchaseConfirmationTimer.current)'),'compra lenta dá feedback e limpa timer');
 ok(purchase.includes('remotePurchaseSavedRef.current = true;')&&purchase.includes('await onSubmit({')&&purchase.includes('ainda não é uma gravação confirmada'),'compra preserva confirmação remota e rascunho');
