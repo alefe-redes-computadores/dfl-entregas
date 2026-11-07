@@ -15,9 +15,29 @@ const pilotNumber=()=>{
   const value=process.env.DFL_MESSAGING_PILOT_PHONE_E164?.trim()||'';
   return /^55[1-9]\d{9,10}$/.test(value)?value:null;
 };
+
+// R8: clientes autorizados, ate 12 telefones; configuracao estrita, OFF por padrao.
+const r8ApprovedNumbers=():Set<string>|null=>{
+  const values=(process.env.DFL_MANUAL_MESSAGING_APPROVED_PHONES_E164||'').split(',').map(v=>v.trim()).filter(Boolean);
+  if(!values.length||values.length>12||new Set(values).size!==values.length||values.some(v=>!/^55[1-9]\d{9,10}$/.test(v)))return null;
+  return new Set(values);
+};
+const r8Authorized=(phone:string):boolean=>{
+  if(process.env.DFL_MANUAL_MESSAGING_KILL_SWITCH==='true')return false;
+  const scope=process.env.DFL_MANUAL_MESSAGING_SCOPE;
+  if(scope==='canary')return Boolean(pilotNumber()&&phone===pilotNumber());
+  return scope==='authorized_clients' &&
+    process.env.DFL_MANUAL_MESSAGING_ROLLOUT_APPROVED==='true' &&
+    Boolean(r8ApprovedNumbers()?.has(phone));
+};
+
 // M7 CANARY: o flag geral sozinho NAO ativa envio. Scope exato + allowlist sao obrigatorios.
 const enabled = () => process.env.DFL_MANUAL_MESSAGING_ENABLED === 'true' &&
-  process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' && pilotNumber()!==null && activationTime() !== null;
+  process.env.DFL_MANUAL_MESSAGING_KILL_SWITCH !== 'true' &&
+  activationTime() !== null &&
+  (process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' ? pilotNumber() !== null :
+   process.env.DFL_MANUAL_MESSAGING_SCOPE === 'authorized_clients' &&
+   process.env.DFL_MANUAL_MESSAGING_ROLLOUT_APPROVED === 'true' && r8ApprovedNumbers() !== null);
 const createdAfterActivation = (delivery: ManualDeliveryRecord) => {
   const created = Date.parse(String(delivery.created_at || delivery.createdAt || ''));
   const activated = activationTime();
@@ -38,13 +58,13 @@ async function forward(delivery: ManualDeliveryRecord, reason: ManualMessageReas
   const plan = planManualMessage({delivery,reason,route});
   if (!plan.eligible) return {status:'skipped',reason:plan.reason};
   // Nao enviar a clientes reais durante a homologacao, mesmo com opt-in.
-  if(plan.phone!==pilotNumber())return {status:'skipped',reason:'not_pilot_phone'};
+  if(!r8Authorized(plan.phone))return {status:'skipped',reason:'recipient_not_authorized'};
   const target = siteEndpoint();
   if (!target) return {status:'failed',reason:'bridge_configuration_invalid'};
   const event = {
     event_id: `manual-msg-v1__${plan.eventType}__${delivery.id}`,
     source: 'manual', event_type:plan.eventType, order_id:plan.orderId,
-    customer_phone:plan.phone,customer_name:plan.customerName,payload:plan.payload,
+    customer_phone:plan.phone,customer_name:plan.customerName,payload:{...plan.payload,manual_messaging_opt_in_v1:true},
   };
   // Site reverse-inbound contract (including this manual endpoint): epoch milliseconds
   // and bare 64-character hex HMAC. The Site -> Entregas relay uses a distinct
@@ -89,7 +109,7 @@ export async function notifyManualRoute(input:{routeId:string;reason:string}):Pr
   const candidates=snapshot.docs.map(doc=>({...doc.data(),id:doc.id} as ManualDeliveryRecord))
     .filter(d=>createdAfterActivation(d) && (()=>{
       const plan=planManualMessage({delivery:d,reason,route});
-      return plan.eligible && plan.phone===pilotNumber();
+      return plan.eligible && r8Authorized(plan.phone);
     })());
   eligible=candidates.length;
   for(let offset=0;offset<candidates.length;offset+=6){
