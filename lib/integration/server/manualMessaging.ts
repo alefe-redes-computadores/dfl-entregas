@@ -72,7 +72,8 @@ async function forward(delivery: ManualDeliveryRecord, reason: ManualMessageReas
   const body = JSON.stringify(event), timestamp = String(Date.now());
   const signature = createHmac('sha256',target.secret).update(`${timestamp}.${body}`,'utf8').digest('hex');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(),7000);
+  // R16: a ponte deve aguardar ingest (ate 6s) + wake (ate 4,5s); sem retry em timeout incerto.
+  const timer = setTimeout(() => controller.abort(),14000);
   try {
     const response = await fetch(target.url,{method:'POST',headers:{'content-type':'application/json','x-dfl-timestamp':timestamp,'x-dfl-signature':signature,'x-dfl-event-id':event.event_id},body,cache:'no-store',signal:controller.signal});
     const result = await response.json().catch(()=>null) as {ok?:boolean;queued?:boolean;duplicate?:boolean;error?:string}|null;
