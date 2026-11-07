@@ -19,7 +19,7 @@ ok(ui.includes('delivery.is_urgent === true')&&ui.includes('sujeito à aprovaç�
 const attention=read('components/store/OperationalAttentionQueue.tsx');
 ok(attention.includes('kindPriority[a.kind]-kindPriority[b.kind]')&&attention.includes('urgentDeliveryIds.has(task.deliveryId)')&&attention.includes('aTime-bTime'), 'pendencias por categoria, urgencia e idade');
 const messaging=read('components/messaging/MessagingOrderPicker.tsx');
-ok(messaging.includes('(norm ? deliveries : recent)')&&messaging.includes('.slice(0, 120)')&&messaging.includes('.slice(0, 15)'), 'busca total sem montar lista enorme');
+ok(messaging.includes('(norm ? deliveries : recent)')&&messaging.includes('topRanked(deliveries, 120')&&messaging.includes('15, compare)'), 'busca total sem montar lista enorme');
 ok(messaging.includes('manual_messaging_opt_in_v1')&&messaging.includes('maskedMessagePhone')&&messaging.includes('deliveries.find(item => item.id === selectedId)'), 'mensageria manual indicada sem expor telefone nem perder seleção');
 for(const unsafe of ['fetch(', 'getDocs(', 'onSnapshot(', 'setDoc(', 'sendWhatsApp', 'runTransaction('])ok(!messaging.includes(unsafe),'seletor puro sem operacao: '+unsafe);
 const card=read('components/home/DeliveryCard.tsx');

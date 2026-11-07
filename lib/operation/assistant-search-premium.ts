@@ -20,10 +20,27 @@ export type Search360Snapshot = Readonly<{
 
 const TIME_ZONE = 'America/Sao_Paulo';
 const text = (value: unknown) => typeof value === 'string' ? value : '';
+// Índice fraco por snapshot imutável: evita reconstruir o mapa de clientes
+// a cada caractere, sem manter snapshots antigos vivos após substituição.
+const customerNameIndexes = new WeakMap<readonly Customer[], Map<string, string>>();
+function customerNameIndex(customers: readonly Customer[]): Map<string, string> {
+  const existing = customerNameIndexes.get(customers);
+  if (existing) return existing;
+  const index = new Map(customers.map(customer => [customer.id, customer.name]));
+  customerNameIndexes.set(customers, index);
+  return index;
+}
 const safeId = (value: unknown) => encodeURIComponent(text(value).slice(0, 1300));
 const ascii = (value: unknown) => text(value).normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
 const HOUR_EXPRESSION = /\b(?:(?:por volta d[ae]s?|perto d[ae]s?|as|das|pelas?)\s+)([01]?\d|2[0-3])(?::([0-5]\d))?\s*(?:h(?:oras?)?)?(?=\b|$)/i;
+// Reutilizar formatadores: construí-los para cada pedido e tecla é caro no Android.
+const ORDER_CLOCK_FORMATTER = new Intl.DateTimeFormat('en-GB', {
+  timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false,
+});
+const ORDER_DATE_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: TIME_ZONE, day: '2-digit', month: '2-digit',
+});
 const ORDER_TIME_EXPRESSION = /\b(?:pedidos?|entregas?)\s+([01]?\d|2[0-3]):([0-5]\d)\b/i;
 
 /** Apenas expressões de horário explícitas: não confundir código de pedido com hora. */
@@ -62,13 +79,11 @@ export function localOrderClock(value: unknown): Readonly<{ minuteOfDay: number;
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(value) || !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)) return null;
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return null;
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(timestamp);
+  const parts = ORDER_CLOCK_FORMATTER.formatToParts(timestamp);
   const hour = Number(parts.find(part => part.type === 'hour')?.value);
   const minute = Number(parts.find(part => part.type === 'minute')?.value);
   if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) return null;
-  const date = new Intl.DateTimeFormat('pt-BR', {timeZone: TIME_ZONE, day:'2-digit',month:'2-digit'}).format(timestamp);
+  const date = ORDER_DATE_FORMATTER.format(timestamp);
   return { minuteOfDay: hour * 60 + minute, label: `${date} · ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}` };
 }
 
@@ -109,9 +124,11 @@ export function searchAssistantSnapshotPremium(
   };
 
   if (allowed('delivery')) {
-    const customerById = new Map(snapshot.customers.map(customer => [customer.id, customer.name]));
+    const customerById = customerNameIndex(snapshot.customers);
     for (const delivery of snapshot.deliveries) {
-      const timeValue = localOrderClock(delivery.created_at ?? delivery.createdAt);
+      // Busca por nome/código não precisa formatar horário de todos os pedidos.
+      // Na busca temporal, calcular só quando o filtro realmente exige.
+      const timeValue = time ? localOrderClock(delivery.created_at ?? delivery.createdAt) : null;
       if (time && (!timeValue || !matchesClock(timeValue.minuteOfDay, time))) continue;
       const score = best([
         delivery.customer_name, customerById.get(delivery.customer_id), delivery.address_string,
@@ -119,8 +136,11 @@ export function searchAssistantSnapshotPremium(
       ], [delivery.id, delivery.order_id, delivery.ifood_id, delivery.external_order_id]);
       if (score < 0) continue;
       const code = delivery.order_id || delivery.ifood_id || delivery.external_order_id || delivery.id.slice(0,8);
+      // Horário do card é solicitado apenas para resultados candidatos,
+      // jamais para milhares de pedidos que não correspondem ao nome digitado.
+      const displayClock = timeValue ?? localOrderClock(delivery.created_at ?? delivery.createdAt);
       const customer = delivery.customer_name || customerById.get(delivery.customer_id) || 'Cliente não identificado';
-      const detail = [ `Pedido ${code}`, timeValue?.label, delivery.address_string ].filter(Boolean).join(' · ').slice(0,170);
+      const detail = [ `Pedido ${code}`, displayClock?.label, delivery.address_string ].filter(Boolean).join(' · ').slice(0,170);
       add({id:`delivery:${delivery.id}`,kind:'delivery',title:customer,detail,href:`/entregas/details?id=${safeId(delivery.id)}`,score:score + (time ? 100 : 0)});
     }
   }

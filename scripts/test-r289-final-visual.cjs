@@ -14,7 +14,7 @@ for(const token of ['siteOrderDisplayReference(item)','siteOrderDisplayReference
 const m=read('app/mais/mensageria/page.tsx');
 for(const token of ['MessagingOrderPicker deliveries={deliveries} selectedId={deliveryId} onSelect={setDeliveryId}','isSuperadminUid','role="alert"','Consultar panorama','dfl-m4-id','id ? `?deliveryId=${encodeURIComponent(id)}` : \'\'','Nenhuma consulta dispara mensagens.'])ok(m.includes(token),'M8 preserva '+token);
 const picker=read('components/messaging/MessagingOrderPicker.tsx');
-for(const token of ['maskedMessagePhone','onSelect(item.id)','role="listbox"','aria-selected','slice(0, 120)','slice(0, 15)','aria-expanded={open}','onClick={()=>{onSelect(item.id)'])ok(picker.includes(token),'picker '+token);
+for(const token of ['maskedMessagePhone','onSelect(item.id)','role="listbox"','aria-selected','topRanked(deliveries, 120','15, compare)','aria-expanded={open}','onClick={()=>{onSelect(item.id)'])ok(picker.includes(token),'picker '+token);
 for(const prohibited of ['fetch(', 'sendWhatsApp','getDocs(', 'onSnapshot(', 'setDoc(', 'runTransaction(', 'localStorage.setItem'])ok(!picker.includes(prohibited),'picker somente leitura '+prohibited);
 const pre=read('scripts/pre-apk.cjs');
 ok(pre.includes("'scripts/test-r289-final-visual.cjs'") && pre.includes("'scripts/test-r288-mensagens-imagens.cjs'"),'R288 e R289 integradas no gate');

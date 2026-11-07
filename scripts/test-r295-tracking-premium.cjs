@@ -42,7 +42,7 @@ check(!panel.includes('console.log(issuedLink)')&&!panel.includes('console.log(a
 const picker=fs.readFileSync(files[1],'utf8');
 check(picker.includes('todayOnly')&&picker.includes('trackingDeliveryDayKey(item)===today'),'picker de mensageria inicia em Hoje');
 check(picker.includes('Number(trackingDeliveryDayKey(b)===today)-Number(trackingDeliveryDayKey(a)===today)'),'pedidos de hoje antes do limite visual de 120');
-check(picker.includes('(norm ? deliveries : recent)')&&picker.includes('.slice(0, 120)')&&picker.includes('.slice(0, 15)'),'busca antiga e limite de renderizacao preservados');
+check(picker.includes('(norm ? deliveries : recent)')&&picker.includes('topRanked(deliveries, 120')&&picker.includes('15, compare)'),'busca antiga e limite de renderizacao preservados');
 for(const text of ['fetch(', 'sendWhatsApp','getDocs(', 'onSnapshot(', 'setDoc(', 'runTransaction('])check(!picker.includes(text),'picker sem efeito colateral '+text);
 const server=fs.readFileSync('lib/tracking/gate1/owner-inspection.ts','utf8');
 const inspect=fs.readFileSync('lib/tracking/gate1/readiness.ts','utf8');

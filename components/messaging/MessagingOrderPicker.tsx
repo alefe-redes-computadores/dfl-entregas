@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Check, ChevronDown, Search, ShieldCheck, Smartphone, X } from 'lucide-react';
 import type { Delivery } from '@/types';
+import { topRanked } from '@/lib/operation/top-limited';
 import { maskedMessagePhone, shortTechnicalReference, siteOrderDisplayReference } from '@/lib/operation/site-order-presentation';
 import { trackingTodayKey, trackingDeliveryDayKey } from '@/lib/tracking/gate1/tracking-date-filter';
 
@@ -24,12 +25,12 @@ export function MessagingOrderPicker({ deliveries, selectedId, onSelect }: Props
     Number(b.is_urgent === true) - Number(a.is_urgent === true) ||
     String(b.created_at || b.createdAt || '').localeCompare(String(a.created_at || a.createdAt || '')) ||
     a.id.localeCompare(b.id);
-  const recent = useMemo(() => [...deliveries].sort((a,b) => Number(trackingDeliveryDayKey(b)===today)-Number(trackingDeliveryDayKey(a)===today)||compare(a,b)).slice(0, 120), [deliveries,today]);
+  const recent = useMemo(() => topRanked(deliveries, 120, (a,b) => Number(trackingDeliveryDayKey(b)===today)-Number(trackingDeliveryDayKey(a)===today)||compare(a,b)), [deliveries,today]);
   const norm = search.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const matches = useMemo(() => (norm ? deliveries : recent)
+  const matches = useMemo(() => topRanked((norm ? deliveries : recent)
     .filter(item => (!todayOnly || trackingDeliveryDayKey(item)===today) && (!norm || [item.customer_name, item.order_id, item.external_order_id, item.id, item.phone]
-      .filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(norm)))
-    .sort(compare).slice(0, 15), [deliveries, recent, norm, todayOnly, today]);
+      .filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(norm))),
+    15, compare), [deliveries, recent, norm, todayOnly, today]);
   const current = deliveries.find(item => item.id === selectedId);
   return <section aria-label="Escolher pedido para diagnóstico" className="rounded-2xl border border-sky-500/15 bg-sky-500/[.035] p-3">
     <div className="flex items-start justify-between gap-2">
