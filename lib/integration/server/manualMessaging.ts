@@ -26,6 +26,7 @@ const r8Authorized=(phone:string):boolean=>{
   if(process.env.DFL_MANUAL_MESSAGING_KILL_SWITCH==='true')return false;
   const scope=process.env.DFL_MANUAL_MESSAGING_SCOPE;
   if(scope==='canary')return Boolean(pilotNumber()&&phone===pilotNumber());
+  if(scope==='consented_customers')return process.env.DFL_MANUAL_MESSAGING_ROLLOUT_APPROVED==='true' && /^55[1-9]\d{9,10}$/.test(phone);
   return scope==='authorized_clients' &&
     process.env.DFL_MANUAL_MESSAGING_ROLLOUT_APPROVED==='true' &&
     Boolean(r8ApprovedNumbers()?.has(phone));
@@ -36,6 +37,7 @@ const enabled = () => process.env.DFL_MANUAL_MESSAGING_ENABLED === 'true' &&
   process.env.DFL_MANUAL_MESSAGING_KILL_SWITCH !== 'true' &&
   activationTime() !== null &&
   (process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' ? pilotNumber() !== null :
+   process.env.DFL_MANUAL_MESSAGING_SCOPE === 'consented_customers' ? process.env.DFL_MANUAL_MESSAGING_ROLLOUT_APPROVED === 'true' :
    process.env.DFL_MANUAL_MESSAGING_SCOPE === 'authorized_clients' &&
    process.env.DFL_MANUAL_MESSAGING_ROLLOUT_APPROVED === 'true' && r8ApprovedNumbers() !== null);
 const createdAfterActivation = (delivery: ManualDeliveryRecord) => {

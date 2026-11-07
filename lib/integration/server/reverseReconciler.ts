@@ -350,6 +350,9 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
       stopsAhead: started && pendingIndex >= 0 ? pendingIndex : null,
       totalStops: stopGroups.length || null,
       nextStop: started && pendingIndex === 0,
+      // Somente declarar parada anterior concluida quando existe prova no estado da rota.
+      previousStopCompleted: started && stopIndex > 0 &&
+        stopGroups[stopIndex - 1]?.pending.length === 0,
       completedAt: str(item.data.completed_at) || null,
       failedReason: null,
       ...(recoveryReplay ? { recoveryReplay: true } : {}),
