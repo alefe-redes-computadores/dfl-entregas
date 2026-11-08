@@ -199,7 +199,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   );
   // Um único índice para os cards, preview e organizador. Quando um cliente
   // altera endereço/bairro, o snapshot invalida a geografia da rota.
-  const { sortedDeliveries, pendingDeliveries, addressCounts, normalizedAddress, neighborMeta, stopMeta, allStopGroups, pendingStopGroups } = useOptimizedDeliveries(deliveries, getCustomerById, customers);
+  const { sortedDeliveries, pendingDeliveries, neighborMeta, stopMeta, allStopGroups, pendingStopGroups } = useOptimizedDeliveries(deliveries, getCustomerById, customers);
   // Derived operational figures share one snapshot instead of regrouping per JSX render.
   const { totalDeliveries, pendingDeliveriesCount, totalStops, pendingStopsCount, progressPercent } = useMemo(() => {
     const totalStops = allStopGroups.length;
@@ -1103,8 +1103,6 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
               const first = stopGroup.pending[0] || stopGroup.representative;
               const physicalStop = stopMeta.get(first.id);
               const cust = getCustomerById(first.customer_id);
-              const addressKey = normalizedAddress(first.address_string || cust?.address);
-              const isNeighbor = addressKey ? (addressCounts[addressKey] > 1) : false;
               const nearby = neighborMeta.get(first.id);
 
               return (
@@ -1114,7 +1112,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
                   stopDeliveries={stopGroup.deliveries}
                   customer={cust}
                   route={route}
-                  isNeighbor={Boolean(isNeighbor || nearby)}
+                  isNeighbor={Boolean(nearby)}
                   neighborPosition={nearby?.position}
                   neighborTotal={nearby?.total}
                   position={!first.completed ? physicalStop?.stopNumber : undefined}

@@ -39,8 +39,8 @@ check('troco: apenas pedidos ainda cobrados em espécie',flow.cashOrders.map(ite
 check('troco: total econômico físico sem quitados/cancelados/Pix',flow.customerCharges===79);
 check('troco: previsão de cédulas recebidas correta',flow.tenderedCash===120);
 check('troco: R$ 41 de troco, não o troco de quitados',flow.requiredChange===41);
-check('troco: usa R$ 30 da bag e R$ 11 de Pix',flow.plannedCashChange===30&&flow.plannedPixChange===11);
-check('troco: valor físico retornado permanece consistente',flow.expectedPhysicalReturn===120);
+check('troco: reutiliza recebido na parada anterior; R$ 35 em especie e R$ 6 em Pix',flow.plannedCashChange===35&&flow.plannedPixChange===6);
+check('troco: valor físico retornado permanece consistente',flow.expectedPhysicalReturn===115);
 check('troco: inicial inválido não contamina totais',cash.routeCashFlow([],Infinity).initialCash===0);
 check('ação Dinheiro presente somente com cobrança real',cash.hasPhysicalCashForRoute(entries,0));
 check('ação Dinheiro ausente quando só há pagos ou Pix',!cash.hasPhysicalCashForRoute(entries.filter(item=>['paid','past','pix','cancel'].includes(item.id)),0));

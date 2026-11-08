@@ -58,6 +58,7 @@ export default function HomePage() {
   // R90: balcão/retirada/99Food não montam dezenas de cards numa só pintura.
   // Os totais e a contabilidade continuam usando TODOS os pedidos do período.
   const [storeOrdersVisibleLimit, setStoreOrdersVisibleLimit] = useState(8);
+  const [storeOrdersOpen, setStoreOrdersOpen] = useState(false);
 
   const selectedDateKey = saoPauloDateKey(selectedDate);
 
@@ -497,18 +498,20 @@ export default function HomePage() {
               <h2 className="font-heading text-sm font-bold uppercase tracking-wide text-zinc-500">Pedidos na loja</h2>
               <p className="mt-1 text-[11px] text-zinc-600">Fora da logística de rotas</p>
             </div>
-            <div className="flex items-center gap-2 text-[10px] font-black">
+            <div className="flex flex-wrap items-center justify-end gap-1 text-[10px] font-black">
               {pickupCount > 0 && <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-violet-400">{pickupCount} retirada{pickupCount === 1 ? '' : 's'}</span>}
               {counterCount > 0 && <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-amber-400">{counterCount} balcão</span>}
               {platformCount > 0 && <span className="rounded-full border border-yellow-400/20 bg-yellow-400/10 px-2.5 py-1 text-yellow-300">{platformCount} pela plataforma</span>}
+              <button type="button" aria-expanded={storeOrdersOpen} aria-controls="dfl-home-store-orders" onClick={() => setStoreOrdersOpen((value) => !value)} className="inline-flex min-h-10 items-center gap-1 rounded-xl border border-zinc-700 bg-zinc-950/65 px-2.5 text-[10px] font-black text-zinc-200">{storeOrdersOpen ? 'Recolher' : 'Ver pedidos'}<ChevronDown size={13} className={storeOrdersOpen ? 'rotate-180' : ''}/></button>
             </div>
           </div>
 
-          <div className="space-y-2">
-            {storeOrdersDoDia.slice(0, storeOrdersVisibleLimit).map((order) => {
+          <div id="dfl-home-store-orders" className="space-y-2">
+            {storeOrdersOpen && storeOrdersDoDia.slice(0, storeOrdersVisibleLimit).map((order) => {
               const mode = getFulfillmentMode(order);
               const isPickup = mode === 'pickup';
               const isPlatform = mode === 'external_delivery';
+              const isKeetaPlatform = isPlatform && order.origin === 'keeta';
               const paidConfirmed = deriveDeliveryPaymentState(order) === 'paid';
               const cardPayment = ['cartao', 'cartao_credito', 'cartao_debito'].includes(order.payment_method);
               // Conclusao fisica nao comprova o recebimento financeiro. O Site pode
@@ -527,14 +530,14 @@ export default function HomePage() {
                   onClick={() => router.push(`/entregas/details?id=${order.id}&date=${encodeURIComponent(selectedDateKey)}`)}
                   className="flex w-full items-center gap-3 rounded-[22px] border border-zinc-800 bg-zinc-900/45 p-3.5 text-left transition-all active:scale-[0.99]"
                 >
-                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isPlatform?'bg-yellow-400/10 text-yellow-300':isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isKeetaPlatform?'bg-violet-500/10 text-violet-300':isPlatform?'bg-yellow-400/10 text-yellow-300':isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
                     <ModeIcon size={19} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-black text-zinc-100">{order.customer_name || `Pedido #${order.order_id || 'sem número'}`}</p>
-                      <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase ${isPlatform?'bg-yellow-400/10 text-yellow-300':isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                        {isPlatform ? 'Entrega 99Food' : isPickup ? 'Retirada' : 'Balcão'}
+                      <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase ${isKeetaPlatform?'bg-violet-500/10 text-violet-300':isPlatform?'bg-yellow-400/10 text-yellow-300':isPickup ? 'bg-violet-500/10 text-violet-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                        {isPlatform ? (isKeetaPlatform ? 'Entrega Keeta' : 'Entrega 99Food') : isPickup ? 'Retirada' : 'Balcão'}
                       </span>
                     </div>
                     <p className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-500">
@@ -551,7 +554,7 @@ export default function HomePage() {
               );
             })}
           </div>
-          {storeOrdersDoDia.length > storeOrdersVisibleLimit && (
+          {storeOrdersOpen && storeOrdersDoDia.length > storeOrdersVisibleLimit && (
             <button
               type="button"
               onClick={() => setStoreOrdersVisibleLimit((limit) => limit + 12)}

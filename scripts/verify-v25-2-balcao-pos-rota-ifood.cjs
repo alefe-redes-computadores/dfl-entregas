@@ -8,15 +8,15 @@ const store=read('store/useAppStore.ts');
 
 console.log('=== BALCÃO / RETIRADA ===');
 ok(details.includes("mode === 'counter'"),'ficha reconhece Balcão explicitamente');
-ok(details.includes("if (!logistics) {") && details.includes("router.replace(deliveriesReturn);"),
-  'atendimento sem rota retorna deterministicamente à lista após a baixa');
+ok(details.includes("router.replace('/');"),
+  'conclusão de qualquer modalidade retorna deterministicamente à Home após persistência');
 const executeStart=details.indexOf('const executeCompletion');
 const executeEnd=details.indexOf('const handleCompletionAction',executeStart);
 const execute=details.slice(executeStart,executeEnd);
 ok(execute.includes('await updateDelivery(delivery.id, payload)'),
   'retorno só ocorre depois da persistência da baixa');
-ok(execute.indexOf('await updateDelivery(delivery.id, payload)') < execute.indexOf('router.replace(deliveriesReturn)'),
-  'navegação não antecede a gravação');
+ok(execute.includes("router.replace('/');") && execute.indexOf('await updateDelivery(delivery.id, payload)') < execute.indexOf("router.replace('/');"),
+  'navegação para Home não antecede a gravação');
 ok(details.includes("if (logistics) {") && details.includes("if (!route) {"),
   'validação de rota continua restrita às entregas logísticas');
 

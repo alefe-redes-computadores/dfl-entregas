@@ -60,6 +60,25 @@ const IFOOD_HEADER_PATTERNS = [
 ];
 
 function explicitIfoodHeader(line: string) {
+  // R299: textos reais do clipboard: "Ana P. 2255 75400962"
+  // e "Ana P. 75400962 2255". Somente duas sequencias numericas
+  // inequívocas; linhas de endereco, telefone, CEP e pagamento ficam fora.
+  const r299NameAndIds = line.match(
+    /^\s*([\p{L}][\p{L} .'-]{1,74}?)\s+#?(\d{4})\s+#?(\d{8})\s*$/u,
+  );
+  const r299NameAndReverseIds = line.match(
+    /^\s*([\p{L}][\p{L} .'-]{1,74}?)\s+#?(\d{8})\s+#?(\d{4})\s*$/u,
+  );
+  const r299Named = r299NameAndIds || r299NameAndReverseIds;
+  if (r299Named &&
+    !/\b(?:rua|avenida|av|travessa|alameda|cep|pedido|telefone|celular|whatsapp|pix|troco|valor|total)\b/i.test(r299Named[1])) {
+    const name = r299Named[1].trim();
+    if (name.length >= 3 && /[\p{L}]/u.test(name)) {
+      return r299NameAndIds
+        ? { orderId: r299Named[2], ifoodId: r299Named[3], customerName: name }
+        : { orderId: r299Named[3], ifoodId: r299Named[2], customerName: name };
+    }
+  }
   // Um número de 8 dígitos ANTES do pedido de 3–6 dígitos
   // representa um cabeçalho iFood igualmente válido; não inferir
   // de linhas com endereço, telefone, valores, CEP rotulado ou código.
@@ -723,6 +742,9 @@ export function parseIfoodOrderText(
     if (header) {
       result.orderId ||= header.orderId;
       result.ifoodId ||= header.ifoodId;
+      if ('customerName' in header && typeof header.customerName === 'string') {
+        result.customerName ||= header.customerName;
+      }
       if (idLine < 0) idLine = index;
       return;
     }

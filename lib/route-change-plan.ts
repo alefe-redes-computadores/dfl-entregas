@@ -20,13 +20,13 @@ export function buildRouteChangePlan(
 ) {
   const flow = routeCashFlow(deliveries, initialCash);
   const numbers = stopNumberMap(deliveries);
-  let cashAvailable = flow.initialCash;
+  const allocationById = new Map(flow.changeAllocations.map((item) => [item.id, item] as const));
 
   const lines: RouteChangeLine[] = flow.cashOrders
     .map((item) => {
-      const cashChange = Math.min(cashAvailable, item.requestedChange);
-      cashAvailable = Math.max(0, cashAvailable - cashChange);
-      const pixChange = Math.max(0, item.requestedChange - cashChange);
+      const allocated = allocationById.get(item.delivery.id);
+      if (!allocated) throw new Error('Plano de troco sem alocacao');
+      const { cashChange, pixChange } = allocated;
       const customer = customerById(item.delivery.customer_id);
       return {
         delivery: item.delivery,

@@ -4,7 +4,7 @@ import { NavigationLinkAssistance } from '@/components/deliveries/NavigationLink
 import { formatBrazilPhone, normalizeBrazilPhone } from '@/lib/phone';
 
 import {
-  useState, useEffect, useMemo, useRef, Suspense } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store,
+  useState, useEffect, useMemo, useRef, Suspense, useDeferredValue } from 'react'; import { useRouter, useSearchParams } from 'next/navigation'; import {    ChevronLeft, Store,
   Smartphone, Trash2, Banknote, QrCode, CreditCard, ChevronDown,
   AlertTriangle, Navigation, CheckCircle2, Link2, MessageCircle, Info,
   Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, UsersRound
@@ -21,7 +21,8 @@ import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete
 import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidencePreview';
 import { extractCoordinatesFromUrl } from '@/lib/maps';
 import { normalizeAddressText } from '@/lib/maps';
-import { parseIfoodOrderText } from '@/lib/ifood-order-parser';
+import { parseMarketplaceText } from '@/lib/operation/marketplace-text-parser';
+import { normalizeBeverageList } from '@/lib/operation/beverage-normalization';
 import { isKeetaCommercialId } from '@/lib/keeta-order';
 import { geocodeAddress } from '@/lib/store-geocoding';
 import { getFulfillmentMode } from '@/lib/delivery-mode';
@@ -59,9 +60,11 @@ function DeliveryDetailsForm() {
 
   // Parser Mágico de Texto para Edição
   const [magicText, setMagicText] = useState('');
+  const deferredMarketplaceText = useDeferredValue(magicText);
 
   // Bloco 1: Origem e Rota
   const [origin, setOrigin] = useState<OrderOrigin>('ifood');
+  const marketplacePreview = useMemo(() => parseMarketplaceText(origin, deferredMarketplaceText), [origin, deferredMarketplaceText]);
     const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>('delivery');
 const [routeId, setRouteId] = useState('');
   const [isRouteDropdownOpen, setIsRouteDropdownOpen] = useState(false);
@@ -385,11 +388,12 @@ const [routeId, setRouteId] = useState('');
       return;
     }
     if (Capacitor.isNativePlatform()) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
-    const parsed = parseIfoodOrderText(magicText);
+    const parsed = parseMarketplaceText(origin, magicText);
+    if (!parsed) {toast.warning('Não foi possível identificar este texto com segurança. Confira a origem e cole um pedido por vez.');return;}
     const identified: string[] = [];
     if (parsed.orderId) { setOrderId(parsed.orderId); identified.push(`Nº #${parsed.orderId}`); }
-    if (parsed.ifoodId) { setIfoodId(parsed.ifoodId); identified.push(`ID ${parsed.ifoodId}`); }
-    if (parsed.confirmationCode) { setConfirmationCode(parsed.confirmationCode); identified.push(`Cód. ${parsed.confirmationCode}`); }
+    if (origin === 'ifood' && parsed.ifoodId) { setIfoodId(parsed.ifoodId); identified.push(`ID ${parsed.ifoodId}`); }
+    if (origin === 'ifood' && parsed.confirmationCode) { setConfirmationCode(parsed.confirmationCode); identified.push(`Cód. ${parsed.confirmationCode}`); }
     if (parsed.customerName) { setCustomerName(parsed.customerName); identified.push('Cliente'); }
     if (parsed.phone) { setPhone(formatPhoneInput(parsed.phone)); identified.push('Zap'); }
     if (parsed.address) { setStreetAddress(parsed.address); identified.push('Endereço'); }
@@ -400,9 +404,9 @@ const [routeId, setRouteId] = useState('');
       if (parsed.paymentMethod !== 'dinheiro') setChangeFor('');
       identified.push(parsed.isPaid ? 'Pago no app' : 'Pagamento');
     }
-    if (parsed.value) { setValue(formatCurrencyInput(parsed.value.replace(/\D/g, ''))); identified.push(`Valor R$ ${parsed.value}`); }
+    if (parsed.customerCharge || parsed.value) { const charge=parsed.customerCharge||parsed.value;setValue(formatCurrencyInput(charge.replace(/\D/g, ''))); identified.push(`Valor R$ ${charge}`); }
     if (parsed.changeFor) { setChangeFor(formatCurrencyInput(parsed.changeFor.replace(/\D/g, ''))); identified.push(`Troco para ${parsed.changeFor}`); }
-    if (parsed.drinks.length) { setDrinks(parsed.drinks.join(', ')); identified.push('Bebidas'); }
+    if (parsed.drinks.length) { setDrinks(normalizeBeverageList(parsed.drinks).join(', ')); identified.push('Bebidas'); }
     if (parsed.observations.length) {
       setObservation(current => current ? `${current} - ${parsed.observations.join(' - ')}` : parsed.observations.join(' - '));
       identified.push('Observações');
@@ -869,34 +873,43 @@ const [routeId, setRouteId] = useState('');
         </section>
       )}
 
-      {/* PARSER MÁGICO (APENAS QUANDO IFOOD) */}
-      {origin === 'ifood' && (
-        <div className="flex flex-col gap-3 rounded-[26px] border border-red-500/20 bg-gradient-to-b from-red-500/10 to-zinc-900/40 p-4 animate-in fade-in">
+      {/* R299: leitor unico por canal, tambem na edicao */}
+      {origin !== 'loja' && (
+        <div className={`flex flex-col gap-3 rounded-[26px] border p-4 animate-in fade-in ${origin==='keeta'?'border-violet-500/25 bg-gradient-to-b from-violet-500/10 to-zinc-900/40':origin==='food99'?'border-amber-400/25 bg-gradient-to-b from-amber-400/10 to-zinc-900/40':'border-red-500/20 bg-gradient-to-b from-red-500/10 to-zinc-900/40'}`}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">
-              <Sparkles size={14} className="text-amber-400" /> Leitor inteligente do iFood
+            <span className={`text-xs font-bold flex items-center gap-1.5 ${origin==='keeta'?'text-violet-300':origin==='food99'?'text-amber-300':'text-red-400'}`}>
+              <Sparkles size={14} className="text-amber-400" /> Leitor inteligente do {origin==='keeta'?'Keeta':origin==='food99'?'99Food':'iFood'}
             </span>
             <button
               type="button"
               onClick={handlePasteFromClipboard}
               className="flex items-center gap-1 text-[11px] font-bold text-zinc-300 bg-zinc-800/90 hover:bg-zinc-700 px-3 py-1 rounded-full active:scale-95 transition-all shadow-sm"
             >
-              <ClipboardPaste size={12} className="text-red-400" /> Colar do Celular
+              <ClipboardPaste size={12} className={origin==='keeta'?'text-violet-300':origin==='food99'?'text-amber-300':'text-red-400'} /> Colar do Celular
             </button>
           </div>
 
           <textarea
             rows={3}
-            placeholder="Cole aqui o texto do iFood..."
+            aria-label={origin==='keeta'?'Texto do pedido Keeta':origin==='food99'?'Texto do pedido 99Food':'Texto do pedido iFood'}
+            placeholder={origin==='keeta'?'Cole aqui o pedido Keeta...':origin==='food99'?'Cole aqui o pedido 99Food...':'Cole aqui o texto do iFood...'}
+            onFocus={event=>event.currentTarget.scrollIntoView({block:'center',behavior:'smooth'})}
             value={magicText}
             onChange={(e) => setMagicText(e.target.value)}
             className="w-full rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-red-500/50 outline-none resize-none font-mono"
           />
 
-          <button
-            type="button"
-            onClick={handleExecuteSmartParse}
-            className="h-11 w-full rounded-xl bg-red-500 hover:bg-red-400 font-bold text-white text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-red-500/20"
+           {!!magicText.trim() && <div role="status" className="rounded-xl border border-zinc-700/80 bg-zinc-950/80 p-3 text-[11px] text-zinc-300">
+             <p className="font-bold text-zinc-100">Conferência antes de preencher</p>
+             <div className="mt-2 grid grid-cols-2 gap-2">
+               {([['Pedido',marketplacePreview?.orderId||'Revisar'],['Cliente',marketplacePreview?.customerName||'Revisar'],['Valor',marketplacePreview?.customerCharge||marketplacePreview?.value||'Revisar'],['Bebidas',marketplacePreview?.drinks.length?normalizeBeverageList(marketplacePreview.drinks).join(', '):'Não identificadas']] as const).map(([label,v])=><div key={label} className="min-w-0 rounded-lg border border-zinc-800 p-2"><span className="block text-[10px] text-zinc-500">{label}</span><b className="mt-1 block break-words text-zinc-200">{v}</b></div>)}
+             </div>
+             <p className="mt-2 text-[10px] text-zinc-500">Texto incerto permanece para revisão. Nenhum dado é salvo automaticamente.</p>
+           </div>}
+           <button
+             type="button"
+             onClick={handleExecuteSmartParse}
+            className={`min-h-12 w-full rounded-xl font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg ${origin==='keeta'?'bg-violet-500 text-white shadow-violet-500/20':origin==='food99'?'bg-amber-400 text-zinc-950 shadow-amber-500/20':'bg-red-500 hover:bg-red-400 text-white shadow-red-500/20'}`}
           >
             <Sparkles size={15} /> Ler pedido e atualizar campos
           </button>
@@ -1372,11 +1385,14 @@ const [routeId, setRouteId] = useState('');
           </div>
         </section>
 
-        <label className={`flex items-start gap-3 rounded-2xl border p-3.5 text-xs ${excludeFromReports ? 'border-amber-500/35 bg-amber-500/[.08]' : 'border-zinc-800 bg-zinc-900/45'}`}>
+         <details className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3" open={excludeFromReports||undefined}>
+         <summary className="cursor-pointer py-1 text-xs font-bold text-zinc-300">Configurações avançadas · indicadores {excludeFromReports?'· EXCLUÍDO':''}</summary>
+         <label className={`mt-3 flex items-start gap-3 rounded-2xl border p-3.5 text-xs ${excludeFromReports ? 'border-amber-500/35 bg-amber-500/[.08]' : 'border-zinc-800 bg-zinc-900/45'}`}>
           <input type="checkbox" checked={excludeFromReports} onChange={event=>setExcludeFromReports(event.target.checked)} className="mt-0.5 accent-amber-400"/>
           <span><b className="block text-zinc-200">Excluir este pedido dos indicadores</b><small className="mt-1 block text-[11px] text-zinc-500">Marque testes e lançamentos de treinamento. Não apaga o pedido, não desfaz caixa/estoque e não altera a entrega. Pedidos DEV continuam excluídos mesmo sem essa marcação.</small></span>
-        </label>
-        <div className="flex flex-col gap-3 mt-1">
+         </label>
+         </details>
+         <div className="flex flex-col gap-3 mt-1">
           <button type="submit" disabled={isSaving || isDeleting} className="h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-amber-500/20 transition-all">
             {isSaving ? 'Salvando...' : 'Salvar alterações'}
           </button>

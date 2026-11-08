@@ -55,6 +55,7 @@ export default function LojaPage() {
   const setRouteAlertsEnabled = useAppStore((state) => state.setRouteAlertsEnabled);
   const routeOrderingMode = storeSettings.routeOrderingMode === 'smart' ? 'smart' : 'manual';
   const routeReminderActive = storeSettings.routeReminderEnabled !== false;
+  const sitePrepLead = ([15,30,60] as const).find(v => v === storeSettings.sitePreparationLeadMinutes) || 30;
   const autoCloseActive = storeSettings.autoCloseCompletedRoutes !== false;
   // R197: preferências remotas têm gravação única e feedback somente após persistência.
   const quickPreferenceInFlight = useRef(false);
@@ -798,6 +799,17 @@ export default function LojaPage() {
         {isSettingsOpen && (
           <div className="flex flex-col gap-4 rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-4">
             <button type="button" onClick={()=>router.push('/mais/notificacoes')} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] px-3 text-left text-xs font-bold text-emerald-300">Personalizar notificações, horários e categorias <ChevronRight size={16}/></button>
+             <section aria-label="Lembrete de preparo do Site" className="rounded-[22px] border border-sky-500/20 bg-sky-500/[.045] p-3.5">
+               <h3 className="text-sm font-black text-zinc-100">Agendados · lembrar preparação</h3>
+               <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">Aviso VISUAL na Caixa antes do horário do pedido. Não antecipa despacho, não envia WhatsApp ou push e não altera a janela do Site.</p>
+               <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Antecedência visual de preparo">
+                 {([15,30,60] as const).map(minutes => <button type="button" key={minutes}
+                   disabled={quickPreferenceBusy || storeSettingsBusy || storeToggleBusy || sitePrepLead === minutes}
+                   aria-pressed={sitePrepLead === minutes}
+                   onClick={() => void saveQuickPreference({sitePreparationLeadMinutes:minutes})}
+                   className={`min-h-12 rounded-xl border px-2 text-xs font-black disabled:opacity-60 ${sitePrepLead===minutes?'border-sky-400/40 bg-sky-500/10 text-sky-200':'border-zinc-700 bg-zinc-950/50 text-zinc-400'}`}>{minutes} min</button>)}
+               </div>
+             </section>
             <section aria-label="Ordenação das entregas" className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/[.045] p-3.5">
               <div className="flex items-center gap-2"><Bike size={17} className="text-emerald-400" /><h3 className="text-sm font-black text-zinc-100">Ordem das entregas</h3></div>
               <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">Escolha como novas entregas entram nas rotas. Ajustes manuais confirmados nunca serão reorganizados automaticamente.</p>

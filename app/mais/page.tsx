@@ -11,8 +11,6 @@ import { BellRing,
   MessageSquareText,
   SlidersHorizontal,
   UsersRound,
-  ClipboardCheck,
-  Settings2,
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
@@ -28,7 +26,6 @@ export default function MaisPage() {
   const logout = useAppStore((state) => state.logout);
   const fullName = user?.displayName?.trim() || 'Usuário DFL';
   const isDiagnosticsAdmin = isSuperadminUid(user?.uid);
-  const operationalSettings = useAppStore((state) => state.storeSettings);
 
   const handleLogout = async () => {
     try {
@@ -71,29 +68,24 @@ export default function MaisPage() {
             </div>
             <span className="rounded-full border border-zinc-700/70 bg-zinc-900 px-2 py-1 text-[9px] font-bold text-zinc-400">Admin</span>
           </div>
-          <button type="button" onClick={() => router.push('/mais/mensageria')}
+          <button type="button" onClick={() => router.push('/mais/comunicacao')}
             className="group flex min-h-[68px] w-full items-center gap-3 rounded-[20px] border border-amber-400/25 bg-gradient-to-r from-amber-400/[.12] to-zinc-900/70 px-3.5 py-3 text-left transition active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/[.12] text-amber-200"><MessageSquareText size={19}/></span>
-            <span className="min-w-0 flex-1"><strong className="block text-sm font-black text-amber-100">Central de Mensageria 360°</strong><small className="mt-0.5 block text-[11px] leading-snug text-zinc-400">Envios, pendências e falhas · acesso administrativo</small></span>
+            <span className="min-w-0 flex-1"><strong className="block text-sm font-black text-amber-100">Comunicação 360</strong><small className="mt-0.5 block text-[11px] leading-snug text-zinc-400">Central de Mensageria 360° · acompanhamento privado · modelos e imagens</small></span>
             <ChevronRight size={17} className="shrink-0 text-amber-300 transition-transform group-active:translate-x-0.5" />
           </button>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => router.push('/confirmacoes')} className="flex min-h-[68px] min-w-0 items-center gap-2 rounded-[18px] border border-zinc-800 bg-zinc-900/60 px-3 py-2.5 text-left transition active:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-              <ClipboardCheck size={17} className="shrink-0 text-emerald-400"/>
-              <span className="min-w-0"><strong className="block text-[11px] font-black text-zinc-100">Confirmações</strong><small className="mt-0.5 block text-[10px] leading-tight text-zinc-500">Pedidos e códigos</small></span>
+          <div className="space-y-2">
+            <details className="group rounded-[18px] border border-zinc-800 bg-zinc-950/30">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3.5 text-xs font-bold text-zinc-400">Acessos técnicos diretos <ChevronRight size={15} className="transition-transform group-open:rotate-90"/></summary>
+              <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-2">
+                <button type="button" onClick={() => router.push('/mais/mensageria')} className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900/60 px-2 text-[10px] font-bold text-zinc-300">Mensageria original</button>
+                <button type="button" onClick={() => router.push('/mais/acompanhamento')} className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900/60 px-2 text-[10px] font-bold text-zinc-300">Acompanhamento original</button>
+              </div>
+            </details>
+            <button type="button" onClick={() => router.push('/clientes/inteligencia')} className="flex min-h-[66px] w-full items-center gap-3 rounded-[18px] border border-violet-500/20 bg-violet-500/[.045] px-3.5 py-3 text-left transition-colors active:bg-violet-500/10">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-violet-300"><UsersRound size={19}/></span>
+              <span className="min-w-0 flex-1"><strong className="block text-xs font-black text-zinc-100">Inteligência de Clientes</strong><small className="mt-1 block text-[10px] leading-relaxed text-zinc-400">Score, etiquetas e observações com histórico verificável</small></span><ChevronRight size={16} className="text-violet-300"/>
             </button>
-            <button type="button" onClick={() => router.push('/mais/acompanhamento')} className="flex min-h-[68px] min-w-0 items-center gap-2 rounded-[18px] border border-zinc-800 bg-zinc-900/60 px-3 py-2.5 text-left transition active:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-              <ShieldCheck size={17} className="shrink-0 text-sky-400"/>
-              <span className="min-w-0"><strong className="block text-[11px] font-black text-zinc-100">Acompanhamento</strong><small className="mt-0.5 block text-[10px] leading-tight text-zinc-500">Acesso protegido</small></span>
-            </button>
-          </div>
-          <div className="rounded-[18px] border border-zinc-800 bg-zinc-900/35 px-3 py-3">
-            <div className="flex items-center gap-2"><Settings2 size={14} className="text-sky-300"/><p className="text-[10px] font-black uppercase tracking-wide text-zinc-300">Estado operacional</p></div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
-              <div className="min-w-0 rounded-xl bg-zinc-950/60 px-2.5 py-2"><p className="text-[9px] text-zinc-500">Avisos das rotas</p><p className="mt-0.5 font-black text-zinc-100">{operationalSettings.routeReminderEnabled !== false ? 'Ativos' : 'Pausados'}</p></div>
-              <div className="min-w-0 rounded-xl bg-zinc-950/60 px-2.5 py-2"><p className="text-[9px] text-zinc-500">Fechamento</p><p className="mt-0.5 font-black text-zinc-100">{operationalSettings.autoCloseCompletedRoutes !== false ? 'Automático' : 'Manual'}</p></div>
-            </div>
-            <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Para alterar a operação, abra Minha Loja. Estes indicadores são locais; não confirmam entrega de mensagens ou conexão com servidores.</p>
           </div>
         </section>
       )}

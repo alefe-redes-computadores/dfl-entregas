@@ -16,7 +16,7 @@ for (const field of [
   "setOrderId(parsed.orderId || '');", "setCustomerName(parsed.customerName || '');",
   "setPhone(formatPhoneInput(parsed.phone || ''));", "setStreetAddress(parsed.address || '');",
   "setMapsLink(parsed.mapsLink || '');", "setValue(price ? formatCurrencyInput(",
-  "setIsPaid(Boolean(parsed.isPaid));", "setDrinks((parsed.drinks || []).join(', '));",
+  "setIsPaid(Boolean(parsed.isPaid));", "setDrinks(normalizeBeverageList(parsed.drinks || []).join(', '));",
   "setObservation((parsed.observations || []).join(' - '));",
   "setSelectedCustomerId('');", "setIfoodId(draftOrigin === 'ifood' ?",
   "setConfirmationCode(draftOrigin === 'ifood' ?",

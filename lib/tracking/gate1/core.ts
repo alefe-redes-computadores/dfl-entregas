@@ -122,6 +122,10 @@ function statusFromSnapshot(s: ConfirmedSnapshot, events: TrackingEvent[]): Trac
   const started = !pickup && Boolean(iso(s.route?.started_at) || iso(s.route?.departure_time));
   if (started && text(d.route_id) && text(d.route_id) === text(s.route?.id)) return 'out_for_delivery';
   if (!pickup && text(d.route_id) && s.route) return 'assigned';
+  // R299 P9: R21 acceptedAt is distinct from starting preparation. A signed
+  // commercial acceptance in the audit ledger supersedes only an old 'received'
+  // status, not scheduled/preparing/ready/terminal evidence.
+  if (commercial === 'received' && events.some(event => event.kind === 'confirmed')) return 'confirmed';
   if (commercial) return commercial === 'cancelled' ? 'cancelled' : commercial;
   if (events.some(event => event.kind === 'confirmed')) return 'confirmed';
   return d.scheduled_for ? 'scheduled' : 'received';

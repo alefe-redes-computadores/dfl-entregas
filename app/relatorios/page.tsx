@@ -24,6 +24,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { SummaryCard } from '@/components/reports/SummaryCard';
 import { ReportChartCard } from '@/components/reports/ReportChartCard';
 import { OriginChart } from '@/components/reports/Charts/OriginChart';
+import { ReportOrderPulse } from '@/components/reports/ReportOrderPulse';
 import { DataQualityCard } from '@/components/reports/DataQualityCard';
 import { ReportDrilldownSheet } from '@/components/reports/ReportDrilldownSheet';
 import { ReportIntelligencePanel } from '@/components/reports/ReportIntelligencePanel';
@@ -219,6 +220,8 @@ export default function RelatoriosPage() {
             accentColor="blue"
           />
         </section>
+
+        <ReportOrderPulse statuses={model.statuses} origins={model.origins} onStatus={(key) => setDrilldown({kind:'status',key,title:`Pedidos ${key.toLowerCase()}`,subtitle:'Pedidos reais deste período, com exclusões de teste respeitadas.'})} onOrigin={(key) => setDrilldown({kind:'origin',key,title:`Pedidos ${key}`,subtitle:'Origem comercial do pedido; independente do responsável pela entrega.'})}/>
 
         {model.metrics.ignoredDateCount > 0 && periodKey === 'all' && (
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-200">
@@ -431,8 +434,8 @@ export default function RelatoriosPage() {
             />
 
             <p className="px-1 text-[11px] leading-relaxed text-zinc-500">99Food entregue pela plataforma entra nas vendas, não na produtividade dos motoboys DFL. A Keeta com entrega parceira segue a mesma regra.</p>
-            <OriginChart data={model.origins.filter(bucket => ['iFood','99Food','Keeta','Loja'].includes(bucket.label)).map(bucket => ({
-              origin: bucket.label === '99Food' ? 'food99' : bucket.label === 'Keeta' ? 'keeta' : bucket.label === 'iFood' ? 'ifood' : 'loja',
+            <OriginChart data={model.origins.filter(bucket => ['iFood','99Food','Keeta','Site','Loja'].includes(bucket.label)).map(bucket => ({
+              origin: bucket.label === '99Food' ? 'food99' : bucket.label === 'Keeta' ? 'keeta' : bucket.label === 'Site' ? 'site' : bucket.label === 'iFood' ? 'ifood' : 'loja',
               count: bucket.count, total: bucket.revenue,
             }))}/>
             <ReportChartCard

@@ -2,6 +2,15 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/test-r299-tracking-auto-p9.cjs',
+  'scripts/test-r299-comunicacao-p8.cjs',
+  'scripts/test-r299-inteligencia-p7.cjs',
+  'scripts/test-r299-integridade-site-p6.cjs',
+  'scripts/test-r299-fechamento-p5.cjs',
+  'scripts/test-r299-relatorios-p4.cjs',
+  'scripts/test-r299-parser-p3.cjs',
+  'scripts/test-r299-clientes-p2.cjs',
+  'scripts/test-r299-core-p1.cjs',
   'scripts/test-r298-final-closeout.cjs',
   'scripts/test-r295-tracking-premium.cjs',
   'scripts/test-r290-auditoria-fechamento.cjs',

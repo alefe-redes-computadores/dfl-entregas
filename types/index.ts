@@ -473,6 +473,23 @@ export interface Delivery {
 export interface CustomerPhone { id: string; number: string; label?: string; primary?: boolean; }
 export interface CustomerAddress { id: string; address: string; neighborhood?: string; maps_link?: string; reference?: string; label?: string; primary?: boolean; }
 
+export type CustomerReviewState = 'normal' | 'observacao' | 'revisado';
+export interface CustomerOperationalReviewEvent {
+  id: string;
+  state: CustomerReviewState;
+  reason: string;
+  actor_uid: string;
+  occurred_at: string;
+  related_delivery_id?: string;
+}
+export interface CustomerOperationalReview {
+  state: CustomerReviewState;
+  reason: string;
+  changed_at: string;
+  changed_by_uid: string;
+  events: CustomerOperationalReviewEvent[];
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -490,6 +507,8 @@ export interface Customer {
   maps_link?: string;
   observation?: string;
   last_confirmation_code?: string;
+  /** Revisão humana registrada em transação. Nunca representa score de fraude. */
+  operational_review?: CustomerOperationalReview;
   avatar?: string;
   createdAt?: string;
   updated_at?: string;

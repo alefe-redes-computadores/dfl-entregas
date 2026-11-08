@@ -13,6 +13,7 @@ import {
   type IntegrationEventEnvelope,
 } from './contracts';
 import { legacySiteOrderCanPreserveContent } from './site-combo-unit-guard';
+import { parseBeverageTokens } from '@/lib/operation/beverage-normalization';
 
 export interface DflSiteCustomerSnapshotV1 {
   id: string;
@@ -407,25 +408,40 @@ export function siteOrderItemsFromPayload(value:unknown):import('@/types').SiteO
 const siteDrinkCategory=(v:unknown)=>siteText(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()==='bebidas';
 const SITE_DRINK_NAME=/\b(coca(?:-cola)?|guaran[aá]|kuat|fanta|sprite|suco|refrigerante|[aá]gua|schweppes|del\s+valle|pepsi)\b/i;
 export function siteOrderDrinksFromPayload(value:unknown):string{
- if(!Array.isArray(value))return '';
- const drinks=new Map<string,{name:string;qty:number}>();
- const add=(name:string,qty:number)=>{const clean=siteText(name);if(!clean)return;const key=clean.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const prev=drinks.get(key);drinks.set(key,{name:prev?.name||clean,qty:(prev?.qty||0)+Math.max(1,Math.trunc(qty||1))})};
- value.forEach(raw=>{
-  const i=siteRecord(raw);
-  const qty=Math.max(1,Math.trunc(siteMoney(i.quantity)||1));
-  const name=siteText(i.name);
-  const isDrink=siteDrinkCategory(i.category)||SITE_DRINK_NAME.test(name);
-  if(isDrink)add(name,qty);
-  if(Array.isArray(i.components))i.components.forEach(rawComponent=>{
-   const c=siteRecord(rawComponent),cn=siteText(c.name??c.id);
-   if(!(siteDrinkCategory(c.category)||SITE_DRINK_NAME.test(cn)))return;
-   // O mesmo produto pode aparecer simultaneamente como item e componente.
-   // Não remova componentes distintos: combos podem conter várias bebidas legítimas.
-   const sameName=isDrink&&cn.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()===name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-   if(!sameName)add(cn,Math.max(1,Math.trunc(siteMoney(c.quantity)||1)));
+  if(!Array.isArray(value))return '';
+  const drinks=new Map<string,{name:string;qty:number}>();
+  const add=(name:string,qty:number)=>{
+    const clean=siteText(name);
+    if(!clean)return;
+    const key=clean.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const prev=drinks.get(key);
+    drinks.set(key,{name:prev?.name||clean,qty:(prev?.qty||0)+Math.max(1,Math.trunc(qty||1))});
+  };
+  value.forEach(raw=>{
+    const i=siteRecord(raw);
+    const qty=Math.max(1,Math.trunc(siteMoney(i.quantity)||1));
+    const name=siteText(i.name);
+    const isDrink=siteDrinkCategory(i.category)||SITE_DRINK_NAME.test(name);
+    const fromName=isDrink?parseBeverageTokens(name):[];
+    const fromNameKeys=new Set<string>();
+    fromName.forEach(item=>{add(item.name,item.qty*qty);fromNameKeys.add(item.name)});
+    // Produtos explicitamente da categoria bebida, mas desconhecidos, não somem.
+    if(isDrink&&!fromName.length&&siteDrinkCategory(i.category))add(name,qty);
+    if(Array.isArray(i.components))i.components.forEach(rawComponent=>{
+      const c=siteRecord(rawComponent),cn=siteText(c.name??c.id);
+      if(!(siteDrinkCategory(c.category)||SITE_DRINK_NAME.test(cn)))return;
+      const parts=parseBeverageTokens(cn);
+      const componentQty=Math.max(1,Math.trunc(siteMoney(c.quantity)||1))*qty;
+      if(parts.length){
+        parts.forEach(item=>{
+          // Se o nome do combo já incluía essa bebida, o componente é a
+          // representação estruturada do MESMO produto — não cobrar duas vezes.
+          if(!fromNameKeys.has(item.name))add(item.name,item.qty*componentQty);
+        });
+      } else if(siteDrinkCategory(c.category)&&!fromNameKeys.has(cn)) add(cn,componentQty);
+    });
   });
- });
- return [...drinks.values()].map(item=>`${item.qty}x ${item.name}`).join(', ');
+  return [...drinks.values()].map(item=>`${item.qty}x ${item.name}`).join(', ');
 }
 
 export function normalizeSiteOrderStatus(value?: string | null): string {

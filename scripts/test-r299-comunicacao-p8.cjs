@@ -1,0 +1,48 @@
+'use strict';
+/** R299 P8 — hermetic UI + pure policy gates, ZERO network/provider/Firebase. */
+const fs=require('node:fs'),assert=require('node:assert/strict'),ts=require('typescript');
+const read=p=>fs.readFileSync(p,'utf8');let checks=0;
+const ok=(v,label)=>{assert.ok(v,'R299 P8 '+label);checks++;};
+const eq=(a,b,label)=>{assert.deepStrictEqual(a,b,'R299 P8 '+label);checks++;};
+for(const path of ['app/mais/page.tsx','app/mais/comunicacao/page.tsx','app/motoboys/acerto/page.tsx','lib/motoboy-settlement-export.ts']){
+ const source=read(path);
+ const ast=ts.createSourceFile(path,source,ts.ScriptTarget.Latest,true,path.endsWith('tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);
+ eq(ast.parseDiagnostics.length,0,'AST '+path);
+ const tr=ts.transpileModule(source,{fileName:path,reportDiagnostics:true,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}});
+ ok(!tr.diagnostics.some(d=>d.category===ts.DiagnosticCategory.Error),'transpile '+path);
+}
+const policyTs=read('lib/motoboy-settlement-export.ts');
+const mod={exports:{}};
+new Function('module','exports',ts.transpileModule(policyTs,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(mod,mod.exports);
+const summary=mod.exports.settlementImagePolicy('summary');
+const detailed=mod.exports.settlementImagePolicy('detailed');
+eq(summary.detailed,false,'resumido sem detalhamento longo');
+eq(detailed.detailed,true,'detalhado com discriminação');
+eq(summary.summaryCanvasHeight,1490,'resumo curto independente de linhas longas');
+eq(detailed.detailedRowLimit,72,'limite de imagem longa conservado');
+ok(summary.suffix!==detailed.suffix,'arquivos distintos');
+const more=read('app/mais/page.tsx');
+ok(more.includes("router.push('/mais/comunicacao')"),'entrada unificada em Mais');
+ok(more.includes('Central de Mensageria 360°')&&more.includes('Gestão e integrações'),'contratos históricos de hierarquia');
+ok(more.includes("router.push('/mais/mensageria')")&&more.includes("router.push('/mais/acompanhamento')"),'rotas diretas de segurança preservadas');
+ok(more.includes('Acessos técnicos diretos')&&!more.includes("router.push('/confirmacoes')"),'sem terceiro portal duplicado no Mais');
+const hub=read('app/mais/comunicacao/page.tsx');
+ok(hub.includes("isSuperadminUid(owner?.uid)")&&hub.includes('if(!allowed) return'),'barreira admin antes de carregar telas');
+ok(hub.includes('<MensageriaDiagnosticPage/>')&&hub.includes('<AcompanhamentoAdminPage/>'),'interfaces reais integradas sob demanda');
+ok(hub.includes("section==='mensagens'")&&hub.includes("section==='acompanhamento'"),'não monta as duas telas simultaneamente');
+ok(hub.includes('Materiais da operação')&&hub.includes("router.push('/rotas')")&&hub.includes("router.push('/motoboys')"),'textos e imagens no fluxo original');
+ok(hub.includes('Emissão automática de link permanece OFF'),'não finge integração DFL 360 homologada');
+ok(!/fetch\(|onSnapshot\(|getDocs\(|runTransaction\(/.test(hub),'hub não cria backend ou leituras extras');
+const settlement=read('app/motoboys/acerto/page.tsx');
+ok(settlement.includes("image('summary')")&&settlement.includes("image('detailed')"),'dois botões reais');
+ok(settlement.includes('settlementImagePolicy(mode)')&&settlement.includes('exportPolicy.summaryCanvasHeight'),'política integrada à imagem');
+ok(settlement.includes('settlementVisualLines(displayAdjustments)')&&settlement.includes('data.completedStops.flatMap'),'detalhado com ajustes e pedidos por parada');
+ok(settlement.includes('deliveryCustomerCharge(delivery)')&&settlement.includes('payment_method'),'valores individuais usam origem financeira existente');
+ok(settlement.includes('visibleImageRows=settlementImageRows.slice(0,72)')&&settlement.includes('imageExtraRows'),'limite legado de memória respeitado');
+ok(settlement.includes("text:summaryCompact()")&&settlement.includes('navigator.clipboard.writeText(summary())'),'legado: texto curto e cópia integral preservados');
+ok(settlement.includes("exportPolicy.detailed?1340+settlementDetailHeight+84:exportPolicy.summaryCanvasHeight"),'canvas curto separado de detalhado');
+ok(settlement.includes('Compartilhar não significa recebido no WhatsApp.'),'envio por share não confunde entrega');
+ok(!/\b(setDoc|updateDoc|runTransaction|onSnapshot)\s*\(/.test(settlement),'exportação não grava dados');
+const pre=read('scripts/pre-apk.cjs');
+ok(pre.includes("'scripts/test-r299-comunicacao-p8.cjs'")&&pre.includes("'scripts/test-r299-inteligencia-p7.cjs'")&&pre.includes("'scripts/test-r299-integridade-site-p6.cjs'"),'gates preservados');
+console.log(`R299 P8: ${checks} contratos isolados aprovados, sem rede, sem WhatsApp e sem gravação.`);

@@ -34,6 +34,7 @@ import {
   shiftOperationalDateKey,
 } from '@/lib/operational-time';
 import type { FulfillmentMode } from '@/types';
+import { deliveryBelongsToCustomer } from '@/lib/customer-analytics';
 import { OPERATION_BATCH, OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 
 type StatusFilter = 'todas' | 'pendentes' | 'concluidas' | 'incompletas' | 'canceladas';
@@ -81,6 +82,8 @@ export default function DeliveriesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialDate = searchParams.get('date');
+  const customerFilterId = searchParams.get('customer') || '';
+  const allDatesForCustomer = Boolean(customerFilterId && searchParams.get('allDates') === '1');
   const globalSelectedDate = useAppStore((state) => state.selectedDate);
   const setGlobalSelectedDate = useAppStore((state) => state.setSelectedDate);
   const today = dateKey(new Date());
@@ -88,6 +91,7 @@ export default function DeliveriesPage() {
   const deliveries = useAppStore((state) => state.deliveries);
   const routes = useAppStore((state) => state.routes);
   const customers = useAppStore((state) => state.customers);
+  const selectedCustomer = useMemo(() => customers.find((customer) => customer.id === customerFilterId) || null, [customers, customerFilterId]);
 
   const selectedDate = datedOperationKey(initialDate, dateKey(globalSelectedDate));
 
@@ -125,10 +129,12 @@ export default function DeliveriesPage() {
   const dayDeliveries = useMemo(
     () =>
       deliveries.filter((delivery) => {
+        if (customerFilterId && (!selectedCustomer || !deliveryBelongsToCustomer(delivery, selectedCustomer))) return false;
+        if (allDatesForCustomer) return true;
         const value = deliveryDate(delivery);
         return value ? dateKey(value) === selectedDate : false;
       }),
-    [deliveries, selectedDate],
+    [deliveries, selectedDate, customerFilterId, selectedCustomer, allDatesForCustomer],
   );
 
   // A lista diária pode conter centenas de pedidos. Resolver cliente e rota
@@ -188,10 +194,9 @@ export default function DeliveriesPage() {
           (!normalizedQuery || haystack.includes(normalizedQuery)),
         )
         .sort(
-          (a, b) =>
-            a.sortAt - b.sortAt,
+          (a, b) => allDatesForCustomer ? b.sortAt - a.sortAt : a.sortAt - b.sortAt,
         ),
-    [customerById, dayDeliveries, fulfillment, origin, normalizedQuery, paymentPending, routeById, status],
+    [allDatesForCustomer, customerById, dayDeliveries, fulfillment, origin, normalizedQuery, paymentPending, routeById, status],
   );
 
   const renderedRows = useMemo(() => rows.slice(0, progressiveCount(rows.length, visibleLimit)), [rows, visibleLimit]);
@@ -236,6 +241,7 @@ export default function DeliveriesPage() {
 
   return (
     <div className="dfl-page">
+      {customerFilterId && <section className="mb-2 flex items-center justify-between gap-3 rounded-2xl border border-indigo-500/25 bg-indigo-500/[.06] px-3 py-2.5"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-indigo-300">Histórico por cliente</p><p className="truncate text-sm font-bold text-zinc-100">{selectedCustomer?.name || 'Cliente não encontrado'} · {allDatesForCustomer ? 'Todo o período' : 'Data selecionada'}</p></div><button type="button" onClick={() => router.replace('/entregas')} className="min-h-10 shrink-0 rounded-xl border border-zinc-700 px-3 text-[10px] font-black text-zinc-300">Limpar filtro</button></section>}
       <header className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <button
@@ -255,6 +261,7 @@ export default function DeliveriesPage() {
 
       </header>
 
+      {!allDatesForCustomer && (
       <div className="flex items-center gap-1.5 rounded-[18px] border border-zinc-800 bg-zinc-900/40 p-1.5">
         <button
           onClick={() => setSelectedDate((value) => shiftOperationalDateKey(value, -1))}
@@ -283,6 +290,7 @@ export default function DeliveriesPage() {
           <ChevronRight size={21} />
         </button>
       </div>
+      )}
 
       <section className="rounded-[18px] border border-zinc-800 bg-zinc-900/35 px-3 py-2.5">
         <div className="flex items-center justify-between gap-3">
@@ -615,7 +623,7 @@ export default function DeliveriesPage() {
               Nenhum pedido encontrado
             </p>
             <p className="mx-auto mt-1 max-w-[260px] text-[11px] leading-relaxed text-zinc-600">
-              Não há pedidos que correspondam à data e aos filtros atuais.
+              {allDatesForCustomer ? 'Não há pedidos desse cliente que correspondam aos filtros.' : 'Não há pedidos que correspondam à data e aos filtros atuais.'}
             </p>
             <div className="mt-4 flex items-center justify-center gap-2">
               {(status !== 'todas' || fulfillment !== 'todas' || origin !== 'todas' || query.trim()) && (

@@ -84,9 +84,20 @@ export function routeCashFlow(deliveries: Delivery[], initialCashInput = 0) {
     0,
   );
 
-  // O dinheiro da bag é consumido primeiro. O restante é previsão de Pix.
-  const plannedCashChange = Math.min(initialCash, requiredChange);
-  const plannedPixChange = Math.max(0, requiredChange - plannedCashChange);
+  // R299: simulacao cronologica, nao conciliacao de caixa.
+  // So o dinheiro de paradas ANTERIORES pode ser reaproveitado.
+  // Nao supor denominacoes das cedulas recebidas na parada atual.
+  let cashAvailable = initialCash;
+  let plannedCashChange = 0;
+  let plannedPixChange = 0;
+  const changeAllocations = cashOrders.map((item) => {
+    const cashChange = Math.min(cashAvailable, item.requestedChange);
+    const pixChange = Math.max(0, item.requestedChange - cashChange);
+    plannedCashChange += cashChange;
+    plannedPixChange += pixChange;
+    cashAvailable = Math.max(0, cashAvailable - cashChange) + item.tenderedCash;
+    return { id: item.delivery.id, cashChange, pixChange };
+  });
   const unusedInitialCash = Math.max(0, initialCash - plannedCashChange);
 
   // Ex.: pedido 64, cliente entrega 100, bag sai com 36:
@@ -98,6 +109,7 @@ export function routeCashFlow(deliveries: Delivery[], initialCashInput = 0) {
 
   return {
     cashOrders,
+    changeAllocations,
     initialCash,
     customerCharges,
     tenderedCash,

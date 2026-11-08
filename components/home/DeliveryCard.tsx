@@ -1044,7 +1044,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         <span className={clsx('inline-flex min-w-0 items-center gap-1 truncate rounded-md border px-2 py-0.5 text-[10px] font-bold', payment.className)}><PaymentIcon size={11} className="shrink-0"/>{paymentState === 'pending' ? 'Pix pendente' : payment.label === 'Dinheiro' ? 'Cobrar dinheiro' : 'Cobrar cartão'}</span>
                       )}
                       {!isGroupedStop && delivery.drinks && <span className="truncate text-[10px] text-sky-300"><CupSoda size={11} className="mr-1 inline"/>{delivery.drinks}</span>}
-                      {isNeighbor && <span className="ml-auto shrink-0 text-[9px] font-bold text-sky-400">Vizinha {neighborPosition || 1}/{neighborTotal || 2}</span>}
+                      {isNeighbor && <span className="ml-auto shrink-0 text-[9px] font-bold text-sky-400">Próxima {neighborPosition || 1}/{neighborTotal || 2}</span>}
                     </div>
                     <div className="flex min-w-0 flex-wrap items-stretch gap-1.5" aria-label="Ações rápidas da parada">
                       {canManageStop && Boolean(routeStartedAt(route)) ? (

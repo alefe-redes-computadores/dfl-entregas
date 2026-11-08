@@ -14,6 +14,7 @@ import { OPERATION_FIRST_BATCH, nextProgressiveCount } from '@/lib/operation/pro
 import { siteHistoryRows, siteHistoryLabel, siteHistoryDetail, siteHistoryKind, siteHistoryCompactId, siteHistoryTime } from '@/lib/operation/site-order-history-r161';
 import { siteManualReviewCandidates, siteManualArchiveReason } from '@/lib/operation/site-manual-review-r280';
 import { siteOrderDisplayReference } from '@/lib/operation/site-order-presentation';
+import { siteReviewHints, sitePreparationReminder } from '@/lib/operation/site-review-hints';
 import type { Delivery } from '@/types';
 
 const captions: Record<Extract<SiteInboxState, 'confirmar'|'pronto'|'aguardar_agenda'|'revisar'>,string> = {
@@ -42,6 +43,7 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
   const deliveries = useAppStore(state=>state.deliveries);
   const routes = useAppStore(state=>state.routes);
   const motoboys = useAppStore(state=>state.motoboys);
+  const sitePreparationLeadMinutes = useAppStore(state=>state.storeSettings.sitePreparationLeadMinutes || 30);
   const allocate = useAppStore(state=>state.allocateSiteDelivery);
   const archiveSiteDelivery = useAppStore(state=>state.archiveSiteDelivery);
   const [clock,setClock]=useState(()=>Date.now());
@@ -51,6 +53,16 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
     window.addEventListener('dfl:app-foreground',refresh);
     document.addEventListener('visibilitychange',refresh);
     return ()=>{window.removeEventListener('focus',refresh);window.removeEventListener('dfl:app-foreground',refresh);document.removeEventListener('visibilitychange',refresh);};
+  },[]);
+  // Relógio puramente visual: sem Firestore, sem WhatsApp, sem notificações de fundo.
+  useEffect(()=>{
+    let clockTimer: number | undefined;
+    const tick=()=>{
+      if(document.visibilityState==='visible')setClock(Date.now());
+      clockTimer=window.setTimeout(tick,60_000);
+    };
+    clockTimer=window.setTimeout(tick,60_000);
+    return ()=>{if(clockTimer!==undefined)window.clearTimeout(clockTimer);};
   },[]);
   const projection = useMemo(()=>siteInboxProjection(deliveries,clock),[deliveries,clock]);
   const [filter,setFilter]=useState<'all'|'pronto'|'confirmar'|'aguardar_agenda'|'revisar'>('all');
@@ -285,9 +297,11 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
       const step=siteStep(state,duplicate);
       const possibleManual=matchesBySite.get(delivery.id)||[];
       const requiresManualReview=!duplicate&&possibleManual.length>0&&!independentOrders.includes(delivery.id);
+      const reviewHints=siteReviewHints(delivery);
+      const scheduleNotice=sitePreparationReminder(delivery,clock,sitePreparationLeadMinutes);
       return <article key={delivery.id} className={`scroll-mt-28 rounded-[20px] border p-3.5 ${tones[state]}`}>
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wide">{duplicate?'Possível pedido duplicado · revisar origem':captions[state]}</p><h3 className="mt-1 truncate text-sm font-black text-zinc-100">{delivery.customer_name||'Cliente do Site'}</h3><p className="mt-0.5 text-[11px] font-semibold text-sky-300">{siteOrderDisplayReference(delivery)}</p><p className="mt-0.5 text-[9px] text-zinc-600">Site · #{siteHistoryCompactId(delivery)}</p><details className="mt-1 text-[10px] text-zinc-400"><summary className="w-fit cursor-pointer font-semibold text-sky-300">Mostrar ID completo</summary><code className="mt-1 block break-all select-text font-mono text-zinc-300">{delivery.external_order_id||delivery.order_id||delivery.id}</code></details></div>
+          <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wide">{duplicate?'Possível pedido duplicado · revisar origem':captions[state]}</p><h3 className="mt-1 truncate text-sm font-black text-zinc-100">{delivery.customer_name||'Cliente do Site'}</h3><p className="mt-0.5 text-[11px] font-semibold text-sky-300">{siteOrderDisplayReference(delivery)}</p><details className="mt-1 text-[10px] text-zinc-400"><summary className="w-fit cursor-pointer font-semibold text-sky-300">Detalhes técnicos do Site</summary><p className="mt-1">Site · #{siteHistoryCompactId(delivery)}</p></details><details className="mt-1 text-[10px] text-zinc-400"><summary className="w-fit cursor-pointer font-semibold text-sky-300">Mostrar ID completo</summary><code className="mt-1 block break-all select-text font-mono text-zinc-300">{delivery.external_order_id||delivery.order_id||delivery.id}</code></details></div>
           <span className="shrink-0 text-sm font-black text-zinc-100">{amount(Number(delivery.customer_charge??delivery.value))}</span>
         </div>
         {duplicate&&<p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-200">Foram encontrados registros com o mesmo ID externo. Confira e concilie os pedidos antes de alocar uma rota.</p>}
@@ -300,13 +314,18 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
         <p className="mt-2 flex items-start gap-1 text-[11px] text-zinc-400"><MapPin size={13} className="mt-0.5 shrink-0"/>{delivery.address_string||'Endereço não informado'}</p>
         {delivery.is_urgent === true && <p className="mt-1 inline-flex rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[10px] font-black text-amber-200">Urgente · priorizado na triagem, sujeito à aprovação comercial</p>}
         {delivery.scheduled_for&&<p className="mt-1 flex items-center gap-1 text-[10px] text-sky-300"><CalendarClock size={13}/> Agendado: {delivery.scheduled_label||new Date(delivery.scheduled_for).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'})}</p>}
+        {scheduleNotice&&<div role="status" className="mt-2 rounded-xl border border-sky-500/25 bg-sky-500/[.065] px-3 py-2 text-[11px] font-bold text-sky-200"><CalendarClock size={13} className="mr-1 inline"/>{scheduleNotice.label}. Sem liberação automática.</div>}
+        {reviewHints.length>0&&<details className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/[.045] px-3 py-2 text-xs text-amber-200"><summary className="cursor-pointer font-bold">Conferir dados · {reviewHints.length} ponto{reviewHints.length===1?'':'s'}</summary><ul className="mt-2 space-y-1 text-[11px] font-normal leading-relaxed text-amber-100/80">{reviewHints.map(hint=><li key={hint.key}>• {hint.label}</li>)}</ul><p className="mt-2 text-[10px] text-zinc-400">Sugestão de revisão humana, não é acusação nem bloqueio automático.</p></details>}
+        {Boolean(delivery.site_order_timeline?.length)&&<details className="mt-2 rounded-xl border border-zinc-800 bg-zinc-950/25 px-3 py-2"><summary className="cursor-pointer text-[10px] font-bold text-zinc-400">Histórico do status do Site · {delivery.site_order_timeline?.length} evento(s)</summary><div className="mt-2 space-y-1">{(delivery.site_order_timeline||[]).slice(-8).map(event=><p key={event.event_id} className="text-[10px] text-zinc-500">{event.status} · {(Number.isFinite(Date.parse(event.occurred_at)) ? new Date(event.occurred_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : 'Sem data confiável')}</p>)}</div></details>}
         <p className="mt-2 text-[10px] leading-relaxed text-zinc-400" role="status"><span className="font-bold text-zinc-200">{step.title}.</span> {step.hint}</p>
         {state==='pronto'?<button type="button" disabled={requiresManualReview} onClick={()=>begin(delivery)} aria-expanded={expanded} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-xs font-black text-emerald-200 disabled:opacity-35"><RouteIcon size={16}/>{expanded?'Fechar escolha de rota':'Escolher rota'}<ChevronDown size={15}/></button>:
         <button type="button" onClick={()=>router.push('/loja?site=pending')} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/50 text-xs font-bold text-zinc-200"><ShoppingBag size={15}/>{step.action}</button>}
+        {!duplicate && !delivery.route_id?.trim() && !delivery.completed && !delivery.operational_dismissed_at && <details className="group mt-2 rounded-xl border border-zinc-800/70 bg-zinc-950/30 p-2"><summary className="min-h-10 cursor-pointer px-2 py-2 text-[11px] font-semibold text-zinc-400">Outras ações · conciliar ou arquivar</summary>
         {!duplicate && !requiresManualReview && manualRows.length>0 && !delivery.route_id?.trim() && !delivery.completed && !delivery.operational_dismissed_at && <button type="button" onClick={()=>requestArchive(delivery,'manual')} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.05] px-3 text-[11px] font-bold text-amber-200"><Link2 size={14}/> Já cadastrei manualmente · conciliar</button>}
         {!duplicate && !delivery.route_id?.trim() && !delivery.completed && !delivery.operational_dismissed_at && <button type="button" onClick={()=>requestArchive(delivery)} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-xl border border-zinc-700/70 bg-zinc-950/35 px-3 text-[11px] font-bold text-zinc-400" aria-label={`Arquivar operacionalmente pedido ${delivery.external_order_id||delivery.order_id||delivery.id}`}>
           Arquivar da operação · preservar histórico
         </button>}
+        </details>}
         {expanded&&state==='pronto'&&<div className="mt-3 space-y-3 rounded-2xl border border-zinc-700/60 bg-zinc-950/75 p-3">
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[.045] px-3 py-2.5 text-[11px] leading-relaxed text-zinc-300">
             <span className="font-bold text-emerald-200">Pedido conferido?</span> Escolha uma rota ainda não iniciada. A confirmação é transacional e não avisa saída ao cliente.

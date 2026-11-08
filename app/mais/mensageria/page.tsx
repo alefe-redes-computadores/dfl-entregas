@@ -140,7 +140,7 @@ export default function MensageriaDiagnosticPage() {
           <p className="text-[10px] text-zinc-500">Teste protegido, sem envio em massa. Histórico de homologação preservado para auditoria.</p>
         </div>
       </details>
-      <p className="px-1 text-[10px] leading-relaxed text-zinc-500">Esta central não expõe telefone completo, conteúdo das mensagens, segredos ou dados financeiros. Aceito na fila não equivale a recebido pelo cliente.</p>
+      <p className="px-1 text-[10px] leading-relaxed text-zinc-500">Esta central não expõe telefone completo, conteúdo das mensagens, segredos ou dados financeiros. O status aceito na fila não confirma entrega no WhatsApp e não equivale a recebido pelo cliente.</p>
     </>}
   </div>;
 }

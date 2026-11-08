@@ -30,16 +30,29 @@ export default function CustomerDuplicatesPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const mergeInFlight = useRef(false);
   const [visibleCount, setVisibleCount] = useState(30);
+  const [search, setSearch] = useState('');
   const [pendingMerge, setPendingMerge] = useState<{
     source: Customer;
     target: Customer;
     key: string;
   } | null>(null);
 
-  const candidates = useMemo(
+  const allCandidates = useMemo(
     () => customerDuplicateCandidates(customers, deliveries),
     [customers, deliveries],
   );
+  const groupsCount = useMemo(() => new Set(allCandidates.map(candidate =>
+    candidate.left.name.replace(/\s*\(\d+\)\s*$/, '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()
+  )).size, [allCandidates]);
+  const candidates = useMemo(() => {
+    const term = search.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    if (!term) return allCandidates;
+    return allCandidates.filter(candidate =>
+      [candidate.left.name,candidate.right.name,candidate.left.phone,candidate.right.phone,
+       candidate.left.address,candidate.right.address]
+        .some(value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(term))
+    );
+  }, [allCandidates, search]);
 
   const requestMerge = (
     source: Customer,
@@ -108,6 +121,14 @@ export default function CustomerDuplicatesPage() {
         </div>
       </section>
 
+      <div className="rounded-[18px] border border-zinc-800 bg-zinc-900/35 p-3">
+        <label htmlFor="r299-customer-duplicate-search" className="mb-2 block text-xs font-bold text-zinc-300">Encontrar grupo por nome, telefone ou endereço</label>
+        <input id="r299-customer-duplicate-search" type="search" value={search}
+          onChange={event => {setSearch(event.target.value);setVisibleCount(30);}}
+          placeholder="Ex.: Claudio, rua ou telefone"
+          className="h-12 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-amber-400" />
+        <p className="mt-2 text-[11px] text-zinc-500">{groupsCount} grupo(s) de nomes · {allCandidates.length} pares potenciais. A mesclagem continua manual.</p>
+      </div>
       <div className="flex items-center justify-between px-1">
         <p className="text-xs font-bold text-zinc-500">
           {candidates.length} par(es) para revisar

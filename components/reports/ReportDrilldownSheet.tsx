@@ -1,6 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { deliveryEconomicValue } from '@/lib/delivery-finance';
+import { normalizeLogisticsProvider } from '@/lib/reports/buildReportModel';
+import { reportOrderStatus } from '@/lib/reports/report-order-status';
 import { createPortal } from 'react-dom';
 import {
   Banknote,
@@ -53,10 +57,12 @@ function deliveryMatches(
       return delivery.paymentLabel === selection.key;
     case 'origin':
       return delivery.originLabel === selection.key;
+    case 'status':
+      return reportOrderStatus(delivery) === selection.key;
     case 'logistics': {
       const mode = delivery.fulfillment_mode || 'delivery';
       const provider = mode === 'external_delivery'
-        ? (delivery.logistics_provider === 'food99' || delivery.origin === 'food99' ? '99Food' : delivery.logistics_provider === 'ifood' ? 'iFood' : 'Plataforma externa')
+        ? normalizeLogisticsProvider(delivery)
         : mode === 'pickup' ? 'Retirada pelo cliente' : mode === 'counter' ? 'Balcão / presencial' : 'DFL Entregas';
       return provider === selection.key;
     }
@@ -87,6 +93,8 @@ function bucketSource(
       return model.payments;
     case 'origin':
       return model.origins;
+    case 'status':
+      return model.statuses;
     case 'logistics':
       return model.logisticsProviders;
     case 'hour':
@@ -107,6 +115,7 @@ export function ReportDrilldownSheet({
   model,
   onClose,
 }: ReportDrilldownSheetProps) {
+  const router = useRouter();
   const [selectedKey, setSelectedKey] = useState<string | null>(selection?.key ?? null);
 
   useEffect(() => {
@@ -272,7 +281,7 @@ export function ReportDrilldownSheet({
                   label="Faturamento"
                   value={money(
                     deliveries.reduce(
-                      (sum, delivery) => sum + (delivery.value || 0),
+                      (sum, delivery) => sum + deliveryEconomicValue(delivery),
                       0,
                     ),
                   )}
@@ -321,9 +330,10 @@ export function ReportDrilldownSheet({
                     </div>
 
                     <div className="shrink-0 text-sm font-black text-emerald-300">
-                      {money(delivery.value || 0)}
+                      {money(deliveryEconomicValue(delivery))}
                     </div>
                   </div>
+                  <button type="button" onClick={() => { onClose(); router.push(`/entregas/details?id=${encodeURIComponent(delivery.id)}${delivery.reportDateKey ? `&date=${encodeURIComponent(delivery.reportDateKey)}` : ''}`); }} className="mt-3 min-h-10 w-full rounded-xl border border-sky-500/20 bg-sky-500/[.06] text-[11px] font-black text-sky-300 active:bg-sky-500/15">Abrir pedido individual</button>
                 </article>
               ))}
 

@@ -278,7 +278,7 @@ function DeliveryDetailsContent() {
       setInputCode('');
       toast.success(
         mode === 'external_delivery'
-          ? 'Pedido 99Food concluído.'
+          ? `Entrega parceira ${delivery.origin === 'keeta' ? 'Keeta' : delivery.origin === 'food99' ? '99Food' : delivery.origin === 'ifood' ? 'iFood' : ''} concluída.`
           : mode === 'pickup'
           ? 'Retirada concluída.'
           : mode === 'counter'
@@ -286,12 +286,9 @@ function DeliveryDetailsContent() {
             : 'Entrega concluída com sucesso.',
       );
 
-      // V25.2: atendimentos sem logística não pertencem ao ciclo de uma rota.
-      // Após a baixa persistida, devolvemos o operador à lista do mesmo dia em
-      // vez de deixar a ficha dependente da reconciliação visual do registro.
-      if (!logistics) {
-        router.replace(deliveriesReturn);
-      }
+      // R299 P5: conclusão persistida devolve à Home operacional e às rotas.
+      // A confirmação financeira e a confirmação iFood seguem independentes.
+      router.replace('/');
     } catch {
       void vibrate(ImpactStyle.Heavy);
       toast.error('Não foi possível concluir o pedido.', {

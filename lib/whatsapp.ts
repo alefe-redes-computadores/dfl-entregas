@@ -775,41 +775,58 @@ export async function generateRouteMessages(
     let compactTasks = 0;
     const drinkRows = Object.values(drinksSummary);
     if (drinkRows.length) {
-      compactChecklist.push(`🥤 *Conferir bebidas:* ${drinkRows.map(item => `${item.qty}x ${item.name}`).join(' · ')}`);
+      compactChecklist.push('🥤 *PEGAR BEBIDAS*');
+      drinkRows.forEach(item => compactChecklist.push(`  • *${item.qty}× ${item.name}*`));
+      compactTasks++;
+    }
+    const compactStops = groupDeliveriesByStop(deliveries);
+    const customerFor = (item: Delivery) => getCustomerById(item.customer_id)?.name || item.customer_name || 'Cliente';
+    const pendingCardOrders = deliveries.filter(item => !deliveryPaid(item) && (deliverySplitStatus(item)?.valid ? Boolean(deliverySplitStatus(item)?.cardCents) : item.payment_method?.includes('cartao')));
+    const cashChangeOrders = deliveries.filter(item => !deliveryPaid(item) && (deliverySplitStatus(item)?.valid ? Boolean(deliverySplitStatus(item)?.changeCents) : item.payment_method === 'dinheiro' && Number(item.change_for) > deliveryCharge(item)));
+    if (pendingCardOrders.length || cashChangeOrders.length) {
+      compactChecklist.push('💳 *EQUIPAMENTOS E TROCO*');
+      if (pendingCardOrders.length) compactChecklist.push(`  • Levar maquininha · ${pendingCardOrders.length} pedido(s)`);
+      if (cashChangeOrders.length) compactChecklist.push(`  • Preparar troco · ${cashChangeOrders.length} pedido(s)`);
       compactTasks++;
     }
     const codesPending = deliveries.filter(item => item.origin === 'ifood' && !orderConfirmationCode(item.confirmation_code));
     if (codesPending.length) {
-      compactChecklist.push(`🔑 *${codesPending.length} código(s) iFood a solicitar*`);
-      codesPending.forEach(item => {
-        const orderRef = item.ifood_id ? `ID ${item.ifood_id}` : item.order_id ? `#${item.order_id}` : 'ID ausente · avisar a loja';
-        const who = getCustomerById(item.customer_id)?.name || item.customer_name || 'Cliente';
-        compactChecklist.push(`  • ${who} · ${orderRef} · ${driverConfirmsIfood ? 'pedir código e confirmar no portal' : 'pedir código ao cliente'}`);
+      compactChecklist.push('', `🔑 *${codesPending.length} código(s) iFood a solicitar*`);
+      compactChecklist.push(driverConfirmsIfood ? 'pedir código e confirmar no portal por cliente:' : 'pedir código aos clientes abaixo:');
+      compactStops.forEach((stop, index) => {
+        const missing = stop.deliveries.filter(item => item.origin === 'ifood' && !orderConfirmationCode(item.confirmation_code));
+        if (!missing.length) return;
+        compactChecklist.push(`📍 *Parada ${index+1}${stop.deliveries.length>1?' · pedidos no mesmo endereço':''}*`);
+        missing.forEach(item => compactChecklist.push(`  • ${customerFor(item)} · ${item.ifood_id ? `ID ${item.ifood_id}` : item.order_id ? `pedido #${item.order_id}` : 'ID ausente: avisar loja'}`));
       });
       compactTasks++;
     }
     if (driverConfirmsIfood && ifoodCount > 0) {
-      compactChecklist.push(`🔴 iFood: confirmar cada pedido no portal (após coletar código).`);
+      compactChecklist.push('🔴 Confirmar individualmente no portal iFood depois de obter o código.');
       compactChecklist.push(IFOOD_DRIVER_CONFIRMATION_URL);
       compactTasks++;
     }
-    const pendingPixOrders = deliveries.filter(item => !deliveryPaid(item) && item.payment_method === 'pix');
-    if (pendingPixOrders.length) {
-      const total = pendingPixOrders.reduce((sum,item) => sum + deliveryCharge(item), 0);
-      compactChecklist.push(`📱 *Cobrar R$ ${formatMoney(total)} no Pix (QR/chave da loja)* · confirmar recebimentos por pedido`);
-      compactTasks++;
-    }
-    if (stopsNeedingPosMachine.length) {
-      compactChecklist.push(`💳 *Levar maquininha* · ${stopsNeedingPosMachine.length} cobrança(s)`);
-      compactTasks++;
-    }
-    const cashChangeOrders = deliveries.filter(item => !deliveryPaid(item) && item.payment_method === 'dinheiro' && Number(item.change_for) > deliveryCharge(item));
-    if (cashChangeOrders.length) {
-      compactChecklist.push(`💵 *Preparar troco para ${cashChangeOrders.length} pedido(s)* · conferir valores na rota`);
+    const pendingPixOrders = deliveries.filter(item => !deliveryPaid(item) && (deliverySplitStatus(item)?.valid ? Boolean(deliverySplitStatus(item)?.pixCents) : item.payment_method === 'pix'));
+    const pendingCollections = [...pendingPixOrders, ...pendingCardOrders, ...cashChangeOrders];
+    if (pendingCollections.length) {
+      compactChecklist.push('', '💰 *COBRANÇAS POR PARADA E CLIENTE*');
+      compactStops.forEach((stop, index) => {
+        const collected: string[] = [];
+        stop.deliveries.forEach(item => {
+          if (deliveryPaid(item)) return;
+          const split = deliverySplitStatus(item);
+          const pix = split?.valid ? split.pixCents/100 : item.payment_method === 'pix' ? deliveryCharge(item) : 0;
+          const card = split?.valid ? split.cardCents/100 : item.payment_method?.includes('cartao') ? deliveryCharge(item) : 0;
+          const change = split?.valid ? split.changeCents/100 : item.payment_method === 'dinheiro' ? Math.max(0,(Number(item.change_for)||0)-deliveryCharge(item)) : 0;
+          const parts = [pix>0?`Pix R$ ${formatMoney(pix)}`:'', card>0?`cartão R$ ${formatMoney(card)}`:'',change>0?`troco R$ ${formatMoney(change)}`:''].filter(Boolean);
+          if (parts.length) collected.push(`  • ${customerFor(item)} · ${parts.join(' + ')}`);
+        });
+        if (collected.length) compactChecklist.push(`📍 *Parada ${index+1}*`, ...collected);
+      });
       compactTasks++;
     }
     if (fuzzyDeliveries.length) {
-      compactChecklist.push(`⚠️ ${fuzzyDeliveries.length} endereço(s) sem referência suficiente · conferir antes da saída`);
+      compactChecklist.push(`⚠️ ${fuzzyDeliveries.length} endereço(s) exigem conferência antes da saída`);
       compactTasks++;
     }
     if (!compactTasks) compactChecklist.push('✅ Sem pendências adicionais. Confira trajeto e pedidos no resumo da rota.');

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, User, Plus, X } from 'lucide-react';
+import { ChevronLeft, User, Plus, X, Sparkles, GripVertical } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { dateKey } from '@/lib/operational-time';
 import { useAppStore } from '@/store/useAppStore';
@@ -25,6 +25,7 @@ export default function NovaRotaPage() {
       : '/rotas';
   const addRoute = useAppStore((state) => state.addRoute);
   const motoboys = useAppStore((state) => state.motoboys);
+  const routeOrderingMode = useAppStore((state) => state.storeSettings.routeOrderingMode === 'smart' ? 'smart' : 'manual');
   const addMotoboy = useAppStore((state) => state.addMotoboy);
 
   const [name, setName] = useState('');
@@ -140,6 +141,10 @@ export default function NovaRotaPage() {
           <p className="mt-0.5 text-[11px] text-zinc-600">
             Escolha o responsável e prepare a saída
           </p>
+          <div className={`mt-2 inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[10px] font-black ${routeOrderingMode==='smart' ? 'border-sky-500/25 bg-sky-500/10 text-sky-300':'border-amber-500/25 bg-amber-500/10 text-amber-300'}`}>
+            {routeOrderingMode==='smart' ? <Sparkles size={13}/> : <GripVertical size={13}/>}
+            Ordenação {routeOrderingMode==='smart'?'inteligente':'manual'} · definida em Loja
+          </div>
         </div>
       </header>
 

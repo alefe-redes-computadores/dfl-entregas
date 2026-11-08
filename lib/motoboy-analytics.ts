@@ -46,10 +46,12 @@ export function getMotoboyDayData(
   vales:ValeInput[]=[],
   cashHandedOver:boolean|number=true,
   carry:{storeCredit?:number;motoboyCredit?:number}={},
+  includePendingForSimulation=false,
 ){
   const dayRoutes=getMotoboyRoutes(motoboy,routes).filter(route=>route.operational_date?route.operational_date===date:(routeOperationalDate(route)?operationalDateKey(routeOperationalDate(route)! as string)===date:false));
   const routeIds=new Set(dayRoutes.map(route=>route.id));
-  const completedDeliveries=activeRouteDeliveries(deliveries).filter(delivery=>routeIds.has(delivery.route_id)&&delivery.completed===true);
+  // Prévia hipotética por parâmetro explícito; o acerto normal só considera entregas concluídas.
+  const completedDeliveries=activeRouteDeliveries(deliveries).filter(delivery=>routeIds.has(delivery.route_id)&&(delivery.completed===true||includePendingForSimulation));
   const completedByRoute=new Map<string,Delivery[]>();
   for(const delivery of completedDeliveries){
     const group=completedByRoute.get(delivery.route_id);

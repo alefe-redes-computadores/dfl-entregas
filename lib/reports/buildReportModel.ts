@@ -3,6 +3,7 @@ import { SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { isInternalOperationalCustomer, isInternalOperationalRoute } from '@/lib/operational-exclusions';
 import { excludedFromReports } from '@/lib/operation/report-eligibility';
+import { reportOrderStatus } from './report-order-status';
 import { deliveryCustomerCharge, deliveryEconomicValue, deliveryIfoodSubsidy } from '@/lib/delivery-finance';
 import {
   deliveryOperationalTimestamp,
@@ -53,6 +54,7 @@ function money(value: unknown): number {
 }
 
 function normalizeOrigin(delivery: Delivery): ReportDelivery['originLabel'] {
+  if (delivery.source_system === 'dfl_site') return 'Site';
   const raw = (delivery as Delivery & { origin?: string }).origin;
   if (raw === 'ifood') return 'iFood';
   if (raw === 'food99') return '99Food';
@@ -73,7 +75,7 @@ function normalizePayment(delivery: Delivery): string {
   return raw ? (map[raw] ?? raw) : 'Não informado';
 }
 
-function normalizeLogisticsProvider(delivery: Delivery): string {
+export function normalizeLogisticsProvider(delivery: Delivery): string {
   const mode = delivery.fulfillment_mode || 'delivery';
   if (mode === 'external_delivery') {
     if (delivery.logistics_provider === 'food99' || delivery.origin === 'food99') return '99Food';
@@ -480,7 +482,7 @@ function buildQuality(
   const missingNeighborhood = deliveries.filter(
     (delivery) => !delivery.neighborhood,
   ).length;
-  const missingRoute = deliveries.filter((delivery) => !delivery.route).length;
+  const missingRoute = deliveries.filter((delivery) => isDeliveryFulfillment(delivery) && !delivery.route && reportOrderStatus(delivery) !== 'Cancelado').length;
 
   return [
     {
@@ -619,6 +621,7 @@ export function buildReportModel(input: {
   const origins = aggregate(current, (delivery) => delivery.originLabel).sort(
     (a, b) => b.count - a.count,
   );
+  const statuses = aggregate(current, (delivery) => reportOrderStatus(delivery)).sort((a,b) => b.count - a.count);
   const logisticsProviders = aggregate(current, normalizeLogisticsProvider).sort(
     (a, b) => b.count - a.count,
   );
@@ -709,6 +712,7 @@ export function buildReportModel(input: {
     payments,
     origins,
     logisticsProviders,
+    statuses,
     hours,
     weekdays,
     neighborhoods,

@@ -50,6 +50,12 @@ export async function verifyTrackingSiteRequest(request: NextRequest, rawBody: s
   if (!trackingCustomerEnabled()) return 'not_ready';
   return verifySignedTrackingRequest(request,rawBody);
 }
+/** R299 P9: distinct OFF-by-default S2S automatic issue gate. Shared canonical
+ * signature and durable nonce protection; never accepts an owner's Firebase token. */
+export async function verifyTrackingAutomaticRequest(request: NextRequest, rawBody: string): Promise<TrackingAuthResult> {
+  if (!trackingCustomerEnabled() || process.env.DFL_TRACKING_AUTO_S2S_CERTIFIED !== '1') return 'not_ready';
+  return verifySignedTrackingRequest(request,rawBody);
+}
 /** R254: separately gated internal S2S probe; never enables customers. */
 export async function verifyTrackingBridgeRequest(request: NextRequest, rawBody: string): Promise<TrackingAuthResult> {
   if (!trackingCodeEnabled() || process.env.DFL_TRACKING_BRIDGE_PROBE_CERTIFIED !== '1') return 'not_ready';

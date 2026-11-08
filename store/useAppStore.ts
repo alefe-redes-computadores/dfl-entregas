@@ -234,6 +234,8 @@ interface AppState {
     storeMapsLink?: string;
     routeOrderingMode?: 'manual' | 'smart';
     routeReminderEnabled?: boolean;
+    /** Aviso visual na Caixa de Entrada; não altera janela de despacho. */
+    sitePreparationLeadMinutes?: 15 | 30 | 60;
     autoCloseCompletedRoutes?: boolean;
     notificationPreferences?: NotificationPreferences;
     /** Plataforma entrega ou DFL entrega; ausencia preserva o padrao anterior. */
@@ -3557,6 +3559,10 @@ export const useAppStore = create<AppState>()(
 
         if (!source || !target) {
           throw new Error('Um dos clientes não foi encontrado.');
+        }
+        // R299 P7: não perder histórico de revisão na consolidação de cadastros.
+        if ((source.operational_review?.events?.length||0)>0 || (target.operational_review?.events?.length||0)>0) {
+          throw new Error('Cliente possui revisão operacional: confira a trilha antes de mesclar cadastros.');
         }
 
         const linkedDeliveries = state.deliveries.filter(

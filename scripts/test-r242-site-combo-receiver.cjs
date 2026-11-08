@@ -118,9 +118,11 @@ eq(guard.legacySiteOrderCanPreserveContent({...legacy,contract:'dfl_site_combo_u
 const live=read('lib/integration/site-order.ts');
 ok(live.includes("from './site-combo-unit-guard'"),'live receiver imports the guard');
 ok(live.includes('legacySiteOrderCanPreserveContent(value)'),'live receiver calls guard before projecting');
+const beverage=loadTs('lib/operation/beverage-normalization.ts');
 const site=loadTs('lib/integration/site-order.ts',{
  './site-combo-unit-guard':guard,
  './contracts': {INTEGRATION_SCHEMA_VERSION:1,isIntegrationEventEnvelope:(x)=>!!x&&typeof x==='object'&&x.schema_version===1&&typeof x.event_type==='string'&&typeof x.entity_id==='string'},
+ '@/lib/operation/beverage-normalization':beverage,
 });
 const payload={orderId:'mock-r242',sourceSystem:'dfl_site',orderSchemaVersion:2,userId:'guest-r242',customerSnapshot:null,
  tipoEntrega:'pickup',deliverySnapshot:null,itens:legacy.itens,subtotal:69.99,taxaEntrega:0,desconto:0,cupom:null,

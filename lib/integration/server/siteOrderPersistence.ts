@@ -1,4 +1,6 @@
 import 'server-only';
+import { createHash } from 'node:crypto';
+import { siteGuestIdentityEvidence, siteCustomerExistingEvidenceMatch } from '@/lib/integration/site-guest-identity';
 import type {
   DocumentData,
   DocumentReference,
@@ -134,31 +136,9 @@ function storedPhoneForms(value?: string | null): string[] {
   return [...forms].filter(Boolean);
 }
 
-function normalizeComparable(value?: string | null): string {
-  return (value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('pt-BR')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function incomingAddress(event: DflSiteOrderCreatedEvent): string {
   if (event.payload.tipoEntrega !== 'delivery') return '';
   return dflSiteAddressString(event.payload.deliverySnapshot);
-}
-
-function customerMatchesAddress(
-  customer: Customer,
-  address: string,
-): boolean {
-  if (!address) return false;
-
-  const local = normalizeComparable(customer.address);
-  const incoming = normalizeComparable(address);
-  if (!local || !incoming) return false;
-
-  return local === incoming;
 }
 
 function uniqueCustomers(
@@ -421,16 +401,11 @@ export async function consumeDflSiteOrderCreatedPersisted(
       if (byPhone) {
         const address = incomingAddress(event);
 
-        // Telefone identifica; endereço, quando existe dos dois lados,
-        // funciona como trava contra associação contraditória.
-        if (
-          address &&
-          byPhone.address &&
-          !customerMatchesAddress(byPhone, address)
-        ) {
-          // Enderecos divergentes nao sao prova de identidade.
-          // Nao associar ao Customer existente: usar identidade deterministica.
-        } else {
+        // Reutilizar SOMENTE com nome completo + telefone válido + endereço idêntico.
+        // Telefones familiares compartilhados não provam identidade.
+        if (siteCustomerExistingEvidenceMatch(byPhone, {
+          name: event.payload.customerSnapshot.name, phone, address,
+        })) {
           customer = byPhone;
           customerRef = adminDb.collection('customers').doc(byPhone.id);
           createCustomerIdentity = Boolean(externalCustomerId);
@@ -439,9 +414,22 @@ export async function consumeDflSiteOrderCreatedPersisted(
     }
 
     if (!customer) {
-      const newId = externalCustomerId
-        ? `site-customer-v1__${encodeURIComponent(externalCustomerId)}`
-        : siteGuestCustomerId(event.payload.orderId);
+      // A identidade externa da sessão pode ser diferente a cada pedido convidado.
+      // Só nomes COMPLETOS, telefone brasileiro válido e endereço estruturado inteiro
+      // geram um ID compartilhado. Hash evita expor dados pessoais no caminho.
+      const siteEvidence = siteGuestIdentityEvidence({
+        name: event.payload.customerSnapshot?.name,
+        phone: event.payload.customerSnapshot?.phoneE164 || event.payload.customerSnapshot?.phone,
+        street: event.payload.deliverySnapshot?.street,
+        number: event.payload.deliverySnapshot?.number,
+        district: event.payload.deliverySnapshot?.district,
+        complement: event.payload.deliverySnapshot?.complement,
+      });
+      const newId = siteEvidence
+        ? `site-guest-v2__${createHash('sha256').update(siteEvidence).digest('hex')}`
+        : externalCustomerId
+          ? `site-customer-v1__${encodeURIComponent(externalCustomerId)}`
+          : siteGuestCustomerId(event.payload.orderId);
 
       customerRef = adminDb.collection('customers').doc(newId);
 
@@ -455,13 +443,18 @@ export async function consumeDflSiteOrderCreatedPersisted(
           deterministicCustomerSnap.data()!,
         );
 
-        if (!externalCustomerId) {
-          throw new Error(
-            'Customer guest determinístico já existe sem Delivery; revisão manual necessária.',
-          );
+        // Em nova compra a mesma identidade completa pode reaparecer com outro
+        // ID de sessão. Não consolidar se o cadastro foi alterado/diverge.
+        if (newId.startsWith('site-guest-v2__')) {
+          if (!siteCustomerExistingEvidenceMatch(customer, {
+            name: event.payload.customerSnapshot?.name,
+            phone: event.payload.customerSnapshot?.phoneE164 || event.payload.customerSnapshot?.phone,
+            address: incomingAddress(event),
+          })) throw new Error('Identidade do convidado divergente: revisão humana necessária.');
+        } else if (!externalCustomerId) {
+          throw new Error('Customer guest determinístico já existe sem Delivery; revisão manual necessária.');
         }
-
-        createCustomerIdentity = true;
+        createCustomerIdentity = Boolean(externalCustomerId);
       } else {
         const now = new Date().toISOString();
         customer = customerDraftFromSite(event.payload, newId, now);

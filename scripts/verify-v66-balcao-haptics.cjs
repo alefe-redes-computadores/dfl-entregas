@@ -7,7 +7,7 @@ for(const [name,check] of [
  ['persistência precede feedback',body.indexOf('await updateDelivery(delivery.id, payload)')<body.indexOf('void vibrate(ImpactStyle.Medium)')],
  ['feedback não bloqueante',body.includes('void vibrate(ImpactStyle.Medium)')],
  ['falha tátil não mascara erro',body.includes('void vibrate(ImpactStyle.Heavy)')],
- ['balcão retorna após persistir',body.includes('if (!logistics)') && body.includes('router.replace(deliveriesReturn)')],
+ ['todas modalidades retornam Home após persistir',body.includes("router.replace('/');") && body.indexOf('await updateDelivery(delivery.id, payload)') < body.indexOf("router.replace('/');")],
  ['iFood mantém código salvo',body.includes('confirmation_code: codeToSave')],
  ['falha de gravação mantém aviso',body.includes('Não foi possível concluir o pedido.')],
 ]){assert.ok(check,name);console.log('OK:',name)}

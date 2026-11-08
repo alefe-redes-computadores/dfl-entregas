@@ -17,7 +17,9 @@ import { Directory, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { paintDflBrand, paintFittedText } from '@/lib/share-card-brand';
 import { activeRouteDeliveries } from '@/lib/route-closure-eligibility';
+import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { settlementVisualLines } from '@/lib/motoboy-settlement-visual';
+import { settlementImagePolicy } from '@/lib/motoboy-settlement-export';
 
 const fromKey=(key:string)=>new Date(`${key}T12:00:00-03:00`);
 const shift=(key:string,days:number)=>{const date=fromKey(key);date.setDate(date.getDate()+days);return operationalDateKey(date);};
@@ -78,6 +80,7 @@ function Content(){
   const copyInFlight=useRef(false);
   const [copyBusy,setCopyBusy]=useState(false);
   const [imageBusy,setImageBusy]=useState(false);
+  const [simulatePending,setSimulatePending]=useState(false);
   const adjustmentSubmitting=useRef(false);
   const [adjustmentBusy,setAdjustmentBusy]=useState(false);
 
@@ -98,6 +101,8 @@ function Content(){
   const offsetReturn=baseData?Math.max(0,baseData.cashInHand-Math.min(baseData.cashCollected,Math.max(0,baseData.liquidFee+baseData.priorMotoboyCredit-baseData.priorStoreCredit))):0;
   const cashSettlementInput=settlementStrategy==='separate'?true:settlementStrategy==='offset'?offsetReturn:manualCashInput;
   const data=useMemo(()=>motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,existing?.settlement_adjustments||adjustments,cashSettlementInput,priorCarry):null,[adjustments,cashSettlementInput,date,deliveries,existing,motoboy,priorCarry,routes]);
+  // Nunca alimentar a confirmação de acerto com forecastData.
+  const forecastData=useMemo(()=>simulatePending&&motoboy?getMotoboyDayData(motoboy,date,routes,deliveries,existing?.settlement_adjustments||adjustments,true,priorCarry,true):null,[adjustments,date,deliveries,existing,motoboy,priorCarry,routes,simulatePending]);
   // Usar exatamente o mesmo snapshot dos totais no texto e na imagem, mesmo após fechar o dia.
   const displayAdjustments=existing?.settlement_adjustments||adjustments;
   // R192: visitas confirmadas são eventos físicos, não novos pedidos ou vendas.
@@ -345,11 +350,12 @@ function Content(){
     `📦 ${data.orderCount} pedidos · 🏍️ ${data.physicalDeliveryCount} paradas remuneradas · ${data.completedRoutes} rotas`,
     `Diária bruta R$ ${money(data.fee.amount)} · Abatimentos − R$ ${money(data.totalVales)} · Acréscimos + R$ ${money(data.totalAdditions)}`,
     `*Líquido R$ ${money(data.liquidFee)}* · ${settlementTitle}: R$ ${money(data.balance)}`,
-    'Confira os motivos de cada ajuste na imagem do comprovante. O resumo completo pode ser copiado no DFL.',
+    'Os motivos e rotas ficam na imagem detalhada. O resumo integral continua no botão Copiar.',
   ].join('\n');
   // Compartilhamento unificado: imagem discriminada e legenda curta; copia integral permanece independente.
-  const image=async()=>{
+  const image=async(mode:'summary'|'detailed')=>{
     if(imageBusy)return;
+    const exportPolicy=settlementImagePolicy(mode);
     setImageBusy(true);
     try{
     // R233: altura sob demanda. A imagem não pode esconder as rotas ou
@@ -366,13 +372,19 @@ function Content(){
       ...visualAdjustments.additions.map(item=>({type:'detail' as const,line:item.label,color:'#6ee7b7',amount:`+ R$ ${money(item.amount)}`})),
       {type:'header' as const,line:`ROTAS · ${data.completedRoutes} CONCLUÍDAS`,color:'#93c5fd',amount:''},
       ...settlementRouteRows.map((item,index)=>({type:'route' as const,line:`${index+1}. ${item.label}: ${item.orderCount} pedidos · ${item.physicalDeliveryCount} paradas`,color:'#cbd5e1',amount:''})),
+       {type:'header' as const,line:'PEDIDOS CONCLUÍDOS · VALORES REGISTRADOS',color:'#93c5fd',amount:''},
+       ...data.completedStops.flatMap((stop,stopIndex)=>stop.deliveries.map(delivery=>({
+         type:'detail' as const,
+         line:`P${stopIndex+1} · ${delivery.customer_name||'Cliente'} · #${String(delivery.external_order_id||delivery.order_id||delivery.id).slice(-8)} · ${delivery.payment_splits?.length?'Dividido':delivery.payment_method||'A conferir'}`,
+         color:'#cbd5e1',amount:`R$ ${money(deliveryCustomerCharge(delivery))}`,
+       }))),
     ];
     if(!displayAdjustments.length && data.totalAdditions+data.totalVales>0)settlementImageRows.push({type:'detail',line:'Motivos indisponíveis no registro anterior',color:'#fbbf24',amount:''});
     if(!displayAdjustments.length && data.totalAdditions+data.totalVales===0)settlementImageRows.push({type:'detail',line:'Sem acréscimos ou abatimentos',color:'#cbd5e1',amount:''});
     const visibleImageRows=settlementImageRows.slice(0,72);
     const imageExtraRows=settlementImageRows.length-visibleImageRows.length;
     const settlementDetailHeight=Math.max(235,100+visibleImageRows.reduce((height,item)=>height+(item.type==='header'?61:53),0)+(imageExtraRows?55:0));
-    const imageHeight=1340+settlementDetailHeight+84;
+    const imageHeight=exportPolicy.detailed?1340+settlementDetailHeight+84:exportPolicy.summaryCanvasHeight;
     const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=imageHeight;
     const ctx=canvas.getContext('2d');if(!ctx)return void toast.error('Não foi possível gerar a imagem.');
     const round=(x:number,y:number,w:number,h:number,r:number,fill:string,stroke?:string)=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}};
@@ -409,7 +421,8 @@ function Content(){
     label(`R$ ${money(data.balance)}`,80,1238,'900 65px Arial','#ffffff',850);
     label(data.retainedCash>0?`Ainda com o motoboy: R$ ${money(data.retainedCash)}`:'Dinheiro da rota conferido no caixa',80,1290,'700 23px Arial','#e2e8f0',910);
 
-    // R286: cada ajuste aparece em sua própria linha, com motivo e valor em colunas.
+    // R286: a imagem detalhada mantém todos os ajustes e rotas até o limite de memória.
+    if(exportPolicy.detailed){
     round(48,1340,984,settlementDetailHeight,26,'#171b20','#2c3339');
     label('CONFERÊNCIA DETALHADA · PEDIDOS ≠ PARADAS',80,1390,'900 25px Arial','#f8fafc',920);
     let detailY=1454;
@@ -425,11 +438,16 @@ function Content(){
       if(item.amount){ctx.font='800 23px Arial';ctx.fillStyle=item.color;ctx.textAlign='right';ctx.fillText(item.amount,994,detailY);ctx.textAlign='left';}
       detailY+=53;
     });
-    if(imageExtraRows>0)label(`+ ${imageExtraRows} linhas adicionais no resumo completo`,82,detailY,'700 20px Arial','#fbbf24',890);
+    if(imageExtraRows>0)label(`+ ${imageExtraRows} linhas omitidas na imagem · confira no app`,82,detailY,'700 20px Arial','#fbbf24',890);
+    }else{
+      round(48,1340,984,92,24,'#171b20','#2c3339');
+      label('RESUMO PARA CONFERÊNCIA RÁPIDA',80,1377,'900 25px Arial','#f8fafc',914);
+      label('Para ajustes e rotas por linha, utilize a imagem detalhada.',80,1410,'600 21px Arial','#94a3b8',912);
+    }
 
     label('DFL ENTREGAS  •  RESUMO DE CONFERÊNCIA',60,imageHeight-32,'700 21px Arial','#7b919a',930);
-    const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}.png`;
-    if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:summaryCompact(),files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem gerada. Escolha onde compartilhar.');return;}
+    const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}-${exportPolicy.suffix}.png`;
+    if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:summaryCompact(),files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem pronta. Confira o destinatário antes de enviar.');return;}
     const blob=await (await fetch(dataUrl)).blob();const file=new File([blob],filename,{type:'image/png'});if(navigator.share&&navigator.canShare?.({files:[file]})){await navigator.share({title:`Acerto · ${motoboy.name}`,text:summaryCompact(),files:[file]});return;}const link=document.createElement('a');link.download=filename;link.href=dataUrl;link.click();toast.info('Imagem baixada. Use Copiar resumo para enviar também o texto.');
     }catch(error){if(error instanceof Error&&/cancel/i.test(error.message))return;console.error('[ACERTO] Falha ao gerar imagem:',error);toast.error('Não foi possível gerar ou compartilhar a imagem.');}finally{setImageBusy(false);}
   };
@@ -448,6 +466,10 @@ function Content(){
       <Card icon={Package} label="Pedidos atendidos" value={String(data.orderCount)} tone="sky"/>
       <Card icon={Bike} label="Paradas físicas (diária)" value={String(data.physicalDeliveryCount)} tone="amber"/>
     </div>
+    <section className="rounded-[20px] border border-sky-500/20 bg-sky-500/[.04] p-3.5" aria-label="Simulação do acerto com pedidos pendentes">
+      <div className="flex items-center justify-between gap-2"><div><p className="text-xs font-black text-sky-200">Simulação do dia inteiro</p><p className="mt-1 text-[10px] text-zinc-400">Comparar baixas confirmadas com todas as entregas previstas.</p></div><button type="button" aria-expanded={simulatePending} onClick={()=>setSimulatePending(value=>!value)} className="min-h-11 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 text-[11px] font-black text-sky-200">{simulatePending?'Recolher':'Simular pendentes'}</button></div>
+      {forecastData&&<div className="mt-3 space-y-2 border-t border-sky-500/15 pt-3 text-xs"><p className="font-black text-amber-200">SIMULAÇÃO · NÃO RECEBIDO · NÃO QUITADO</p><div className="grid grid-cols-2 gap-2"><div className="rounded-xl bg-zinc-950/50 p-2"><span className="text-zinc-400">Pedidos previstos</span><b className="mt-1 block text-lg tabular-nums text-zinc-100">{forecastData.orderCount} <span className="text-[10px] text-zinc-500">vs {data.orderCount} concluídos</span></b></div><div className="rounded-xl bg-zinc-950/50 p-2"><span className="text-zinc-400">Paradas previstas</span><b className="mt-1 block text-lg tabular-nums text-zinc-100">{forecastData.physicalDeliveryCount} <span className="text-[10px] text-zinc-500">vs {data.physicalDeliveryCount} concluídas</span></b></div></div><p className="text-zinc-300">Diária projetada: <b>R$ {money(forecastData.fee.amount)}</b> · atual: R$ {money(data.fee.amount)}</p><p className="text-zinc-300">Dinheiro projetado a receber: <b>R$ {money(forecastData.cashTendered)}</b> · já considerado no acerto: R$ {money(data.cashTendered)}</p><p className="text-[10px] leading-relaxed text-zinc-500">Estimativa baseada em valores cadastrados. Não altera a remuneração confirmada, o caixa, o pagamento de clientes nem o lançamento do acerto.</p></div>}
+    </section>
     {data.groupedOrderCount>0 && <p className="-mt-2 rounded-xl border border-sky-500/15 bg-sky-500/[.04] px-3 py-2 text-[11px] leading-relaxed text-sky-200">{data.groupedOrderCount} pedido(s) compartilham parada. A remuneração usa {data.physicalDeliveryCount} paradas; pedidos e valores de venda continuam individuais.</p>}
     <p className="-mt-1 px-1 text-[11px] text-zinc-500"><Banknote size={13} className="mr-1 inline text-emerald-400"/>Dinheiro recebido antes do troco: <strong className="text-zinc-200">R$ {money(data.cashTendered)}</strong></p>
 
@@ -469,7 +491,14 @@ function Content(){
     <section className={`rounded-[22px] border p-4 shadow-[0_12px_32px_rgba(0,0,0,.15)] ${data.settlementDirection==='store_credit'?'border-amber-400/40 bg-amber-500':'border-emerald-400/40 bg-emerald-500'}`}><div className="flex items-center justify-between text-zinc-950"><p className="text-[10px] font-black uppercase tracking-wider">Resultado do acerto</p>{data.settlementDirection==='store_credit'?<ArrowDownLeft/>:<ArrowUpRight/>}</div><p className="mt-1 break-words text-[clamp(1.65rem,8vw,2.25rem)] font-black tabular-nums text-zinc-950">R$ {money(data.balance)}</p><p className="mt-1 text-xs font-black uppercase text-zinc-900">{settlementTitle}</p><p className="mt-2 max-w-[32rem] text-[11px] font-bold leading-relaxed text-zinc-900/80">{settlementExplanation}</p></section>
 
     <button disabled={saving||Boolean(existing)} onClick={confirm} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-black text-zinc-950 disabled:opacity-40"><ReceiptText size={17}/>{existing?'Acerto já registrado':saving?'Confirmando...':'Confirmar acerto'}</button>
-    <div className="grid grid-cols-2 gap-2"><button disabled={copyBusy} aria-busy={copyBusy} onClick={copy} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-800 text-[11px] font-black text-zinc-300"><Copy size={14}/>{copyBusy?'Copiando...':'Copiar resumo'}</button><button disabled={imageBusy} onClick={()=>void image()} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-emerald-500/35 bg-emerald-500/10 text-[11px] font-black text-emerald-200 disabled:opacity-40"><ImageIcon size={14}/>{imageBusy?'Gerando...':'Compartilhar acerto'}</button></div>
+    <section className="space-y-2" aria-label="Compartilhamento do acerto">
+      <button disabled={copyBusy} aria-busy={copyBusy} onClick={copy} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 text-xs font-black text-zinc-300"><Copy size={14}/>{copyBusy?'Copiando...':'Copiar resumo completo em texto'}</button>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" disabled={imageBusy} onClick={()=>void image('summary')} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-2 text-[11px] font-black text-emerald-200 disabled:opacity-40"><ImageIcon size={15}/>{imageBusy?'Gerando...':'Imagem resumida'}</button>
+        <button type="button" disabled={imageBusy} onClick={()=>void image('detailed')} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/[.07] px-2 text-[11px] font-black text-sky-200 disabled:opacity-40"><ImageIcon size={15}/>{imageBusy?'Gerando...':'Imagem detalhada'}</button>
+      </div>
+      <p className="px-1 text-[10px] leading-relaxed text-zinc-500">Resumida: valores e resultado em imagem curta. Detalhada: ajustes e rotas discriminados; a imagem tem limite de linhas; confira todos os pedidos na tela do aplicativo. Compartilhar não significa recebido no WhatsApp.</p>
+    </section>
 
 
     {pendingRemoval && <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/80 px-3 pb-[calc(var(--dfl-safe-bottom)+12px)] backdrop-blur-sm" onClick={()=>{if(!removalBusy)setPendingRemoval(null);}}>

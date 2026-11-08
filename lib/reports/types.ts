@@ -9,7 +9,7 @@ export type ReportDelivery = Delivery & {
   route: Route | null;
   customer: Customer | null;
   neighborhood: string | null;
-  originLabel: 'iFood' | '99Food' | 'Keeta' | 'Loja' | 'Origem não registrada';
+  originLabel: 'iFood' | '99Food' | 'Keeta' | 'Site' | 'Loja' | 'Origem não registrada';
   paymentLabel: string;
 };
 
@@ -96,6 +96,7 @@ export interface ReportModel {
   payments: ReportBucket[];
   origins: ReportBucket[];
   logisticsProviders: ReportBucket[];
+  statuses: ReportBucket[];
   hours: ReportBucket[];
   weekdays: ReportBucket[];
   neighborhoods: ReportBucket[];
@@ -110,6 +111,7 @@ export type DrilldownKind =
   | 'payment'
   | 'origin'
   | 'logistics'
+  | 'status'
   | 'hour'
   | 'weekday'
   | 'neighborhood'

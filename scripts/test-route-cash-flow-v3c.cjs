@@ -2,8 +2,8 @@ const fs=require('fs');
 const s=fs.readFileSync('lib/route-cash-flow.ts','utf8');
 const required=[
  'initialCash + tenderedCash - plannedCashChange',
- 'Math.min(initialCash, requiredChange)',
- 'Math.max(0, requiredChange - plannedCashChange)',
+ 'Math.min(cashAvailable, item.requestedChange)',
+ 'Math.max(0, item.requestedChange - cashChange)',
 ];
 let fail=0;
 for(const x of required){

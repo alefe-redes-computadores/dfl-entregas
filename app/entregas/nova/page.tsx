@@ -28,6 +28,7 @@ import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidenc
 import { extractCoordinatesFromUrl, normalizeAddressText } from '@/lib/maps';
 import { parseIfoodOrdersText } from '@/lib/ifood-order-parser';
 import { normalizeFood99Order } from '@/lib/food99-order';
+import { normalizeBeverageList } from '@/lib/operation/beverage-normalization';
 import { parseKeetaOrdersText, isKeetaCommercialId } from '@/lib/keeta-order';
 import { assessIfoodParseQuality, buildIfoodParseGuide, buildIfoodRecognitionSummary } from '@/lib/ifood-parser-quality';
 import { loadInboxDay, markInboxDraft } from '@/lib/delivery-inbox';
@@ -291,7 +292,7 @@ const [routeId, setRouteId] = useState('');
     if (parsed.paymentMethod) setPaymentMethod(parsed.paymentMethod);
     setIsPaid(Boolean(parsed.isPaid));
     setChangeFor(parsed.changeFor ? formatCurrencyInput(parsed.changeFor.replace(/\D/g, '')) : '');
-    setDrinks((parsed.drinks || []).join(', '));
+    setDrinks(normalizeBeverageList(parsed.drinks || []).join(', '));
     setObservation((parsed.observations || []).join(' - '));
 
     toast.info('Rascunho carregado da Caixa de Entrada', {
@@ -427,10 +428,10 @@ const [routeId, setRouteId] = useState('');
     if(charge){setValue(formatCurrencyInput(charge.replace(/\D/g,'')));identified.push(`Cobrança R$ ${charge}`)}
     if(parsed.subsidy){setHasIfoodSubsidy(true);setIfoodSubsidy(formatCurrencyInput(parsed.subsidy.replace(/\D/g,'')));identified.push(`Cupom R$ ${parsed.subsidy}`)}else{setHasIfoodSubsidy(false);setIfoodSubsidy('')}
     if(parsed.changeFor){setChangeFor(formatCurrencyInput(parsed.changeFor.replace(/\D/g,'')));identified.push(`Troco p/ ${parsed.changeFor}`)}
-    if(parsed.drinks.length){setDrinks(parsed.drinks.join(', '));identified.push('Bebidas')}
+    if(parsed.drinks.length){setDrinks(normalizeBeverageList(parsed.drinks).join(', '));identified.push('Bebidas')}
     if(parsed.observations.length){setObservation(current=>{const incoming=parsed.observations.join(' - ');return current&&!current.includes(incoming)?`${current} - ${incoming}`:current||incoming});identified.push('Obs')}
     const routeResolution=resolveParsedRoute(parsed.routeNumber,parsed.motoboyHint);if(routeResolution.routeId&&!routeSelectionTouched.current){setRouteId(routeResolution.routeId);identified.push(`Rota ${routeResolution.candidates[0].name}`)}
-    if(parsedOrders.length>1){setExtraIfoodOrders(parsedOrders.slice(1).map((item,index)=>({id:`extra-${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,orderId:item.orderId,ifoodId:item.ifoodId,confirmationCode:item.confirmationCode,customerName:item.customerName||parsed.customerName,customerCharge:item.customerCharge||item.value||'',subsidy:item.subsidy,paymentMethod:item.paymentMethod||'dinheiro',isPaid:item.isPaid,changeFor:item.changeFor?formatCurrencyInput(item.changeFor.replace(/\D/g,'')):'',address:item.address||parsed.address,phone:item.phone||'',mapsLink:item.mapsLink||'',drinks:item.drinks.join(', '),observation:item.observations.join(' - '),notifyWhatsapp:false})));identified.push(`${parsedOrders.length} pedidos reconhecidos`)}else setExtraIfoodOrders([]);
+    if(parsedOrders.length>1){setExtraIfoodOrders(parsedOrders.slice(1).map((item,index)=>({id:`extra-${Date.now()}-${index}-${Math.random().toString(36).slice(2,6)}`,orderId:item.orderId,ifoodId:item.ifoodId,confirmationCode:item.confirmationCode,customerName:item.customerName||parsed.customerName,customerCharge:item.customerCharge||item.value||'',subsidy:item.subsidy,paymentMethod:item.paymentMethod||'dinheiro',isPaid:item.isPaid,changeFor:item.changeFor?formatCurrencyInput(item.changeFor.replace(/\D/g,'')):'',address:item.address||parsed.address,phone:item.phone||'',mapsLink:item.mapsLink||'',drinks:normalizeBeverageList(item.drinks).join(', '),observation:item.observations.join(' - '),notifyWhatsapp:false})));identified.push(`${parsedOrders.length} pedidos reconhecidos`)}else setExtraIfoodOrders([]);
     if(!identified.length){toast.error('Nenhum dado reconhecido no texto.');return}
     if(Capacitor.isNativePlatform())void Haptics.impact({style:ImpactStyle.Heavy}).catch(()=>undefined);
     const parseQuality=isKeeta
@@ -798,16 +799,16 @@ const [routeId, setRouteId] = useState('');
         <button
           type="button"
           onClick={() => setIsParserOpen(true)}
-          className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/5 text-xs font-bold text-red-400 active:scale-[0.98]"
+          className={`flex h-11 items-center justify-center gap-2 rounded-2xl border text-xs font-bold active:scale-[0.98] ${isKeeta?'border-violet-400/30 bg-violet-500/[.08] text-violet-300':isFood99?'border-amber-400/30 bg-amber-400/[.08] text-amber-300':'border-red-500/20 bg-red-500/5 text-red-400'}`}
         >
           <Sparkles size={15} /> Colar outro pedido do {isKeeta ? 'Keeta' : isFood99 ? '99Food' : 'iFood'}
         </button>
       )}
 
       {isMarketplace && isParserOpen && (
-        <div className={`flex flex-col gap-3 rounded-[24px] border p-3.5 animate-in fade-in ${isFood99 ? 'border-amber-400/25 bg-gradient-to-b from-amber-400/[.08] to-zinc-900/40' : 'border-red-500/20 bg-gradient-to-b from-red-500/10 to-zinc-900/40'}`}>
+        <div className={`flex flex-col gap-3 rounded-[24px] border p-3.5 animate-in fade-in ${isKeeta ? 'border-violet-400/25 bg-gradient-to-b from-violet-500/[.08] to-zinc-900/40' : isFood99 ? 'border-amber-400/25 bg-gradient-to-b from-amber-400/[.08] to-zinc-900/40' : 'border-red-500/20 bg-gradient-to-b from-red-500/10 to-zinc-900/40'}`}>
           <div className="flex items-center justify-between">
-            <span className={`flex items-center gap-1.5 text-xs font-bold ${isFood99 ? 'text-amber-300' : 'text-red-400'}`}>
+            <span className={`flex items-center gap-1.5 text-xs font-bold ${isKeeta ? 'text-violet-300' : isFood99 ? 'text-amber-300' : 'text-red-400'}`}>
               <Sparkles size={14} className="text-amber-400" /> Leitor inteligente do {isKeeta ? 'Keeta' : isFood99 ? '99Food' : 'iFood'}
             </span>
             <button
@@ -889,13 +890,13 @@ const [routeId, setRouteId] = useState('');
             value={magicText}
             onChange={(e) => setMagicText(e.target.value)}
             onFocus={()=>window.setTimeout(()=>parserInputRef.current?.scrollIntoView({behavior:'smooth',block:'center'}),180)}
-            className={`w-full rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 text-xs text-zinc-100 placeholder:text-zinc-600 outline-none resize-none font-mono ${isFood99 ? 'focus:border-amber-400/50' : 'focus:border-red-500/50'}`}
+            className={`w-full rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 text-xs text-zinc-100 placeholder:text-zinc-600 outline-none resize-none font-mono ${isKeeta ? 'focus:border-violet-400/50' : isFood99 ? 'focus:border-amber-400/50' : 'focus:border-red-500/50'}`}
           />
 
           <button
             type="button"
             onClick={handleExecuteMagicParse}
-            className={`min-h-11 w-full rounded-xl font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all ${isFood99 ? 'bg-amber-400 text-zinc-950 shadow-lg shadow-amber-500/10' : 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20'}`}
+            className={`min-h-11 w-full rounded-xl font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all ${isKeeta ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/15' : isFood99 ? 'bg-amber-400 text-zinc-950 shadow-lg shadow-amber-500/10' : 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20'}`}
           >
             <Sparkles size={15} />
             {isKeeta ? 'Preencher e revisar pedido Keeta' : isFood99 ? 'Preencher pedido 99Food' : liveParseQuality.review > 0 && liveRecognition.items.length > 0
@@ -1388,18 +1389,24 @@ const [routeId, setRouteId] = useState('');
         </section>
 
 
-        <label className={`flex items-start gap-3 rounded-2xl border p-3.5 text-xs ${excludeFromReports ? 'border-amber-500/40 bg-amber-500/[.08]' : 'border-zinc-800 bg-zinc-900/45'}`}>
+         <details className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3" open={excludeFromReports||undefined}>
+           <summary className="cursor-pointer py-1 text-xs font-bold text-zinc-300">Configurações avançadas · pedido de teste {excludeFromReports?'· ATIVO':''}</summary>
+         <label className={`mt-3 flex items-start gap-3 rounded-2xl border p-3.5 text-xs ${excludeFromReports ? 'border-amber-500/40 bg-amber-500/[.08]' : 'border-zinc-800 bg-zinc-900/45'}`}>
           <input type="checkbox" checked={excludeFromReports} onChange={event=>setExcludeFromReports(event.target.checked)} className="mt-0.5 accent-amber-400"/>
           <span><b className="block text-zinc-200">Pedido de teste · fora dos indicadores</b><small className="mt-1 block text-[10px] leading-relaxed text-zinc-500">Não participa de rankings, horários, bairros ou volumes. Mantém o pedido no histórico; não apaga valores nem movimentos de estoque.</small></span>
-        </label>
-        {ownerIdentityAmongDrafts && <section className="rounded-[24px] border border-sky-500/25 bg-sky-500/[.055] p-4"><p className="text-[10px] font-black uppercase tracking-[.16em] text-sky-400">Identidade da loja detectada</p><p className="mt-1 text-sm font-black text-zinc-100">Como este lançamento deve contar?</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Isso separa testes de vendas reais sem apagar faturamento legítimo.</p><div className="mt-3 grid gap-2">{([['owner_test','DEV / teste','Sai dos relatórios, ranking e fidelidade.'],['owner_provisional','Pedido real provisório','Conta na venda e operação; não vira pedido do Álefe.'],['store_pickup','Retirada real na loja','Conta normalmente; vincule ao cliente verdadeiro.']] as const).map(([context,label,description])=><button key={context} type="button" onClick={()=>setOwnerOrderContext(context)} className={`rounded-2xl border p-3 text-left ${ownerOrderContext===context?'border-sky-400/50 bg-sky-500/10':'border-zinc-800 bg-zinc-950/40'}`}><b className="block text-xs text-zinc-100">{label}</b><span className="mt-1 block text-[10px] text-zinc-500">{description}</span></button>)}</div></section>}
+         </label>
+         </details>
+         {ownerIdentityAmongDrafts && <section className="rounded-[24px] border border-sky-500/25 bg-sky-500/[.055] p-4"><p className="text-[10px] font-black uppercase tracking-[.16em] text-sky-400">Identidade da loja detectada</p><p className="mt-1 text-sm font-black text-zinc-100">Como este lançamento deve contar?</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Isso separa testes de vendas reais sem apagar faturamento legítimo.</p><div className="mt-3 grid gap-2">{([['owner_test','DEV / teste','Sai dos relatórios, ranking e fidelidade.'],['owner_provisional','Pedido real provisório','Conta na venda e operação; não vira pedido do Álefe.'],['store_pickup','Retirada real na loja','Conta normalmente; vincule ao cliente verdadeiro.']] as const).map(([context,label,description])=><button key={context} type="button" onClick={()=>setOwnerOrderContext(context)} className={`rounded-2xl border p-3 text-left ${ownerOrderContext===context?'border-sky-400/50 bg-sky-500/10':'border-zinc-800 bg-zinc-950/40'}`}><b className="block text-xs text-zinc-100">{label}</b><span className="mt-1 block text-[10px] text-zinc-500">{description}</span></button>)}</div></section>}
 
-        <button type="button" onClick={() => setExcludeCustomerMetrics(v => !v)} className={`flex w-full items-start gap-3 rounded-2xl border p-3.5 text-left ${excludeCustomerMetrics ? 'border-violet-500/30 bg-violet-500/[.08]' : 'border-zinc-800 bg-zinc-900/45'}`}>
+         <details className="rounded-2xl border border-zinc-800 bg-zinc-950/35 p-3" open={excludeCustomerMetrics||undefined}>
+           <summary className="cursor-pointer py-1 text-xs font-bold text-zinc-300">Configurações avançadas · métricas do cliente {excludeCustomerMetrics?'· ATIVO':''}</summary>
+         <button type="button" onClick={() => setExcludeCustomerMetrics(v => !v)} className={`mt-3 flex w-full items-start gap-3 rounded-2xl border p-3.5 text-left ${excludeCustomerMetrics ? 'border-violet-500/30 bg-violet-500/[.08]' : 'border-zinc-800 bg-zinc-900/45'}`}>
           <span className="mt-0.5">{excludeCustomerMetrics ? <CheckCircle2 size={16} className="text-violet-400"/> : <span className="block h-4 w-4 rounded border border-zinc-700"/>}</span>
           <span><b className="block text-xs text-zinc-200">Pedido operacional / não contar como cliente</b><small className="mt-1 block text-[10px] leading-relaxed text-zinc-500">Use para retirada de balcão ou lançamento interno. A venda continua no financeiro, mas não altera ranking, frequência ou benefícios do cliente.</small></span>
-        </button>
+         </button>
+         </details>
 
-        <button type="submit" disabled={isSaving} className="mt-2 h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-amber-500/20 transition-all">
+         <button type="submit" disabled={isSaving} className="mt-2 h-14 w-full rounded-2xl bg-amber-500 font-bold text-zinc-950 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-amber-500/20 transition-all">
           {isSaving ? 'Salvando...' : extraIfoodOrders.length ? `Salvar ${extraIfoodOrders.length + 1} pedidos` : 'Salvar entrega'}
         </button>
       </form>
