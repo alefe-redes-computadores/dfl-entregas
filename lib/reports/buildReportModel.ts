@@ -1,4 +1,5 @@
 import type { Customer, Delivery, Route, StockSupply, Motoboy } from '@/types';
+import { neighborhoodForReport } from '@/lib/operation/neighborhood-intelligence';
 import { SUPPLY_STATUS_LABELS, supplyTotal } from '@/lib/stock-supply';
 import { isDeliveryFulfillment } from '@/lib/delivery-mode';
 import { isInternalOperationalCustomer, isInternalOperationalRoute } from '@/lib/operational-exclusions';
@@ -89,8 +90,8 @@ export function normalizeLogisticsProvider(delivery: Delivery): string {
 }
 
 function normalizeNeighborhood(customer: Customer | null): string | null {
-  const value = customer?.neighborhood?.trim();
-  return value ? value : null;
+  // Alias seguros consolidados apenas em analise; o cadastro permanece original.
+  return neighborhoodForReport(customer?.neighborhood);
 }
 
 function buildPeriod(

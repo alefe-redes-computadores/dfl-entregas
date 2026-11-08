@@ -57,8 +57,8 @@ const tests=[
   'alocacao atomica preserva status comercial e limita ajustes operacionais'],
 [store.includes("if ('newRoute' in target) transaction.set(routeRef"),'nova rota criada atomicamente'],
 [store.includes('deliveryMutationLocks.add(`site-allocate:${deliveryId}`)'),'bloqueio clique duplo'],
-[!store.slice(store.indexOf('allocateSiteDelivery: async'),store.indexOf('updateDelivery: async')).includes('kickSiteRoute('),'alocacao nao dispara site saiu para entrega'],
-[!store.slice(store.indexOf('allocateSiteDelivery: async'),store.indexOf('updateDelivery: async')).includes('setDoc('),'sem escrita solta fora da transacao'],
+[!store.slice(store.indexOf('allocateSiteDelivery: async'),store.indexOf('moveRouteStop: async')).includes('kickSiteRoute('),'alocacao nao dispara site saiu para entrega'],
+[!store.slice(store.indexOf('allocateSiteDelivery: async'),store.indexOf('moveRouteStop: async')).includes('setDoc('),'sem escrita solta fora da transacao'],
 ];
 for (const [condition,name] of tests)ok(condition,name);
 console.log('R66 SITE -> CAIXA -> ROTA: '+n+' garantias estruturais OK');

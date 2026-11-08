@@ -67,6 +67,8 @@ import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
 import { mergeCloudFirstById, mergeDeliveriesPreservingExpansion } from '@/lib/operation/snapshotMerge';
 import { deliveriesForRouteIndexed, findByIdIndexed } from '@/lib/operation/collection-lookup-index';
 import { assertRemoteDeliveryTransition, assertRouteClosureStable, assertRemoteSettlementAdjustment } from '@/lib/operation/remoteOperationGuards';
+import { assertRouteStopTransfer, appendRouteTransferAudit, type StopTransferAudit } from '@/lib/operation/route-stop-transfer-policy';
+import { isSuperadminUid } from '@/lib/access/roles';
 import { captureOperationalBaseline, operationalDeliverySignature, operationalRouteSignature, preserveInFlightLocalEdits, trustedIncrementalCheckpoint, syncOwnerStillCurrent } from '@/lib/operation/snapshot-sync-safety';
 import { markUnreadSiteOrders } from '@/lib/site-order-inbox';
 import { buildSmartRouteOrder, deliveryPoint } from '@/lib/route-intelligence';
@@ -271,6 +273,8 @@ interface AppState {
   addDelivery: (delivery: Delivery) => Promise<void>;
   addDeliveries: (deliveries: Delivery[]) => Promise<void>;
   updateDelivery: (id: string, updatedData: Partial<Delivery>) => Promise<void>;
+  /** Reatribuição transacional de parada física; apenas proprietário, sem baixa ou disparo de mensagem de saída. */
+  moveRouteStop: (deliveryId: string, destinationId: string, memberIds: string[], selectedPatch?: Partial<Delivery>) => Promise<number>;
   allocateSiteDelivery: (deliveryId: string, target: ({routeId: string} | {newRoute: {name: string; motoboyId: string}}) & {operational?: {address_string?:string;phone?:string;observation?:string;payment_method?:Delivery['payment_method']}; expectedPlannedRouteId?: string}) => Promise<string>;
   /** Arquivamento operacional do Site; nao cancela comercialmente nem conclui entrega. */
   archiveSiteDelivery: (id: string, reason: string) => Promise<void>;
@@ -2144,6 +2148,121 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      // P12 — atômico por parada e documento, sem sucesso otimista e sem alterar pagamentos dos irmãos.
+      moveRouteStop: async (deliveryId, destinationId, memberIds, selectedPatch) => {
+        const actorUid = get().user?.uid;
+        if (!isSuperadminUid(actorUid)) throw new Error('Somente o proprietário pode reatribuir paradas entre rotas.');
+        const ids = [...new Set(memberIds)].sort();
+        if (!ids.length || ids.length > 30 || !ids.includes(deliveryId)) throw new Error('Seleção inválida da parada física.');
+        const state = get();
+        const locals = ids.map(id => state.deliveries.find(d => d.id === id));
+        if (locals.some(d => !d)) throw new Error('Pedidos não carregados. Sincronize e confira a parada.');
+        const selected = locals.find(d => d?.id === deliveryId)!;
+        const sourceId = selected.route_id;
+        if (!sourceId || isSyntheticOperationalRoute(sourceId)) throw new Error('Selecione uma rota operacional real.');
+        const from = state.routes.find(r => r.id === sourceId);
+        const to = destinationId ? state.routes.find(r => r.id === destinationId) : null;
+        if (!from) throw new Error('Rota de origem ausente. Sincronize.');
+        assertRouteStopTransfer({
+          selectedId: deliveryId, members: locals as Delivery[],
+          allSource: state.deliveries.filter(d => d.route_id === sourceId),
+          from, to: to || null, destinationId, selectedPatch,
+        });
+        const lockKey = `p12:stop:${sourceId}:${deliveryStopKey(selected)}`;
+        if (deliveryMutationLocks.has(lockKey)) throw new Error('Essa parada já está sendo transferida.');
+        deliveryMutationLocks.add(lockKey);
+        const nowIso = new Date().toISOString();
+        const operationId = `route-transfer:${deliveryId}:${nowIso}:${Math.random().toString(36).slice(2,10)}`;
+        const event: StopTransferAudit = {
+          operation_id: operationId, at: nowIso, actor_uid: actorUid!,
+          from_route_id: sourceId, to_route_id: destinationId, group_size: ids.length,
+        };
+        try {
+          const changed = await queueDeliveryDocuments(queueEntityWrite, ids, () =>
+            runTransaction(db, async transaction => {
+              const fromRef = doc(db, 'routes', sourceId);
+              const toRef = destinationId ? doc(db, 'routes', destinationId) : null;
+              const refs = ids.map(id => doc(db, 'deliveries', id));
+              // Todas as leituras antes de qualquer gravação: CAS entre aparelhos.
+              const [[fromSnap, toSnap], snapshots] = await Promise.all([
+                Promise.all([transaction.get(fromRef), toRef ? transaction.get(toRef) : Promise.resolve(null)]),
+                Promise.all(refs.map(ref => transaction.get(ref))),
+              ]);
+              const remoteFrom = fromSnap.exists() ? { ...fromSnap.data(), id: sourceId } as Route : null;
+              const remoteTo = toSnap?.exists() ? { ...toSnap.data(), id: destinationId } as Route : null;
+              if (!remoteFrom) throw new Error('A rota de origem foi removida. Sincronize.');
+              if (destinationId && !remoteTo) throw new Error('Rota de destino removida. Sincronize.');
+              const remotes = snapshots.map(s => s.exists() ? { ...s.data(), id: s.id } as Delivery : null);
+              if (remotes.some(d => !d)) throw new Error('Um pedido desapareceu do servidor. Sincronize.');
+              assertRouteStopTransfer({
+                selectedId: deliveryId, members: remotes as Delivery[],
+                allSource: remotes as Delivery[], from: remoteFrom, to: remoteTo,
+                destinationId, selectedPatch,
+              });
+              const savedById = new Map<string,Delivery>();
+              const targetPending = state.deliveries.filter(d => d.route_id === destinationId && !d.completed);
+              const indices = targetPending.map(d => Number(d.order_index)).filter(Number.isFinite);
+              const baseIndex = (indices.length ? Math.max(...indices) : -1) + 1;
+              for (let index = 0; index < ids.length; index++) {
+                const local = locals[index] as Delivery;
+                const remote = remotes[index] as Delivery;
+                assertRemoteDeliveryTransition(local, remote, { route_id: destinationId }, remoteTo, Boolean(destinationId));
+                const patch = {
+                  ...(remote.id === deliveryId ? selectedPatch : {}),
+                  route_id: destinationId,
+                  // Apenas dados logísticos nas entregas irmãs.
+                  order_index: destinationId ? baseIndex + index : remote.order_index,
+                  order_source: 'manual' as const,
+                  order_locked: false,
+                  order_updated_at: nowIso,
+                  updated_at: nowIso,
+                  route_transfer_audit: appendRouteTransferAudit(remote.route_transfer_audit, event),
+                };
+                transaction.update(refs[index], sanitizeForFirebase(patch));
+                savedById.set(remote.id, { ...remote, ...patch } as Delivery);
+              }
+              // Se rota conferida mudou, exigir nova conferência antes do despacho.
+              for (const [ref, route] of ([[fromRef, remoteFrom],[toRef, remoteTo]] as const)) {
+                if (!ref || !route || route.started_at || route.departure_time || !route.departure_ready_at) continue;
+                transaction.update(ref, sanitizeForFirebase({
+                  departure_ready_at: null, departure_ready_signature: null,
+                  departure_ready_revoked_at: nowIso,
+                  departure_ready_revision: (route.departure_ready_revision || 0) + 1,
+                  updated_at: nowIso,
+                }));
+              }
+              return savedById;
+            }));
+          // UI só muda após confirmação do servidor. Sem estados fantasmas offline.
+          set(prev => ({
+            deliveries: prev.deliveries.map(d => changed.get(d.id) || d),
+            routes: prev.routes.map(r => {
+              if (r.id !== sourceId && r.id !== destinationId) return r;
+              if (r.started_at || r.departure_time || !r.departure_ready_at) return r;
+              return { ...r, departure_ready_at: null, departure_ready_signature: null,
+                departure_ready_revoked_at: nowIso, departure_ready_revision: (r.departure_ready_revision || 0) + 1,
+                updated_at: nowIso };
+            }),
+          }));
+          // Reconciliar cada rota ativa uma vez; não é envio automático de WhatsApp.
+          for (const routeId of [...new Set([sourceId, destinationId].filter(Boolean))]) {
+            const route = get().routes.find(r => r.id === routeId);
+            if (!route || !routeStartedAt(route)) continue;
+            void kickSiteRoute(routeId, { reason: 'manual_recovery', maxAttempts: 2 })
+              .catch(err => { console.warn('P12: rota salva, reconciliação Site pendente:', routeId, err);
+                set({ syncError: true });
+                toast.warning('Parada salva. Sincronização do Site pendente — confira na rota.');
+              });
+          }
+          return changed.size;
+        } catch (error) {
+          set({ syncError: true });
+          throw error;
+        } finally {
+          deliveryMutationLocks.delete(lockKey);
+        }
+      },
+
       updateDelivery: async (id, updatedData) => {
         const state = get();
         const deliveryToUpdate = state.deliveries.find((d) => d.id === id);
@@ -2454,6 +2573,16 @@ export const useAppStore = create<AppState>()(
               });
           }
 
+          if (routeChanged) {
+            for (const affectedId of [...new Set([previousRouteId, nextRouteId].filter(Boolean))]) {
+              const affectedRoute = get().routes.find(r => r.id === affectedId);
+              if (!affectedRoute || !routeStartedAt(affectedRoute)) continue;
+              void kickSiteRoute(affectedId, { reason: 'manual_recovery', maxAttempts: 2 })
+                .catch(err => { console.warn('P12: vinculo alterado, Site pendente:',err);
+                  set({syncError:true}); toast.warning('Entrega salva; Site ainda precisa sincronizar a rota.');
+                });
+            }
+          }
           if (routeChanged && previousRouteId) {
             const currentState = get();
             const previousRoute = currentState.routes.find(
@@ -2574,6 +2703,7 @@ export const useAppStore = create<AppState>()(
           if (duplicate) throw new Error('Identidade duplicada: confira o Site antes de planejar.');
           if (routeId && !get().routes.some(route => route.id === routeId)) throw new Error('Rota nao encontrada. Sincronize.');
           const now = Date.now();
+          const expectedReservation = local.planned_route_id?.trim() || null;
           const deliveryRef = doc(db, 'deliveries', deliveryId);
           const result = await runTransaction(db, async transaction => {
             const remoteSnap = await transaction.get(deliveryRef);
@@ -2581,6 +2711,9 @@ export const useAppStore = create<AppState>()(
             const remote = { ...remoteSnap.data(), id: remoteSnap.id } as Delivery;
             const routeSnap = routeId ? await transaction.get(doc(db, 'routes', routeId)) : null;
             if (remote.source_system !== 'dfl_site' || isCancelledSiteDelivery(remote) || remote.completed || remote.operational_dismissed_at || remote.route_id?.trim()) throw new Error('Pedido cancelado, encerrado ou ja vinculado. Revise no Site.');
+            const remoteReservation = remote.planned_route_id?.trim() || null;
+            if (remoteReservation !== expectedReservation) throw new Error('A reserva mudou em outro aparelho. Sincronize antes de continuar.');
+            if (routeId === remoteReservation) return { planned_route_id: remote.planned_route_id || null, planned_route_at: remote.planned_route_at || null };
             if (routeId) {
               const approved = futureRoutePlan([remote], routeSnap?.exists() ? [{ ...routeSnap.data(), id: routeSnap.id } as Route] : [], now);
               if (!approved.length || approved[0].issue || !approved[0].candidates.some(route => route.id === routeId)) throw new Error('Pedido ou rota nao esta elegivel para reserva futura.');

@@ -53,6 +53,7 @@ function DeliveryDetailsForm() {
   const customers = useAppStore((state) => state.customers);
   const marketplaceModes = useAppStore((state) => state.storeSettings.marketplaceDeliveryModes);
   const updateDelivery = useAppStore((state) => state.updateDelivery);
+  const moveRouteStop = useAppStore((state) => state.moveRouteStop);
   const deleteDelivery = useAppStore((state) => state.deleteDelivery);
   const getCustomerById = useAppStore((state) => state.getCustomerById);
   const findOrCreateCustomer = useAppStore((state) => state.findOrCreateCustomer);
@@ -614,6 +615,7 @@ const [routeId, setRouteId] = useState('');
       return;
     }
 
+    if (routeChanged && moveWholeStop && sameStopDeliveries.length > 1 && !window.confirm(`Mover os ${sameStopDeliveries.length} pedidos desta parada em uma única transação?`)) return;
     setIsSaving(true);
     try {
       const customerCharge = parseFloat(value.replace(/\./g, '').replace(',', '.'));
@@ -657,7 +659,7 @@ const [routeId, setRouteId] = useState('');
         });
       }
 
-      await updateDelivery(deliveryId, {
+      const selectedData: Partial<Delivery> = {
         route_id: fulfillmentMode === 'delivery' ? routeId : '',
         fulfillment_mode: fulfillmentMode,
         logistics_provider: fulfillmentMode === 'delivery' ? 'dfl' : fulfillmentMode === 'external_delivery' ? (origin === 'keeta' ? 'keeta' : origin === 'food99' ? 'food99' : origin === 'ifood' ? 'ifood' : 'dfl') : 'customer',
@@ -690,18 +692,12 @@ const [routeId, setRouteId] = useState('');
               drinks_manual_override_at: new Date().toISOString(),
             }
           : {}),
-      } as any);
+      } as any;
 
       if (routeChanged && moveWholeStop && sameStopDeliveries.length > 1) {
-        const siblings = sameStopDeliveries.filter(
-          (item) => item.id !== deliveryId && item.completed !== true,
-        );
-        for (const sibling of siblings) {
-          await updateDelivery(sibling.id, {
-            route_id: routeId,
-            fulfillment_mode: fulfillmentMode,
-          });
-        }
+        await moveRouteStop(deliveryId, routeId, sameStopDeliveries.map(item=>item.id), selectedData);
+      } else {
+        await updateDelivery(deliveryId, selectedData);
       }
 
       toast.success(
@@ -1027,7 +1023,7 @@ const [routeId, setRouteId] = useState('');
         {routeChanged && sameStopDeliveries.length > 1 && !currentDelivery?.completed && (
           <div className="mt-3 rounded-2xl border border-violet-500/20 bg-violet-500/[.06] p-3">
             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-300">
-              Esta parada possui {sameStopDeliveries.length} pedidos
+              Esta parada possui {sameStopDeliveries.length} pedidos · transferência única no servidor
             </p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setMoveWholeStop(false)} className={`min-h-11 rounded-xl border px-2 text-[10px] font-black ${!moveWholeStop ? 'border-sky-500/40 bg-sky-500/10 text-sky-300' : 'border-zinc-800 text-zinc-500'}`}>

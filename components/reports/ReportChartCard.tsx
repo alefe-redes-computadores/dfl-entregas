@@ -53,7 +53,7 @@ export function ReportChartCard({
   }));
 
   const originColors: Record<string,string> = { 'iFood':'#ef4444', '99Food':'#facc15', Keeta:'#8b5cf6', Loja:'#10b981' };
-  const mobileCategoryBars = chartType === 'bar' && chartData.length >= 6;
+  const mobileCategoryBars = chartType === 'bar' && (chartData.length >= 6 || chartData.some(item => item.label.length > 15));
   const visibleBars = mobileCategoryBars ? chartData.slice(0, 8) : chartData;
 
   const handleChartClick = (state: unknown) => {
@@ -160,7 +160,7 @@ export function ReportChartCard({
                 <YAxis
                   dataKey={mobileCategoryBars ? 'label' : undefined}
                   type={mobileCategoryBars ? 'category' : 'number'}
-                  width={mobileCategoryBars ? 125 : undefined}
+                  width={mobileCategoryBars ? 112 : undefined}
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: '#a1a1aa', fontSize: 10 }}
@@ -183,6 +183,21 @@ export function ReportChartCard({
               </BarChart>
             )}
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {chartType === 'bar' && chartData.length > 0 && (
+        <div className="grid min-w-0 gap-1.5 px-3 pb-3 sm:px-5" role="list" aria-label={`Valores legíveis: ${title}`}>
+          {visibleBars.map((bucket) => (
+            <div key={bucket.key} role="listitem" className="min-w-0">
+              <button type="button" disabled={!onSelectBucket} onClick={() => onSelectBucket?.(bucket)}
+                className="flex min-h-10 w-full min-w-0 items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-950/40 px-3 text-left disabled:cursor-default">
+                <span className="min-w-0 flex-1 break-words text-[11px] font-medium leading-snug text-zinc-300">{bucket.label}</span>
+                <strong className="shrink-0 text-[11px] font-black tabular-nums text-zinc-100">{formatter(Number(bucket[dataKey] ?? 0))}</strong>
+              </button>
+            </div>
+          ))}
+          {chartData.length > visibleBars.length && <p className="text-[10px] text-zinc-500">Mais categorias disponíveis ao abrir o histórico.</p>}
         </div>
       )}
 

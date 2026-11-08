@@ -15,6 +15,7 @@ import { siteHistoryRows, siteHistoryLabel, siteHistoryDetail, siteHistoryKind, 
 import { siteManualReviewCandidates, siteManualArchiveReason } from '@/lib/operation/site-manual-review-r280';
 import { siteOrderDisplayReference } from '@/lib/operation/site-order-presentation';
 import { siteReviewHints, sitePreparationReminder } from '@/lib/operation/site-review-hints';
+import { SiteFutureRoutePlanner } from '@/components/store/SiteFutureRoutePlanner';
 import type { Delivery } from '@/types';
 
 const captions: Record<Extract<SiteInboxState, 'confirmar'|'pronto'|'aguardar_agenda'|'revisar'>,string> = {
@@ -181,7 +182,7 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
   },[acknowledgmentKey]);
   const begin=(delivery:Delivery)=>{
     setEditing(current=>current===delivery.id?null:delivery.id);
-    setSelection('');setNewMode(false);setRouteName('');setMotoboyId('');
+    setSelection(delivery.planned_route_id?.trim() || '');setNewMode(false);setRouteName('');setMotoboyId('');
     setReviewOpen(false);setSaveError('');
     setReviewAddress(delivery.address_string || '');setReviewPhone(delivery.phone || '');
     setReviewObservation(delivery.observation || '');setReviewPayment(delivery.payment_method || 'dinheiro');
@@ -195,10 +196,15 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
       address:reviewOpen?reviewAddress:(delivery.address_string || ''),
     });
     if(issue){setSaveError(issue);toast.warning(issue);return;}
+    const reservedRoute = delivery.planned_route_id?.trim();
+    if (reservedRoute && (newMode || selection !== reservedRoute)) {
+      const message = 'Este pedido tem uma rota reservada. Use a rota reservada ou cancele primeiro o planejamento antecipado.';
+      setSaveError(message); toast.warning(message); return;
+    }
     lock.current=true;setSaving(true);setSaveError('');
     try{
       const operational = reviewOpen ? {address_string:reviewAddress,phone:reviewPhone,observation:reviewObservation,payment_method:reviewPayment} : undefined;
-      const routeId=await allocate(delivery.id,newMode?{newRoute:{name:routeName.trim(),motoboyId},operational}:{routeId:selection,operational});
+      const routeId=await allocate(delivery.id,newMode?{newRoute:{name:routeName.trim(),motoboyId},operational}:{routeId:selection,operational,...(reservedRoute?{expectedPlannedRouteId:reservedRoute}:{})});
       toast.success('Pedido vinculado à rota.',{description:'A saída para entrega só acontece ao iniciar a rota.'});
       setEditing(null);
       // R175: permanecer na Caixa para processar outros pedidos; a rota segue acessível pelo feedback.
@@ -251,6 +257,7 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
       </div>
       <span aria-label={`${projection.total} pedidos aguardando organização`} className="shrink-0 rounded-xl bg-zinc-950/60 px-3 py-1.5 text-lg font-black tabular-nums text-zinc-100">{projection.total}</span>
     </div>
+    <SiteFutureRoutePlanner now={clock}/>
     <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Filtrar pedidos do Site">
       {([['all','Todos',projection.total],['pronto','Prontos',projection.ready],['confirmar','Comercial',projection.commercial],['aguardar_agenda','Agendados',projection.scheduled],['revisar','Revisar',projection.review]] as const).map(([key,label,count])=><button key={key} type="button" aria-pressed={filter===key} onClick={()=>setFilter(key)} className={`min-h-10 shrink-0 rounded-xl border px-3 text-[11px] font-bold ${filter===key?'border-emerald-500/40 bg-emerald-500/10 text-emerald-200':'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}>{label} · {count}</button>)}
     </div>
@@ -315,6 +322,7 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
         {delivery.is_urgent === true && <p className="mt-1 inline-flex rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[10px] font-black text-amber-200">Urgente · priorizado na triagem, sujeito à aprovação comercial</p>}
         {delivery.scheduled_for&&<p className="mt-1 flex items-center gap-1 text-[10px] text-sky-300"><CalendarClock size={13}/> Agendado: {delivery.scheduled_label||new Date(delivery.scheduled_for).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'})}</p>}
         {scheduleNotice&&<div role="status" className="mt-2 rounded-xl border border-sky-500/25 bg-sky-500/[.065] px-3 py-2 text-[11px] font-bold text-sky-200"><CalendarClock size={13} className="mr-1 inline"/>{scheduleNotice.label}. Sem liberação automática.</div>}
+        {delivery.planned_route_id?.trim() && <p role="status" className="mt-2 rounded-xl border border-sky-500/20 bg-sky-500/[.06] px-3 py-2 text-[10px] font-bold text-sky-200">Planejamento registrado: {routes.find(route=>route.id===delivery.planned_route_id)?.name||'rota indisponível'}. A reserva não despacha o pedido nem altera o preparo. Quando liberado, confirme a alocação na rota reservada.</p>}
         {reviewHints.length>0&&<details className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/[.045] px-3 py-2 text-xs text-amber-200"><summary className="cursor-pointer font-bold">Conferir dados · {reviewHints.length} ponto{reviewHints.length===1?'':'s'}</summary><ul className="mt-2 space-y-1 text-[11px] font-normal leading-relaxed text-amber-100/80">{reviewHints.map(hint=><li key={hint.key}>• {hint.label}</li>)}</ul><p className="mt-2 text-[10px] text-zinc-400">Sugestão de revisão humana, não é acusação nem bloqueio automático.</p></details>}
         {Boolean(delivery.site_order_timeline?.length)&&<details className="mt-2 rounded-xl border border-zinc-800 bg-zinc-950/25 px-3 py-2"><summary className="cursor-pointer text-[10px] font-bold text-zinc-400">Histórico do status do Site · {delivery.site_order_timeline?.length} evento(s)</summary><div className="mt-2 space-y-1">{(delivery.site_order_timeline||[]).slice(-8).map(event=><p key={event.event_id} className="text-[10px] text-zinc-500">{event.status} · {(Number.isFinite(Date.parse(event.occurred_at)) ? new Date(event.occurred_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : 'Sem data confiável')}</p>)}</div></details>}
         <p className="mt-2 text-[10px] leading-relaxed text-zinc-400" role="status"><span className="font-bold text-zinc-200">{step.title}.</span> {step.hint}</p>

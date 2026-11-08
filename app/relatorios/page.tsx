@@ -26,6 +26,7 @@ import { ReportChartCard } from '@/components/reports/ReportChartCard';
 import { OriginChart } from '@/components/reports/Charts/OriginChart';
 import { ReportOrderPulse } from '@/components/reports/ReportOrderPulse';
 import { DataQualityCard } from '@/components/reports/DataQualityCard';
+import { NeighborhoodAuditPanel } from '@/components/reports/NeighborhoodAuditPanel';
 import { ReportDrilldownSheet } from '@/components/reports/ReportDrilldownSheet';
 import { ReportIntelligencePanel } from '@/components/reports/ReportIntelligencePanel';
 import { buildReportModel } from '@/lib/reports/buildReportModel';
@@ -908,6 +909,7 @@ export default function RelatoriosPage() {
 
         {activeTab === 'qualidade' && (
           <>
+            <NeighborhoodAuditPanel customers={customers} />
             <DataQualityCard
               issues={model.quality}
               totalDeliveries={model.metrics.totalDeliveries}
@@ -921,9 +923,9 @@ export default function RelatoriosPage() {
               }
             />
 
-            <section className="rounded-[26px] border border-zinc-800/80 bg-zinc-900/55 p-5">
-              <h2 className="font-black text-zinc-100">Critérios desta reconstrução</h2>
-              <div className="mt-3 space-y-2 text-xs leading-relaxed text-zinc-500">
+            <details className="rounded-[20px] border border-zinc-800/80 bg-zinc-900/45 p-4">
+              <summary className="cursor-pointer text-xs font-bold text-zinc-300">Como os indicadores são calculados</summary>
+              <div className="mt-3 space-y-2 text-[11px] leading-relaxed text-zinc-400">
                 <p>• `updated_at` nunca é usado como data de criação da entrega.</p>
                 <p>• Datas ausentes não recebem `new Date()`.</p>
                 <p>• Timezone é interpretado por `America/Sao_Paulo`, sem subtrair três horas manualmente.</p>
@@ -932,8 +934,9 @@ export default function RelatoriosPage() {
                 <p>• Rotas curtas ou temporalmente impossíveis continuam no volume e financeiro, mas ficam fora de duração.</p>
                 <p>• Origem ausente permanece desconhecida.</p>
                 <p>• Horários entre 06h e 16h continuam existindo se houver registros reais.</p>
+                <p>• Grafias conhecidas de bairros são normalizadas somente nas análises; cadastros não mudam.</p>
               </div>
-            </section>
+            </details>
           </>
         )}
       </main>

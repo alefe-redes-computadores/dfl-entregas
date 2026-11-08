@@ -82,9 +82,9 @@ export default function MaisPage() {
                 <button type="button" onClick={() => router.push('/mais/acompanhamento')} className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900/60 px-2 text-[10px] font-bold text-zinc-300">Acompanhamento original</button>
               </div>
             </details>
-            <button type="button" onClick={() => router.push('/clientes/inteligencia')} className="flex min-h-[66px] w-full items-center gap-3 rounded-[18px] border border-violet-500/20 bg-violet-500/[.045] px-3.5 py-3 text-left transition-colors active:bg-violet-500/10">
+            <button type="button" onClick={() => router.push('/mais/inteligencia')} className="flex min-h-[66px] w-full items-center gap-3 rounded-[18px] border border-violet-500/20 bg-violet-500/[.045] px-3.5 py-3 text-left transition-colors active:bg-violet-500/10">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-violet-300"><UsersRound size={19}/></span>
-              <span className="min-w-0 flex-1"><strong className="block text-xs font-black text-zinc-100">Inteligência de Clientes</strong><small className="mt-1 block text-[10px] leading-relaxed text-zinc-400">Score, etiquetas e observações com histórico verificável</small></span><ChevronRight size={16} className="text-violet-300"/>
+              <span className="min-w-0 flex-1"><strong className="block text-xs font-black text-zinc-100">DFL Intelligence</strong><small className="mt-1 block text-[10px] leading-relaxed text-zinc-400">Inteligência de Clientes · recomendações, bairros, qualidade e operação</small></span><ChevronRight size={16} className="text-violet-300"/>
             </button>
           </div>
         </section>

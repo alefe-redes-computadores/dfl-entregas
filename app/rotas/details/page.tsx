@@ -21,7 +21,9 @@ import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { firstValidTimestamp, type TimestampLike } from '@/lib/reports/time';
 import { RouteOperationalMemory } from '@/components/intelligence/EntityOperationalMemory';
-import { groupDeliveriesByStop } from '@/lib/route-stops';
+import { groupDeliveriesByStop, type DeliveryStopGroup } from '@/lib/route-stops';
+import { routeOperationalDateKey } from '@/lib/operational-time';
+import { isSuperadminUid } from '@/lib/access/roles';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { sumDeliveryFinance } from '@/lib/delivery-finance';
 import { RouteDepartureChecklist } from '@/components/routes/RouteDepartureChecklist';
@@ -53,6 +55,9 @@ export default function RouteDetailsPage() {
     state.routes.find((item) => item.id === id),
   );
   const allDeliveries = useAppStore((state) => state.deliveries);
+  const allRoutes = useAppStore((state) => state.routes);
+  const ownerUid = useAppStore((state) => state.user?.uid);
+  const moveRouteStop = useAppStore((state) => state.moveRouteStop);
 
   const deliveries = useMemo(
     () =>
@@ -61,6 +66,7 @@ export default function RouteDetailsPage() {
     [allDeliveries, id],
   );
   const physicalStops = useMemo(() => groupDeliveriesByStop(deliveries), [deliveries]);
+  const transferDestinations = useMemo(() => allRoutes.filter(item => item.status === 'aberta' && item.id !== id && route && routeOperationalDateKey(item) === routeOperationalDateKey(route)), [allRoutes, id, route]);
   const startRoute = useAppStore((state) => state.startRoute);
   const setRouteDepartureReady = useAppStore((state) => state.setRouteDepartureReady);
   const closeRoute = useAppStore((state) => state.closeRoute);
@@ -69,6 +75,9 @@ export default function RouteDetailsPage() {
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
 
   const [busy, setBusy] = useState(false);
+  const [transferStopKey, setTransferStopKey] = useState<string | null>(null);
+  const [transferTargetId, setTransferTargetId] = useState('');
+  const [transferBusy, setTransferBusy] = useState(false);
   const [departureChecklistOpen, setDepartureChecklistOpen] = useState(false);
   const [visibleStops, setVisibleStops] = useState(8);
 
@@ -123,6 +132,28 @@ export default function RouteDetailsPage() {
       toast.error(error instanceof Error ? error.message : 'Não foi possível confirmar a rota.');
     } finally { setBusy(false); }
   };
+  const submitStopTransfer = async (stop: DeliveryStopGroup, targetRouteId: string) => {
+    if (transferBusy || !stop.pending.length || stop.completed.length) return;
+    const target = transferDestinations.find(r=>r.id===targetRouteId);
+    if (targetRouteId && !target) { toast.error('A rota de destino mudou. Sincronize.'); return; }
+    const destination = target?.name || 'Fila sem rota';
+    const notice = `${stop.pending.length} pedido(s) da parada ${route.name} → ${destination}.` +
+      (routeStartedAt || (target && (target.started_at || target.departure_time))
+        ? '\nUma rota já saiu. A posição de entrega poderá mudar. Confirma a reatribuição?' : '\nConfirma a reatribuição?');
+    if (!window.confirm(notice)) return;
+    setTransferBusy(true);
+    try {
+      const total = await moveRouteStop(stop.representative.id, targetRouteId, stop.deliveries.map(d=>d.id));
+      setTransferStopKey(null);
+      setTransferTargetId('');
+      toast.success(`${total} pedido(s) reatribuído(s) em uma única transação.`, {
+        description: 'A rota comercial e o pagamento não foram concluídos por esta ação.',
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível mover a parada. Nenhuma mudança foi confirmada.');
+    } finally { setTransferBusy(false); }
+  };
+
   const state =
     route.status === 'fechada'
       ? 'finalizada'
@@ -431,6 +462,33 @@ export default function RouteDetailsPage() {
                     </button>
                   ))}
                 </div>
+                {route.status === 'aberta' && stop.pending.length > 0 && isSuperadminUid(ownerUid) && (
+                  <div className="border-t border-zinc-800/70 px-3 py-2">
+                    {stop.completed.length ? (
+                      <p className="text-[10px] text-amber-300">Parada parcialmente concluída: preserve os pedidos entregues e revise individualmente antes de transferir.</p>
+                    ) : (
+                      <>
+                        <button type="button" aria-expanded={transferStopKey === stop.key} onClick={() => { setTransferStopKey(v=>v===stop.key?null:stop.key); setTransferTargetId(''); }} className="min-h-10 w-full rounded-xl border border-sky-500/20 bg-sky-500/[.05] px-3 text-left text-xs font-bold text-sky-200">
+                          Reatribuir parada · {stop.pending.length} pedido{stop.pending.length===1?'':'s'}
+                        </button>
+                        {transferStopKey === stop.key && (
+                          <div className="mt-2 space-y-2 rounded-xl bg-zinc-950/60 p-2">
+                            <p className="text-[10px] leading-relaxed text-zinc-400">Ação do proprietário, auditada no servidor. Não encerra pedidos, não confirma pagamento nem envia aviso de saída.</p>
+                            {transferDestinations.map(destination => (
+                              <button key={destination.id} type="button" disabled={transferBusy} aria-pressed={transferTargetId === destination.id} onClick={()=>setTransferTargetId(destination.id)} className={`min-h-11 w-full rounded-lg border px-3 text-left text-xs ${transferTargetId===destination.id?'border-sky-400/50 bg-sky-500/10 text-sky-200':'border-zinc-800 text-zinc-300'}`}>
+                                {destination.name} · {destination.motoboy_name || 'Sem responsável'}{destination.started_at || destination.departure_time ? ' · na rua' : ' · em montagem'}
+                              </button>
+                            ))}
+                            <button type="button" disabled={transferBusy} aria-pressed={transferTargetId === '__unassign__'} onClick={()=>setTransferTargetId('__unassign__')} className={`min-h-11 w-full rounded-lg border px-3 text-left text-xs ${transferTargetId==='__unassign__'?'border-amber-400/50 bg-amber-500/10 text-amber-200':'border-zinc-800 text-zinc-400'}`}>Retirar da rota · manter pedidos pendentes</button>
+                            <button type="button" disabled={transferBusy || !transferTargetId} onClick={()=>void submitStopTransfer(stop,transferTargetId==='__unassign__'?'':transferTargetId)} className="min-h-11 w-full rounded-xl bg-sky-600 px-3 text-xs font-black text-white disabled:opacity-40">
+                              {transferBusy?'Confirmando no servidor...':'Confirmar reatribuição'}
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </section>
             );
           })}

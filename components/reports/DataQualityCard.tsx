@@ -27,7 +27,7 @@ export function DataQualityCard({
               <h2 className="font-black text-zinc-100">Qualidade dos dados</h2>
             </div>
             <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-              Mostra cobertura e registros que foram excluídos apenas das métricas que dependem do campo problemático.
+              Veja registros que precisam de correção. As mesmas entregas podem aparecer em mais de uma ocorrência.
             </p>
           </div>
 
@@ -47,7 +47,7 @@ export function DataQualityCard({
           </div>
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 p-3">
             <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
-              Ocorrências de qualidade
+              Sinalizações (não únicas)
             </div>
             <div className="mt-1 text-xl font-black text-amber-300">{affected}</div>
           </div>
@@ -80,7 +80,7 @@ export function DataQualityCard({
         onClick={onExplore}
         className="flex w-full items-center justify-between border-t border-zinc-800/70 px-5 py-3 text-xs font-bold text-zinc-400 active:bg-zinc-800/70"
       >
-        <span>Ver cobertura e critérios</span>
+        <span>Conferir ocorrências e critérios</span>
         <ChevronRight size={15} />
       </button>
     </section>

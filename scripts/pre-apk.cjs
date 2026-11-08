@@ -2,6 +2,9 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/test-r299-p12-route-atomic.cjs',
+  'scripts/test-r299-p11-intelligence-macro.cjs',
+  'scripts/test-r299-p10a-future-route.cjs',
   'scripts/test-r299-tracking-auto-p9.cjs',
   'scripts/test-r299-comunicacao-p8.cjs',
   'scripts/test-r299-inteligencia-p7.cjs',

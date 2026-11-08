@@ -342,6 +342,8 @@ export interface SiteOrderTimelineEntry {
 export interface Delivery {
   id: string;
   route_id: string;
+  /** Reatribuições de rota confirmadas e auditáveis; até 20 eventos por pedido. */
+  route_transfer_audit?: import('@/lib/operation/route-stop-transfer-policy').StopTransferAudit[];
   fulfillment_mode?: FulfillmentMode; // legado sem campo = delivery
   /** Responsável físico pela entrega. Ausente em registros legados = DFL. */
   logistics_provider?: LogisticsProvider;
