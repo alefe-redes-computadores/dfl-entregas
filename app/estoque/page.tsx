@@ -24,6 +24,7 @@ import { formatCommercialPlan } from '@/lib/stock-commercial';
 import { humanPurchasePlan, naturalStockNameCompare, physicalStockDisplay } from '@/lib/stock-commercial-display-v2';
 import { buildDailyStockSignal } from '@/lib/stock-daily-plan';
 import { guardedStockRecommendation } from '@/lib/stock-recommendation-guard';
+import { stockBuyReview } from '@/lib/operation/stock-buy-review';
 import { commercialCoverage, commercialProductStatus } from '@/lib/stock-commercial-health';
 import { parseStockPanelPreferences } from '@/lib/stock-panel-preferences';
 import { readStockUiStorage, writeStockUiStorage, removeStockUiStorage } from '@/lib/stock-local-ui-storage';
@@ -111,6 +112,7 @@ export default function StockPage() {
   const recommendationMap=useMemo(()=>new Map(recommendations.map(item=>[item.productId,item])),[recommendations]);
   const suggested=useMemo(()=>active.filter(p=>{const r=recommendationMap.get(p.id);if(!r)return false;return guardedStockRecommendation(p,r).quantity>0}).sort(prioritySort),[active,recommendationMap]);
   const commercialMissing=useMemo(()=>active.filter(p=>{const status=commercialProductStatus(p);return status==='fractional_without_presentation'||status==='invalid_presentation'}),[active]);
+  const purchaseReview=useMemo(()=>suggested.filter(p=>{const rec=recommendationMap.get(p.id);const guarded=guardedStockRecommendation(p,rec);const plan=commercialPurchasePlan(p,guarded.quantity,committedMap.get(p.id)||0);return plan.netNeed>0&&!stockBuyReview(p,plan).autoSelect;}),[suggested,recommendationMap,committedMap]);
   const daily=useMemo(()=>{
     const now=new Date();
     return active.map(product=>({p:product,signal:buildDailyStockSignal(product,movementsByProduct.get(product.id)||[],now,recommendationMap.get(product.id))}))
@@ -162,6 +164,12 @@ export default function StockPage() {
         </div>}
         {radarOpen&&<p className="mt-2 text-[10px] text-zinc-500">Compras solicitadas não aumentam o estoque até o recebimento. Sugestões sujeitas à conferência.</p>}
       </section>}
+    {!query&&purchaseReview.length>0&&<section aria-label="Conferência de reposição" className="rounded-[22px] border border-amber-500/25 bg-amber-500/[.06] p-3.5">
+      <p className="text-xs font-black text-amber-200">Conferir meta ou embalagem</p>
+      <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">{purchaseReview.length} produto(s) têm sugestão de compra que precisa de revisão humana. Não serão pré-selecionados na lista de compras.</p>
+      <p className="mt-2 text-[11px] text-zinc-300">{purchaseReview.slice(0,3).map(p=>p.name).join(' · ')}{purchaseReview.length>3?' e outros':''}</p>
+      <button type="button" onClick={()=>rememberAndPush('/estoque/compras')} className="mt-3 min-h-11 w-full rounded-xl border border-amber-500/30 bg-zinc-950/40 px-3 text-xs font-black text-amber-200">Abrir compra para revisar</button>
+    </section>}
     {!query&&suggested.length>0&&<section className="rounded-[22px] border border-amber-500/25 bg-amber-500/[.055] p-4">
       <div className="flex items-center justify-between gap-3">
         <div>

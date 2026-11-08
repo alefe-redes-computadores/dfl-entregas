@@ -5,6 +5,7 @@ import { commercialMovementPreview, commercialPresentationEquation, humanPresent
 import { stockPackageBreakdown } from '@/lib/stock-package-insights';
 import { fullStockQuantityInput, canShortcutAllStock, movementStockSignal } from '@/lib/stock-movement-shortcuts';
 import { committedStockQuantityMap } from '@/lib/stock-shopping';
+import { nextStockReviewTarget } from '@/lib/operation/stock-count-navigation';
 import { dualStockView, looseMovementPresentation, stockMovementBaseQuantity } from '@/lib/stock-dual-unit';
 
 import {
@@ -284,13 +285,56 @@ function Content() {
     ) ||
     insufficientStock;
 
+  // A fila foi capturada no Estoque com os filtros e a ordem efetivamente exibidos.
+  const nextReviewProduct = (skipCategory = false) => {
+    let ids:string[]=[];
+    try {
+      const raw=JSON.parse(sessionStorage.getItem('dfl-stock-review-queue') || '[]');
+      if(Array.isArray(raw))ids=raw.filter((item):item is string=>typeof item==='string');
+    } catch {}
+    // V21: avançar pelo próximo ID real na fila, sem confundir posição visual.
+    const byId = new Map(activeProducts.map(item => [item.id, item]));
+    const ordered = (ids.length ? [...new Set(ids)] : [...byId.keys()])
+      .map(id => byId.get(id))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+    const index = ordered.findIndex(item => item.id === product.id);
+    const next = index >= 0 ? ordered[index + 1] : null;
+    if (!skipCategory) return next || null;
+    // O salto de categoria aplica a mesma autoridade da fila validada.
+    return nextStockReviewTarget(activeProducts,ids,product.id,true);
+  };
+  const skipReviewCategory = () => {
+    if(busy || savingRef.current)return;
+    if(quantity.trim()){
+      toast.warning('Salve ou limpe a quantidade antes de pular a categoria. Nenhum lançamento será descartado.');
+      return;
+    }
+    const next=nextReviewProduct(true);
+    if(next){
+      sessionStorage.setItem('dfl-stock-anchor',next.id);
+      toast.info('Próxima categoria. Nenhum saldo foi alterado.');
+      router.replace(`/estoque/movimentar?id=${next.id}&from=estoque`);
+      return;
+    }
+    try{
+      const changes=JSON.parse(sessionStorage.getItem('dfl-stock-review-changes')||'[]');
+      if(Array.isArray(changes)&&changes.length) {
+        // Aviso local da categoria final: não bloqueia a navegação e não cria movimento.
+        void Promise.resolve().then(() => notifyStockThresholdChanges(
+          changes, useAppStore.getState().storeSettings.notificationPreferences,
+        )).catch(() => undefined);
+      }
+    }catch{}
+    sessionStorage.removeItem('dfl-stock-review-changes');
+    sessionStorage.removeItem('dfl-stock-review-queue');
+    toast.success('Conferência encerrada; nenhuma alteração fictícia foi lançada.');
+    router.replace('/estoque');
+  };
+
   // Conferir e avançar não é uma movimentação: não cria lançamento zero,
   // não altera custos e não gera notificação de estoque artificial.
   const skipUnchangedAndNext = async () => {
-    const queue = (() => { try { return JSON.parse(sessionStorage.getItem('dfl-stock-review-queue') || '[]') as string[]; } catch { return []; } })();
-    const ordered = queue.length ? queue.map(pid => activeProducts.find(item => item.id === pid)).filter(Boolean) : activeProducts;
-    const index = ordered.findIndex(item => item?.id === product.id);
-    const next = index >= 0 ? ordered[index + 1] : undefined;
+    const next = nextReviewProduct();
     sessionStorage.setItem('dfl-stock-anchor', next?.id || product.id);
     if (next) {
       toast.success('Saldo conferido, sem alteração.');
@@ -434,10 +478,7 @@ function Content() {
       );
 
       if (submitIntent === 'next') {
-        const queue = (()=>{ try { return JSON.parse(sessionStorage.getItem('dfl-stock-review-queue') || '[]') as string[]; } catch { return []; } })();
-        const ordered = queue.length ? queue.map((pid)=>activeProducts.find((item)=>item.id===pid)).filter(Boolean) : activeProducts;
-        const index = ordered.findIndex((item)=>item?.id===product.id);
-        const next = index >= 0 ? ordered[index + 1] : undefined;
+        const next = nextReviewProduct();
 
         if (next) {
           sessionStorage.setItem(
@@ -961,6 +1002,7 @@ function Content() {
             </button>
           )}
         </div>
+        {from === 'estoque' && <button type="button" disabled={busy} onClick={skipReviewCategory} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 text-[11px] font-bold text-zinc-400 disabled:opacity-40"><SkipForward size={15}/>Pular categoria sem lançar movimentação</button>}
       </form>
     </div>
   );

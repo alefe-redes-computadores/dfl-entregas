@@ -55,6 +55,7 @@ import { purchaseContextSignals } from '@/lib/operation/contextual-signals';
 import { invalidStockPurchaseSelections, validateStockPurchaseQuantity } from '@/lib/stock-purchase-draft';
 import { compactStockPurchaseDraft, parseStockPurchaseDraft, STOCK_PURCHASE_DRAFT_KEY } from '@/lib/stock-purchase-session';
 import { guardedStockRecommendation } from '@/lib/stock-recommendation-guard';
+import { stockBuyReview } from '@/lib/operation/stock-buy-review';
 import { formatCommercialPlan, isDiscretePurchaseUnit,
   normalizeTypedPurchaseQuantity,
 } from '@/lib/stock-commercial';
@@ -153,6 +154,7 @@ export default function ShoppingList() {
               presentation: commercial.presentation,
               surplus: commercial.surplusQuantity,
               guard: guarded,
+              review: stockBuyReview(product, commercial),
             },
           ] as const;
         }),
@@ -183,6 +185,15 @@ export default function ShoppingList() {
     [products, netRecommendationMap, recommendationMap],
   );
 
+  const autoSuggested = useMemo(
+    () => suggested.filter(product => netRecommendationMap.get(product.id)?.review.autoSelect),
+    [suggested, netRecommendationMap],
+  );
+  const reviewNeeded = useMemo(
+    () => suggested.filter(product => !netRecommendationMap.get(product.id)?.review.autoSelect),
+    [suggested, netRecommendationMap],
+  );
+
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState('');
   // Recebe a busca da Home sem substituir o filtro local nem reescrever o rascunho.
@@ -195,7 +206,7 @@ export default function ShoppingList() {
     Record<string, boolean>
   >(() =>
     Object.fromEntries(
-      suggested.map((product) => [
+      autoSuggested.map((product) => [
         product.id,
         true,
       ]),
@@ -206,7 +217,7 @@ export default function ShoppingList() {
     Record<string, string>
   >(() =>
     Object.fromEntries(
-      suggested.map((product) => [
+      autoSuggested.map((product) => [
         product.id,
         String(
           Number(
@@ -297,7 +308,7 @@ export default function ShoppingList() {
    * tenha desmarcado manualmente.
    */
   useEffect(() => {
-    const freshSuggestions = suggested.filter(
+    const freshSuggestions = autoSuggested.filter(
       (product) => !initializedSuggestions.current.has(product.id),
     );
 
@@ -329,12 +340,15 @@ export default function ShoppingList() {
     freshSuggestions.forEach((product) =>
       initializedSuggestions.current.add(product.id),
     );
-  }, [netRecommendationMap, suggested]);
+  }, [netRecommendationMap, autoSuggested]);
 
-  const displayed = useMemo(() => rankStockProducts(
-    showAll ? products : suggested, query,
-  ).filter((product) => !showOnlySelected || selected[product.id]),
-  [showAll, products, suggested, query, showOnlySelected, selected]);
+  const displayed = useMemo(() => {
+    const matching = rankStockProducts(showAll ? products : suggested, query)
+      .filter(product => !showOnlySelected || selected[product.id]);
+    return showAll && !query.trim()
+      ? [...matching].sort((a,b) => a.name.localeCompare(b.name,'pt-BR',{sensitivity:'base'}))
+      : matching;
+  }, [showAll, products, suggested, query, showOnlySelected, selected]);
 
   const renderedProducts = useMemo(() => displayed.slice(0, visibleLimit), [displayed, visibleLimit]);
   const selectedProducts = useMemo(() => products.filter((product) => selected[product.id]), [products, selected]);
@@ -690,13 +704,16 @@ export default function ShoppingList() {
       <section className="mb-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3" aria-label="Busca e revisão da compra" id="dfl-purchase-review">
         <div className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950 px-3">
           <Search size={17} className="shrink-0 text-amber-400" />
-          <input aria-label="Buscar produto para comprar" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome ou categoria" className="h-12 min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600" />
+          <input aria-label="Buscar produto para comprar" type="search" enterKeyHint="search" autoComplete="off" maxLength={110} value={query} onChange={(event) => setQuery(event.target.value)} onFocus={(event) => event.currentTarget.scrollIntoView({block:'nearest',behavior:'smooth'})} placeholder="Buscar por nome ou categoria" className="h-12 min-w-0 flex-1 scroll-mt-24 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600" />
           {query && <button type="button" onClick={() => setQuery('')} aria-label="Limpar busca"><X size={16} className="text-zinc-400" /></button>}
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <div aria-live="polite" className="flex items-center gap-2 text-xs font-bold text-zinc-300"><ShoppingBasket size={16} className="text-amber-400" />{selectedProducts.length} {selectedProducts.length === 1 ? 'item escolhido' : 'itens escolhidos'}</div>
           <button type="button" aria-pressed={showOnlySelected} onClick={() => {setShowOnlySelected((current) => !current); if(!showOnlySelected) { setShowAll(true); setQuery(''); }}} className={`min-h-10 rounded-xl border px-3 text-[11px] font-bold ${showOnlySelected ? 'border-amber-500/50 bg-amber-500/10 text-amber-300' : 'border-zinc-700 text-zinc-400'}`}>{showOnlySelected ? 'Exibindo escolhidos' : 'Revisar escolhidos'}</button>
         </div>
+        {reviewNeeded.length > 0 && <div role="status" className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 py-2.5 text-[11px] leading-relaxed text-amber-200">
+          <strong>{reviewNeeded.length} produto(s) precisam de conferência</strong> de meta ou embalagem antes de entrar automaticamente na compra. Eles seguem visíveis para seleção manual; nada foi corrigido no cadastro.
+        </div>}
         {!!invalidSelected.length && <div role="alert" className="mt-3 rounded-xl border border-red-500/30 bg-red-500/[.07] px-3 py-2 text-[11px] font-bold text-red-300">
           {invalidSelected.length} item(ns) selecionado(s) com quantidade inválida ou arredondada para zero. Corrija antes de montar a compra. Primeiro: {invalidSelected[0].name}.
           <button type="button" onClick={()=>{setShowAll(true);setShowOnlySelected(true);setQuery('')}} className="ml-2 underline underline-offset-2">Revisar</button>
@@ -813,6 +830,11 @@ export default function ShoppingList() {
                   </p>
 
 
+                  {purchasePlan?.review.kind === 'review' && (
+                    <p className="mt-1 text-[10px] leading-snug font-semibold text-amber-300">
+                      Conferência manual: {purchasePlan.review.reasons.join(' · ')}. Não foi selecionado automaticamente.
+                    </p>
+                  )}
                   {suggestedQuantity > 0 && (
                     <div className="mt-0.5 flex flex-wrap items-center gap-1">
                       <p className="text-[9px] font-black text-amber-400">

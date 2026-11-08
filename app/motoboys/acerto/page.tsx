@@ -20,6 +20,7 @@ import { activeRouteDeliveries } from '@/lib/route-closure-eligibility';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { settlementVisualLines } from '@/lib/motoboy-settlement-visual';
 import { settlementImagePolicy } from '@/lib/motoboy-settlement-export';
+import { paginateSettlementRows } from '@/lib/motoboy-settlement-pages';
 
 const fromKey=(key:string)=>new Date(`${key}T12:00:00-03:00`);
 const shift=(key:string,days:number)=>{const date=fromKey(key);date.setDate(date.getDate()+days);return operationalDateKey(date);};
@@ -363,7 +364,7 @@ function Content(){
     const settlementRouteRows=settlementRouteOrder(data.routeBreakdown);
     const visualAdjustments=settlementVisualLines(displayAdjustments);
     // Os motivos vêm do snapshot autoritativo do acerto, não são recalculados.
-    // Cap de memória do canvas Android: mostrar até 72 linhas e indicar o excedente.
+    // Canvas Android: dividir em páginas para preservar TODAS as linhas sem uma imagem gigante.
     const settlementImageRows = [
       // Prioridade do canvas: primeiro os motivos financeiros; rotas ficam depois.
       {type:'header' as const,line:'ABATIMENTOS DISCRIMINADOS',color:'#fda4af',amount:`− R$ ${money(data.totalVales)}`},
@@ -381,6 +382,10 @@ function Content(){
     ];
     if(!displayAdjustments.length && data.totalAdditions+data.totalVales>0)settlementImageRows.push({type:'detail',line:'Motivos indisponíveis no registro anterior',color:'#fbbf24',amount:''});
     if(!displayAdjustments.length && data.totalAdditions+data.totalVales===0)settlementImageRows.push({type:'detail',line:'Sem acréscimos ou abatimentos',color:'#cbd5e1',amount:''});
+    const imagePages=exportPolicy.detailed ? paginateSettlementRows(settlementImageRows) : [[]];
+    const preparedImages:Array<{dataUrl:string;filename:string}>=[];
+    for(let pageIndex=0;pageIndex<imagePages.length;pageIndex++){
+    const settlementImageRows=imagePages[pageIndex];
     const visibleImageRows=settlementImageRows.slice(0,72);
     const imageExtraRows=settlementImageRows.length-visibleImageRows.length;
     const settlementDetailHeight=Math.max(235,100+visibleImageRows.reduce((height,item)=>height+(item.type==='header'?61:53),0)+(imageExtraRows?55:0));
@@ -425,6 +430,7 @@ function Content(){
     if(exportPolicy.detailed){
     round(48,1340,984,settlementDetailHeight,26,'#171b20','#2c3339');
     label('CONFERÊNCIA DETALHADA · PEDIDOS ≠ PARADAS',80,1390,'900 25px Arial','#f8fafc',920);
+    if(imagePages.length>1)label(`PÁGINA ${pageIndex+1} DE ${imagePages.length} · TODOS OS REGISTROS PRESERVADOS`,80,1425,'700 20px Arial','#93c5fd',910);
     let detailY=1454;
     visibleImageRows.forEach(item=>{
       if(item.type==='header'){
@@ -446,9 +452,34 @@ function Content(){
     }
 
     label('DFL ENTREGAS  •  RESUMO DE CONFERÊNCIA',60,imageHeight-32,'700 21px Arial','#7b919a',930);
-    const dataUrl=canvas.toDataURL('image/png',1);const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}-${exportPolicy.suffix}.png`;
-    if(Capacitor.isNativePlatform()){const saved=await Filesystem.writeFile({path:`dfl-acertos/${filename}`,data:dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});await Share.share({title:`Acerto · ${motoboy.name}`,text:summaryCompact(),files:[saved.uri],dialogTitle:'Compartilhar comprovante'});toast.success('Imagem pronta. Confira o destinatário antes de enviar.');return;}
-    const blob=await (await fetch(dataUrl)).blob();const file=new File([blob],filename,{type:'image/png'});if(navigator.share&&navigator.canShare?.({files:[file]})){await navigator.share({title:`Acerto · ${motoboy.name}`,text:summaryCompact(),files:[file]});return;}const link=document.createElement('a');link.download=filename;link.href=dataUrl;link.click();toast.info('Imagem baixada. Use Copiar resumo para enviar também o texto.');
+    const dataUrl=canvas.toDataURL('image/png',1);
+    const filePage=imagePages.length>1?`-parte-${String(pageIndex+1).padStart(2,'0')}-de-${String(imagePages.length).padStart(2,'0')}`:'';
+    const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}-${exportPolicy.suffix}${filePage}.png`;
+    preparedImages.push({dataUrl,filename});
+    }
+    if(Capacitor.isNativePlatform()){
+      const savedUris:string[]=[];
+      for(const item of preparedImages){
+        const saved=await Filesystem.writeFile({path:`dfl-acertos/${item.filename}`,data:item.dataUrl.split(',')[1],directory:Directory.Cache,recursive:true});
+        savedUris.push(saved.uri);
+      }
+      await Share.share({title:`Acerto · ${motoboy.name}`,text:summaryCompact(),files:savedUris,dialogTitle:'Compartilhar comprovantes'});
+      toast.success(`${savedUris.length} imagem(ns) preparada(s). Confira o destinatário; compartilhar não confirma recebimento.`);
+      return;
+    }
+    const files:File[]=[];
+    for(const item of preparedImages){
+      const blob=await (await fetch(item.dataUrl)).blob();
+      files.push(new File([blob],item.filename,{type:'image/png'}));
+    }
+    if(navigator.share&&navigator.canShare?.({files})){
+      await navigator.share({title:`Acerto · ${motoboy.name}`,text:summaryCompact(),files});
+      return;
+    }
+    for(const item of preparedImages){
+      const link=document.createElement('a');link.download=item.filename;link.href=item.dataUrl;link.click();
+    }
+    toast.info(`${preparedImages.length} imagem(ns) oferecida(s) para baixar. Confira as permissões de múltiplos downloads do navegador.`);
     }catch(error){if(error instanceof Error&&/cancel/i.test(error.message))return;console.error('[ACERTO] Falha ao gerar imagem:',error);toast.error('Não foi possível gerar ou compartilhar a imagem.');}finally{setImageBusy(false);}
   };
 
@@ -497,7 +528,7 @@ function Content(){
         <button type="button" disabled={imageBusy} onClick={()=>void image('summary')} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-2 text-[11px] font-black text-emerald-200 disabled:opacity-40"><ImageIcon size={15}/>{imageBusy?'Gerando...':'Imagem resumida'}</button>
         <button type="button" disabled={imageBusy} onClick={()=>void image('detailed')} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/[.07] px-2 text-[11px] font-black text-sky-200 disabled:opacity-40"><ImageIcon size={15}/>{imageBusy?'Gerando...':'Imagem detalhada'}</button>
       </div>
-      <p className="px-1 text-[10px] leading-relaxed text-zinc-500">Resumida: valores e resultado em imagem curta. Detalhada: ajustes e rotas discriminados; a imagem tem limite de linhas; confira todos os pedidos na tela do aplicativo. Compartilhar não significa recebido no WhatsApp.</p>
+      <p className="px-1 text-[10px] leading-relaxed text-zinc-500">Resumida: uma imagem curta. Detalhada: todos os ajustes, rotas e pedidos em imagens paginadas, sem cortar a lista. Confira as páginas e o destinatário. Compartilhar não significa recebido no WhatsApp.</p>
     </section>
 
 
