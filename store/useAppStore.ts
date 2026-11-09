@@ -3949,20 +3949,26 @@ export const useAppStore = create<AppState>()(
               sanitizeForFirebase(updatedFields),
             );
           } catch (error) {
+            // Cache offline pode apontar para um documento apagado remotamente.
+            // Recria SOMENTE o mesmo ID, com a identidade já revalidada;
+            // nunca cria outro cliente nem faz merge entre pessoas distintas.
+            const code = typeof error === 'object' && error !== null && 'code' in error
+              ? String((error as {code?: unknown}).code || '') : '';
+            if (code === 'not-found' || code === 'firestore/not-found') {
+              try {
+                await setDoc(doc(db, 'customers', customer.id),
+                  sanitizeForFirebase({...before, ...updatedFields}), {merge: true});
+                return customer.id;
+              } catch (recoveryError) {
+                console.error('Falha ao recuperar cadastro ausente no Firestore:', recoveryError);
+              }
+            }
             set((state) => ({
               customers: state.customers.map(
-                (current) =>
-                  current.id === customer.id
-                    ? before
-                    : current,
+                (current) => current.id === customer.id ? before : current,
               ),
             }));
-
-            console.error(
-              'Erro ao atualizar cliente existente:',
-              error,
-            );
-
+            console.error('Erro ao atualizar cliente existente:', error);
             throw error;
           }
 

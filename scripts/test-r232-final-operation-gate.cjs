@@ -38,7 +38,12 @@ const page=read('app/entregas/nova/page.tsx');
 ok(page.includes("import { createManualDeliveryId } from '@/lib/operation/manual-delivery-id';"),'cadastro usa fonte única de IDs');
 ok(page.includes('deliveriesToCreate.push({id:createManualDeliveryId()'),'multi-pedido gera ID próprio por linha');
 const inlineManualId=page.includes('try {await addDelivery({id:createManualDeliveryId()');
-const reusedManualId=page.includes('const manualDeliveryId = createManualDeliveryId();try {await addDelivery({id:manualDeliveryId,') && page.includes('void kickManualCreated(manualDeliveryId).then(');
+// R305 introduziu registrationStage entre a criacao do ID e a escrita.
+// Validar invariantes reais em vez de exigir tokens adjacentes no source.
+const reusedManualId =
+  page.includes('const manualDeliveryId = createManualDeliveryId();') &&
+  /try\s*\{\s*await\s+addDelivery\(\{\s*id\s*:\s*manualDeliveryId\s*,/.test(page) &&
+  page.includes('kickManualCreated(manualDeliveryId).then(');
 ok(inlineManualId || reusedManualId,'cadastro individual usa ID sem colisão de relógio');
 ok(!page.includes('id:Date.now().toString()') && !page.includes('id:index===0?Date.now().toString()'),'caminhos antigos de ID temporal excluídos');
 const store=read('store/useAppStore.ts');

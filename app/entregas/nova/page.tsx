@@ -982,10 +982,11 @@ const [routeId, setRouteId] = useState('');
                     )}`,
                   )
                 }
-                className="mb-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4 text-left"
+                aria-label="Criar rota agora. Abre o formulário de nova rota"
+                className="mb-3 flex w-full items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-left active:scale-[.99]"
               >
-                <p className="text-sm font-black text-amber-400">Nenhuma rota aberta</p>
-                <p className="mt-1 text-xs text-zinc-400">Crie uma rota para registrar uma entrega.</p>
+                <span><strong className="block text-sm text-amber-300">Nenhuma rota aberta</strong><span className="mt-1 block text-xs text-zinc-300">Toque aqui para abrir a criação de rota.</span></span>
+                <span className="shrink-0 rounded-xl bg-amber-400 px-3 py-2 text-xs font-black text-zinc-950">+ Criar rota agora</span>
               </button>
             )}
         {/* ROTA */}

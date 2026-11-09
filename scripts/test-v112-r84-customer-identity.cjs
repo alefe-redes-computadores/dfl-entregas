@@ -48,7 +48,13 @@ ok(identity.customerIdentityEvidence(saved,'Maria Souza',{address:'R. das Flores
 ok(!identity.customerIdentityEvidence(saved,'Maria',{address}).reusable,'primeiro nome nao reutiliza');
 ok(!identity.customerIdentityEvidence(saved,'Maria S.',{address}).reusable,'sobrenome parcial nao reutiliza');
 ok(!identity.customerIdentityEvidence(saved,'Maria Souza',{address:'Rua Outro Lugar, 120 - Centro',phone:saved.phone}).reusable,'telefone igual nao ganha de rua diferente');
-ok(!identity.customerIdentityEvidence(saved,'Maria Souza',{phone:saved.phone}).reusable,'telefone sozinho nao reutiliza');
+// R304: retirada sem endereco pode reutilizar nome EXATO + telefone validado.
+// A R84 continua bloqueando telefone isolado, homonimo e endereco conflitante.
+ok(identity.customerIdentityEvidence(saved,'Maria Souza',{phone:saved.phone}).reusable,'R304 retirada sem endereco: nome exato + telefone confirmado reutilizam');
+ok(!identity.customerIdentityEvidence(saved,'Maria',{phone:saved.phone}).reusable,'telefone isolado sem nome completo nao reutiliza');
+ok(!identity.customerIdentityEvidence(saved,'Maria S.',{phone:saved.phone}).reusable,'sobrenome parcial + telefone nao reutilizam');
+ok(!identity.customerIdentityEvidence(saved,'Maria Souza',{phone:'34911112222'}).reusable,'nome exato sem telefone validado nao reutiliza sem endereco');
+ok(identity.findExistingCustomer([saved],'Maria Souza',{phone:saved.phone})?.id==='maria1','R304 retirada encontra cliente unico com identidade validada');
 ok(!identity.customerIdentityEvidence(saved,'Maria Souza',{address:'Rua das Flores, 120 - Outro Bairro'}).reusable,'bairro divergente bloqueia');
 ok(!identity.customerIdentityEvidence(saved,'Maria Souza',{address:'Rua das Flores, 120 - Centro',phone:'34911112222'}).reusable,'telefone confirmado conflitante bloqueia');
 const multiple={...saved,id:'maria-2',address:'Rua B, 100 - Centro',addresses:[{id:'a',address:'Rua B, 100 - Centro'}, {id:'b',address}]};

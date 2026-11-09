@@ -2,7 +2,7 @@
 import type { Customer, Delivery } from '@/types';
 import { deliveryCustomerCharge } from '@/lib/delivery-finance';
 import { deliveryDate } from '@/lib/operational-time';
-import { verifiedInternalCustomer } from '@/lib/internal-owner-identity';
+import { verifiedInternalCustomer, isOwnerCustomerForAnalytics } from '@/lib/internal-owner-identity';
 import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
 
 export interface CustomerStats {
@@ -23,7 +23,7 @@ export const normalizeCustomerName = (value?: string) => (value || '')
 
 /** Unified, conservative owner rule: never infer from a matching first name. */
 export function isOperationalCustomer(customer: Customer): boolean {
-  return verifiedInternalCustomer(customer);
+  return verifiedInternalCustomer(customer) || isOwnerCustomerForAnalytics(customer);
 }
 
 export const getDeliveryCreatedAt = (delivery: Delivery) => deliveryDate(delivery) || undefined;
@@ -46,7 +46,10 @@ export function getCustomerStats(customer: Customer, deliveries: Delivery[]): Cu
       delivery.exclude_customer_metrics !== true &&
       delivery.developer_test !== true &&
       delivery.exclude_from_reports !== true &&
-      customer.exclude_from_analytics !== true
+      customer.exclude_from_analytics !== true &&
+      !isOperationalCustomer(customer) &&
+      delivery.owner_order_context !== 'owner_test' &&
+      delivery.owner_order_context !== 'owner_provisional'
     )
     .sort((a,b) => new Date(getDeliveryCreatedAt(b) || 0).getTime() - new Date(getDeliveryCreatedAt(a) || 0).getTime());
   const totalValue = linked.reduce((total, delivery) => total + deliveryCustomerCharge(delivery), 0);
@@ -86,7 +89,7 @@ export function buildCustomerStatsIndex(customers: Customer[], deliveries: Deliv
   }
 
   for (const delivery of deliveries) {
-    if (delivery.exclude_customer_metrics === true || delivery.developer_test === true || delivery.exclude_from_reports === true || customerById.get(delivery.customer_id)?.exclude_from_analytics === true) continue;
+    if (delivery.exclude_customer_metrics === true || delivery.developer_test === true || delivery.exclude_from_reports === true || delivery.owner_order_context === 'owner_test' || delivery.owner_order_context === 'owner_provisional' || customerById.get(delivery.customer_id)?.exclude_from_analytics === true || (delivery.customer_id && isOperationalCustomer(customerById.get(delivery.customer_id)!))) continue;
     if (delivery.customer_id) {
       if (knownIds.has(delivery.customer_id)) linked.get(delivery.customer_id)?.push(delivery);
       continue;
@@ -96,7 +99,7 @@ export function buildCustomerStatsIndex(customers: Customer[], deliveries: Deliv
     const candidateIds=byName.get(name)||[];
     if (candidateIds.length !== 1) continue; // Homonyms remain unassigned.
     const candidate=customerById.get(candidateIds[0]);
-    if (!candidate) continue;
+    if (!candidate || isOperationalCustomer(candidate)) continue;
     const phone=String(delivery.phone||'').replace(/\D/g,'');
     const address=String(delivery.address_string||'').toLocaleLowerCase('pt-BR').trim();
     const verifiedPhone=phone.length>=10&&customerPhones(candidate).some(item=>item.number.replace(/\D/g,'')===phone);
@@ -106,7 +109,7 @@ export function buildCustomerStatsIndex(customers: Customer[], deliveries: Deliv
 
   const stats = new Map<string, CustomerStats>();
   for (const customer of customers) {
-    const orders = linked.get(customer.id) || [];
+    const orders = isOperationalCustomer(customer) ? [] : (linked.get(customer.id) || []);
     orders.sort((a, b) => new Date(getDeliveryCreatedAt(b) || 0).getTime() - new Date(getDeliveryCreatedAt(a) || 0).getTime());
     let completedCount = 0;
     let totalValue = 0;

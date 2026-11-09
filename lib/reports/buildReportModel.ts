@@ -566,7 +566,14 @@ export function buildReportModel(input: {
       (delivery) =>
         delivery.developer_test !== true &&
         !excludedFromReports(delivery, delivery.customer) && // exclusão de indicadores, não do ledger
-        true, // sales on internal routes remain part of true commercial revenue
+        delivery.owner_order_context !== 'owner_test' &&
+        // O cadastro pessoal do proprietario nao infla volume/faturamento gerencial.
+        // Provisorio e retirada na loja podem ser VENDAS REAIS: nao excluir.
+        (
+          !isInternalOperationalCustomer(delivery.customer) ||
+          delivery.owner_order_context === 'owner_provisional' ||
+          delivery.owner_order_context === 'store_pickup'
+        ) // Vendas reais em rotas internas continuam elegiveis
     );
 
   const period = buildPeriod(input.periodKey, normalized);

@@ -16,6 +16,11 @@ const ownerName=(name?:string)=>names.has(normalize(name));
 export function ownerNameAndPhone(name?:string,phone?:string) {
   return ownerName(name)&&digits(phone)===OWNER_LEGACY_PHONE;
 }
+/** Identidade comercial interna: nome completo/variante conhecida E telefone conferido.
+ * Não usa primeiro nome isolado nem modifica o cadastro persistido. */
+export function isOwnerCustomerForAnalytics(customer?:Customer|null) {
+  return Boolean(customer && (customer.internal_owner_verified === true || ownerNameAndPhone(customer.name, customer.phone)));
+}
 export function verifiedInternalCustomer(customer?:Customer|null) {
   if(!customer)return false;
   if(customer.internal_owner_verified===true)return true;
