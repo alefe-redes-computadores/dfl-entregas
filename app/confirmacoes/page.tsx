@@ -196,9 +196,10 @@ export default function ConfirmacoesPage() {
     () =>
       allIfood.filter((delivery) => {
         const created = deliveryDate(delivery);
-        return Boolean(created) && dateKey(created) === selectedDateKey;
+        return Boolean(created) && dateKey(created) === selectedDateKey &&
+          (!requestedRouteId || delivery.route_id === requestedRouteId);
       }),
-    [allIfood, selectedDateKey],
+    [allIfood, selectedDateKey, requestedRouteId],
   );
 
   const normalizedQueueQuery = useMemo(() => normalize(query.trim()), [query]);
@@ -716,8 +717,8 @@ export default function ConfirmacoesPage() {
               Fila operacional
             </h2>
             <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-400">
-              A central organiza os pedidos que ainda estão abertos no DFL. Abrir o portal não
-              marca uma confirmação externa como concluída.
+              A central organiza os pedidos que ainda estão abertos no DFL. Confirme IDs e códigos durante a rota.
+              Abrir o portal não marca uma confirmação externa como concluída nem dá baixa no DFL.
             </p>
           </div>
         </div>
@@ -779,15 +780,15 @@ export default function ConfirmacoesPage() {
       {requestedRouteId && (
         <div className="rounded-[24px] border border-sky-500/20 bg-sky-500/[.055] p-4">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">
-            Pós-rota
+             Rota selecionada · confirmações
           </p>
           <div className="mt-1 flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-black text-zinc-100">
-                {requestedRouteName || 'Rota finalizada'}
+                {requestedRouteName || 'Rota selecionada'}
               </p>
               <p className="mt-1 text-[11px] text-zinc-500">
-                {pendingManualConfirmations.length} pedido{pendingManualConfirmations.length === 1 ? '' : 's'} aguardando confirmação no iFood
+                {queue.length} pedido{queue.length === 1 ? '' : 's'} operacional{queue.length === 1 ? '' : 'is'} nesta rota · podem ser conferidos durante a entrega
               </p>
             </div>
             <button
@@ -801,6 +802,11 @@ export default function ConfirmacoesPage() {
         </div>
       )}
 
+      {queue.some((item) => item.confirmation.ready) && (
+        <p role="status" className="rounded-xl border border-emerald-500/25 bg-emerald-500/[.06] px-3 py-2 text-[11px] font-semibold text-emerald-200">
+          ID e código disponíveis: você pode abrir o portal iFood agora, sem finalizar a rota. A confirmação externa continua manual.
+        </p>
+      )}
       <div className="relative">
         <Search
           size={16}
@@ -1230,13 +1236,13 @@ export default function ConfirmacoesPage() {
               </div>
 
               <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-                {confirmation.state === 'missing_id' ? (
+                {confirmation.state === 'missing_id' || confirmation.state === 'missing_code' ? (
                   <button
                     onClick={() => router.push(`/entregas/editar?id=${delivery.id}${deliveryDateSuffix}`)}
                     className="flex h-12 items-center justify-center gap-2 rounded-xl bg-amber-500 font-black text-zinc-950 active:scale-95"
                   >
                     <Pencil size={15} />
-                    Completar dados
+                    {confirmation.state === 'missing_code' ? 'Registrar código' : 'Completar dados'}
                   </button>
                 ) : (
                   <button

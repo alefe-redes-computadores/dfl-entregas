@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/integration/server/admin';
 import { isSuperadminUid } from '@/lib/access/roles';
 import { notifyManualRoute } from '@/lib/integration/server/manualMessaging';
+import { notifyManualNextStop } from '@/lib/integration/server/manualNextStop';
 import { reconcileReverseTrackingOutbox } from '@/lib/integration/server/reverseReconciler';
 import { drainReverseIntegrationEventIds } from '@/lib/integration/server/reverseRelay';
 
@@ -124,12 +125,17 @@ export async function POST(req: NextRequest) {
       reconciliation.eventIds,
     );
 
+    // Novo evento é independente, OFF por padrão e não altera ack do relay.
+    const nextStopTask = manualOwner && reason === 'delivery_completed'
+      ? notifyManualNextStop(routeId).catch(()=>({status:'failed' as const,eligible:0,queued:0,duplicates:0,failed:1,reason:'bridge_failed'}))
+      : Promise.resolve({status:'off' as const,eligible:0,queued:0,duplicates:0,failed:0});
     // Manual notifications do not change Site relay acknowledgment semantics.
-    const manualMessaging = await manualMessagingTask;
+    const [manualMessaging,manualNextStop] = await Promise.all([manualMessagingTask,nextStopTask]);
 
     const result = {
       ok: reconciliation.ok && relay.ok,
       manualMessaging,
+      manualNextStop,
       routeId,
       reason,
       reconciliation,

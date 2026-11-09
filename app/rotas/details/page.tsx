@@ -442,17 +442,17 @@ export default function RouteDetailsPage() {
                       type="button"
                       onClick={() => router.push(`/entregas/details?id=${delivery.id}${dateSuffix}`)}
                       className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-2 text-left active:bg-zinc-800/60"
-                      aria-label={`Abrir detalhes de ${delivery.customer_name || `pedido ${delivery.order_id || delivery.id}`}`}
+                      aria-label={`Abrir detalhes de ${delivery.customer_name || `pedido ${delivery.order_id || delivery.ifood_id || delivery.external_order_id || delivery.id}`}`}
                     >
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-semibold text-zinc-200">
-                          {delivery.customer_name || `Pedido ${delivery.order_id || 'sem número'}`}
+                          {delivery.customer_name || `Pedido ${delivery.order_id || delivery.ifood_id || delivery.external_order_id?.slice(-8).toUpperCase() || 'sem referência'}`}
                         </p>
-                        {delivery.order_id && (
-                          <p className="mt-0.5 truncate text-[10px] text-zinc-500">
-                            Pedido {delivery.order_id}
-                          </p>
-                        )}
+                        {(delivery.order_id || delivery.ifood_id || delivery.external_order_id) && (
+                           <p className="mt-0.5 truncate text-[10px] text-zinc-500">
+                             {delivery.source_system === 'dfl_site' ? `Site #${delivery.external_order_id?.slice(-8).toUpperCase() || delivery.order_id}` : delivery.order_id ? `Pedido #${delivery.order_id}${delivery.ifood_id ? ` · ID iFood ${delivery.ifood_id}` : ''}` : delivery.ifood_id ? `ID iFood ${delivery.ifood_id}` : `Ref. #${delivery.external_order_id?.slice(-8).toUpperCase()}`}
+                           </p>
+                         )}
                       </div>
                       {delivery.completed ? (
                         <CheckCircle2 size={15} className="shrink-0 text-emerald-400" />

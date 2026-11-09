@@ -415,6 +415,8 @@ export interface Delivery {
   address_string: string;
   maps_link: string;
   observation?: string;
+  /** Descrição opcional, apenas do pedido manual da loja; não substitui observação ou bebidas. */
+  manual_order_items?: string;
   /** Visitas físicas de retorno confirmadas: independentes do valor do pedido e de tentativas. */
   redelivery_visits?: import('@/lib/delivery-return-visits').DeliveryReturnVisit[];
   /** Registro persistido de tentativa, independente de baixa e confirmação externa. */

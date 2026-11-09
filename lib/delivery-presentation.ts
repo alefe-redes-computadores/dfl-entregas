@@ -9,14 +9,21 @@ export function deliveryChannel(delivery: Pick<Delivery, 'origin' | 'source_syst
   if (delivery.origin === 'ifood' || !delivery.origin) return 'ifood';
   return 'store';
 }
-export function deliveryOrderNumber(delivery: Pick<Delivery, 'source_system' | 'external_order_id' | 'order_id'>) {
+export function deliveryOrderNumber(delivery: Pick<Delivery, 'source_system' | 'external_order_id' | 'order_id' | 'ifood_id'>) {
   const externalId = delivery.external_order_id?.trim() || '';
   if (delivery.source_system === 'dfl_site' && externalId) {
     // O DFL Site usa os 8 últimos caracteres como referência comercial
     // em WhatsApp, histórico e diagnóstico. O UUID completo fica interno.
     return externalId.slice(-8).toUpperCase();
   }
-  return delivery.order_id?.trim() || externalId;
+  return delivery.order_id?.trim() || delivery.ifood_id?.trim() || (externalId ? externalId.slice(-8).toUpperCase() : '');
+}
+export function deliveryReferenceLabel(delivery: Pick<Delivery, 'source_system' | 'origin' | 'order_id' | 'ifood_id' | 'external_order_id'>): string {
+  const value = deliveryOrderNumber(delivery);
+  if (!value) return 'Pedido sem referência comercial';
+  if (delivery.source_system === 'dfl_site') return `Pedido do Site #${value}`;
+  if (!delivery.order_id?.trim() && delivery.ifood_id?.trim()) return `ID iFood ${value}`;
+  return `Pedido #${value}`;
 }
 export function deliveryChannelLabel(delivery: Pick<Delivery, 'origin' | 'source_system'>) { const channel = deliveryChannel(delivery); return channel === 'site' ? 'Pedido do Site' : channel === 'ifood' ? 'Pedido iFood' : channel === 'food99' ? 'Pedido 99Food' : channel === 'keeta' ? 'Pedido Keeta' : 'Pedido da loja'; }
 export function formatBrazilianPhone(value?: string) { let digits = String(value || '').replace(/\D/g, ''); if (digits.startsWith('55') && digits.length > 11) digits = digits.slice(2); if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`; if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`; return value?.trim() || ''; }

@@ -1,11 +1,60 @@
 import type { Customer, CustomerPhone, CustomerAddress } from '@/types';
 import { normalizeBrazilPhone } from '@/lib/phone';
 
+
 const digits = (value?: string) => String(value || '').replace(/\D/g, '');
-const addressKey = (value?: string, neighborhood?: string) =>
-  [value, neighborhood].map(part => String(part || '').normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
-    .replace(/[^a-z0-9]+/g, ' ').trim()).join('|');
+/**
+ * Rua+numero é identidade primária; bairro serve como discriminador quando
+ * ambos cadastros o possuem. CEP, "bairro" duplicado e mapa diferente NÃO
+ * criam três opções iguais na seleção.
+ */
+const canonicalAddress = (value?: string, neighborhood?: string) => {
+  const raw = String(value || '').replace(/\b(?:CEP\s*:?\s*)?\d{5}\s*(?:-|–|—|\s)?\s*\d{3}\b/gi, ' ')
+    .replace(/\s+/g, ' ').replace(/[\s,;–—-]+$/g, '').trim();
+  const pieces = raw.split(/\s+[-–—]\s+/).map(x=>x.trim()).filter(Boolean);
+  const district = String(neighborhood || '').trim() || pieces.slice(1).find(x=>!/^(?:patos de minas|mg|minas gerais)$/i.test(x)) || '';
+  const plain = (s:string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  return {address: district && !plain(raw).includes(plain(district)) ? `${raw} - ${district}` : raw,
+    neighborhood: district || undefined};
+};
+const addressParts = (item: CustomerAddress) => {
+  const canonical = canonicalAddress(item.address, item.neighborhood);
+  const street = canonical.address.split(/\s[-–—]\s/)[0]?.trim() || canonical.address;
+  const key = String(street).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/^(?:r\.?|rua|av\.?|avenida)\s+/i,'')
+    .replace(/[^a-z0-9]+/g,' ').replace(/\b(?:cep|mg|patos de minas)\b/g,' ').replace(/\s+/g,' ').trim();
+  const district = String(item.neighborhood || canonical.neighborhood || '').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return { key, district, canonical };
+};
+const equivalentAddress = (a:CustomerAddress,b:CustomerAddress):boolean => {
+  const left=addressParts(a),right=addressParts(b);
+  return Boolean(left.key && left.key===right.key &&
+    (!left.district || !right.district || left.district===right.district));
+};
+const mergeAddressEntries = (source: CustomerAddress[]): CustomerAddress[] => {
+  const unique: CustomerAddress[]=[];
+  for(const item of source){
+    if(!item.address?.trim())continue;
+    const found=unique.findIndex(existing=>equivalentAddress(existing,item));
+    if(found<0){unique.push({...item});continue;}
+    const existing=unique[found];
+    const preferred=item.primary && !existing.primary ? item : existing;
+    const alternative=preferred===item ? existing : item;
+    const preferredCanonical=canonicalAddress(preferred.address,preferred.neighborhood);
+    const otherCanonical=canonicalAddress(alternative.address,alternative.neighborhood);
+    const neighborhood=preferredCanonical.neighborhood||otherCanonical.neighborhood||preferred.neighborhood||alternative.neighborhood;
+    unique[found]={...preferred,
+      address:canonicalAddress(preferred.address,neighborhood).address,
+      neighborhood,
+      maps_link:preferred.maps_link||alternative.maps_link,
+      primary:Boolean(existing.primary||item.primary),
+      label:preferred.label||alternative.label,
+    };
+  }
+  const primary=unique.find(item=>item.primary)||unique[0];
+  return unique.map(item=>({...item,primary:item.id===primary?.id}));
+};
 
 // Legacy fields are read as a virtual primary, not migrated via writes on mount.
 export function customerPhones(customer: Pick<Customer, 'phone' | 'phones'>): CustomerPhone[] {
@@ -18,12 +67,8 @@ export function customerPhones(customer: Pick<Customer, 'phone' | 'phones'>): Cu
 export function customerAddresses(customer: Pick<Customer, 'address' | 'addresses' | 'neighborhood' | 'maps_link'>): CustomerAddress[] {
   const stored=(customer.addresses||[]).filter(item=>!!item.address.trim());
   const source=stored.length?stored:customer.address?[{id:'legacy-address',address:customer.address,neighborhood:customer.neighborhood,maps_link:customer.maps_link,primary:true,label:'Principal'}]:[];
-  const seen=new Set<string>();
-  const unique = source.filter(item=>{const key=addressKey(item.address,item.neighborhood);if(!item.address.trim()||seen.has(key))return false;seen.add(key);return true;});
-  // A flag principal pode estar no item duplicado removido ou em um item mais adiante.
-  // Recalcular depois da deduplicacao impede lista sem nenhum endereco principal.
-  const selectedPrimary = unique.find(item => item.primary) || unique[0];
-  return unique.map(item => ({...item, primary: item.id === selectedPrimary?.id}));
+  // Não grava nem exclui cadastros na montagem da tela; consolidação de leitura.
+  return mergeAddressEntries(source);
 }
 export function customerPhoneMatches(customer: Customer, query: string) {
   const sought=digits(query);return sought.length>=3&&customerPhones(customer).some(item=>digits(item.number).includes(sought) || `55${digits(item.number)}`.includes(sought));
@@ -38,7 +83,12 @@ export function customerContactPayload(phonesInput: CustomerPhone[], addressesIn
   const phones=phoneRows.filter(item=>{if(uniquePhones.has(item.number))return false;uniquePhones.add(item.number);return true;});
   const addressRows=addressesInput.map((item,index)=>({...item,id:item.id||`addr-${index}`,address:item.address.trim()})).filter(item=>!!item.address);
   const uniqueAddresses=new Set<string>();
-  const addresses=addressRows.filter(item=>{const key=addressKey(item.address,item.neighborhood);if(uniqueAddresses.has(key))return false;uniqueAddresses.add(key);return true;});
+  const addresses=mergeAddressEntries(addressRows).filter(item=>{
+    const parts=addressParts(item);
+    const key=`${parts.key}|${parts.district}`;
+    if(uniqueAddresses.has(key))return false;
+    uniqueAddresses.add(key);return true;
+  });
   const phonePrimary=phones.find(item=>item.primary)||phones[0];
   const addressPrimary=addresses.find(item=>item.primary)||addresses[0];
   // Campos legados refletem SOMENTE o endereco principal, mas os demais ficam

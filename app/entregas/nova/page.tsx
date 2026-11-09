@@ -164,6 +164,7 @@ const [routeId, setRouteId] = useState('');
 
   const [streetAddress, setStreetAddress] = useState('');
   const [mapsLink, setMapsLink] = useState('');
+  const [selectedAddressNeighborhood, setSelectedAddressNeighborhood] = useState('');
 
   const [value, setValue] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<Delivery['payment_method']>('dinheiro');
@@ -179,6 +180,7 @@ const [routeId, setRouteId] = useState('');
   const [fulfillmentOptionsOpen, setFulfillmentOptionsOpen] = useState(false);
   const [isUrgent, setIsUrgent] = useState(false);
   const [drinks, setDrinks] = useState('');
+  const [manualOrderItems, setManualOrderItems] = useState('');
   const [observation, setObservation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [slowDeliveryConfirmation, setSlowDeliveryConfirmation] = useState(false);
@@ -215,7 +217,7 @@ const [routeId, setRouteId] = useState('');
   const setActiveConfirmationCode = (next: string) => activeExtra ? updateActiveExtra({confirmationCode:next}) : setConfirmationCode(next);
   const setActiveCustomerName = (next: string) => activeExtra ? updateActiveExtra({customerName:next}) : setCustomerName(next);
   const setActivePhone = (next: string) => activeExtra ? updateActiveExtra({phone:next}) : setPhone(next);
-  const setActiveAddress = (next: string) => activeExtra ? updateActiveExtra({address:next}) : setStreetAddress(next);
+  const setActiveAddress = (next: string) => {setSelectedAddressNeighborhood('');return activeExtra ? updateActiveExtra({address:next}) : setStreetAddress(next);};
   const setActiveMapsLink = (next: string) => activeExtra ? updateActiveExtra({mapsLink:next}) : setMapsLink(next);
   const setActiveValue = (next: string) => activeExtra ? updateActiveExtra({customerCharge:next}) : setValue(next);
   const setActiveSubsidy = (next: string) => activeExtra ? updateActiveExtra({subsidy:next}) : setIfoodSubsidy(next);
@@ -594,7 +596,7 @@ const [routeId, setRouteId] = useState('');
     deliveryConfirmationTimer.current = setTimeout(() => setSlowDeliveryConfirmation(true), 1400);
     const r227SubmitStartedAt = Date.now();
     try{
-      const normalizedAddress=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(streetAddress):{address:'',neighborhood:undefined,phone:undefined,observations:[] as string[]};
+      const normalizedAddress=fulfillmentMode==='delivery'?(selectedAddressNeighborhood ? canonicalizeOperationalAddress(streetAddress,selectedAddressNeighborhood) : canonicalizeOperationalAddress(streetAddress)):{address:'',neighborhood:undefined,phone:undefined,observations:[] as string[]};
       const cleanStreet=fulfillmentMode==='delivery'?normalizedAddress.address:'';
       const addressQuality=fulfillmentMode==='delivery'
         ? auditOperationalAddress(streetAddress,{
@@ -652,8 +654,11 @@ const [routeId, setRouteId] = useState('');
       }else{
         const customerAddress=fulfillmentMode==='delivery'?cleanStreet:streetAddress.trim();
         let customerId='';if(customerName.trim()){const r228r3CustomerAt=Date.now();try {customerId=await findOrCreateCustomer(customerName,{address:customerAddress||undefined,phone:rawPhone||undefined,mapsLink:mapsLink.trim()||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'confirmed');}catch(customerError){recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'failed');throw customerError;}}
-        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='keeta'?'keeta':origin==='food99'?'food99':'customer',stop_group_id:stopGroupId,origin,order_id:(origin==='food99'||origin==='keeta')?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery',observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}toast.success(origin==='keeta'?`Pedido Keeta cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:origin==='food99'?`Pedido 99Food cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='keeta'?'keeta':origin==='food99'?'food99':'customer',stop_group_id:stopGroupId,origin,order_id:(origin==='food99'||origin==='keeta')?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_order_items:origin==='loja'?(manualOrderItems.trim().slice(0,180)||undefined):undefined,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery' || (notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'pickup'),observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}toast.success(origin==='keeta'?`Pedido Keeta cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:origin==='food99'?`Pedido 99Food cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
         // MSG-M1: o pedido foi confirmado antes de chamar a ponte. Nunca desfazer a venda por falha de WhatsApp.
+        if (origin === 'loja' && notifyWhatsapp && fulfillmentMode === 'pickup') {
+          toast.info('Retirada cadastrada. Aviso automático de retirada ainda aguarda homologação com o Site.');
+        }
         if (origin === 'loja' && notifyWhatsapp && fulfillmentMode === 'delivery') {
           // Never delay the confirmed order while waiting on WhatsApp.
           void kickManualCreated(manualDeliveryId).then(messaging => {
@@ -1182,6 +1187,7 @@ const [routeId, setRouteId] = useState('');
           <AddressAutocomplete
             value={activeAddress}
             onChange={setActiveAddress}
+            onNeighborhoodResolved={setSelectedAddressNeighborhood}
             onMapsLinkDetected={setActiveMapsLink}
             placeholder="Ex: Rua Zeca Mota, 123 — Alvorada"
             label="Endereço da Entrega*"
@@ -1225,8 +1231,8 @@ const [routeId, setRouteId] = useState('');
               className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
             />
           </div>
-          <LocationEvidencePreview address={activeAddress} mapsLink={activeMapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':origin==='keeta'?'Keeta':'Loja'}/>
-          <NavigationLinkAssistance address={activeAddress} mapsLink={activeMapsLink} />
+          <details className="rounded-xl border border-zinc-800/70 bg-zinc-950/45 p-3"><summary className="cursor-pointer text-xs font-bold text-sky-300">Conferir ponto no mapa e navegação (opcional)</summary><div className="mt-3 space-y-3"><LocationEvidencePreview address={activeAddress} mapsLink={activeMapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':origin==='keeta'?'Keeta':'Loja'}/>
+          <NavigationLinkAssistance address={activeAddress} mapsLink={activeMapsLink} /></div></details>
         </section>
 
           </>
@@ -1370,6 +1376,7 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}
 
+          {origin === 'loja' && <label className="flex flex-col gap-1.5"><span className="text-xs font-semibold text-zinc-400">O que é o pedido? (opcional)</span><input type="text" maxLength={180} value={manualOrderItems} onChange={e=>setManualOrderItems(e.target.value)} placeholder="Ex.: 2 Armaria e 1 Fanta 1 L" className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-500"/><span className="text-[10px] text-zinc-500">Aparece na conferência interna. Mensagens externas dependem do template homologado.</span></label>}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-400">Observação / Portão / Complemento</label>
             <input type="text" placeholder="Ex: Ap. 11B, Portão preto..." value={activeObservation} onChange={(e) => setActiveObservation(e.target.value)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />

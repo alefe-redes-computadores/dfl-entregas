@@ -27,6 +27,8 @@ import {
 interface AddressAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
+  /** Bairro da sugestão selecionada; conservado no pedido ao salvar. */
+  onNeighborhoodResolved?: (neighborhood: string) => void;
   placeholder?: string;
   label?: string;
   onMapsLinkDetected?: (url: string) => void;
@@ -47,6 +49,7 @@ const normalizeInput = (raw: string) =>
 export function AddressAutocomplete({
   value,
   onChange,
+  onNeighborhoodResolved,
   placeholder = 'Ex: Major Gote, 123',
   label = 'Rua e Número*',
   onMapsLinkDetected,
@@ -154,17 +157,20 @@ export function AddressAutocomplete({
   const selectSuggestion = async (
     suggestion: AddressSuggestion,
   ) => {
+    const selectedRequest = ++requestId.current;
     setIsResolving(true);
 
     try {
       const resolved =
         await resolveAddressSuggestion(suggestion);
 
+      if (selectedRequest !== requestId.current) return; // Digitação posterior nunca é sobrescrita pela API.
       const nextAddress =
         resolved.address || resolved.formattedAddress;
 
       selectedValue.current = nextAddress;
       onChange(nextAddress);
+      onNeighborhoodResolved?.(resolved.neighborhood || '');
 
       if (resolved.mapsLink && onMapsLinkDetected) {
         onMapsLinkDetected(resolved.mapsLink);
@@ -193,11 +199,12 @@ export function AddressAutocomplete({
           : 'Não foi possível usar esta sugestão.',
       );
     } finally {
-      setIsResolving(false);
+      if (selectedRequest === requestId.current) setIsResolving(false);
     }
   };
 
   const clear = () => {
+    requestId.current += 1;
     selectedValue.current = '';
     setSuggestions([]);
     cancelAddressAutocompleteSession();
@@ -252,6 +259,7 @@ export function AddressAutocomplete({
             window.setTimeout(() => setIsFocused(false), 180);
           }}
           onChange={(event) => {
+            requestId.current += 1;
             selectedValue.current = '';
             onChange(event.target.value);
           }}

@@ -260,6 +260,13 @@ export function canonicalizeOperationalAddress(
     }
   }
 
+  const selectedBrasilNeighborhood = normalizeToken(fallback) === 'brasil' ||
+    (/(?:^|\s+-\s+)(?:bairro\s+)?brasil\s*(?:$|,)/i.test(original) &&
+      !/\bpatos de minas\b/i.test(original));
+  if (selectedBrasilNeighborhood) {
+    neighborhood = 'Brasil';
+    if (!/\s+-\s+brasil$/i.test(address)) address = address ? `${address} - Brasil` : 'Brasil';
+  }
   return {
     address: compactWhitespace(address),
     neighborhood: neighborhood || undefined,

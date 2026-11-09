@@ -21,6 +21,7 @@ import { AddressAutocomplete } from '@/components/deliveries/AddressAutocomplete
 import { LocationEvidencePreview } from '@/components/deliveries/LocationEvidencePreview';
 import { extractCoordinatesFromUrl } from '@/lib/maps';
 import { normalizeAddressText } from '@/lib/maps';
+import { canonicalizeOperationalAddress } from '@/lib/operational-address';
 import { parseMarketplaceText } from '@/lib/operation/marketplace-text-parser';
 import { normalizeBeverageList } from '@/lib/operation/beverage-normalization';
 import { isKeetaCommercialId } from '@/lib/keeta-order';
@@ -83,6 +84,7 @@ const [routeId, setRouteId] = useState('');
   // Bloco 3: Endereço e Satélite
   const [streetAddress, setStreetAddress] = useState('');
   const [mapsLink, setMapsLink] = useState('');
+  const [selectedAddressNeighborhood, setSelectedAddressNeighborhood] = useState('');
 
   // Bloco 4: Financeiro e Carga
   const [value, setValue] = useState('');
@@ -104,6 +106,7 @@ const [routeId, setRouteId] = useState('');
   const [isUrgent, setIsUrgent] = useState(false);
   const [excludeFromReports, setExcludeFromReports] = useState(false);
   const [drinks, setDrinks] = useState('');
+  const [manualOrderItems, setManualOrderItems] = useState('');
   const [observation, setObservation] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
@@ -524,6 +527,7 @@ const [routeId, setRouteId] = useState('');
       setChangeFor(delivery.change_for ? delivery.change_for.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
       setDrinks(delivery.drinks || '');
       setObservation(delivery.observation || '');
+      setManualOrderItems(delivery.manual_order_items || '');
       setConfirmationCode(delivery.confirmation_code || '');
       setNotifyWhatsapp(delivery.notify_whatsapp || false);
 
@@ -623,7 +627,7 @@ const [routeId, setRouteId] = useState('');
       const cleanValue = Math.max(0, customerCharge) + Math.max(0, subsidy);
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
       const cleanStreet = fulfillmentMode === 'delivery' ? normalizeAddressText(streetAddress) : '';
-      const customerAddress = fulfillmentMode === 'delivery' ? cleanStreet : streetAddress.trim();
+      const customerAddress = fulfillmentMode === 'delivery' ? canonicalizeOperationalAddress(cleanStreet,selectedAddressNeighborhood).address : streetAddress.trim();
       const rawPhone = normalizeBrazilPhone(phone);
 
       let resolvedMapsLink = mapsLink.trim();
@@ -683,8 +687,9 @@ const [routeId, setRouteId] = useState('');
         address_string: customerAddress,
         maps_link: mapsLink.trim() || resolvedMapsLink,
         phone: rawPhone || undefined,
-        notify_whatsapp: notifyWhatsapp,
-        observation,
+         notify_whatsapp: notifyWhatsapp,
+         manual_order_items: origin === 'loja' ? (manualOrderItems.trim().slice(0,180) || undefined) : currentDelivery?.manual_order_items,
+         observation,
         drinks: drinks.trim(),
         ...(drinks.trim() !== (currentDelivery?.drinks || '').trim()
           ? {
@@ -1147,7 +1152,8 @@ const [routeId, setRouteId] = useState('');
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">06 · Destino</p><p className="mt-1 text-sm font-black text-zinc-200">Endereço da entrega</p></div>
           <AddressAutocomplete
             value={streetAddress}
-            onChange={(next) => { setStreetAddress(next); if (formIssue?.field === 'address') setFormIssue(null); }}
+            onChange={(next) => { setStreetAddress(next); setSelectedAddressNeighborhood(''); if (formIssue?.field === 'address') setFormIssue(null); }}
+            onNeighborhoodResolved={setSelectedAddressNeighborhood}
             placeholder="Ex: Rua Major Gote, 100, Bairro"
             label="Endereço da Entrega*"
           />
@@ -1189,8 +1195,8 @@ const [routeId, setRouteId] = useState('');
               className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
             />
           </div>
-          <LocationEvidencePreview address={streetAddress} mapsLink={mapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':origin==='keeta'?'Keeta':'Loja'}/>
-          <NavigationLinkAssistance address={streetAddress} mapsLink={mapsLink} />
+          <details className="rounded-xl border border-zinc-800/70 bg-zinc-950/45 p-3"><summary className="cursor-pointer text-xs font-bold text-sky-300">Mapa e navegação (opcional)</summary><div className="mt-3 space-y-3"><LocationEvidencePreview address={streetAddress} mapsLink={mapsLink} sourceLabel={origin==='ifood'?'iFood':origin==='food99'?'99Food':origin==='keeta'?'Keeta':'Loja'}/>
+          <NavigationLinkAssistance address={streetAddress} mapsLink={mapsLink} /></div></details>
         </section>
 
           </>
@@ -1363,6 +1369,7 @@ const [routeId, setRouteId] = useState('');
             </div>
           )}
 
+           {origin === 'loja' && <label className="flex flex-col gap-1.5"><span className="text-xs font-semibold text-zinc-400">O que é o pedido? (opcional)</span><input type="text" maxLength={180} value={manualOrderItems} onChange={e=>setManualOrderItems(e.target.value)} placeholder="Ex.: 2 Armaria e 1 Fanta 1 L" className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-500"/></label>}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-400">Observação / Portão / Complemento</label>
             <input type="text" placeholder="Ex: Ap. 11B, Portão preto..." value={observation} onChange={(e) => setObservation(e.target.value)} className="h-12 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none" />

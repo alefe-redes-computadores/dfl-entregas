@@ -218,10 +218,12 @@ export function OperationalCommandCenter({
       key: 'ifood-code',
       label: 'Códigos iFood da rota',
       description:
-        `${routeCodes.collected} de ${routeCodes.active} coletados · falta registrar durante a rota`,
+        `${routeCodes.collected} de ${routeCodes.active} coletados · conferir agora na Central, mesmo com a rota em andamento`,
       count: routeCodes.missing,
       badge: `${routeCodes.collected}/${routeCodes.active}`,
-      href: deliveryActionHref(firstMissingIfoodCode),
+       href: firstMissingIfoodCode?.route_id
+         ? `/confirmacoes?route=${encodeURIComponent(firstMissingIfoodCode.route_id)}&routeName=${encodeURIComponent(routes.find(r=>r.id===firstMissingIfoodCode.route_id)?.name || 'Rota em andamento')}`
+         : deliveryActionHref(firstMissingIfoodCode),
       icon: ShieldAlert,
       tone: 'sky',
       priority: 80,

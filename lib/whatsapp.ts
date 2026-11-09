@@ -197,6 +197,7 @@ export async function copyDeliveryToClipboard(
 
     const individualAddress = routeAddressParts(delivery.address_string);
     parts.push(`📍 *Destino:* ${individualAddress.streetWithNumber} · *${individualAddress.neighborhood}*`);
+    if (delivery.manual_order_items && delivery.origin === 'loja') parts.push(`🛍️ *Pedido:* ${delivery.manual_order_items}`);
     if (delivery.observation) parts.push(/\b(?:urgente|cuidado|aten[cç][aã]o|perigo|endere[cç]o incompleto)\b/i.test(delivery.observation) ? `⚠️ *ATENÇÃO:* ${delivery.observation}` : `📝 *Referência:* ${delivery.observation}`);
 
     if (clientPhone) {
@@ -531,6 +532,7 @@ export async function generateRouteMessages(
         const paymentAction = ` · ${paymentText}`;
         msg1.push(`• ${customerText}${reference}${codeText}${paymentAction}`);
 
+        if (item.manual_order_items?.trim() && item.origin === 'loja') msg1.push(`   🛍️ *Pedido:* ${item.manual_order_items.trim()}`);
         if (item.drinks?.trim()) parseDrinkItems(item.drinks.trim()).forEach(({ qty, name }) => { const key=name.toLowerCase(); if(!drinksSummary[key]) drinksSummary[key]={qty:0,name}; drinksSummary[key].qty+=qty; });
       });
 

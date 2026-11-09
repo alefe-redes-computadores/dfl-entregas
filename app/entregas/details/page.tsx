@@ -46,6 +46,7 @@ import {
   deliveryChannel,
   deliveryChannelLabel,
   deliveryOrderNumber,
+  deliveryReferenceLabel,
   formatBrazilianPhone,
   operationalAddressLabel,
   operationalMapsUrl,
@@ -53,6 +54,7 @@ import {
 } from '@/lib/delivery-presentation';
 import { siteIntegrationStages } from '@/lib/site-integration-health';
 import { canMarkSitePickupReady, isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { canMarkManualPickupReady } from '@/lib/integration/site-order';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 
@@ -149,6 +151,7 @@ function DeliveryDetailsContent() {
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const channel = deliveryChannel(delivery);
   const visibleOrderNumber = deliveryOrderNumber(delivery);
+  const visibleOrderReference = deliveryReferenceLabel(delivery);
   // O último código do cliente é histórico: nunca preenchê-lo em outra entrega.
   const savedConfirmationCode = orderConfirmationCode(delivery.confirmation_code);
   const normalizedIfoodId = (delivery.ifood_id || '').replace(/\D/g, '').slice(0, 8);
@@ -251,11 +254,13 @@ function DeliveryDetailsContent() {
   };
 
   const markPickupReady = async () => {
-    if (!canMarkSitePickupReady(delivery) || isMarkingReady) return;
+    if (delivery.source_system === 'dfl_site') {
+      if (!canMarkSitePickupReady(delivery) || isMarkingReady) return;
+    } else if (!canMarkManualPickupReady(delivery) || isMarkingReady) return;
     setIsMarkingReady(true);
     try {
       await updateDelivery(delivery.id, { pickup_ready_at: new Date().toISOString() });
-      toast.success('Prontidão registrada. O aviso ao cliente depende da sincronização com o Site.');
+      toast.success(canMarkManualPickupReady(delivery) ? 'Prontidão manual salva. Aviso WhatsApp depende de homologação específica de retirada.' : 'Prontidão registrada. O aviso ao cliente depende da sincronização com o Site.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Falha ao registrar prontidão.');
     } finally { setIsMarkingReady(false); }
@@ -448,7 +453,7 @@ function DeliveryDetailsContent() {
                 {deliveryChannelLabel(delivery)}
               </p>
               <p className="mt-0.5 truncate text-lg font-black text-zinc-100">
-                {visibleOrderNumber ? `#${visibleOrderNumber}` : 'Sem número informado'}
+                {visibleOrderNumber ? visibleOrderReference : 'Referência comercial não informada'}
               </p>
             </div>
           </div>
@@ -543,6 +548,9 @@ function DeliveryDetailsContent() {
           />
         )}
 
+        {delivery.manual_order_items && delivery.origin === 'loja' && (
+          <InfoRow icon={ShoppingBag} label="Itens deste pedido" value={delivery.manual_order_items} />
+        )}
         {delivery.drinks && (
           <InfoRow icon={CupSoda} label="Bebidas" value={delivery.drinks} />
         )}
@@ -663,6 +671,14 @@ function DeliveryDetailsContent() {
             <ShoppingBag size={19} />
             {isMarkingReady ? 'Registrando prontidão...' : delivery.pickup_ready_at ? 'Prontidão registrada' : 'Pronto para retirada'}
           </button>
+        )}
+        {delivery.source_system !== 'dfl_site' && canMarkManualPickupReady(delivery) && mode === 'pickup' && !cancelled && (
+          <button type="button" onClick={markPickupReady} disabled={isMarkingReady} className="mb-3 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-400/35 bg-emerald-400/10 px-4 font-black text-emerald-200 disabled:opacity-50">
+            <ShoppingBag size={19}/>{isMarkingReady?'Registrando prontidão...':'Pronto para retirada · pedido manual'}
+          </button>
+        )}
+        {delivery.source_system !== 'dfl_site' && mode === 'pickup' && Boolean(delivery.pickup_ready_at) && !delivery.completed && (
+          <p role="status" className="mb-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[.06] p-3 text-xs font-bold text-emerald-300">Retirada pronta, aguardando o cliente. Aviso WhatsApp depende de homologação.</p>
         )}
         <button
           onClick={handleCompletionAction}

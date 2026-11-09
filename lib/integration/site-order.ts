@@ -474,6 +474,14 @@ export function canMarkSitePickupReady(delivery: Pick<Delivery, 'source_system' 
     !Boolean(delivery.pickup_ready_at);
 }
 
+/** Prontidão LOCAL de retirada da loja. Não cria evento do Site nem envia WhatsApp. */
+export function canMarkManualPickupReady(delivery: Pick<Delivery, 'source_system' | 'origin' | 'fulfillment_mode' | 'completed' | 'pickup_ready_at'>): boolean {
+  return delivery.source_system !== 'dfl_site' &&
+    delivery.origin === 'loja' &&
+    delivery.fulfillment_mode === 'pickup' &&
+    delivery.completed !== true && !Boolean(delivery.pickup_ready_at);
+}
+
 /** Cancelamento comercial nao equivale a entrega concluida. */
 export function isCancelledSiteDelivery(delivery: Pick<Delivery, 'source_system' | 'site_order_status'>): boolean {
   return delivery.source_system === 'dfl_site' &&
