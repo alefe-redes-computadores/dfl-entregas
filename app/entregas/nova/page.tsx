@@ -680,7 +680,22 @@ const [routeId, setRouteId] = useState('');
       }
       recordActionLatency('delivery_form', Date.now() - r227SubmitStartedAt, 'confirmed', origin === 'ifood' ? drafts.length : 1);
       router.replace(safeReturnTo||deliveriesReturn);
-    }catch(error){recordActionLatency('delivery_form', Date.now() - r227SubmitStartedAt, 'failed', origin === 'ifood' ? drafts.length : 1);console.error('Erro ao cadastrar entrega:',error);toast.error('Não foi possível cadastrar a entrega.',{description:'Confira os dados e sua conexão e tente novamente.'})}finally{if(deliveryConfirmationTimer.current)clearTimeout(deliveryConfirmationTimer.current);deliveryConfirmationTimer.current=null;setSlowDeliveryConfirmation(false);submitFlight.current=false;setIsSaving(false)}
+    }catch(error){
+      recordActionLatency('delivery_form', Date.now() - r227SubmitStartedAt, 'failed', origin === 'ifood' ? drafts.length : 1);
+      console.error('Erro ao cadastrar entrega:',error);
+      const code = typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as {code?: unknown}).code || '') : '';
+      const explanation = code === 'permission-denied' || code === 'firestore/permission-denied'
+        ? 'O Firestore recusou a gravação por permissão. Verifique a sessão e as regras de acesso.'
+        : code === 'unavailable' || code === 'firestore/unavailable'
+        ? 'O Firestore está indisponível. Confira a conexão antes de tentar novamente.'
+        : code === 'deadline-exceeded' || code === 'firestore/deadline-exceeded'
+        ? 'A confirmação demorou demais. Confira a lista antes de tentar novamente.'
+        : code === 'unauthenticated' || code === 'firestore/unauthenticated'
+        ? 'Sua sessão expirou. Entre novamente e confira a lista de pedidos.'
+        : 'Não houve confirmação de gravação. Confira a lista antes de tentar novamente.';
+      toast.error('Não foi possível cadastrar a entrega.',{description:explanation});
+    }finally{if(deliveryConfirmationTimer.current)clearTimeout(deliveryConfirmationTimer.current);deliveryConfirmationTimer.current=null;setSlowDeliveryConfirmation(false);submitFlight.current=false;setIsSaving(false)}
   };
 
   return (

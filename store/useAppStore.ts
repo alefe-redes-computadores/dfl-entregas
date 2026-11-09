@@ -3921,12 +3921,11 @@ export const useAppStore = create<AppState>()(
             updatedFields.neighborhood = derivedNeighborhood;
           }
 
-          if (details?.origin && details.origin !== customer.origin) {
-            updatedFields.origin = details.origin;
-          }
+          // R304: reutilizar cliente em outra origem nao altera sua origem
+          // historica nem exige escrita remota apenas para trocar etiqueta.
 
-          if (!customer.phone && details?.phone?.trim()) {
-            updatedFields.phone = details.phone.trim();
+          if (!customer.phone && normalizedPhone.length >= 10) {
+            updatedFields.phone = normalizedPhone;
           }
 
           // Se o cliente já estava correto, eliminar o round-trip Firestore inteiro.
@@ -4025,8 +4024,7 @@ export const useAppStore = create<AppState>()(
             undefined,
 
           phone:
-            details?.phone?.trim() ||
-            undefined,
+            normalizedPhone.length >= 10 ? normalizedPhone : undefined,
 
           createdAt: now,
           updated_at: now,

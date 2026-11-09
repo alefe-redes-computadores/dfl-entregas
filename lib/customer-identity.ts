@@ -343,11 +343,13 @@ export function customerIdentityEvidence(
    * enriquecer um cadastro antigo incompleto sem criar um "Nome (2)".
    */
   // Autoridade de cadastro: nome e endereco completos. Telefone nunca e identidade suficiente.
+  // R304: retirada sem endereco nao pode gerar "Nome (2)" quando
+  // nome exato + telefone validado coincidem. Nunca ignorar conflitos.
+  const pickupPhoneIdentity = exactName && samePhone &&
+    !wantedAddress && !addressConflict && !phoneConflict;
   const reusable =
-    exactName &&
-    sameAddress &&
-    !addressConflict &&
-    !phoneConflict;
+    (exactName && sameAddress && !addressConflict && !phoneConflict) ||
+    pickupPhoneIdentity;
 
   return {
     score: Math.max(0, Math.min(100, score)),
