@@ -52,7 +52,16 @@ export async function notifyManualNextStop(routeId:string):Promise<Outcome> {
   const deliveries = deliverySnap.docs.map(doc => ({...doc.data(),id:doc.id} as Delivery));
   const plan = planManualNextStopTransition({route,deliveries,now:Date.now()});
   if (!plan) return {status:'skipped',reason:'no_recent_physical_transition',...empty};
-  const eligible = plan.nextDeliveries.filter(d => authorizedCandidate(d,pilot));
+  // R302: uma notificação por destinatário e TRANSIÇÃO física, não por pedido.
+  // Duas comandas na mesma parada não podem produzir dois WhatsApps.
+  const candidateByPhone = new Map<string, Delivery>();
+  const consented = plan.nextDeliveries.filter(d => authorizedCandidate(d,pilot))
+    .slice().sort((a,b) => a.id.localeCompare(b.id));
+  for (const delivery of consented) {
+    const phone = normalizeManualMessagePhone(delivery.phone);
+    if (phone && !candidateByPhone.has(phone)) candidateByPhone.set(phone,delivery);
+  }
+  const eligible = [...candidateByPhone.values()];
   if (!eligible.length) return {status:'skipped',reason:'no_consented_canary_customer',...empty};
   const previousId = sha(`${routeId}:${plan.previousGroupKey}`).slice(0,40);
   const nextId = sha(`${routeId}:${plan.nextGroupKey}`).slice(0,40);
@@ -63,7 +72,10 @@ export async function notifyManualNextStop(routeId:string):Promise<Outcome> {
   let queued=0,duplicates=0,failed=0;
   for (const delivery of eligible) {
     const id = `manual-msg-v2__delivery.next_stop__${delivery.id}__${transitionKey}`;
-    const ledgerRef = adminDb.collection('manual_next_stop_transitions_v2').doc(sha(id));
+    // Identidade da reserva permanece a mesma se uma comanda do próximo
+    // grupo for baixada e outra continuar pendente. Sem segundo aviso.
+    const recipientLedgerKey = sha(`${routeId}:${transitionKey}:${normalizeManualMessagePhone(delivery.phone)}`);
+    const ledgerRef = adminDb.collection('manual_next_stop_transitions_v2').doc(recipientLedgerKey);
     const payload = {
       delivery_id:delivery.id,fulfillment_mode:'delivery',manual_messaging_opt_in_v1:true,
       notify_whatsapp:true,route_id:routeId,route_started:true,route_closed:false,
