@@ -157,7 +157,15 @@ const [routeId, setRouteId] = useState('');
   const [selectedCustomerLabel, setSelectedCustomerLabel] = useState('');
   const [sameStopIdentityMode, setSameStopIdentityMode] = useState<'new' | 'same'>('new');
   const [phone, setPhone] = useState('');
-  const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
+  // R307: preferência visível ligada em pedidos da Loja, mas a preferência NÃO é consentimento.
+  // A autorização é declarada separadamente para este destinatário e este pedido.
+  const [notifyWhatsappPreference, setNotifyWhatsappPreference] = useState(true);
+  const [confirmedWhatsappRecipient, setConfirmedWhatsappRecipient] = useState('');
+  const consentPhone = normalizeBrazilPhone(phone);
+  const consentRecipientKey = `${consentPhone}|${customerName.trim().toLocaleLowerCase('pt-BR')}`;
+  const notifyWhatsapp = origin === 'loja' && notifyWhatsappPreference && consentPhone.length >= 10 &&
+    confirmedWhatsappRecipient === consentRecipientKey;
+  useEffect(() => { setConfirmedWhatsappRecipient(''); }, [origin]);
   const [excludeCustomerMetrics, setExcludeCustomerMetrics] = useState(false);
   const [excludeFromReports, setExcludeFromReports] = useState(false);
   const [ownerOrderContext, setOwnerOrderContext] = useState<OwnerOrderContext | ''>('');
@@ -210,7 +218,7 @@ const [routeId, setRouteId] = useState('');
   const activeChangeFor = activeExtra?.changeFor ?? changeFor;
   const activeDrinks = activeExtra?.drinks ?? drinks;
   const activeObservation = activeExtra?.observation ?? observation;
-  const activeNotifyWhatsapp = activeExtra?.notifyWhatsapp ?? notifyWhatsapp;
+  const activeNotifyWhatsapp = origin === 'loja' && (activeExtra?.notifyWhatsapp ?? notifyWhatsappPreference);
   useEffect(() => { if (formIssue?.field === 'address' && activeAddress.trim()) setFormIssue(null); }, [activeAddress, formIssue]);
   const setActiveOrderId = (next: string) => activeExtra ? updateActiveExtra({orderId:next}) : setOrderId(next);
   const setActiveIfoodId = (next: string) => activeExtra ? updateActiveExtra({ifoodId:next}) : setIfoodId(next);
@@ -226,7 +234,11 @@ const [routeId, setRouteId] = useState('');
   const setActiveChangeFor = (next: string) => activeExtra ? updateActiveExtra({changeFor:next}) : setChangeFor(next);
   const setActiveDrinks = (next: string) => activeExtra ? updateActiveExtra({drinks:next}) : setDrinks(next);
   const setActiveObservation = (next: string) => activeExtra ? updateActiveExtra({observation:next}) : setObservation(next);
-  const setActiveNotifyWhatsapp = (next: boolean) => activeExtra ? updateActiveExtra({notifyWhatsapp:next}) : setNotifyWhatsapp(next);
+  const setActiveNotifyWhatsapp = (next: boolean) => {
+    if (activeExtra) updateActiveExtra({notifyWhatsapp: next});
+    else setNotifyWhatsappPreference(next);
+    if (!next) setConfirmedWhatsappRecipient('');
+  };
   const ownerIdentityDetected = useMemo(() => hasOwnerIdentity({name: activeCustomerName, phone: activePhone}), [activeCustomerName, activePhone]);
   const ownerIdentityAmongDrafts = useMemo(() => ownerIdentityDetected || hasOwnerIdentity({name: customerName, phone}) || extraIfoodOrders.some((draft) => hasOwnerIdentity({name: draft.customerName, phone: draft.phone})), [ownerIdentityDetected, customerName, phone, extraIfoodOrders]);
 
@@ -1192,7 +1204,8 @@ const [routeId, setRouteId] = useState('');
                 className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
               />
             </div>
-            <button
+            {origin === 'loja' && <button
+              aria-pressed={activeNotifyWhatsapp}
               type="button"
               onClick={(e) => {
                 e.preventDefault();
@@ -1206,9 +1219,21 @@ const [routeId, setRouteId] = useState('');
               }`}
             >
               <MessageCircle size={15} /> Avisar no Zap
-            </button>
+            </button>}
           </div>
-          <p className="text-[10px] leading-relaxed text-zinc-500">Informar o número não envia mensagem. Ative “Avisar no Zap” apenas com autorização do cliente; o automático depende da integração certificada.</p>
+          {origin === 'loja' && activeNotifyWhatsapp && (
+            <label className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[.06] px-3 py-3 text-[11px] leading-relaxed text-zinc-200">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500"
+                disabled={!consentPhone || !customerName.trim()}
+                checked={notifyWhatsapp}
+                onChange={(event) => setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey : '')}
+              />
+              <span>Confirmo que este cliente autorizou avisos sobre este pedido no WhatsApp. Sem confirmar, o pedido será salvo sem mensagens.</span>
+            </label>
+          )}
+          <p className="text-[10px] leading-relaxed text-zinc-500">A preferência vem marcada em pedidos da Loja, mas informar o número ou deixar a preferência ligada não autoriza envios. Confirme acima a autorização do cliente. Marketplaces seguem seus próprios avisos.</p>
         </section>
 
         {fulfillmentMode === 'delivery' && (
