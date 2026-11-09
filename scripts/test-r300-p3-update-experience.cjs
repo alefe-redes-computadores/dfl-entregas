@@ -1,0 +1,38 @@
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict'),vm=require('node:vm'),ts=require('typescript');
+const read=p=>fs.readFileSync(p,'utf8');let checks=0;
+const ok=(value,message)=>{assert.ok(value,`R300 P3 ATUALIZACOES: ${message}`);checks++};
+const files=['app/mais/atualizacoes/page.tsx','app/api/system/release/route.ts','app/loading.tsx','lib/operation/release-policy.ts','components/auth/AuthGuard.tsx','app/mais/page.tsx','components/pwa/PwaRuntime.tsx'];
+for(const file of files){
+ const ast=ts.createSourceFile(file,read(file),ts.ScriptTarget.Latest,true,file.endsWith('.tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);
+ ok(ast.parseDiagnostics.length===0,`AST íntegra: ${file}`);
+}
+const mod={exports:{}};
+vm.runInNewContext(ts.transpileModule(read('lib/operation/release-policy.ts'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:mod,exports:mod.exports}, {filename:'release-policy',timeout:1600});
+const policy=mod.exports;
+const a='a'.repeat(40), b='b'.repeat(40);
+ok(policy.compareReleaseRevisions(a,a)==='same','mesmo commit é a mesma revisão');
+ok(policy.compareReleaseRevisions(a,b)==='different','commits diferentes geram atualização web');
+ok(policy.compareReleaseRevisions('unknown',b)==='unknown','revisão local desconhecida não inventa update');
+ok(policy.compareReleaseRevisions(a,null)==='unknown','servidor sem revisão não inventa update');
+ok(policy.shortReleaseRevision(a)==='aaaaaaaa','versão abreviada usa hash real');
+const page=read('app/mais/atualizacoes/page.tsx');
+ok(page.includes('Capacitor.isNativePlatform()')&&page.includes('App.getInfo()'),'APK consulta versão instalada real');
+ok(page.includes("navigator.serviceWorker.getRegistration('/')")&&page.includes('registration.update()'),'PWA consulta SW existente; sem segundo registro');
+ok(page.includes('mayApplyPwaUpdate({')&&page.includes('readWriteJournal(owner)')&&page.includes('unverifiedWrites: journal.unverified'),'gravação incerta bloqueia atualização');
+ok(page.indexOf('mayApplyPwaUpdate({')<page.indexOf('window.location.reload()'),'reload somente depois da validação');
+ok(page.includes('Uma versão nova do servidor não comprova que um APK atualizado já foi gerado'),'APK não recebe disponibilidade falsa');
+ok(!/\b(?:onSnapshot|setDoc|updateDoc|runTransaction|deleteDoc)\s*\(/.test(page),'central não escreve no Firestore');
+const api=read('app/api/system/release/route.ts');
+ok(api.includes('no-store')&&api.includes('validReleaseRevision')&&api.includes('NATIVE_ORIGINS')&&!api.includes('SUPABASE_SERVICE_ROLE'),'endpoint público retorna somente revisão não sensível');
+const config=read('next.config.js');
+ok(config.includes("output: 'export'")&&config.includes('NEXT_PUBLIC_DFL_RELEASE_SHA')&&config.includes('git'),'APK estático permanece suportado com commit de build');
+const nav=read('app/mais/page.tsx');
+ok(nav.includes("router.push('/mais/atualizacoes')")&&nav.includes('Central de Atualizações'),'entrada acessível no menu Mais');
+const guard=read('components/auth/AuthGuard.tsx');
+ok(guard.includes('Verificando acesso')&&guard.includes('Preparando dados locais')&&guard.includes('!authLoaded || !hasHydrated'),'boot comunica fase real, sem fingir sincronização');
+const pwa=read('components/pwa/PwaRuntime.tsx');
+ok(pwa.includes('mayApplyPwaUpdate({')&&pwa.includes("updateViaCache: 'none'"),'guard preexistente não é modificado ou duplicado');
+const pre=read('scripts/pre-apk.cjs');
+ok(pre.includes("'scripts/test-r300-p3-update-experience.cjs'")&&pre.includes("'scripts/verify-pwa-update-v6.cjs'")&&pre.includes("'scripts/test-r231-global-closeout.cjs'"),'PRE-APK mantém invariantes SW e R231');
+console.log(`R300 P3 ATUALIZACOES: ${checks} contratos aprovados; sem rede/Firestore/WhatsApp`);

@@ -10,6 +10,7 @@ import { routeCashFlow } from '@/lib/route-cash-flow';
 import { groupDeliveriesByStop } from '@/lib/route-stops';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { departureStopSummary } from '@/lib/operation/departure-stop-summary';
+import { aggregateRouteBeverages } from '@/lib/operation/route-beverage-checklist';
 
 type Props = {
   route: Route;
@@ -84,6 +85,7 @@ export function RouteDepartureChecklist({
   }), [deliveries, getCustomerById]);
 
   const drinks = checklist.filter((item) => item.drinks);
+  const beverageReview = useMemo(() => aggregateRouteBeverages(checklist.map(item => ({id:item.id,name:item.name,drinks:item.drinks}))),[checklist]);
   const change = checklist.filter((item) => item.change > 0);
   const warnings = checklist.filter(
     (item) => item.missingAddress || item.missingConfirmation,
@@ -143,8 +145,8 @@ export function RouteDepartureChecklist({
             <p className="text-[9px] font-bold uppercase text-zinc-500">Paradas</p>
           </div>
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
-            <p className="text-lg font-black text-sky-300">{drinks.length}</p>
-            <p className="text-[9px] font-bold uppercase text-zinc-500">Bebidas</p>
+            <p className="text-lg font-black text-sky-300">{beverageReview.totalUnits ? `${beverageReview.totalUnits}${beverageReview.unknown.length ? "+" : ""}` : beverageReview.unknown.length ? "Conferir" : "0"}</p>
+            <p className="text-[9px] font-bold uppercase text-zinc-500">Bebidas · unidades</p>
           </div>
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
             <p className="text-lg font-black text-amber-300">{change.length}</p>
@@ -179,17 +181,31 @@ export function RouteDepartureChecklist({
             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-400">
               Bebidas para pegar
             </p>
-            <div className="mt-3 space-y-2">
-              {drinks.map((item) => (
-                <div key={item.id} className="flex items-start gap-3 rounded-xl bg-zinc-950/50 px-3 py-2.5">
-                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-sky-400" />
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-black text-zinc-200">{item.name}</p>
-                    <p className="mt-0.5 text-xs text-zinc-400">{item.drinks}</p>
-                  </div>
+            <div data-dfl-beverage-totals="true" className="mt-3 space-y-2">
+              {beverageReview.items.map((item) => (
+                <div key={item.name} className="flex items-center gap-3 rounded-xl border border-sky-500/10 bg-zinc-950/60 px-3 py-3">
+                  <CheckCircle2 size={16} className="shrink-0 text-sky-400" />
+                  <p className="min-w-0 flex-1 text-xs font-black text-zinc-100">{item.name}</p>
+                  <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 font-mono text-sm font-black text-sky-200">{item.qty}×</span>
                 </div>
               ))}
+              {beverageReview.unknown.length > 0 && (
+                <div role="status" className="rounded-xl border border-amber-500/25 bg-amber-500/[.07] p-3 text-xs text-amber-200">
+                  {beverageReview.unknown.length} bebida(s) com texto não padronizado: confira manualmente antes da saída. Nenhuma quantidade foi adivinhada.
+                  {beverageReview.unknown.map(item=><p key={item.id} className="mt-1 break-words text-amber-100">{item.name}: {item.drinks}</p>)}
+                </div>
+              )}
             </div>
+            <details data-dfl-beverage-customer-review="true" className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
+              <summary className="cursor-pointer text-xs font-bold text-zinc-400">Ver bebidas por cliente · {drinks.length} pedido(s)</summary>
+              <div className="mt-3 space-y-2">
+                {drinks.map((item) => (
+                  <div key={item.id} className="flex items-start gap-3 rounded-xl bg-zinc-900/50 px-3 py-2.5">
+                    <div className="min-w-0"><p className="truncate text-xs font-black text-zinc-200">{item.name}</p><p className="mt-0.5 break-words text-xs text-zinc-400">{item.drinks}</p></div>
+                  </div>
+                ))}
+              </div>
+            </details>
           </section>
         )}
 

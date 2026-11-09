@@ -47,8 +47,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (!authLoaded || !hasHydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+      <div role="status" aria-live="polite" className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-zinc-950 px-6 text-center text-zinc-100">
+        <div className="grid h-20 w-20 place-items-center rounded-[28px] border border-emerald-500/25 bg-emerald-500/[.09] text-2xl font-black tracking-wide text-emerald-300">DFL</div>
+        <div><p className="text-sm font-black">{!authLoaded ? 'Verificando acesso' : 'Preparando dados locais'}</p><p className="mt-1 text-xs text-zinc-500">{!authLoaded ? 'Conferindo a sessão deste aparelho.' : 'Preservando as operações salvas neste dispositivo.'}</p></div>
+        <div aria-hidden="true" className="h-1 w-28 overflow-hidden rounded-full bg-zinc-800"><div className="h-full w-1/2 rounded-full bg-emerald-400 motion-safe:animate-pulse" /></div>
       </div>
     );
   }

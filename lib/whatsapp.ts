@@ -51,6 +51,21 @@ type ParsedDrinkItem = {
   name: string;
 };
 
+/** R300 P3: local normalization so VM-isolated R85 message contracts stay compatible.
+ * Keep unknown input untouched. Do not infer quantities or add external imports.
+ */
+const canonicalizeRouteDrinkName = (raw: string): string => {
+  const name = String(raw || '').trim();
+  if (!/^(?:coca|fanta|guaran[aá]|kuat|sprite|pepsi|schweppes|del\s+valle|suco|[aá]gua|refrigerante|refri|soda|t[oô]nica|cerveja|heineken|energ[eé]tico|red\s*bull)\b/i.test(name)) return name;
+  return name
+    .replace(/^coca\s*[- ]\s*cola\b/i, 'COCA')
+    .replace(/\b(\d+(?:[.,]\d+)?)\s*(?:litros?|l)\b/gi, (_, amount: string) => `${amount}L`)
+    .replace(/\b(\d{2,4})\s*ml\b/gi, (_, amount: string) => `${amount}ML`)
+    .replace(/\s+/g, ' ')
+    .toLocaleUpperCase('pt-BR')
+    .trim();
+};
+
 const parseDrinkItems = (raw?: string): ParsedDrinkItem[] => {
   if (!raw?.trim()) return [];
 
@@ -60,10 +75,10 @@ const parseDrinkItems = (raw?: string): ParsedDrinkItem[] => {
     .filter(Boolean)
     .map((part) => {
       const match = part.match(/^(?:(\d+)\s*[xX]?\s+|([0-9]+)[xX]\s*)(.+)$/);
-      if (!match) return { qty: 1, name: part };
+      if (!match) return { qty: 1, name: canonicalizeRouteDrinkName(part) };
 
       const qty = Number(match[1] || match[2] || 1);
-      const name = (match[3] || part).trim();
+      const name = canonicalizeRouteDrinkName((match[3] || part).trim());
 
       return {
         qty: Number.isFinite(qty) && qty > 0 ? qty : 1,

@@ -2,6 +2,9 @@ const {spawnSync}=require('child_process');
 const fs=require('fs');
 
 const tests=[
+  'scripts/test-r300-p3-release-beverages.cjs',
+  'scripts/test-r300-p3-update-experience.cjs',
+  'scripts/verify-pwa-update-v6.cjs',
   'scripts/test-r300-p2-physical-messaging.cjs',
   'scripts/test-r300-p2-address-pickup.cjs',
   'scripts/test-r300-p1-operacional.cjs',

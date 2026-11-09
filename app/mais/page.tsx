@@ -10,6 +10,7 @@ import { BellRing,
   ShieldCheck,
   MessageSquareText,
   SlidersHorizontal,
+  RefreshCw,
   UsersRound,
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
@@ -117,6 +118,12 @@ export default function MaisPage() {
                 Expediente, rotas, iFood, estoque e sistema
               </p>
             </div>
+            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
+          </button>
+          <button type="button" onClick={() => router.push('/mais/atualizacoes')}
+            className="flex min-h-14 w-full items-center gap-3 border-b border-zinc-800/80 px-3.5 py-3 text-left transition-colors active:bg-zinc-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-300"><RefreshCw size={18}/></div>
+            <div className="min-w-0 flex-1"><p className="font-semibold text-zinc-100">Central de Atualizações</p><p className="text-xs text-zinc-500">Versão do APK/PWA, atualização segura e builds Android</p></div>
             <ChevronRight size={18} className="shrink-0 text-zinc-600" />
           </button>
 
