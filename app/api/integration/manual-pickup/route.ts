@@ -24,7 +24,7 @@ export async function POST(req:NextRequest){
     const user=await adminAuth.verifyIdToken(bearer.slice(7),true);
     if(!isSuperadminUid(user.uid))return result(req,{ok:false,error:'Forbidden'},403);
   }catch{return result(req,{ok:false,error:'Unauthorized'},401);}
-  if(process.env.DFL_MANUAL_PICKUP_ENABLED!=='true')return result(req,{ok:true,status:'off'});
+  if(process.env.DFL_MANUAL_PICKUP_ENABLED!=='true')return result(req,{ok:true,status:'off',reason:'pickup_disabled'});
   let body:Record<string,unknown>;
   try{
     const raw=await req.text();if(raw.length>512)return result(req,{ok:false,error:'Request too large'},413);

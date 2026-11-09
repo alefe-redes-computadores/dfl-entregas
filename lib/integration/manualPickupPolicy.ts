@@ -5,6 +5,48 @@
 import { normalizeManualMessagePhone } from './manualMessagingPolicy';
 import type { Delivery } from '@/types';
 
+export type ManualPickupRecipientDecision =
+  | { allowed: true }
+  | { allowed: false; status: 'off' | 'skipped'; reason: string };
+
+/** R303 / Site R38: valida somente destinatário da retirada manual v2.
+ * Mensageria v1, comercial do Site e NEXT_STOP usam suas próprias políticas.
+ * Nenhuma destas permissões envia mensagem ou altera flags.
+ */
+export function manualPickupRecipientAccess(
+  env: Record<string, string | undefined>,
+  phone: string,
+): ManualPickupRecipientDecision {
+  const off = (reason: string): ManualPickupRecipientDecision => ({allowed: false, status:'off', reason});
+  const skipped = (reason: string): ManualPickupRecipientDecision => ({allowed: false, status:'skipped', reason});
+  if (env.DFL_MANUAL_PICKUP_ENABLED !== 'true') return off('pickup_disabled');
+  if (env.DFL_MANUAL_PICKUP_KILL_SWITCH !== 'false') return off('pickup_kill_switch');
+  if (env.DFL_MANUAL_MESSAGING_ENABLED !== 'true') return off('manual_messaging_disabled');
+  if (env.DFL_MANUAL_MESSAGING_KILL_SWITCH !== 'false') return off('manual_messaging_kill_switch');
+  if (!/^55[1-9]\d{9,10}$/.test(phone)) return skipped('invalid_phone');
+  const scope = env.DFL_MANUAL_PICKUP_SCOPE;
+  if (scope === 'canary') {
+    // O escopo histórico antigo permanece obrigatório SOMENTE no canário legado.
+    if (env.DFL_MANUAL_MESSAGING_SCOPE !== 'canary') return off('canary_legacy_scope_mismatch');
+    const pilot = env.DFL_MESSAGING_PILOT_PHONE_E164 || '';
+    if (!/^55[1-9]\d{9,10}$/.test(pilot)) return off('pilot_not_configured');
+    return phone === pilot ? {allowed: true} : skipped('not_pilot_phone');
+  }
+  if (scope === 'authorized_clients') {
+    const raw = (env.DFL_MANUAL_PICKUP_APPROVED_PHONES_E164 || '').trim();
+    const numbers = raw.split(',').map(v => v.trim()).filter(Boolean);
+    if (numbers.length < 1 || numbers.length > 12 ||
+        new Set(numbers).size !== numbers.length ||
+        numbers.some(v => !/^55[1-9]\d{9,10}$/.test(v))) return off('approved_list_invalid');
+    return numbers.includes(phone) ? {allowed: true} : skipped('not_authorized_phone');
+  }
+  if (scope === 'consented_customers') {
+    return env.DFL_MANUAL_PICKUP_ROLLOUT_APPROVED === 'true'
+      ? {allowed: true} : off('rollout_not_approved');
+  }
+  return off('pickup_scope_invalid');
+}
+
 export type ManualPickupReason = 'created' | 'ready';
 export type ManualPickupPlan =
   | { eligible: false; reason: string }

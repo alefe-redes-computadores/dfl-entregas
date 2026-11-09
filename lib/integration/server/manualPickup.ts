@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash, createHmac } from 'node:crypto';
 import { adminDb } from './admin';
-import { planManualPickup, type ManualPickupReason } from '../manualPickupPolicy';
+import { planManualPickup, manualPickupRecipientAccess, type ManualPickupReason } from '../manualPickupPolicy';
 import type { Delivery } from '@/types';
 
 export type ManualPickupResult = {
@@ -12,11 +12,11 @@ const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 const gate = (): boolean =>
   process.env.DFL_MANUAL_PICKUP_ENABLED === 'true' &&
   process.env.DFL_MANUAL_PICKUP_KILL_SWITCH === 'false' &&
-  process.env.DFL_MANUAL_PICKUP_SCOPE === 'canary' &&
   process.env.DFL_MANUAL_MESSAGING_ENABLED === 'true' &&
   process.env.DFL_MANUAL_MESSAGING_KILL_SWITCH === 'false' &&
-  process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' &&
-  /^55[1-9]\d{9,10}$/.test(process.env.DFL_MESSAGING_PILOT_PHONE_E164 || '');
+  (process.env.DFL_MANUAL_PICKUP_SCOPE === 'canary' ||
+   process.env.DFL_MANUAL_PICKUP_SCOPE === 'authorized_clients' ||
+   process.env.DFL_MANUAL_PICKUP_SCOPE === 'consented_customers');
 const site = () => {
   const raw = process.env.DFL_SITE_INTEGRATION_URL?.trim();
   const secret = process.env.DFL_INTEGRATION_SIGNING_SECRET?.trim();
@@ -37,7 +37,7 @@ const oldEnough = (createdAt: string) => {
  * Resposta incerta NÃO pode ser retransmitida automaticamente.
  */
 export async function notifyManualPickup(deliveryId: string, reason: ManualPickupReason): Promise<ManualPickupResult> {
-  if (!gate()) return {status:'off'};
+  if (!gate()) return {status:'off',reason:'manual_pickup_off'};
   if (!/^dfl-[A-Za-z0-9-]{12,120}$/.test(deliveryId) || !['created','ready'].includes(reason))
     return {status:'skipped',reason:'invalid_request'};
   const target = site();
@@ -49,7 +49,8 @@ export async function notifyManualPickup(deliveryId: string, reason: ManualPicku
   if (!oldEnough(delivery.created_at || delivery.createdAt || '')) return {status:'skipped',reason:'predates_rollout'};
   const plan = planManualPickup({delivery,reason,now:Date.now()});
   if (!plan.eligible) return {status:'skipped',reason:plan.reason};
-  if (plan.phone !== process.env.DFL_MESSAGING_PILOT_PHONE_E164) return {status:'skipped',reason:'not_pilot_phone'};
+  const recipient = manualPickupRecipientAccess(process.env,plan.phone);
+  if (!recipient.allowed) return {status:recipient.status,reason:recipient.reason};
 
   const transitionKey = sha(JSON.stringify({v:2,deliveryId,reason,occurredAt:plan.occurredAt}));
   const eventId = `manual-msg-v2__${plan.eventType}__${deliveryId}__${transitionKey}`;

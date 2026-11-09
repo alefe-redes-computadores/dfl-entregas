@@ -8,6 +8,9 @@ import {
   Banknote,
   Bike,
   CheckCircle2,
+  CheckCheck,
+  PackageCheck,
+  Loader2,
   ChevronRight,
   ChevronLeft,
   Clock3,
@@ -56,7 +59,8 @@ import { siteIntegrationStages } from '@/lib/site-integration-health';
 import { canMarkSitePickupReady, isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { canMarkManualPickupReady } from '@/lib/integration/site-order';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
-import { kickManualPickup } from '@/lib/integration/client/manualMessagingKick';
+import { kickManualPickup, manualPickupResultDescription } from '@/lib/integration/client/manualMessagingKick';
+import { detailActionState } from '@/lib/operation/detail-action-state';
 import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 
 const money = (value = 0) =>
@@ -98,6 +102,8 @@ function DeliveryDetailsContent() {
   const [confirmCardPaymentOpen, setConfirmCardPaymentOpen] = useState(false);
   const [confirmCardPaymentBusy, setConfirmCardPaymentBusy] = useState(false);
   const cardPaymentLock = useRef(false);
+  const readyLock = useRef(false);
+  const completionLock = useRef(false);
   const [openingAdmin, setOpeningAdmin] = useState(false);
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -172,7 +178,16 @@ function DeliveryDetailsContent() {
   const routeIsClosed = logistics && route?.status === 'fechada';
   const operationalStartedAt = route ? routeStartedAt(route) : '';
   const routeNotStarted =
-    logistics && route?.status === 'aberta' && !operationalStartedAt;
+    logistics && (!route || (route.status === 'aberta' && !operationalStartedAt));
+  // R303: um CTA contextual, preservando as duas autoridades de prontidão.
+  const sitePickup = delivery.source_system === 'dfl_site' && mode === 'pickup';
+  const canSetReady = sitePickup ? canMarkSitePickupReady(delivery) : canMarkManualPickupReady(delivery);
+  const actionState = detailActionState({
+    pickup: mode === 'pickup', completed: delivery.completed === true, cancelled,
+    ready: Boolean(delivery.pickup_ready_at), canMarkReady: canSetReady,
+    logistics, routeAvailable: Boolean(route),
+    routeStarted: Boolean(operationalStartedAt), routeClosed: Boolean(routeIsClosed),
+  });
 
   // Feedback tátil nunca deve impedir persistência, confirmação ou navegação.
   const vibrate = async (style: ImpactStyle) => {
@@ -255,11 +270,14 @@ function DeliveryDetailsContent() {
   };
 
   const markPickupReady = async () => {
+    if (readyLock.current) return;
     if (delivery.source_system === 'dfl_site') {
       if (!canMarkSitePickupReady(delivery) || isMarkingReady) return;
     } else if (!canMarkManualPickupReady(delivery) || isMarkingReady) return;
     const manualPickup = canMarkManualPickupReady(delivery);
+    readyLock.current = true;
     setIsMarkingReady(true);
+    void vibrate(ImpactStyle.Light);
     try {
       await updateDelivery(delivery.id, { pickup_ready_at: new Date().toISOString() });
       if (manualPickup) {
@@ -267,9 +285,10 @@ function DeliveryDetailsContent() {
         if (delivery.notify_whatsapp === true && delivery.manual_messaging_opt_in_v1 === true) {
           // R301: o produtor só consulta o documento após a escrita confirmada.
           void kickManualPickup(delivery.id, 'ready').then(messaging => {
-            if (messaging.status === 'queued') toast.info('Aviso de retirada na fila.', {description:'Recebimento do WhatsApp ainda não confirmado.'});
-            else if (messaging.status === 'off') toast.info('Aviso automático de retirada permanece desligado.');
-            else if (messaging.status === 'failed') toast.warning('Prontidão salva; aviso não confirmado.', {description:'Confira a auditoria antes de tentar novamente.'});
+            if (messaging.status === 'queued') toast.info('Aviso de retirada na fila.', {description:manualPickupResultDescription(messaging)});
+            else if (messaging.status === 'off' || messaging.status === 'skipped') toast.info('Prontidão salva; aviso suprimido.', {description:manualPickupResultDescription(messaging)});
+            else if (messaging.status === 'duplicate') toast.info('Aviso já reservado.', {description:manualPickupResultDescription(messaging)});
+            else if (messaging.status === 'failed') toast.warning('Prontidão salva; aviso não confirmado.', {description:manualPickupResultDescription(messaging)});
           }).catch(() => toast.warning('Prontidão salva; status do aviso indisponível.'));
         }
       } else {
@@ -277,12 +296,13 @@ function DeliveryDetailsContent() {
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Falha ao registrar prontidão.');
-    } finally { setIsMarkingReady(false); }
+    } finally { readyLock.current = false; setIsMarkingReady(false); }
   };
 
   const executeCompletion = async (codeToSave?: string) => {
-    if (cancelled || delivery.completed || isCompleting) return;
-
+    if (cancelled || delivery.completed || isCompleting || completionLock.current) return;
+    if (mode === 'pickup' && !delivery.pickup_ready_at) return;
+    completionLock.current = true;
     setIsCompleting(true);
     const payload = {
       completed: true,
@@ -314,6 +334,7 @@ function DeliveryDetailsContent() {
         description: 'O estado anterior foi restaurado. Tente novamente.',
       });
     } finally {
+      completionLock.current = false;
       setIsCompleting(false);
     }
   };
@@ -338,7 +359,7 @@ function DeliveryDetailsContent() {
   };
 
   const handleCompletionAction = async () => {
-    if (cancelled || isCompleting) return;
+    if (cancelled || isCompleting || completionLock.current) return;
     await vibrate(ImpactStyle.Light);
 
     if (delivery.completed) {
@@ -349,6 +370,7 @@ function DeliveryDetailsContent() {
         return;
       }
 
+      completionLock.current = true;
       setIsCompleting(true);
       try {
         await updateDelivery(delivery.id, { completed: false });
@@ -356,8 +378,14 @@ function DeliveryDetailsContent() {
       } catch {
         toast.error('Não foi possível desfazer a baixa.');
       } finally {
+        completionLock.current = false;
         setIsCompleting(false);
       }
+      return;
+    }
+
+    if (mode === 'pickup' && !delivery.pickup_ready_at) {
+      toast.info('Marque o pedido como pronto antes de confirmar a retirada.');
       return;
     }
 
@@ -406,7 +434,7 @@ function DeliveryDetailsContent() {
         <button
           disabled={cancelled}
           onClick={() => { if (!cancelled) router.push(`/entregas/editar?id=${delivery.id}${dateSuffix}`); }}
-          className="flex h-10 items-center gap-2 rounded-xl bg-amber-500 px-3 text-xs font-black text-zinc-950"
+          className="flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-xs font-bold text-zinc-300 disabled:opacity-50"
         >
           <Edit3 size={15} />
           Editar
@@ -479,7 +507,7 @@ function DeliveryDetailsContent() {
                 : 'bg-amber-500/15 text-amber-400'
             }`}
           >
-            {cancelled ? 'Cancelado' : delivery.completed ? 'Concluído' : 'Pendente'}
+            {cancelled ? 'Cancelado' : delivery.completed ? 'Concluído' : mode === 'pickup' && delivery.pickup_ready_at ? 'Pronto' : logistics && operationalStartedAt ? 'Em rota' : 'Pendente'}
           </span>
         </div>
 
@@ -651,76 +679,84 @@ function DeliveryDetailsContent() {
         </section>
       )}
 
-      <section className={`rounded-[24px] border p-4 ${
-        delivery.completed
-          ? 'border-emerald-500/20 bg-emerald-500/[.045]'
-          : 'border-zinc-800 bg-zinc-900/35'
-      }`}>
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
-              Baixa operacional
-            </p>
-            <p className="mt-1 text-sm font-black text-zinc-100">
-              {cancelled ? 'Pedido cancelado · Somente leitura' : delivery.completed ? 'Pedido já concluído' : 'Finalizar atendimento'}
-            </p>
+      <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4" aria-label="Ação operacional do pedido">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Próximo passo</p>
+            <h2 className="mt-1 text-sm font-black text-zinc-100">
+              {cancelled ? 'Pedido cancelado' : delivery.completed ? (mode === 'pickup' ? 'Retirada finalizada' : 'Atendimento finalizado') : mode === 'pickup' ? 'Retirada na loja' : 'Entrega operacional'}
+            </h2>
           </div>
           {logistics && (
-            <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${
-              routeIsClosed
-                ? 'bg-emerald-500/10 text-emerald-400'
-                : routeNotStarted
-                  ? 'bg-amber-500/10 text-amber-400'
-                  : 'bg-sky-500/10 text-sky-400'
-            }`}>
-              {routeIsClosed ? 'Rota fechada' : routeNotStarted ? 'Rota não iniciada' : 'Rota ativa'}
+            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ${routeIsClosed ? 'bg-zinc-800 text-zinc-400' : routeNotStarted ? 'bg-amber-400/10 text-amber-200' : 'bg-sky-500/10 text-sky-300'}`}>
+              {routeIsClosed ? 'Rota fechada' : routeNotStarted ? 'Rota não iniciada' : 'Em rota'}
             </span>
           )}
         </div>
 
-        {delivery.source_system === 'dfl_site' && mode === 'pickup' && !delivery.completed && !cancelled && (
+        {actionState === 'pickup_prepare' && (
           <button type="button" onClick={markPickupReady}
-            disabled={isMarkingReady || Boolean(delivery.pickup_ready_at)}
-            className="mb-3 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/40 bg-amber-400/15 px-4 font-black text-amber-200 disabled:opacity-65">
-            <ShoppingBag size={19} />
-            {isMarkingReady ? 'Registrando prontidão...' : delivery.pickup_ready_at ? 'Prontidão registrada' : 'Pronto para retirada'}
+            disabled={isMarkingReady || isCompleting} aria-busy={isMarkingReady}
+            className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 px-4 text-sm font-black text-zinc-950 shadow-sm shadow-amber-900/10 active:scale-[0.99] disabled:opacity-55">
+            {isMarkingReady ? <Loader2 size={19} className="animate-spin" /> : <PackageCheck size={19} />}
+            {isMarkingReady ? 'Registrando prontidão…' : 'Marcar pronto para retirada'}
           </button>
         )}
-        {delivery.source_system !== 'dfl_site' && canMarkManualPickupReady(delivery) && mode === 'pickup' && !cancelled && (
-          <button type="button" onClick={markPickupReady} disabled={isMarkingReady} className="mb-3 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-400/35 bg-emerald-400/10 px-4 font-black text-emerald-200 disabled:opacity-50">
-            <ShoppingBag size={19}/>{isMarkingReady?'Registrando prontidão...':'Pronto para retirada · pedido manual'}
-          </button>
-        )}
-        {delivery.source_system !== 'dfl_site' && mode === 'pickup' && Boolean(delivery.pickup_ready_at) && !delivery.completed && (
-          <p role="status" className="mb-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[.06] p-3 text-xs font-bold text-emerald-300">Retirada pronta, aguardando o cliente. Aviso WhatsApp depende de homologação.</p>
-        )}
-        <button
-          onClick={handleCompletionAction}
-          disabled={isCompleting || cancelled}
-          className={`flex h-14 w-full items-center justify-center gap-2 rounded-2xl font-black active:scale-[0.98] disabled:opacity-60 ${
-            delivery.completed
-              ? 'border border-zinc-700 bg-zinc-900 text-zinc-300'
-              : 'bg-emerald-500 text-zinc-950 shadow-lg shadow-emerald-500/15'
-          }`}
-        >
-          <CheckCircle2 size={19} />
-          {isCompleting
-            ? 'Salvando...'
-            : delivery.completed
-              ? 'Desfazer baixa'
-              : mode === 'pickup'
-                ? 'Concluir retirada'
-                : mode === 'external_delivery'
-                  ? 'Marcar pedido 99Food como concluído'
-                : mode === 'counter'
-                  ? 'Concluir pedido'
-                  : 'Concluir entrega'}
-        </button>
 
-        {delivery.completed && routeIsClosed && (
-          <p className="mt-2 text-center text-[10px] leading-relaxed text-zinc-600">
-            Para desfazer esta baixa, reabra a rota primeiro.
+        {actionState === 'pickup_confirm' && (
+          <>
+            <p role="status" className="mb-3 flex items-center gap-2 text-xs font-medium text-sky-300">
+              <PackageCheck size={15} /> Pronto para retirada · Aguardando cliente
+            </p>
+            <button type="button" onClick={handleCompletionAction}
+              disabled={isCompleting || isMarkingReady} aria-busy={isCompleting}
+              className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-4 text-sm font-black text-white active:scale-[0.99] disabled:opacity-55">
+              {isCompleting ? <Loader2 size={19} className="animate-spin" /> : <CheckCheck size={19} />}
+              {isCompleting ? 'Confirmando retirada…' : 'Confirmar retirada pelo cliente'}
+            </button>
+          </>
+        )}
+
+        {(actionState === 'delivery_complete' || actionState === 'service_complete') && (
+          <button type="button" onClick={handleCompletionAction} disabled={isCompleting || cancelled} aria-busy={isCompleting}
+            className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-zinc-100 px-4 text-sm font-black text-zinc-950 active:scale-[0.99] disabled:opacity-55">
+            {isCompleting ? <Loader2 size={19} className="animate-spin" /> : <CheckCheck size={19} />}
+            {isCompleting ? 'Registrando conclusão…' : mode === 'external_delivery' ? 'Confirmar entrega parceira' : mode === 'counter' ? 'Concluir atendimento de balcão' : 'Confirmar entrega ao cliente'}
+          </button>
+        )}
+
+        {actionState === 'completed' && (
+          <>
+            <div role="status" className="flex items-center gap-3 rounded-2xl border border-zinc-700/70 bg-zinc-950/45 p-3.5">
+              <CheckCircle2 size={21} className="shrink-0 text-emerald-400" />
+              <div className="min-w-0">
+                <p className="text-sm font-black text-zinc-100">{mode === 'pickup' ? 'Retirada concluída' : 'Pedido concluído'}</p>
+                {Boolean(delivery.completed_at) && <p className="mt-1 text-xs text-zinc-500">{dateTime(delivery.completed_at)}</p>}
+              </div>
+            </div>
+            <button type="button" onClick={handleCompletionAction} disabled={isCompleting || routeIsClosed}
+              className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-transparent text-xs font-semibold text-zinc-400 active:bg-zinc-800 disabled:opacity-40">
+              {isCompleting ? 'Revertendo baixa…' : 'Desfazer baixa · ação secundária'}
+            </button>
+            {routeIsClosed && <p className="mt-2 text-center text-[11px] text-zinc-500">Reabra a rota para desfazer a baixa.</p>}
+          </>
+        )}
+
+        {actionState === 'pickup_wait' && (
+          <p role="status" className="rounded-2xl border border-zinc-800 bg-zinc-950/45 p-3 text-xs text-zinc-400">
+            A prontidão deste pedido não está disponível nesta etapa. Verifique o estado comercial no {sitePickup ? 'DFL Admin' : 'cadastro'}.
           </p>
+        )}
+        {actionState === 'route_blocked' && (
+          <p role="status" className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-3 text-xs text-amber-200">
+            {!route ? 'Esta entrega não está vinculada a uma rota válida.' : routeIsClosed ? 'Rota fechada. Reabra a rota antes de concluir.' : 'Inicie a rota para habilitar a conclusão.'}
+          </p>
+        )}
+        {actionState === 'cancelled' && (
+          <p role="status" className="rounded-2xl border border-zinc-800 bg-zinc-950/45 p-3 text-xs text-zinc-400">Cancelado · somente leitura, sem conclusão operacional.</p>
+        )}
+        {sitePickup && !delivery.completed && !cancelled && (
+          <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">Pedido do Site · prontidão sincronizada pelo fluxo comercial existente. Não usa o produtor manual.</p>
         )}
       </section>
 
@@ -728,7 +764,7 @@ function DeliveryDetailsContent() {
         {logistics && (
           <button
             onClick={() => window.open(mapsUrl, '_blank')}
-            className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-sky-500 font-black text-white"
+            className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-sky-500/25 bg-sky-500/10 text-xs font-bold text-sky-200 active:scale-[0.99]"
           >
             <Navigation size={18} />
             Abrir Maps
@@ -737,7 +773,7 @@ function DeliveryDetailsContent() {
 
         <button
           onClick={openWhatsApp}
-          className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 font-black text-zinc-950"
+          className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900 text-xs font-bold text-zinc-300 active:scale-[0.99]"
         >
           <MessageCircle size={18} />
           WhatsApp

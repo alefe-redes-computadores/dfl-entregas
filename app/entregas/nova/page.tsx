@@ -18,7 +18,7 @@ import { firstMultiOrderIssue } from '@/lib/operation/multiOrderDraft';
 import { useAppStore } from '@/store/useAppStore';
 import { recordActionLatency } from '@/lib/operation/action-latency';
 import { createManualDeliveryId } from '@/lib/operation/manual-delivery-id';
-import { kickManualCreated, kickManualPickup } from '@/lib/integration/client/manualMessagingKick';
+import { kickManualCreated, kickManualPickup, manualPickupResultDescription } from '@/lib/integration/client/manualMessagingKick';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { CustomerDestinationSheet } from '@/components/customers/CustomerDestinationSheet';
 import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
@@ -660,9 +660,10 @@ const [routeId, setRouteId] = useState('');
           // R301: pedido já salvo. Aviso v2 da retirada possui gate canário independente.
           // Timeout = resultado incerto; nenhum reenvio automático.
           void kickManualPickup(manualDeliveryId, 'created').then(messaging => {
-            if (messaging.status === 'queued') toast.info('Retirada confirmada; aviso entrou na fila.', {description:'Entrega do WhatsApp ainda não confirmada.'});
-            else if (messaging.status === 'off') toast.info('Retirada salva; aviso automático ainda desligado.');
-            else if (messaging.status === 'failed') toast.warning('Retirada salva; aviso não confirmado.', {description:'Confira a auditoria. Não reenvie sem verificar.'});
+            if (messaging.status === 'queued') toast.info('Retirada salva; aviso na fila.', {description:manualPickupResultDescription(messaging)});
+            else if (messaging.status === 'off' || messaging.status === 'skipped') toast.info('Retirada salva; aviso suprimido.', {description:manualPickupResultDescription(messaging)});
+            else if (messaging.status === 'duplicate') toast.info('Retirada salva; aviso já reservado.', {description:manualPickupResultDescription(messaging)});
+            else if (messaging.status === 'failed') toast.warning('Retirada salva; aviso não confirmado.', {description:manualPickupResultDescription(messaging)});
           }).catch(() => toast.warning('Retirada salva; estado do aviso indisponível.'));
         }
         if (origin === 'loja' && notifyWhatsapp && fulfillmentMode === 'delivery') {

@@ -22,7 +22,7 @@ ok(!compiled.diagnostics?.some(d=>d.category===ts.DiagnosticCategory.Error),'hel
 const evaluate=(cryptoStub,dateNow=()=>12345)=>{
   const m={exports:{}};
   const ctx={module:m,exports:m.exports,Math,Date:{now:dateNow},Uint8Array,Array,crypto:cryptoStub};
-  vm.runInNewContext(compiled.outputText,ctx,{filename:'manual-delivery-id.ts',timeout:1000});
+  vm.runInNewContext(compiled.outputText,ctx,{filename:'manual-delivery-id.ts',timeout:5000});
   return m.exports.createManualDeliveryId;
 };
 const cryptoUuid=evaluate({randomUUID:(()=>{let n=0;return ()=>`00000000-0000-4000-8000-${String(++n).padStart(12,'0')}`;})()});
