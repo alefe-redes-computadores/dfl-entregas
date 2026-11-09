@@ -595,6 +595,8 @@ const [routeId, setRouteId] = useState('');
     setSlowDeliveryConfirmation(false);
     deliveryConfirmationTimer.current = setTimeout(() => setSlowDeliveryConfirmation(true), 1400);
     const r227SubmitStartedAt = Date.now();
+    // R305: a etapa precisa sobreviver ao catch sem incluir dados do cliente.
+    let registrationStage: 'preparacao' | 'cliente' | 'pedido' | 'finalizacao' = 'preparacao';
     try{
       const normalizedAddress=fulfillmentMode==='delivery'?(selectedAddressNeighborhood ? canonicalizeOperationalAddress(streetAddress,selectedAddressNeighborhood) : canonicalizeOperationalAddress(streetAddress)):{address:'',neighborhood:undefined,phone:undefined,observations:[] as string[]};
       const cleanStreet=fulfillmentMode==='delivery'?normalizedAddress.address:'';
@@ -650,11 +652,12 @@ const [routeId, setRouteId] = useState('');
           recordActionLatency('delivery_form_confirm', Date.now() - r228r3ConfirmAt, 'failed', deliveriesToCreate.length);
           throw confirmError;
         }
+        registrationStage='finalizacao';
         toast.success(drafts.length>1?`${drafts.length} pedidos cadastrados nos endereços conferidos.`:'Entrega cadastrada com sucesso!');
       }else{
         const customerAddress=fulfillmentMode==='delivery'?cleanStreet:streetAddress.trim();
-        let customerId='';if(customerName.trim()){const r228r3CustomerAt=Date.now();try {customerId=await findOrCreateCustomer(customerName,{address:customerAddress||undefined,phone:rawPhone||undefined,mapsLink:mapsLink.trim()||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'confirmed');}catch(customerError){recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'failed');throw customerError;}}
-        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='keeta'?'keeta':origin==='food99'?'food99':'customer',stop_group_id:stopGroupId,origin,order_id:(origin==='food99'||origin==='keeta')?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_order_items:origin==='loja'?(manualOrderItems.trim().slice(0,180)||undefined):undefined,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery' || (notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'pickup'),observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}toast.success(origin==='keeta'?`Pedido Keeta cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:origin==='food99'?`Pedido 99Food cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+        let customerId='';if(customerName.trim()){registrationStage='cliente';const r228r3CustomerAt=Date.now();try {customerId=await findOrCreateCustomer(customerName,{address:customerAddress||undefined,phone:rawPhone||undefined,mapsLink:mapsLink.trim()||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'confirmed');}catch(customerError){recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'failed');throw customerError;}}
+        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();registrationStage='pedido';try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='keeta'?'keeta':origin==='food99'?'food99':'customer',stop_group_id:stopGroupId,origin,order_id:(origin==='food99'||origin==='keeta')?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_order_items:origin==='loja'?(manualOrderItems.trim().slice(0,180)||undefined):undefined,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery' || (notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'pickup'),observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}registrationStage='finalizacao';toast.success(origin==='keeta'?`Pedido Keeta cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:origin==='food99'?`Pedido 99Food cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
         // MSG-M1: o pedido foi confirmado antes de chamar a ponte. Nunca desfazer a venda por falha de WhatsApp.
         if (origin === 'loja' && notifyWhatsapp && fulfillmentMode === 'pickup') {
           // R301: pedido já salvo. Aviso v2 da retirada possui gate canário independente.
@@ -682,9 +685,11 @@ const [routeId, setRouteId] = useState('');
       router.replace(safeReturnTo||deliveriesReturn);
     }catch(error){
       recordActionLatency('delivery_form', Date.now() - r227SubmitStartedAt, 'failed', origin === 'ifood' ? drafts.length : 1);
-      console.error('Erro ao cadastrar entrega:',error);
       const code = typeof error === 'object' && error !== null && 'code' in error
         ? String((error as {code?: unknown}).code || '') : '';
+      const rawMessage = error instanceof Error ? error.message : '';
+      const safeCode = /^[a-zA-Z0-9/_-]{1,70}$/.test(code) ? code : '';
+      console.error('R305 falha ao cadastrar', { etapa: registrationStage, codigo: safeCode || 'sem-codigo', erro: error });
       const explanation = code === 'permission-denied' || code === 'firestore/permission-denied'
         ? 'O Firestore recusou a gravação por permissão. Verifique a sessão e as regras de acesso.'
         : code === 'unavailable' || code === 'firestore/unavailable'
@@ -693,8 +698,16 @@ const [routeId, setRouteId] = useState('');
         ? 'A confirmação demorou demais. Confira a lista antes de tentar novamente.'
         : code === 'unauthenticated' || code === 'firestore/unauthenticated'
         ? 'Sua sessão expirou. Entre novamente e confira a lista de pedidos.'
-        : 'Não houve confirmação de gravação. Confira a lista antes de tentar novamente.';
-      toast.error('Não foi possível cadastrar a entrega.',{description:explanation});
+        : registrationStage === 'cliente'
+        ? 'Não foi possível confirmar o cadastro ou atualização do cliente. Confira a lista de clientes antes de repetir.'
+        : registrationStage === 'pedido'
+        ? 'Cliente processado, mas o pedido não teve gravação confirmada. Confira a lista de pedidos antes de repetir.'
+        : registrationStage === 'finalizacao'
+        ? 'A gravação pode ter ocorrido; houve falha ao concluir a tela. Confira a lista antes de repetir.'
+        : 'Falha na preparação do pedido. Não repita antes de conferir a lista.';
+      const knownBusinessError = /^(Este pedido já foi importado|Este pedido ja esta sendo registrado|Pedido cancelado não pode|99Food precisa|Keeta precisa)/.test(rawMessage);
+      const details = knownBusinessError ? rawMessage : `${explanation} Etapa: ${registrationStage}${safeCode ? ` · Código: ${safeCode}` : ' · Sem código Firebase'}.`;
+      toast.error('Não foi possível cadastrar a entrega.',{description:details,duration:9000});
     }finally{if(deliveryConfirmationTimer.current)clearTimeout(deliveryConfirmationTimer.current);deliveryConfirmationTimer.current=null;setSlowDeliveryConfirmation(false);submitFlight.current=false;setIsSaving(false)}
   };
 
