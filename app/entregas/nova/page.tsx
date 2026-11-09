@@ -18,7 +18,7 @@ import { firstMultiOrderIssue } from '@/lib/operation/multiOrderDraft';
 import { useAppStore } from '@/store/useAppStore';
 import { recordActionLatency } from '@/lib/operation/action-latency';
 import { createManualDeliveryId } from '@/lib/operation/manual-delivery-id';
-import { kickManualCreated } from '@/lib/integration/client/manualMessagingKick';
+import { kickManualCreated, kickManualPickup } from '@/lib/integration/client/manualMessagingKick';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
 import { CustomerDestinationSheet } from '@/components/customers/CustomerDestinationSheet';
 import { customerPhones, customerAddresses } from '@/lib/customer-contact-book';
@@ -657,7 +657,13 @@ const [routeId, setRouteId] = useState('');
         const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='keeta'?'keeta':origin==='food99'?'food99':'customer',stop_group_id:stopGroupId,origin,order_id:(origin==='food99'||origin==='keeta')?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_order_items:origin==='loja'?(manualOrderItems.trim().slice(0,180)||undefined):undefined,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery' || (notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'pickup'),observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}toast.success(origin==='keeta'?`Pedido Keeta cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:origin==='food99'?`Pedido 99Food cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
         // MSG-M1: o pedido foi confirmado antes de chamar a ponte. Nunca desfazer a venda por falha de WhatsApp.
         if (origin === 'loja' && notifyWhatsapp && fulfillmentMode === 'pickup') {
-          toast.info('Retirada cadastrada. Aviso automático de retirada ainda aguarda homologação com o Site.');
+          // R301: pedido já salvo. Aviso v2 da retirada possui gate canário independente.
+          // Timeout = resultado incerto; nenhum reenvio automático.
+          void kickManualPickup(manualDeliveryId, 'created').then(messaging => {
+            if (messaging.status === 'queued') toast.info('Retirada confirmada; aviso entrou na fila.', {description:'Entrega do WhatsApp ainda não confirmada.'});
+            else if (messaging.status === 'off') toast.info('Retirada salva; aviso automático ainda desligado.');
+            else if (messaging.status === 'failed') toast.warning('Retirada salva; aviso não confirmado.', {description:'Confira a auditoria. Não reenvie sem verificar.'});
+          }).catch(() => toast.warning('Retirada salva; estado do aviso indisponível.'));
         }
         if (origin === 'loja' && notifyWhatsapp && fulfillmentMode === 'delivery') {
           // Never delay the confirmed order while waiting on WhatsApp.

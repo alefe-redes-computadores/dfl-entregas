@@ -60,7 +60,10 @@ async function forward(delivery: ManualDeliveryRecord, reason: ManualMessageReas
   const plan = planManualMessage({delivery,reason,route});
   if (!plan.eligible) return {status:'skipped',reason:plan.reason};
   // Nao enviar a clientes reais durante a homologacao, mesmo com opt-in.
-  if(!r8Authorized(plan.phone))return {status:'skipped',reason:'recipient_not_authorized'};
+  // R301-R3: canário com destinatário fora do piloto continua bloqueado.
+  // Preserva o motivo histórico esperado pela MSG-M7, sem afrouxar r8Authorized.
+  if(!r8Authorized(plan.phone))return {status:'skipped',reason:
+    process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' ? 'not_pilot_phone' : 'recipient_not_authorized'};
   const target = siteEndpoint();
   if (!target) return {status:'failed',reason:'bridge_configuration_invalid'};
   const event = {

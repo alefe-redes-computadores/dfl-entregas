@@ -688,6 +688,9 @@ const [routeId, setRouteId] = useState('');
         maps_link: mapsLink.trim() || resolvedMapsLink,
         phone: rawPhone || undefined,
          notify_whatsapp: notifyWhatsapp,
+         // R301: edição do opt-in é explícita. Plataforma e Site nunca herdam autorização.
+         manual_messaging_opt_in_v1: origin === 'loja' && currentDelivery?.source_system !== 'dfl_site' &&
+           (fulfillmentMode === 'delivery' || fulfillmentMode === 'pickup') && notifyWhatsapp,
          manual_order_items: origin === 'loja' ? (manualOrderItems.trim().slice(0,180) || undefined) : currentDelivery?.manual_order_items,
          observation,
         drinks: drinks.trim(),

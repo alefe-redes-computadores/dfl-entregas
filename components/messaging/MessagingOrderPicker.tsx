@@ -18,7 +18,7 @@ export function MessagingOrderPicker({ deliveries, selectedId, onSelect }: Props
   // Apenas uma ordenação VISUAL. O servidor continua decidindo elegibilidade real.
   const manualOptedIn = (item: Delivery) => item.source_system !== 'dfl_site' &&
     item.origin === 'loja' && item.notify_whatsapp === true &&
-    item.manual_messaging_opt_in_v1 === true && item.fulfillment_mode === 'delivery';
+    item.manual_messaging_opt_in_v1 === true && (item.fulfillment_mode === 'delivery' || item.fulfillment_mode === 'pickup');
   const priority = (item: Delivery) => manualOptedIn(item) ? 0 : item.source_system === 'dfl_site' ? 2 : 1;
   const compare = (a: Delivery, b: Delivery) =>
     priority(a) - priority(b) || Number(Boolean(a.completed)) - Number(Boolean(b.completed)) ||

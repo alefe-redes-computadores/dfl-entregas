@@ -56,6 +56,7 @@ import { siteIntegrationStages } from '@/lib/site-integration-health';
 import { canMarkSitePickupReady, isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { canMarkManualPickupReady } from '@/lib/integration/site-order';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
+import { kickManualPickup } from '@/lib/integration/client/manualMessagingKick';
 import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 
 const money = (value = 0) =>
@@ -257,10 +258,23 @@ function DeliveryDetailsContent() {
     if (delivery.source_system === 'dfl_site') {
       if (!canMarkSitePickupReady(delivery) || isMarkingReady) return;
     } else if (!canMarkManualPickupReady(delivery) || isMarkingReady) return;
+    const manualPickup = canMarkManualPickupReady(delivery);
     setIsMarkingReady(true);
     try {
       await updateDelivery(delivery.id, { pickup_ready_at: new Date().toISOString() });
-      toast.success(canMarkManualPickupReady(delivery) ? 'Prontidão manual salva. Aviso WhatsApp depende de homologação específica de retirada.' : 'Prontidão registrada. O aviso ao cliente depende da sincronização com o Site.');
+      if (manualPickup) {
+        toast.success('Pronto para retirada registrado.');
+        if (delivery.notify_whatsapp === true && delivery.manual_messaging_opt_in_v1 === true) {
+          // R301: o produtor só consulta o documento após a escrita confirmada.
+          void kickManualPickup(delivery.id, 'ready').then(messaging => {
+            if (messaging.status === 'queued') toast.info('Aviso de retirada na fila.', {description:'Recebimento do WhatsApp ainda não confirmado.'});
+            else if (messaging.status === 'off') toast.info('Aviso automático de retirada permanece desligado.');
+            else if (messaging.status === 'failed') toast.warning('Prontidão salva; aviso não confirmado.', {description:'Confira a auditoria antes de tentar novamente.'});
+          }).catch(() => toast.warning('Prontidão salva; status do aviso indisponível.'));
+        }
+      } else {
+        toast.success('Prontidão registrada. O aviso ao cliente depende da sincronização com o Site.');
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Falha ao registrar prontidão.');
     } finally { setIsMarkingReady(false); }
