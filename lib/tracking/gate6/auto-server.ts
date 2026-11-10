@@ -25,6 +25,12 @@ function privateHash(kind:'recipient'|'provider_event',tenant:string,value:strin
   const hmacKey=secret();if(!hmacKey)return null;
   return createHmac('sha256',hmacKey).update(`dfl360|${kind}|${tenant}|${value}`,'utf8').digest('hex');
 }
+// R311: Site S2S ainda precisa respeitar o unico destinatario do piloto.
+ // Falha fechada se a env nao existir. Sem telefone em logs ou resposta.
+function r311PilotRecipient(phone:string):boolean {
+  const expected=(process.env.DFL_TRACKING_AUTO_PILOT_PHONE_E164||'').trim();
+  return /^\+55[1-9][0-9][2-9][0-9]{7,8}$/.test(expected) && phone===expected;
+}
 async function packet(req:NextRequest){
   const raw=await req.text();
   if(raw.length<2||raw.length>4096)return null;
@@ -73,7 +79,7 @@ export async function commercialAccept(req:NextRequest){
     const snap=await siteDelivery(ctx.tenant,v.canonical_order_key);if(!snap)return unavailable();
     const phone=canonicalE164(snap.data.phone||snap.data.customer_phone);
     const recipient=canonicalE164(v.recipient_e164);
-    if(!phone||!recipient||phone!==recipient)return unavailable(422);
+    if(!phone||!recipient||phone!==recipient||!r311PilotRecipient(recipient))return unavailable(422);
     const recipientHash=privateHash('recipient',ctx.tenant,recipient);
     if(!recipientHash)return unavailable(503);
     const created=iso(snap.data.created_at)||iso(snap.data.createdAt);
@@ -122,7 +128,7 @@ export async function issueInitial(req:NextRequest){
     const v=parseSiteIssue(p.data);if(!v)return unavailable(422);
     const snap=await siteDelivery(ctx.tenant,v.canonical_order_key);if(!snap)return unavailable();
     const recipient=canonicalE164(v.recipient_e164);
-    if(!recipient||canonicalE164(snap.data.phone||snap.data.customer_phone)!==recipient)return unavailable(422);
+    if(!recipient||!r311PilotRecipient(recipient)||canonicalE164(snap.data.phone||snap.data.customer_phone)!==recipient)return unavailable(422);
     const recipientHash=privateHash('recipient',ctx.tenant,recipient);if(!recipientHash)return unavailable(503);
     const existing=await receptionRef(ctx.tenant,v.canonical_order_key).get();
     const acceptance=(existing.data()||{}) as Record<string,unknown>;

@@ -118,6 +118,7 @@ const serverApi=load(paths.server,{
 const makeReq=data=>({text:async()=>JSON.stringify(data)});
 async function run(){
  process.env.DFL_TRACKING_AUTO_S2S_CERTIFIED='1';
+ process.env.DFL_TRACKING_AUTO_PILOT_PHONE_E164='+5534999999999';
  process.env.DFL_TRACKING_AUTO_RECIPIENT_HMAC_KEY='synthetic-hmac-recipient-key-long-enough-do-not-use-production';
  const baseDelivery=structuredClone(memory.get('deliveries/delivery-r299-1'));
  for(const [label,changed] of [
