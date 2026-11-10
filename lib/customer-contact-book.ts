@@ -8,29 +8,92 @@ const digits = (value?: string) => String(value || '').replace(/\D/g, '');
  * ambos cadastros o possuem. CEP, "bairro" duplicado e mapa diferente NÃO
  * criam três opções iguais na seleção.
  */
+
+const normalizeAddressPart = (value?: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const stripAddressCep = (value?: string) =>
+  String(value || '')
+    .replace(/\b(?:CEP\s*:?\s*)?\d{5}\s*(?:-|–|—|\s)?\s*\d{3}\b/gi, ' ')
+    .replace(/\bCEP\b/gi, ' ')
+    .replace(/[·•]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/[\s,;–—-]+$/g, '')
+    .trim();
+
 const canonicalAddress = (value?: string, neighborhood?: string) => {
-  const raw = String(value || '').replace(/\b(?:CEP\s*:?\s*)?\d{5}\s*(?:-|–|—|\s)?\s*\d{3}\b/gi, ' ')
-    .replace(/\s+/g, ' ').replace(/[\s,;–—-]+$/g, '').trim();
-  const pieces = raw.split(/\s+[-–—]\s+/).map(x=>x.trim()).filter(Boolean);
-  const district = String(neighborhood || '').trim() || pieces.slice(1).find(x=>!/^(?:patos de minas|mg|minas gerais)$/i.test(x)) || '';
-  const plain = (s:string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  return {address: district && !plain(raw).includes(plain(district)) ? `${raw} - ${district}` : raw,
-    neighborhood: district || undefined};
+  const raw=stripAddressCep(value);
+  const district=stripAddressCep(neighborhood);
+  const parts=raw.split(/\s+[-–—]\s+/).map(x=>x.trim()).filter(Boolean);
+  const knownDistrict=district || (parts.length>1 ? parts[1] : '');
+  const normalized=normalizeAddressPart(raw);
+  const normalizedDistrict=normalizeAddressPart(knownDistrict);
+
+  return {
+    address:knownDistrict && !normalized.includes(normalizedDistrict)
+      ? `${raw} - ${knownDistrict}`
+      : raw,
+    neighborhood:knownDistrict || undefined
+  };
 };
+
 const addressParts = (item: CustomerAddress) => {
-  const canonical = canonicalAddress(item.address, item.neighborhood);
-  const street = canonical.address.split(/\s[-–—]\s/)[0]?.trim() || canonical.address;
-  const key = String(street).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .toLowerCase().replace(/^(?:r\.?|rua|av\.?|avenida)\s+/i,'')
-    .replace(/[^a-z0-9]+/g,' ').replace(/\b(?:cep|mg|patos de minas)\b/g,' ').replace(/\s+/g,' ').trim();
-  const district = String(item.neighborhood || canonical.neighborhood || '').normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  return { key, district, canonical };
+  const raw=stripAddressCep(item.address);
+  const segments=raw.split(/\s+[-–—]\s+/).map(x=>x.trim()).filter(Boolean);
+
+  const street=segments[0] || raw;
+  const explicitDistrict=normalizeAddressPart(stripAddressCep(item.neighborhood));
+
+  const suffixes=segments.slice(1).map(normalizeAddressPart).filter(Boolean);
+
+  const district=explicitDistrict || (
+    suffixes.length && !/^(?:apto|apartamento|casa|bloco|fundos|lote|sala|andar|loja|quadra|q|lt)\b/.test(suffixes[0])
+      ? suffixes[0]
+      : ''
+  );
+
+  const meaningfulSuffixes=suffixes.filter(part=>part!==district);
+
+  // Se o bairro estiver embutido no texto principal,
+  // retira-se apenas esse bairro da chave da rua.
+  let streetKey=normalizeAddressPart(street);
+  if(district && streetKey.endsWith(` ${district}`)){
+    streetKey=streetKey.slice(0,-district.length-1);
+  }
+
+  // Complementos escritos junto ao número continuam na chave.
+  const complement=meaningfulSuffixes.join(' ');
+  const canonical=canonicalAddress(item.address,item.neighborhood);
+
+  return {
+    key:streetKey,
+    district,
+    complement,
+    canonical
+  };
 };
-const equivalentAddress = (a:CustomerAddress,b:CustomerAddress):boolean => {
-  const left=addressParts(a),right=addressParts(b);
-  return Boolean(left.key && left.key===right.key &&
-    (!left.district || !right.district || left.district===right.district));
+
+const equivalentAddress = (
+  a:CustomerAddress,
+  b:CustomerAddress
+):boolean => {
+  const left=addressParts(a);
+  const right=addressParts(b);
+
+  if(!left.key || left.key!==right.key) return false;
+  if(left.complement!==right.complement) return false;
+
+  // Bairros conhecidos e diferentes nunca se fundem.
+  if(left.district && right.district &&
+     left.district!==right.district) return false;
+
+  return true;
 };
 const mergeAddressEntries = (source: CustomerAddress[]): CustomerAddress[] => {
   const unique: CustomerAddress[]=[];
@@ -45,7 +108,9 @@ const mergeAddressEntries = (source: CustomerAddress[]): CustomerAddress[] => {
     const otherCanonical=canonicalAddress(alternative.address,alternative.neighborhood);
     const neighborhood=preferredCanonical.neighborhood||otherCanonical.neighborhood||preferred.neighborhood||alternative.neighborhood;
     unique[found]={...preferred,
-      address:canonicalAddress(preferred.address,neighborhood).address,
+      address:([preferred,alternative].find(entry =>
+        /(?:CEP\s*:?\s*)?\d{5}\s*(?:-|–|—|\s)?\s*\d{3}/i.test(entry.address)
+      ) || preferred).address.trim(),
       neighborhood,
       maps_link:preferred.maps_link||alternative.maps_link,
       primary:Boolean(existing.primary||item.primary),
@@ -85,7 +150,7 @@ export function customerContactPayload(phonesInput: CustomerPhone[], addressesIn
   const uniqueAddresses=new Set<string>();
   const addresses=mergeAddressEntries(addressRows).filter(item=>{
     const parts=addressParts(item);
-    const key=`${parts.key}|${parts.district}`;
+    const key=`${parts.key}|${parts.district}|${parts.complement}`;
     if(uniqueAddresses.has(key))return false;
     uniqueAddresses.add(key);return true;
   });

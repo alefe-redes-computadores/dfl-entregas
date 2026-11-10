@@ -10,10 +10,18 @@ const card=file('components/home/DeliveryCard.tsx');
 const lib=file('lib/operation/multiOrderDraft.ts');
 check(edit.includes('sameStopDeliveries.map(')&&edit.includes('router.replace(`/entregas/editar?id='),'Editar mantém abas por número');
 for(const name of ['activeDraftId','setActiveDraftId','role="tablist"','aria-selected={activeDraftId === draft.id}','#{draft.orderId ||','setExtraIfoodOrders','Salvar ${extraIfoodOrders.length + 1} pedidos','firstMultiOrderIssue(drafts)','setActiveDraftId(issue.id)'])check(create.includes(name),'Criar navegação: '+name);
-for(const name of ['activeOrderId','activeIfoodId','activeConfirmationCode','activeCustomerName','activePhone','activeAddress','activeMapsLink','activeValue','activeSubsidy','activePaymentMethod','activeIsPaid','activeChangeFor','activeDrinks','activeObservation','activeNotifyWhatsapp'])check(create.includes(name),'Campo individual: '+name);
-for(const name of ['onChange={setActiveAddress}','onMapsLinkDetected={setActiveMapsLink}','setActivePaymentMethod(','setActiveNotifyWhatsapp(','setActiveOrderId(','setActiveConfirmationCode(','setActiveValue('])check(create.includes(name),'Edição ativa: '+name);
+for(const name of ['activeOrderId','activeIfoodId','activeConfirmationCode','activeCustomerName','activePhone','activeAddress','activeMapsLink','activeValue','activeSubsidy','activePaymentMethod','activeIsPaid','activeChangeFor','activeDrinks','activeObservation'])check(create.includes(name),'Campo individual: '+name);
+for(const name of ['onChange={setActiveAddress}','onMapsLinkDetected={setActiveMapsLink}','setActivePaymentMethod(','setActiveOrderId(','setActiveConfirmationCode(','setActiveValue('])check(create.includes(name),'Edição ativa: '+name);
 for(const bad of ['multiOrderReviewOpen','setMultiOrderReviewOpen','confirmationCode:item.confirmationCode||parsed.confirmationCode'])check(!create.includes(bad),'Modal antigo e cópia implícita proibidos: '+bad);
 check(create.includes("confirmationCode:''")&&create.includes("customerCharge:''"),'Novo pedido não herda códigos nem valores');
+check(
+  create.includes('confirmedWhatsappRecipient === consentRecipientKey') &&
+  create.includes("setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey : '')") &&
+  create.includes("notifyWhatsapp:false") &&
+  create.includes("notify_whatsapp:notifyWhatsapp") &&
+  create.includes("notify_whatsapp:draft.notifyWhatsapp"),
+  'R310: consentimento explícito, vinculado ao destinatário e sem herança entre pedidos'
+);
 check(create.includes('draft.notifyWhatsapp')&&create.includes('drinks:draft.drinks'),'Salvar mantém WhatsApp/bebidas por pedido');
 check(create.includes('hasOwnerIdentity({name:draftName,phone:draftPhone})'),'Pedido de teste não contamina irmãos');
 check(create.includes('stopSource&&sameCustomerAddress(stopSource.address_string,draftAddress)'),'Agrupamento respeita endereço existente');

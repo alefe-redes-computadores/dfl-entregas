@@ -16,6 +16,7 @@ import {
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { customerDuplicateCandidates } from '@/lib/customer-duplicates';
+import { customerDuplicateGroups, directDuplicateEvidence, customerUnverifiedNameGroups } from '@/lib/customer-duplicate-groups';
 import { customerAddresses, customerPhones } from '@/lib/customer-contact-book';
 import type { Customer } from '@/types';
 
@@ -30,6 +31,8 @@ export default function CustomerDuplicatesPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const mergeInFlight = useRef(false);
   const [visibleCount, setVisibleCount] = useState(30);
+  const [visibleGroups, setVisibleGroups] = useState(12);
+  const [primaryByGroup, setPrimaryByGroup] = useState<Record<string,string>>({});
   const [search, setSearch] = useState('');
   const [pendingMerge, setPendingMerge] = useState<{
     source: Customer;
@@ -53,6 +56,23 @@ export default function CustomerDuplicatesPage() {
         .some(value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(term))
     );
   }, [allCandidates, search]);
+
+  const allGroups = useMemo(()=>customerDuplicateGroups(allCandidates),[allCandidates]);
+  const unverifiedGroups = useMemo(()=>customerUnverifiedNameGroups(customers,allCandidates),[customers,allCandidates]);
+  const filteredUnverified = useMemo(()=>{
+    const term=search.trim().normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+    return unverifiedGroups.filter(group=>!term || group.members.some(c=>
+      [c.name,c.phone,c.address].some(value=>String(value||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().includes(term))));
+  },[unverifiedGroups,search]);
+  const filteredGroups = useMemo(()=>{
+    const term=search.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    if(!term)return allGroups;
+    return allGroups.filter(group=>group.members.some(row=>[
+      row.customer.name,row.customer.phone,row.customer.address,
+      ...customerPhones(row.customer).map(item=>item.number),
+      ...customerAddresses(row.customer).map(item=>item.address),
+    ].some(value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(term))));
+  },[allGroups,search]);
 
   const requestMerge = (
     source: Customer,
@@ -115,7 +135,7 @@ export default function CustomerDuplicatesPage() {
             <p className="mt-1 text-xs leading-relaxed text-zinc-500">
               O app apenas sugere pares. Você escolhe qual cadastro permanece.
               O nome e o telefone precisam conferir. Endereços diferentes serão preservados como destinos do mesmo cliente.
-              As entregas são repontadas antes da remoção do duplicado.
+              As entregas são repontadas antes da remoção do duplicado. Um telefone igual pode pertencer a pessoas diferentes: confira cada confirmação.
             </p>
           </div>
         </div>
@@ -127,16 +147,59 @@ export default function CustomerDuplicatesPage() {
           onChange={event => {setSearch(event.target.value);setVisibleCount(30);}}
           placeholder="Ex.: Claudio, rua ou telefone"
           className="h-12 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-amber-400" />
-        <p className="mt-2 text-[11px] text-zinc-500">{groupsCount} grupo(s) de nomes · {allCandidates.length} pares potenciais. A mesclagem continua manual.</p>
+        <p className="mt-2 text-[11px] text-zinc-500">{groupsCount} nome(s) com pares confirmados · {allGroups.length} grupo(s) verificáveis · {unverifiedGroups.length} grupo(s) pendente(s) de confirmação. A mesclagem continua manual.</p>
       </div>
       <div className="flex items-center justify-between px-1">
         <p className="text-xs font-bold text-zinc-500">
-          {candidates.length} par(es) para revisar
+          {filteredGroups.length+filteredUnverified.length} grupo(s) para revisar
         </p>
         <UsersRound size={17} className="text-zinc-600" />
       </div>
 
       <div className="space-y-3">
+        {filteredGroups.slice(0,visibleGroups).map(group=>{
+          const chosen=group.members.find(row=>row.customer.id===primaryByGroup[group.key])||group.members[0];
+          return <section key={group.key} className="rounded-[24px] border border-amber-500/20 bg-zinc-900/55 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-amber-400">Grupo para revisão</p><h2 className="mt-1 text-base font-black text-zinc-100">{group.name}</h2><p className="mt-1 text-[11px] text-zinc-500">{group.members.length} cadastros · {group.totalOrders} pedidos vinculados</p></div>
+              <span className="rounded-lg border border-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-300">Escolha o principal</span>
+            </div>
+            <p className="mt-3 text-[11px] leading-relaxed text-zinc-400">Um único grupo pode conter vários endereços. Nenhum pedido será movido até você confirmar a união de cada par. O cadastro escolhido mantém seu endereço principal.</p>
+            <div className="mt-3 space-y-2">
+              {group.members.map(row=>{
+                const selected=row.customer.id===chosen.customer.id;
+                const evidence=selected?undefined:directDuplicateEvidence(group,chosen.customer.id,row.customer.id);
+                return <div key={row.customer.id} className={`rounded-2xl border p-3 ${selected?'border-emerald-500/40 bg-emerald-500/[.06]':'border-zinc-800 bg-zinc-950/50'}`}>
+                  <button type="button" disabled={Boolean(busy)} onClick={()=>setPrimaryByGroup(old=>({...old,[group.key]:row.customer.id}))} aria-pressed={selected} className="flex min-h-10 w-full items-center gap-2 text-left">
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border text-xs ${selected?'border-emerald-400 text-emerald-400':'border-zinc-600 text-zinc-600'}`}>{selected?'●':''}</span>
+                    <span className="min-w-0 flex-1"><strong className="block truncate text-sm text-zinc-100">{row.customer.name}</strong><small className="text-[10px] text-zinc-500">{row.orderCount} pedido(s) · {customerAddresses(row.customer).length} endereço(s) · {customerPhones(row.customer).length} telefone(s)</small></span>
+                    {selected&&<span className="text-[10px] font-black text-emerald-400">PRINCIPAL</span>}
+                  </button>
+                  <p className="mt-1 truncate text-[11px] text-zinc-500">{row.customer.address||'Endereço não informado'}</p>
+                  {!selected&&(evidence ? <button type="button" disabled={Boolean(busy)} onClick={()=>requestMerge(row.customer,chosen.customer,`${row.customer.id}:${chosen.customer.id}`)} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 text-[11px] font-black text-amber-200 disabled:opacity-40"><GitMerge size={14}/>Incorporar ao principal · {evidence.score}%</button> :
+                    <p className="mt-2 text-[10px] text-amber-400">Sem prova direta com o principal. Não mesclar por encadeamento: revise o par individualmente.</p>)}
+                </div>;
+              })}
+            </div>
+          </section>;
+        })}
+        {filteredGroups.length>visibleGroups&&<button type="button" className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 text-xs font-bold text-zinc-200" onClick={()=>setVisibleGroups(v=>v+12)}>Mostrar mais grupos · {filteredGroups.length-visibleGroups} restantes</button>}
+      </div>
+
+      {filteredUnverified.length>0&&<details className="rounded-[22px] border border-sky-500/20 bg-zinc-900/30 p-3">
+        <summary className="min-h-11 cursor-pointer py-3 text-xs font-black text-sky-300">Nomes repetidos sem telefone confirmado · {filteredUnverified.length} grupo(s)</summary>
+        <p className="mb-3 text-[11px] leading-relaxed text-zinc-400">Nome parecido sozinho não prova que é a mesma pessoa. Esses registros são para conferir; primeiro atualize os telefones e endereços no cadastro. Não existe botão de mesclagem nessa lista.</p>
+        {filteredUnverified.slice(0,30).map(group=><div key={group.key} className="mb-3 rounded-xl border border-zinc-800 p-3">
+          <p className="text-xs font-black text-zinc-200">{group.name} · {group.members.length} cadastros</p>
+          <p className="mt-1 text-[10px] text-zinc-500">{group.unverifiedCount} sem prova suficiente</p>
+          {group.members.map(customer=><button key={customer.id} type="button" onClick={()=>router.push(`/clientes/details?id=${customer.id}`)} className="mt-2 flex min-h-10 w-full items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 text-left text-[11px] text-zinc-300"><span className="truncate">{customer.name} · {customer.address||'Sem endereço'}</span><ArrowRight size={13}/></button>)}
+        </div>)}
+        {filteredUnverified.length>30&&<p className="text-[10px] text-zinc-500">Mostrando 30 grupos. Pesquise pelo nome para localizar os demais.</p>}
+      </details>}
+
+      <details className="rounded-[22px] border border-zinc-800 bg-zinc-900/30 p-3">
+        <summary className="min-h-11 cursor-pointer py-3 text-xs font-black text-zinc-300">Comparações individuais (opcional) · {candidates.length} pares</summary>
+      <div className="mt-3 space-y-3">
         {candidates.slice(0, visibleCount).map((candidate) => {
           const key = `${candidate.left.id}:${candidate.right.id}`;
           return (
@@ -240,6 +303,8 @@ export default function CustomerDuplicatesPage() {
           </div>
         )}
       </div>
+
+      </details>
 
       {pendingMerge && (
         <div

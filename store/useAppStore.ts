@@ -3858,16 +3858,25 @@ export const useAppStore = create<AppState>()(
           return chosen!.id;
         }
 
+        // R309: escolha EXPLICITA no autocomplete pode reutilizar mesmo cliente
+        // com novo endereco, SOMENTE com nome-base exato E telefone completo
+        // previamente confirmado. iFood continua sob a regra de endereco estrito.
+        const explicitPhoneSelection = Boolean(
+          preferredCandidate && details?.preferredCustomerId && details?.origin !== 'ifood' &&
+          normalizedPhone.length >= 10 && normalizedPhone.length <= 11 &&
+          normalizeCustomerName(preferredCandidate.name) === normalizedName &&
+          customerPhones(preferredCandidate).some(item => normalizeCustomerPhone(item.number) === normalizedPhone)
+        );
         const preferredCustomer =
           preferredCandidate &&
-          customerIdentityEvidence(
+          (explicitPhoneSelection || customerIdentityEvidence(
             preferredCandidate,
             rawName,
             {
               address: details?.address,
               phone: details?.phone,
             },
-          ).reusable
+          ).reusable)
             ? preferredCandidate
             : undefined;
 
@@ -3900,6 +3909,29 @@ export const useAppStore = create<AppState>()(
            */
           if (!customer.address && details?.address?.trim()) {
             updatedFields.address = details.address.trim();
+          }
+
+          // Destino adicional de cliente escolhido (nunca por telefone isolado).
+          // Preserva o primeiro endereco e o principal; evita duplicar o destino.
+          if (explicitPhoneSelection && customer.id === preferredCandidate?.id && details?.address?.trim()) {
+            const oldAddresses = customerAddresses(customer);
+            const candidateAddress = details.address.trim();
+            const contacts = customerContactPayload(
+              customerPhones(customer),
+              [...oldAddresses, {
+                id: `addr-r309-${Date.now()}-${Math.random().toString(36).slice(2,9)}`,
+                address: candidateAddress,
+                neighborhood: derivedNeighborhood,
+                maps_link: details.mapsLink?.trim() || undefined,
+                label: 'Outro destino',
+                primary: false,
+              }],
+            );
+            if ((contacts.addresses?.length || 0) > oldAddresses.length) {
+              updatedFields.addresses = contacts.addresses;
+              if (!customer.address) updatedFields.address = contacts.address;
+              if (!customer.neighborhood) updatedFields.neighborhood = contacts.neighborhood;
+            }
           }
 
           if (!customer.maps_link && details?.mapsLink?.trim() &&

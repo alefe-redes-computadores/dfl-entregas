@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Crown, GitMerge, MapPin, MessageCircle, Pack
 import { useAppStore } from '@/store/useAppStore';
 import { buildCustomerStatsIndex, isOperationalCustomer, normalizeCustomerName } from '@/lib/customer-analytics';
 import { customerDuplicateCandidates } from '@/lib/customer-duplicates';
+import { customerDuplicateGroups, customerUnverifiedNameGroups } from '@/lib/customer-duplicate-groups';
 import { customerPhoneMatches, customerSearchBlob, customerPhones, customerAddresses } from '@/lib/customer-contact-book';
 import { OPERATION_BATCH, OPERATION_FIRST_BATCH, nextProgressiveCount, progressiveCount } from '@/lib/operation/progressiveWindow';
 
@@ -20,7 +21,7 @@ export default function CustomersPage(){
   const deliveries=useAppStore(state=>state.deliveries);
   const [query,setQuery]=useState('');
   const [filter,setFilter]=useState<Filter>('todos');
-  const [showInternals,setShowInternals]=useState(true);
+  const [showInternals,setShowInternals]=useState(false);
   const [visibleLimit,setVisibleLimit]=useState(OPERATION_FIRST_BATCH);
   const [compactCards,setCompactCards]=useState(true);
 
@@ -41,7 +42,7 @@ export default function CustomersPage(){
   },[filter,items,query,showInternals]);
   const renderedCustomers=useMemo(()=>filtered.slice(0,progressiveCount(filtered.length,visibleLimit)),[filtered,visibleLimit]);
   const maxOrders=ranked[0]?.stats.orderCount||1;
-  const duplicateCount=useMemo(()=>customerDuplicateCandidates(customers,deliveries).length,[customers,deliveries]);
+  const duplicateCount=useMemo(()=>{const pairs=customerDuplicateCandidates(customers,deliveries);return customerDuplicateGroups(pairs).length+customerUnverifiedNameGroups(customers,pairs).length;},[customers,deliveries]);
 
   return <div className="dfl-page">
     <button type="button" onClick={()=>router.push('/clientes/inteligencia')} className="mb-3 flex min-h-14 w-full items-center justify-between rounded-2xl border border-sky-500/25 bg-gradient-to-r from-sky-500/[.08] to-violet-500/[.05] px-4 text-left"><span><strong className="block text-xs font-black text-sky-200">Inteligência de Clientes</strong><small className="mt-1 block text-[10px] text-zinc-400">Fidelidade, histórico e revisão humana</small></span><ChevronRight size={17} className="text-sky-400"/></button>
@@ -66,7 +67,7 @@ export default function CustomersPage(){
       </div>
     </header>
     <div className="grid grid-cols-3 gap-2"><Metric value={customers.length} label="Clientes"/><Metric value={items.filter(item=>item.stats.orderCount>0).length} label="Com pedidos"/><Metric value={deliveries.length} label="Pedidos registrados"/></div>
-    {duplicateCount>0&&<button type="button" onClick={()=>router.push('/clientes/duplicados')} className="flex min-h-12 items-center justify-between rounded-2xl border border-amber-500/20 bg-amber-500/[.06] px-4 text-left active:scale-[.99]"><span className="flex items-center gap-2 text-xs font-black text-amber-400"><GitMerge size={16}/>Revisar possíveis duplicados <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px]">{duplicateCount}</span></span><ChevronRight size={16} className="text-amber-500/60"/></button>}
+    {duplicateCount>0&&<button type="button" onClick={()=>router.push('/clientes/duplicados')} className="flex min-h-12 items-center justify-between rounded-2xl border border-amber-500/20 bg-amber-500/[.06] px-4 text-left active:scale-[.99]"><span className="flex items-center gap-2 text-xs font-black text-amber-400"><GitMerge size={16}/>Revisar grupos de duplicados <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px]">{duplicateCount}</span></span><ChevronRight size={16} className="text-amber-500/60"/></button>}
 
     {ranked.length>0&&<details className="group rounded-[26px] border border-amber-500/20 bg-gradient-to-b from-amber-500/[.07] to-zinc-900/35 p-4"><summary className="mb-2 flex cursor-pointer list-none items-center justify-between focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"><div><p className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-400"><Trophy size={15}/>Quem mais pede</p><p className="mt-1 text-[11px] text-zinc-500">Pedidos válidos de todos os canais</p></div><span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-400">Top 5 · expandir</span></summary><div className="space-y-3 pt-2">{ranked.slice(0,5).map(({customer,stats},index)=><button key={customer.id} onClick={()=>router.push(`/clientes/details?id=${customer.id}`)} className="block w-full text-left"><div className="flex items-center gap-2"><span className={`flex h-6 w-6 items-center justify-center rounded-lg text-[10px] font-black ${index===0?'bg-amber-500 text-zinc-950':'bg-zinc-800 text-zinc-400'}`}>{index===0?<Crown size={12}/>:index+1}</span><span className="min-w-0 flex-1 truncate text-xs font-bold text-zinc-200">{customer.name}</span><span className="text-xs font-black text-amber-400">{stats.orderCount}</span></div><div className="ml-8 mt-1.5 h-1.5 overflow-hidden rounded-full bg-zinc-800"><div className="h-full rounded-full bg-gradient-to-r from-amber-600 to-amber-400" style={{width:`${Math.max(8,(stats.orderCount/maxOrders)*100)}%`}}/></div></button>)}</div></details>}
 
