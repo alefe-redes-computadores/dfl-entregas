@@ -501,13 +501,13 @@ function DeliveryDetailsContent() {
           </div>
 
           <span
-            className={`rounded-full px-3 py-1 text-[10px] font-black uppercase ${
+            className={`max-w-[148px] rounded-full px-3 py-1 text-center text-[10px] font-black uppercase leading-snug ${
               delivery.completed
                 ? 'bg-emerald-500/15 text-emerald-400'
                 : 'bg-amber-500/15 text-amber-400'
             }`}
           >
-            {cancelled ? 'Cancelado' : delivery.completed ? 'Concluído' : mode === 'pickup' && delivery.pickup_ready_at ? 'Pronto' : logistics && operationalStartedAt ? 'Em rota' : 'Pendente'}
+            {cancelled ? 'Cancelado' : delivery.completed ? 'Concluído' : mode === 'pickup' && delivery.pickup_ready_at ? 'Pronto' : logistics && operationalStartedAt ? 'Em rota' : channel === 'site' && logistics ? (route ? 'Aguardando saída' : 'Aguardando rota') : 'Pendente'}
           </span>
         </div>
 
@@ -522,6 +522,18 @@ function DeliveryDetailsContent() {
             <p className="mt-0.5 text-sm font-black text-zinc-100">{modeLabel}</p>
           </div>
         </div>
+
+        {channel === 'site' && (
+          <div className="mt-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.05] p-3" aria-label="Preparo comercial informado pelo Site">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300">Preparo no Site</span>
+              <strong className="text-right text-sm font-black text-zinc-100">
+                {delivery.site_order_status ? siteStatusLabel(delivery.site_order_status) : 'Aguardando sincronização'}
+              </strong>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">Etapa comercial recebida do Site. Prontidão não significa saída da rota.</p>
+          </div>
+        )}
 
         <div className="mt-5 grid grid-cols-2 gap-3">
           <div>

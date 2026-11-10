@@ -1,0 +1,12 @@
+'use strict';
+const fs=require('node:fs');const assert=require('node:assert/strict');
+const details=fs.readFileSync('app/entregas/details/page.tsx','utf8');
+const stages=fs.readFileSync('lib/site-integration-health.ts','utf8');
+assert.match(details,/channel === 'site' && logistics \? \(route \? 'Aguardando saída' : 'Aguardando rota'\)/);
+assert.match(details,/aria-label="Preparo comercial informado pelo Site"/);
+assert.match(details,/delivery\.site_order_status \? siteStatusLabel\(delivery\.site_order_status\)/);
+assert.match(details,/Prontidão não significa saída da rota/);
+assert.match(stages,/key: 'route', label: 'Em rota'/);
+assert.match(stages,/key: 'site', label: 'Conclusao registrada para o Site'/);
+assert.doesNotMatch(details,/\bnotifyRouteReady\b/);
+console.log('R44 ENTREGAS: status comercial separado da logistica, sem trigger de mensagem OK');
