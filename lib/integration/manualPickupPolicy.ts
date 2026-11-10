@@ -71,6 +71,8 @@ export function planManualPickup(input: {
   delivery: Delivery;
   reason: ManualPickupReason;
   now: number;
+  /** R309: somente piloto do dono previamente aprovado pelo servidor. OFF por padrao. */
+  allowOwnerPilot?: boolean;
 }): ManualPickupPlan {
   const { delivery: d, reason, now } = input;
   if (!/^dfl-[A-Za-z0-9-]{12,120}$/.test(d.id)) return {eligible: false, reason: 'invalid_delivery_id'};
@@ -80,7 +82,12 @@ export function planManualPickup(input: {
     return {eligible: false, reason: 'not_active_pickup'};
   if (d.notify_whatsapp !== true || d.manual_messaging_opt_in_v1 !== true)
     return {eligible: false, reason: 'no_explicit_consent'};
-  if (d.developer_test === true || d.exclude_from_reports === true || Boolean(d.owner_order_context))
+  // R309: DEV/teste continua bloqueado por padrao. A unica excecao e o
+  // numero unico permitido pelo servidor da retirada manual; nunca outros
+  // pedidos internos, marketplaces ou clientes. Mantem opt-in explicito.
+  const ownerSelfPilot = input.allowOwnerPilot === true &&
+    d.owner_order_context === 'owner_test' && d.developer_test === true;
+  if ((d.developer_test === true || d.exclude_from_reports === true || Boolean(d.owner_order_context)) && !ownerSelfPilot)
     return {eligible: false, reason: 'internal_or_test'};
   const phone = normalizeManualMessagePhone(d.phone);
   if (!phone) return {eligible: false, reason: 'invalid_phone'};

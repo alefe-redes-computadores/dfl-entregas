@@ -33,6 +33,23 @@ const oldEnough = (createdAt: string) => {
   return Number.isFinite(activation) && Number.isFinite(created) && created >= activation;
 };
 
+/** R309: piloto próprio SEM abrir exceção para destinatários normais.
+ * Somente owner_test + developer_test + exatamente um número aprovado.
+ * Escopo geral/consented_customers NUNCA autoriza testes do dono.
+ */
+const r309OwnerPilot = (delivery: Delivery): boolean => {
+  if (process.env.DFL_MANUAL_PICKUP_SCOPE !== 'authorized_clients' ||
+      delivery.owner_order_context !== 'owner_test' || delivery.developer_test !== true) return false;
+  const numbers = (process.env.DFL_MANUAL_PICKUP_APPROVED_PHONES_E164 || '')
+    .split(',').map(v => v.trim()).filter(Boolean);
+  if (numbers.length !== 1) return false;
+  const digits = String(delivery.phone || '').replace(/\D/g, '');
+  const phone = /^55[1-9]\d{9,10}$/.test(digits) ? digits :
+    /^[1-9]\d{9,10}$/.test(digits) ? `55${digits}` : '';
+  return !!phone && phone === numbers[0] &&
+    manualPickupRecipientAccess(process.env, phone).allowed;
+};
+
 /** Um único aviso de cada fase por pedido. Reserva atômica impede dois aparelhos.
  * Resposta incerta NÃO pode ser retransmitida automaticamente.
  */
@@ -47,7 +64,7 @@ export async function notifyManualPickup(deliveryId: string, reason: ManualPicku
   if (!snap.exists) return {status:'skipped',reason:'delivery_missing'};
   const delivery = {...snap.data(),id:snap.id} as Delivery;
   if (!oldEnough(delivery.created_at || delivery.createdAt || '')) return {status:'skipped',reason:'predates_rollout'};
-  const plan = planManualPickup({delivery,reason,now:Date.now()});
+  const plan = planManualPickup({delivery,reason,now:Date.now(),allowOwnerPilot:r309OwnerPilot(delivery)});
   if (!plan.eligible) return {status:'skipped',reason:plan.reason};
   const recipient = manualPickupRecipientAccess(process.env,plan.phone);
   if (!recipient.allowed) return {status:recipient.status,reason:recipient.reason};
@@ -75,7 +92,8 @@ export async function notifyManualPickup(deliveryId: string, reason: ManualPicku
     // Conferir o documento depois de reservar: servidor é autoridade, não o APK.
     const freshSnap = await deliveryRef.get();
     const fresh = freshSnap.exists
-      ? planManualPickup({delivery:{...freshSnap.data(),id:freshSnap.id} as Delivery,reason,now:Date.now()})
+      ? planManualPickup({delivery:{...freshSnap.data(),id:freshSnap.id} as Delivery,reason,now:Date.now(),
+          allowOwnerPilot:r309OwnerPilot({...freshSnap.data(),id:freshSnap.id} as Delivery)})
       : null;
     if (!fresh?.eligible || fresh.occurredAt !== plan.occurredAt || fresh.phone !== plan.phone ||
         !oldEnough(String((freshSnap.data() || {}).created_at || (freshSnap.data() || {}).createdAt || ''))) {
