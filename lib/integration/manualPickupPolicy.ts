@@ -58,10 +58,25 @@ export type ManualPickupPlan =
       phone: string;
       customerName: string;
       occurredAt: string;
-      payload: Record<string, string | number | boolean>;
+      payload: Record<string, string | number | boolean | Array<{name: string; quantity: number}>>;
     };
 
 const text = (v: unknown) => typeof v === 'string' ? v.trim() : '';
+
+/** R310: texto livre da Loja vira itens legiveis no template JA existente do worker.
+ * Sem inferir valores, sem leitura extra, sem alterar pedidos do Site ou marketplaces.
+ */
+export function manualPickupItems(value: unknown): Array<{name: string; quantity: number}> {
+  const clean = text(value).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').slice(0, 180).trim();
+  if (!clean) return [];
+  const segments = clean.split(/\s*;\s*|,\s*(?=\d{1,2}\s*(?:[x×]\s*)?\S)|\s+e\s+(?=\d{1,2}\s*(?:[x×]\s*)?\S)/i).map(s => s.trim()).filter(Boolean).slice(0, 8);
+  return segments.flatMap(segment => {
+    const m = /^(\d{1,2})\s*(?:[x×]\s*)?(.+)$/i.exec(segment);
+    const count = m ? Number(m[1]) : 1;
+    const name = (m && count >= 1 && count <= 50 ? m[2] : segment).replace(/[*_~`]/g, '').trim().slice(0, 150);
+    return name ? [{name, quantity: count >= 1 && count <= 50 ? count : 1}] : [];
+  });
+}
 const recent = (date: unknown, now: number, ttlMs: number) => {
   const stamp = Date.parse(text(date));
   return Number.isFinite(stamp) && stamp <= now + 30_000 && now - stamp <= ttlMs;
@@ -101,7 +116,7 @@ export function planManualPickup(input: {
   if (reason === 'ready' && created && Date.parse(ready) < Date.parse(created) - 30_000)
     return {eligible: false, reason: 'time_order_invalid'};
   const occurredAt = new Date(Date.parse(selected)).toISOString();
-  const payload: Record<string, string | number | boolean> = {
+  const payload: Record<string, string | number | boolean | Array<{name: string; quantity: number}>> = {
     delivery_id: d.id,
     fulfillment_mode: 'pickup',
     manual_pickup_v1: true,
@@ -110,6 +125,12 @@ export function planManualPickup(input: {
     completed: false,
     [reason === 'created' ? 'created_at' : 'pickup_ready_at']: occurredAt,
   };
+  // Worker 360 ja renderiza payload.items no recibo. Apenas pedidos manuais,
+  // sem ecoar dados internos, telefones ou observacoes administrativas.
+  if (reason === 'created') {
+    const items = manualPickupItems(d.manual_order_items);
+    if (items.length) payload.items = items;
+  }
   const charge = Number(d.customer_charge ?? d.value);
   if (Number.isFinite(charge) && charge >= 0 && charge < 100_000)
     payload.total = Math.round(charge * 100) / 100;
