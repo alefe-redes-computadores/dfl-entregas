@@ -191,9 +191,11 @@ export function projectPublicTracking(s: ConfirmedSnapshot): PublicProjection {
   const fulfillment = s.delivery.fulfillment_mode === 'pickup' ? 'pickup' as const : 'delivery' as const;
   const source = text(s.delivery.source_system);
   const origin = text(s.delivery.origin);
-  const origin_label = source === 'dfl_site' ? 'Loja' : origin === 'ifood' ? 'iFood' : origin === 'food99' ? '99Food' : 'Loja';
-  const id = text(s.delivery.order_id || s.delivery.external_order_id || s.delivery.id, 30).replace(/[^a-zA-Z0-9_-]/g, '');
-  const label = id ? `#${id}`.slice(0, 32) : 'Pedido';
+  const origin_label = source === 'dfl_site' ? 'Site' : origin === 'ifood' ? 'iFood' : origin === 'food99' ? '99Food' : 'Loja';
+  const id = text(s.delivery.order_id || s.delivery.external_order_id || s.delivery.id, 128).replace(/[^a-zA-Z0-9_-]/g, '');
+  const label = source === 'dfl_site' && /^site_[a-f0-9]{40}$/i.test(id)
+    ? `#${id.slice(-8).toUpperCase()}`
+    : id ? `#${id}`.slice(0, 32) : 'Pedido';
   const courier = s.delivery.fulfillment_mode !== 'pickup' && s.showCourier && s.route && !terminal &&
     typeof s.route.motoboy_name === 'string'
     ? s.route.motoboy_name.trim().split(/\s+/)[0].replace(/[^\p{L}\p{M}'-]/gu, '').slice(0, 40)

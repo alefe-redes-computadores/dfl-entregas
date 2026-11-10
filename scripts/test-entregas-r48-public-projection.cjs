@@ -1,0 +1,28 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const ts=require('typescript');
+const source=fs.readFileSync('lib/tracking/gate1/core.ts','utf8');
+const compiled=ts.transpileModule(source,{fileName:'core.ts',compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true},reportDiagnostics:true});
+assert.equal(compiled.diagnostics.length,0);
+const mod={exports:{}};
+new Function('require','module','exports',compiled.outputText)(require,mod,mod.exports);
+const core=mod.exports;
+let n=0;const eq=(a,b,l)=>{assert.deepEqual(a,b,'R48 ENT: '+l);n++};
+const now=Date.now();const when=new Date(now-1000).toISOString();
+const event={id:'r48_evt_a',event_id:'r48_evt_a',kind:'received',at:when,actor_uid:null,source:'dfl_site',revision:1,causation_id:null};
+const delivery={id:'dfl-0000000000000000',source_system:'dfl_site',order_id:'site_0320797a981e563a0466840ba20c56342288af52',site_order_status:'Em Produção',created_at:when,completed:false};
+const project=(d)=>core.projectPublicTracking({delivery:d,route:null,routeDeliveries:[],ledgerEvents:[event],confirmedAt:when,now});
+const p=project(delivery);
+eq(p.order.label,'#2288AF52','public order short label');
+eq(p.order.origin_label,'Site','origin name');
+eq(p.status,'preparing','commercial authority preserved');
+eq(p.freshness,'fresh','no freshness mutation');
+eq(p.timeline.length,1,'ledger unchanged');
+eq(core.validatePublicProjection(p),true,'valid strict public projection');
+const manual=project({...delivery,source_system:'dfl_entregas',order_id:'manual-test'});
+eq(manual.order.origin_label,'Loja','manual source original');
+const unknown=project({...delivery,order_id:'site_1234'});
+eq(unknown.order.label,'#site_1234','no 8 digit inference without 40 hex id');
+const text=JSON.stringify(p);for(const sensitive of ['customer_name','phone','address_string','opaque_token']){eq(text.includes(sensitive),false,'no sensitive '+sensitive)}
+console.log(`R48 ENTREGAS: ${n} public-projection checks OK`);
