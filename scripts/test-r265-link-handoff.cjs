@@ -50,7 +50,7 @@ ok(store.includes("exchange_policy: 'single_use_v1'"),'single-use exchange polic
 ok(store.includes("Object.prototype.hasOwnProperty.call(raw, 'consumed_at')"),'single-use consumed guard');
 ok(admin.includes('CUSTOMER_TRACKING_ORIGIN = \''+siteURL+'\''),'fixed allowed site host');
 ok(admin.includes("origin:currentInspection.delivery.origin"),'server-checked origin, not arbitrary input');
-ok(admin.includes("requested_ttl_minutes:45"),'short grant lifetime');
+ok(admin.includes("requested_ttl_minutes:90"),'manual grant lifetime 90min');
 ok(admin.includes('StaffConfirmDialog')&&admin.includes("setPendingAction('issue')")&&!admin.includes('window.confirm('),'explicit protected premium owner confirmation');
 ok(admin.includes("crypto.randomUUID().replace(/-/g,'')"),'idempotency nonce present');
 ok(admin.includes("navigator.clipboard.writeText(url)"),'explicit clipboard gesture');

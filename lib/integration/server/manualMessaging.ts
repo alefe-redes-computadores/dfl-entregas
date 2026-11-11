@@ -2,6 +2,7 @@ import 'server-only';
 import { createHmac } from 'node:crypto';
 import { adminDb } from './admin';
 import { normalizeManualMessagePhone, planManualMessage, type ManualDeliveryRecord, type ManualMessageReason, type ManualRouteRecord } from '../manualMessagingPolicy';
+import { manualPickupItems } from '../manualPickupPolicy';
 
 export type ManualMessageResult = { status: 'off'|'skipped'|'queued'|'duplicate'|'failed'; reason?: string };
 const off = (): ManualMessageResult => ({status:'off',reason:'manual_messages_disabled'});
@@ -86,10 +87,14 @@ async function forward(delivery: ManualDeliveryRecord, reason: ManualMessageReas
     process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' ? 'not_pilot_phone' : 'recipient_not_authorized'};
   const target = siteEndpoint();
   if (!target) return {status:'failed',reason:'bridge_configuration_invalid'};
+  // R54: mesmo payload.items estruturado que ja funciona na retirada.
+  // Itens comerciais somente no recebimento, nao na rota/conclusao.
+  const items = reason === 'created' ? manualPickupItems(delivery.manual_order_items) : [];
   const event = {
     event_id: `manual-msg-v1__${plan.eventType}__${delivery.id}`,
     source: 'manual', event_type:plan.eventType, order_id:plan.orderId,
-    customer_phone:plan.phone,customer_name:plan.customerName,payload:{...plan.payload,manual_messaging_opt_in_v1:true},
+    customer_phone:plan.phone,customer_name:plan.customerName,
+    payload:{...plan.payload,...(items.length?{items}:{}),manual_messaging_opt_in_v1:true},
   };
   // Site reverse-inbound contract (including this manual endpoint): epoch milliseconds
   // and bare 64-character hex HMAC. The Site -> Entregas relay uses a distinct

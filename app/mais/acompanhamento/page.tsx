@@ -27,7 +27,7 @@ const CUSTOMER_TRACKING_ORIGIN = 'https://dafamilialanches.com.br';
 type Filter = 'todas'|'site'|'manual'|'ifood'|'food99';
 type ProtectedAction = 'issue'|'share'|'revoke'|'confirm'|'sync';
 const confirmCopy: Record<ProtectedAction, {title:string;description:string;confirmLabel:string;tone:'safe'|'caution'|'danger'}> = {
-  issue:{title:'Emitir link privado',description:'Gerar um acesso de uso único, válido por até 45 minutos. Confira o pedido e envie somente ao cliente correto. Esta ação NÃO dispara WhatsApp.',confirmLabel:'Emitir link',tone:'caution'},
+  issue:{title:'Emitir link privado',description:'Gerar um acesso de uso único, válido por até 90 minutos. Confira o pedido e envie somente ao cliente correto. Esta ação NÃO dispara WhatsApp.',confirmLabel:'Emitir link',tone:'caution'},
   share:{title:'Compartilhar acompanhamento',description:'O link será entregue pelo compartilhamento do aparelho. Confira o número e o destinatário antes de enviar. Nenhum envio é automático.',confirmLabel:'Escolher destinatário',tone:'caution'},
   revoke:{title:'Revogar acesso',description:'O link emitido e a sessão ativa do cliente serão invalidados. Esta ação não pode ser desfeita.',confirmLabel:'Revogar link',tone:'danger'},
   confirm:{title:'Confirmar aceite operacional',description:'Registrar o aceite deste pedido no servidor. Não cria link nem envia WhatsApp. Confira a identidade e a origem antes de prosseguir.',confirmLabel:'Confirmar aceite',tone:'caution'},
@@ -195,7 +195,7 @@ function ControlPanel(){
       const answer=await api('/issue',{
         contract:'dfl.tracking.access',version:1,action:'issue',
         order:{canonical_order_key:currentInspection.delivery.canonical_order_key,origin:currentInspection.delivery.origin},
-        idempotency_key:crypto.randomUUID().replace(/-/g,''),requested_ttl_minutes:45,
+        idempotency_key:crypto.randomUUID().replace(/-/g,''),requested_ttl_minutes:90,
       });
       if(currentRequest!==lastRequest.current||auth.currentUser?.uid!==currentAccount)throw new Error('A tela ou a conta mudou. Não compartilhe este link; solicite a revogação.');
       if(!('opaque_token' in answer)||!/^[-_A-Za-z0-9]{43}$/.test(answer.opaque_token||'')||
@@ -316,7 +316,7 @@ function ControlPanel(){
         <p className="mt-2 text-[10px] text-zinc-500">Apenas o proprietário pode registrar o aceite. Não envia WhatsApp nem cria link automaticamente.</p>
       </div>}{actionError&&<p role="alert" className="rounded-xl border border-red-500/25 bg-red-500/[.08] p-2 text-[11px] font-bold text-red-200"><AlertTriangle size={13} className="mr-1 inline"/>{actionError}</p>}
       <button type="button" disabled={!canIssueLink||working||Boolean(issuedLink)} onClick={()=>void issuePrivateLink()}
-        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-bold text-amber-100 disabled:opacity-35"><Link2 size={16}/> {working?'Conferindo servidor...':'Emitir link privado (45 min)'}</button>
+        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-bold text-amber-100 disabled:opacity-35"><Link2 size={16}/> {working?'Conferindo servidor...':'Emitir link privado (90 min)'}</button>
       {issuedLink&&issuedLink.deliveryId===selectedId&&<div className="space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[.045] p-3">
         <p className="text-xs font-bold text-emerald-100">Link emitido — token oculto</p>
         <p className="text-[11px] text-zinc-400">Copie diretamente para o cliente certo. Vence em {new Date(issuedLink.expiresAt).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'})}. Se sair da página antes de copiar, revogue o acesso.</p>
