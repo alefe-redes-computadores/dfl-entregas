@@ -285,18 +285,9 @@ export function bestOperationalAddress(
   const delivery = canonicalizeOperationalAddress(deliveryAddress).address;
   const customer = canonicalizeOperationalAddress(customerAddress).address;
 
-  if (!delivery) return customer;
-  if (!customer) return delivery;
-
-  const deliveryHasNumber = hasHouseNumber(delivery);
-  const customerHasNumber = hasHouseNumber(customer);
-
-  if (!deliveryHasNumber && customerHasNumber) return customer;
-  if (deliveryHasNumber && !customerHasNumber) return delivery;
-
-  return streetQuality(customer) > streetQuality(delivery) + 8
-    ? customer
-    : delivery;
+  // R52: endereco do pedido tem autoridade; o endereco principal do contato
+  // nunca deve substitui-lo silenciosamente, mesmo quando e mais detalhado.
+  return delivery || customer;
 }
 
 export function compactAddressForCard(
@@ -305,5 +296,6 @@ export function compactAddressForCard(
   neighborhood?: string,
 ): string {
   const best = bestOperationalAddress(deliveryAddress, customerAddress);
-  return canonicalizeOperationalAddress(best, neighborhood).address;
+  // Bairro do cadastro so vale quando nao existe snapshot proprio da entrega.
+  return canonicalizeOperationalAddress(best, deliveryAddress?.trim() ? undefined : neighborhood).address;
 }

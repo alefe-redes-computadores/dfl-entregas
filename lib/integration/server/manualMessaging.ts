@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHmac } from 'node:crypto';
 import { adminDb } from './admin';
-import { planManualMessage, type ManualDeliveryRecord, type ManualMessageReason, type ManualRouteRecord } from '../manualMessagingPolicy';
+import { normalizeManualMessagePhone, planManualMessage, type ManualDeliveryRecord, type ManualMessageReason, type ManualRouteRecord } from '../manualMessagingPolicy';
 
 export type ManualMessageResult = { status: 'off'|'skipped'|'queued'|'duplicate'|'failed'; reason?: string };
 const off = (): ManualMessageResult => ({status:'off',reason:'manual_messages_disabled'});
@@ -45,6 +45,26 @@ const createdAfterActivation = (delivery: ManualDeliveryRecord) => {
   const activated = activationTime();
   return activated !== null && Number.isFinite(created) && created >= activated;
 };
+// R52: excecao EXCLUSIVA de homologacao, OFF na ausencia da nova flag.
+// Nao autoriza clientes, marketplace, pedidos do Site nem campos sem opt-in.
+const ownerPilot = (d: ManualDeliveryRecord) =>
+  process.env.DFL_MANUAL_OWNER_PILOT_ENABLED === 'true' &&
+  process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' &&
+  process.env.DFL_MANUAL_MESSAGING_ENABLED === 'true' &&
+  process.env.DFL_MANUAL_MESSAGING_KILL_SWITCH !== 'true' &&
+  d.owner_order_context === 'owner_test' && d.developer_test === true &&
+  (d.source_system === undefined || d.source_system === 'manual') &&
+  !d.external_order_id && d.origin === 'loja' &&
+  d.fulfillment_mode === 'delivery' &&
+  d.notify_whatsapp === true && d.manual_messaging_opt_in_v1 === true &&
+  pilotNumber() !== null && normalizeManualMessagePhone(d.phone) === pilotNumber();
+const plannedManualMessage = (d: ManualDeliveryRecord, reason: ManualMessageReason, route?: ManualRouteRecord|null) =>
+  planManualMessage({
+    // Nunca persistir este clone: remover flags internas apenas na avaliacao
+    // apos verificar explicitamente todos os requisitos do piloto.
+    delivery: ownerPilot(d) ? {...d, owner_order_context:undefined, developer_test:false, exclude_from_reports:false} : d,
+    reason, route,
+  });
 const siteEndpoint = () => {
   const raw = process.env.DFL_SITE_INTEGRATION_URL?.trim();
   const secret = process.env.DFL_INTEGRATION_SIGNING_SECRET?.trim();
@@ -57,7 +77,7 @@ const siteEndpoint = () => {
 async function forward(delivery: ManualDeliveryRecord, reason: ManualMessageReason, route?: ManualRouteRecord|null): Promise<ManualMessageResult> {
   if (!enabled()) return off();
   if (!createdAfterActivation(delivery)) return {status:'skipped',reason:'predates_rollout'};
-  const plan = planManualMessage({delivery,reason,route});
+  const plan = plannedManualMessage(delivery,reason,route);
   if (!plan.eligible) return {status:'skipped',reason:plan.reason};
   // Nao enviar a clientes reais durante a homologacao, mesmo com opt-in.
   // R301-R3: canário com destinatário fora do piloto continua bloqueado.
@@ -114,7 +134,7 @@ export async function notifyManualRoute(input:{routeId:string;reason:string}):Pr
   // O ingest aplica idempotência por evento/pedido, inclusive em retries.
   const candidates=snapshot.docs.map(doc=>({...doc.data(),id:doc.id} as ManualDeliveryRecord))
     .filter(d=>createdAfterActivation(d) && (()=>{
-      const plan=planManualMessage({delivery:d,reason,route});
+      const plan=plannedManualMessage(d,reason,route);
       return plan.eligible && r8Authorized(plan.phone);
     })());
   eligible=candidates.length;

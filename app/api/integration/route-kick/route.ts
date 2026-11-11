@@ -131,6 +131,20 @@ export async function POST(req: NextRequest) {
       : Promise.resolve({status:'off' as const,eligible:0,queued:0,duplicates:0,failed:0});
     // Manual notifications do not change Site relay acknowledgment semantics.
     const [manualMessaging,manualNextStop] = await Promise.all([manualMessagingTask,nextStopTask]);
+    console.info('[integration/manual-canary]', JSON.stringify({
+      reason,
+      messagingStatus: manualMessaging.status,
+      messagingReason: 'reason' in manualMessaging ? (manualMessaging.reason || null) : null,
+      messagingEligible: manualMessaging.eligible,
+      messagingQueued: manualMessaging.queued,
+      messagingFailed: manualMessaging.failed,
+      nextStopStatus: manualNextStop.status,
+      nextStopReason: 'reason' in manualNextStop ? (manualNextStop.reason || null) : null,
+      nextStopEligible: manualNextStop.eligible,
+      nextStopQueued: manualNextStop.queued,
+      nextStopDuplicates: manualNextStop.duplicates,
+      nextStopFailed: manualNextStop.failed,
+    }));
 
     const result = {
       ok: reconciliation.ok && relay.ok,

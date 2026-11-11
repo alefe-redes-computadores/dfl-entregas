@@ -30,8 +30,15 @@ const authorizedCandidate = (d:Delivery, pilot:string) => {
   if (d.source_system === 'dfl_site' || d.external_order_id || !['manual','loja'].includes(d.origin)) return false;
   if (d.fulfillment_mode && d.fulfillment_mode !== 'delivery') return false;
   if (d.completed === true || d.notify_whatsapp !== true || d.manual_messaging_opt_in_v1 !== true) return false;
-  if (d.owner_order_context || d.exclude_from_reports === true || d.developer_test === true) return false;
-  return normalizeManualMessagePhone(d.phone) === pilot;
+  const recipient = normalizeManualMessagePhone(d.phone);
+  if (recipient !== pilot) return false;
+  // R52: excecao temporaria EXCLUSIVA para o titular testar a segunda parada.
+  const ownerPilot = process.env.DFL_MANUAL_OWNER_PILOT_ENABLED === 'true' &&
+    process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' &&
+    process.env.DFL_MANUAL_NEXT_STOP_SCOPE === 'canary' &&
+    d.owner_order_context === 'owner_test' && d.developer_test === true;
+  if ((d.owner_order_context || d.exclude_from_reports === true || d.developer_test === true) && !ownerPilot) return false;
+  return true;
 };
 
 /** At-most-once queue transition, even if two APKs invoke the same server endpoint.

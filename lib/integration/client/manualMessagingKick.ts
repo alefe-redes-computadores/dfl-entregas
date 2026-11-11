@@ -44,7 +44,7 @@ export async function kickManualCreated(deliveryId:string):Promise<ManualKickRes
   if(!user) return {ok:false,status:'failed',reason:'session_unavailable'};
   const origin=(process.env.NEXT_PUBLIC_DFL_SERVER_ORIGIN?.trim()||'https://dfl-entregas.vercel.app').replace(/\/+$/,'');
   const url=Capacitor.isNativePlatform()?`${origin}/api/integration/manual-messaging`:'/api/integration/manual-messaging';
-  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),4500);
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),16000);
   try{
     const token=await user.getIdToken();
     const response=await fetch(url,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({action:'created',deliveryId}),cache:'no-store',credentials:'omit',keepalive:true,signal:controller.signal});

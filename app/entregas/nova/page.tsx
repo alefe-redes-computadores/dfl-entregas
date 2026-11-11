@@ -222,7 +222,13 @@ const [routeId, setRouteId] = useState('');
   const setActiveConfirmationCode = (next: string) => activeExtra ? updateActiveExtra({confirmationCode:next}) : setConfirmationCode(next);
   const setActiveCustomerName = (next: string) => activeExtra ? updateActiveExtra({customerName:next}) : setCustomerName(next);
   const setActivePhone = (next: string) => activeExtra ? updateActiveExtra({phone:next}) : setPhone(next);
-  const setActiveAddress = (next: string) => {setSelectedAddressNeighborhood('');return activeExtra ? updateActiveExtra({address:next}) : setStreetAddress(next);};
+  const setActiveAddress = (next: string) => {
+    setSelectedAddressNeighborhood('');
+    // R52: endereco manual novo nunca herda a localizacao antiga do contato.
+    if (activeExtra) return updateActiveExtra(next === activeAddress ? {address:next} : {address:next,mapsLink:''});
+    if (next !== streetAddress) setMapsLink('');
+    return setStreetAddress(next);
+  };
   const setActiveMapsLink = (next: string) => activeExtra ? updateActiveExtra({mapsLink:next}) : setMapsLink(next);
   const setActiveValue = (next: string) => activeExtra ? updateActiveExtra({customerCharge:next}) : setValue(next);
   const setActiveSubsidy = (next: string) => activeExtra ? updateActiveExtra({subsidy:next}) : setIfoodSubsidy(next);
@@ -630,7 +636,9 @@ const [routeId, setRouteId] = useState('');
             sameCustomerAddress(candidate.address_string, cleanStreet),
           )
         : undefined;
-      const stopSource = sameStopSource || sameAddressSource;
+      // R52: reutilizar grupo fisico SOMENTE se o endereco permaneceu igual.
+      const stopSource = sameStopSource && sameCustomerAddress(sameStopSource.address_string,cleanStreet)
+        ? sameStopSource : sameAddressSource;
       const shouldGroupStop = Boolean(stopSource);
       const stopGroupId = stopSource?.stop_group_id ||
         (shouldGroupStop
@@ -678,6 +686,13 @@ const [routeId, setRouteId] = useState('');
           void kickManualCreated(manualDeliveryId).then(messaging => {
             if (messaging.status === 'queued') toast.info('Aviso incluído na fila do WhatsApp.', {description:'O recebimento pelo cliente ainda não foi confirmado.'});
             else if (messaging.status === 'off') toast.info('Aviso automático ainda desativado.', {description:'O pedido foi salvo normalmente.'});
+            else if (messaging.status === 'skipped') toast.info('Pedido salvo; aviso não enviado.', {
+              description: messaging.reason === 'test_or_internal_order'
+                ? 'Pedido DEV protegido. O envio exige o canário restrito do proprietário.'
+                : messaging.reason === 'no_explicit_opt_in' ? 'O cliente não confirmou o recebimento de avisos.'
+                : messaging.reason === 'not_pilot_phone' ? 'Destinatário diferente do telefone piloto autorizado.'
+                : 'Mensagem suprimida pela política de elegibilidade.'
+            });
             else if (messaging.status === 'failed') toast.warning('Pedido salvo; aviso não confirmado.', {description:'Confira o diagnóstico antes de reenviar.'});
           }).catch(() => toast.warning('Pedido salvo; status do aviso indisponível.'));
         }

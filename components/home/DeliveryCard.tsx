@@ -176,8 +176,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const isSiteAwaitingConfirmation = isSiteOrder && (delivery.site_order_status || '').trim().toLocaleLowerCase('pt-BR') === 'pendente';
   const isUrgent = groupedDeliveries.some((item) => item.is_urgent);
   const shortAddress = compactAddressForCard(delivery.address_string, customer?.address, customer?.neighborhood);
-  const mapTarget = delivery.maps_link || customer?.maps_link || (shortAddress && shortAddress !== 'Endereço pendente' ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shortAddress)}` : '');
-  const hasCoordinatesOrLink = !!(customer?.maps_link || delivery.maps_link);
+  const mapTarget = delivery.maps_link || (!delivery.address_string?.trim() ? customer?.maps_link : '') || (shortAddress && shortAddress !== 'Endereço pendente' ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shortAddress)}` : '');
+  const hasCoordinatesOrLink = !!(delivery.maps_link || (!delivery.address_string?.trim() && customer?.maps_link));
   const hasStreetNumber = hasHouseNumber(shortAddress);
   const addressQuality = auditOperationalAddress(
     delivery.address_string || customer?.address,
