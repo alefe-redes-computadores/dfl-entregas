@@ -378,21 +378,6 @@ export default function HomePage() {
       />
 
       <OperationalCommandCenter routes={routesDoDia} deliveries={deliveriesDoDia} />
-      <section aria-label="Ferramentas de consulta" className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-2">
-        <button type="button" aria-expanded={homeToolsOpen} aria-controls="dfl-home-tools"
-          onClick={() => setHomeToolsOpen(open => !open)}
-          className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-2.5 text-left text-xs font-black text-zinc-300 transition-colors active:bg-zinc-800/40">
-          <Search size={17} className="shrink-0 text-amber-400" />
-          <span className="min-w-0 flex-1">Busca 360 e leitura interna</span>
-          <span className="text-[10px] font-medium text-zinc-500">{homeToolsOpen ? 'Recolher' : 'Consultar'}</span>
-          <ChevronDown size={15} className={`shrink-0 transition-transform ${homeToolsOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {homeToolsOpen && <div id="dfl-home-tools" className="mt-2 space-y-3 border-t border-zinc-800/70 pt-3">
-          <OperationalAssistant dayDeliveries={deliveriesDoDia} dateKey={selectedDateKey} />
-          <OperationalDemandCard />
-        </div>}
-      </section>
-
       {hasOperationSummary ? (
       <section className="space-y-3">
         <div className="flex items-end justify-between gap-3 px-1">
@@ -493,6 +478,47 @@ export default function HomePage() {
       )}
 
 
+      {openRoutes.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-end justify-between gap-3 px-1">
+            <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Execução</p><h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">Rotas em andamento {globalMotoboy && `· ${globalMotoboy}`}</h2></div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              {openRoutes.length > 3 && (
+                <button type="button" onClick={() => setCompactOpenRoutes((value) => !value)} aria-pressed={compactOpenRoutes} aria-label={compactOpenRoutes ? 'Mostrar todas as rotas abertas' : 'Mostrar apenas tres rotas abertas'} className="min-h-9 rounded-xl border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-[10px] font-bold text-zinc-200 transition active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+                  {compactOpenRoutes ? 'Mostrar todas' : 'Focar em 3'}
+                </button>
+              )}
+              <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[9px] font-black text-emerald-400">{openRoutes.length} {openRoutes.length === 1 ? 'aberta' : 'abertas'}</span>
+            </div>
+          </div>
+          {openRoutes.map((route, index) => (
+            !compactOpenRoutes || index < 3 ? (
+              <RouteAccordion key={route.id} route={route} defaultOpen={false} />
+            ) : null
+          ))}
+          {compactOpenRoutes && openRoutes.length > 3 && (
+            <button type="button" onClick={() => setCompactOpenRoutes(false)} className="min-h-11 rounded-2xl border border-zinc-700 bg-zinc-900/70 px-4 text-xs font-bold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400" aria-label={`Exibir todas as ${openRoutes.length} rotas abertas`}>
+              Exibir mais {openRoutes.length - 3} rotas abertas
+            </button>
+          )}
+        </section>
+      )}
+
+      <section aria-label="Ferramentas de consulta" className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-2">
+        <button type="button" aria-expanded={homeToolsOpen} aria-controls="dfl-home-tools"
+          onClick={() => setHomeToolsOpen(open => !open)}
+          className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-2.5 text-left text-xs font-black text-zinc-300 transition-colors active:bg-zinc-800/40">
+          <Search size={17} className="shrink-0 text-amber-400" />
+          <span className="min-w-0 flex-1">Busca 360 e leitura interna</span>
+          <span className="text-[10px] font-medium text-zinc-500">{homeToolsOpen ? 'Recolher' : 'Consultar'}</span>
+          <ChevronDown size={15} className={`shrink-0 transition-transform ${homeToolsOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {homeToolsOpen && <div id="dfl-home-tools" className="mt-2 space-y-3 border-t border-zinc-800/70 pt-3">
+          <OperationalAssistant dayDeliveries={deliveriesDoDia} dateKey={selectedDateKey} />
+          <OperationalDemandCard />
+        </div>}
+      </section>
+
       {storeOrdersDoDia.length > 0 && !globalMotoboy && (
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between px-1">
@@ -570,32 +596,6 @@ export default function HomePage() {
         </section>
       )}
 
-      {openRoutes.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <div className="flex items-end justify-between gap-3 px-1">
-            <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Execução</p><h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">Rotas em andamento {globalMotoboy && `· ${globalMotoboy}`}</h2></div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-              {openRoutes.length > 3 && (
-                <button type="button" onClick={() => setCompactOpenRoutes((value) => !value)} aria-pressed={compactOpenRoutes} aria-label={compactOpenRoutes ? 'Mostrar todas as rotas abertas' : 'Mostrar apenas tres rotas abertas'} className="min-h-9 rounded-xl border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-[10px] font-bold text-zinc-200 transition active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-                  {compactOpenRoutes ? 'Mostrar todas' : 'Focar em 3'}
-                </button>
-              )}
-              <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[9px] font-black text-emerald-400">{openRoutes.length} {openRoutes.length === 1 ? 'aberta' : 'abertas'}</span>
-            </div>
-          </div>
-          {openRoutes.map((route, index) => (
-            !compactOpenRoutes || index < 3 ? (
-              <RouteAccordion key={route.id} route={route} defaultOpen={false} />
-            ) : null
-          ))}
-          {compactOpenRoutes && openRoutes.length > 3 && (
-            <button type="button" onClick={() => setCompactOpenRoutes(false)} className="min-h-11 rounded-2xl border border-zinc-700 bg-zinc-900/70 px-4 text-xs font-bold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400" aria-label={`Exibir todas as ${openRoutes.length} rotas abertas`}>
-              Exibir mais {openRoutes.length - 3} rotas abertas
-            </button>
-          )}
-        </section>
-      )}
-
       {closedRoutes.length > 0 && (
         <ClosedRoutesSection
           key={`${selectedDateKey}:${globalMotoboy || 'all'}`}
@@ -605,8 +605,8 @@ export default function HomePage() {
         />
       )}
 
-      {routesDoDia.length === 0 && (
-        <div className="flex flex-col items-center gap-2 py-16 text-center">
+      {routesDoDia.length === 0 && storeOrdersDoDia.length === 0 && (
+        <div className="flex flex-col items-center gap-2 py-8 text-center">
           <p className="text-sm font-black text-zinc-300">
             Nenhuma rota {globalMotoboy ? 'para este motoboy' : 'neste dia'}.
           </p>

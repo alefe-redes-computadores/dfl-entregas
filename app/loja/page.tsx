@@ -105,6 +105,12 @@ export default function LojaPage() {
     try { setShowManagement(window.sessionStorage.getItem('dfl:loja:gestao') === 'open'); }
     catch { /* Private browsing must not block Loja. */ }
   }, []);
+  // R54: links profundos vindos das Preferências abrem o editor canônico.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash === '#dfl-loja-configuracoes') setIsSettingsOpen(true);
+    if (hash === '#dfl-loja-expediente') setIsScheduleEditorOpen(true);
+  }, []);
   const toggleManagement = () => setShowManagement(current => {
     const next = !current;
     try { window.sessionStorage.setItem('dfl:loja:gestao', next ? 'open' : 'closed'); }
@@ -347,7 +353,7 @@ export default function LojaPage() {
         selectedDateLabel={dashboardData.formattedDateLabel}
       />
 
-      <section className={`overflow-hidden rounded-[24px] border shadow-[0_18px_45px_rgba(0,0,0,.14)] ${isStoreOpen ? 'border-emerald-500/25 bg-gradient-to-br from-emerald-500/[.09] via-zinc-900/55 to-zinc-950/60' : 'border-zinc-800 bg-gradient-to-br from-zinc-900/80 to-zinc-950/60'}`}>
+      <section id="dfl-loja-abertura" className={`overflow-hidden rounded-[24px] border shadow-[0_18px_45px_rgba(0,0,0,.14)] ${isStoreOpen ? 'border-emerald-500/25 bg-gradient-to-br from-emerald-500/[.09] via-zinc-900/55 to-zinc-950/60' : 'border-zinc-800 bg-gradient-to-br from-zinc-900/80 to-zinc-950/60'}`}>
         <button
           onClick={toggleStore} disabled={storeToggleBusy || storeSettingsBusy} aria-busy={storeToggleBusy}
           className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left active:scale-[0.99]"
@@ -376,6 +382,17 @@ export default function LojaPage() {
             {isStoreOpen ? 'Encerrar' : 'Abrir agora'}
           </span>
         </button>
+        {/* R55: expediente ao lado da abertura manual; usa editor existente. */}
+        <div className="flex items-center gap-2 border-t border-zinc-800/60 px-3.5 py-2.5">
+          <Clock size={16} className="shrink-0 text-emerald-300" />
+          <span className="min-w-0 flex-1 text-[11px] font-semibold text-zinc-300">
+            {activeScheduleDays.length} dia{activeScheduleDays.length === 1 ? '' : 's'} programado{activeScheduleDays.length === 1 ? '' : 's'}
+          </span>
+          <button type="button" onClick={() => { setActiveTab('horarios'); setIsScheduleEditorOpen(true); document.getElementById('dfl-loja-expediente')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+            className="min-h-10 shrink-0 rounded-xl border border-emerald-500/25 bg-emerald-500/[.07] px-3 text-[11px] font-black text-emerald-300 active:bg-emerald-500/15">
+            Editar expediente
+          </button>
+        </div>
       </section>
 
       <section aria-label="Conferência opcional de abertura" className="rounded-2xl border border-zinc-800/80 bg-zinc-900/25 p-2">
@@ -403,122 +420,65 @@ export default function LojaPage() {
 
         <OperationalAttentionQueue orders={dashboardData.selectedDateOrders} selectedDateKey={dashboardData.selectedDateKey} onFinance={()=>setIsRevenueModalOpen(true)}/>
 
-        <button
-          onClick={() => {
-            if (Capacitor.isNativePlatform()) {
-              touchFeedback(ImpactStyle.Light);
-            }
-            router.push('/loja/caixa-de-entrada');
-          }}
-          className="group flex w-full items-center gap-3 rounded-[20px] border border-violet-500/15 bg-violet-500/[.045] px-3.5 py-3 text-left active:scale-[.985]"
-        >
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-violet-300">
-            <Inbox size={19} />
+        {/* R54: Loja e autoridade administrativa. Site e operação primeiro; financeiro sempre visível. */}
+        <section aria-label="Centro de acessos da Loja" className="space-y-3">
+          <div className="flex items-end justify-between gap-3 px-1">
+            <div><p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-400">Seu ponto de comando</p><h3 className="mt-1 font-heading text-[15px] font-black text-zinc-100">Acessos da Loja</h3></div>
+            <span className="text-[10px] font-medium text-zinc-500">Operação e gestão</span>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="font-heading text-[13px] font-black text-zinc-100">
-                Caixa de Entrada
-              </p>
-              <span className="rounded-full border border-violet-500/15 bg-violet-500/[.06] px-2 py-0.5 text-[8px] font-black uppercase text-violet-300">
-                Entrada rápida
-              </span>
-            </div>
-            <p className="mt-0.5 text-[9px] leading-relaxed text-zinc-500">
-              Cole iFood, WhatsApp ou texto livre antes de lançar
-            </p>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => router.push('/loja/caixa-de-entrada?aba=site')}
+              className="col-span-2 flex min-h-[72px] items-center gap-3 rounded-[19px] border border-amber-400/25 bg-gradient-to-r from-amber-400/[.10] to-zinc-900/55 px-3.5 py-3 text-left active:scale-[.99]">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[13px] bg-amber-400/10 text-amber-300"><Inbox size={20}/></span>
+              <span className="min-w-0 flex-1"><strong className="block text-[13px] font-black text-amber-100">Pedidos do Site</strong><small className="mt-1 block text-[10px] leading-snug text-zinc-400">Recebimento, pronto para rota e histórico</small></span>
+              <ChevronRight size={17} className="text-amber-300" />
+            </button>
+            <button type="button" onClick={() => router.push('/loja/caixa-de-entrada')}
+              className="flex min-h-[70px] items-center gap-2.5 rounded-[18px] border border-zinc-800 bg-zinc-900/40 px-3 text-left active:bg-zinc-800/50">
+              <Inbox size={19} className="shrink-0 text-violet-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Caixa de Entrada</strong><small className="mt-1 block text-[10px] leading-snug text-zinc-500">iFood, texto e balcão</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/>
+            </button>
+            <button type="button" onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir entregas: ${dashboardData.totalEntregas} no período`}
+              className="flex min-h-[70px] items-center gap-2.5 rounded-[18px] border border-zinc-800 bg-zinc-900/40 px-3 text-left active:bg-zinc-800/50">
+              <Package size={19} className="shrink-0 text-amber-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Entregas <span className="text-amber-300">{dashboardData.totalEntregas}</span></strong><small className="mt-1 block text-[10px] leading-snug text-zinc-500">{dashboardData.pendingDeliveries} pendente(s)</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/>
+            </button>
+            <button type="button" onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir rotas: ${dashboardData.selectedDateRoutes.length} no período · Acompanhar sequência e motoboys`}
+              className="col-span-2 flex min-h-[65px] items-center gap-3 rounded-[18px] border border-sky-500/20 bg-sky-500/[.045] px-3.5 text-left active:bg-sky-500/[.07]">
+              <Bike size={19} className="shrink-0 text-sky-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Rotas</strong><small className="mt-0.5 block text-[10px] leading-snug text-zinc-400">Sequência, saídas e motoboys · {dashboardData.selectedDateRoutes.length} no período</small></span><ChevronRight size={15} className="text-sky-300" />
+            </button>
           </div>
-          <ChevronRight size={16} className="shrink-0 text-zinc-700" />
-        </button>
 
-        {/* R282: atalhos da operação diária; confirmações externas não são ações da Loja. */}
-        <nav aria-label="Acesso rápido a confirmações e histórico" className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => router.push('/confirmacoes')}
-            className="flex min-h-[74px] min-w-0 items-center gap-2 rounded-[17px] border border-red-500/20 bg-red-500/[.045] px-3 text-left transition-colors active:bg-red-500/10">
-            <ShieldCheck size={18} className="shrink-0 text-red-400"/>
-            <span className="min-w-0"><strong className="block text-[12px] font-black text-zinc-100">Confirmar iFood</strong><small className="mt-0.5 block text-[10px] leading-snug text-zinc-500">Pendências e portal</small></span>
-          </button>
-          <button type="button" onClick={() => router.push('/loja/caixa-de-entrada?aba=site&historico=1')}
-            className="flex min-h-[74px] min-w-0 items-center gap-2 rounded-[17px] border border-sky-500/20 bg-sky-500/[.045] px-3 text-left transition-colors active:bg-sky-500/10">
-            <Inbox size={18} className="shrink-0 text-sky-400"/>
-            <span className="min-w-0"><strong className="block text-[12px] font-black text-zinc-100">Histórico do Site</strong><small className="mt-0.5 block text-[10px] leading-snug text-zinc-500">Pedidos e registros</small></span>
-          </button>
-        </nav>
-
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir entregas: ${dashboardData.totalEntregas} no período`} className="group relative min-h-[96px] overflow-hidden rounded-[18px] border border-amber-500/20 bg-gradient-to-br from-amber-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
-            <div className="flex items-center justify-between">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><Package size={18} /></div>
-              <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 px-1"><span className="text-[10px] font-black uppercase tracking-[.13em] text-zinc-400">Estoque e financeiro</span><span className="h-px flex-1 bg-zinc-800/70"/></div>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => router.push('/abastecimentos')} className="flex min-h-[69px] items-center gap-2.5 rounded-[17px] border border-amber-500/20 bg-amber-500/[.05] px-3 text-left active:bg-amber-500/10"><PackagePlus size={19} className="shrink-0 text-amber-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Compras</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Fornecedores e custos</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/></button>
+              <button type="button" onClick={() => router.push('/estoque')} className="flex min-h-[69px] items-center gap-2.5 rounded-[17px] border border-emerald-500/20 bg-emerald-500/[.05] px-3 text-left active:bg-emerald-500/10"><Boxes size={19} className="shrink-0 text-emerald-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Estoque</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Saldos e contagens</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/></button>
+              <button type="button" onClick={() => router.push('/despesas')} className="col-span-2 flex min-h-[60px] items-center gap-2.5 rounded-[17px] border border-zinc-800 bg-zinc-900/45 px-3 text-left active:bg-zinc-800/50"><ReceiptText size={19} className="shrink-0 text-amber-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Despesas operacionais</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Taxas, fretes, manutenção e diárias</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/></button>
             </div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Entregas <span className="ml-1 text-lg text-amber-300">{dashboardData.totalEntregas}</span></p>
-            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.pendingDeliveries > 0 ? `${dashboardData.pendingDeliveries} entrega(s) pendente(s)` : 'Consultar pedidos e pendências'}</p>
-          </button>
-
-          <button onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir rotas: ${dashboardData.selectedDateRoutes.length} no período · Acompanhar sequência e motoboys`} className="group relative min-h-[96px] overflow-hidden rounded-[18px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.10] via-zinc-900/55 to-zinc-950/65 p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,.12)] active:scale-[0.97]">
-            <div className="flex items-center justify-between">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400"><Bike size={18} /></div>
-              <ChevronRight size={16} className="text-zinc-700 transition-transform group-hover:translate-x-0.5" />
-            </div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Rotas <span className="ml-1 text-lg text-sky-300">{dashboardData.selectedDateRoutes.length}</span></p>
-            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">{dashboardData.selectedDateRoutes.filter(route => route.status === 'aberta').length} rota(s) aberta(s) · sequência</p>
-          </button>
-
-          <div className="col-span-2 mt-1 flex items-center gap-2 px-1" aria-label="Reposição e inventário">
-            <span className="text-[10px] font-black uppercase tracking-[.14em] text-zinc-500">Reposição e inventário</span>
-            <span className="h-px flex-1 bg-zinc-800/70" />
-            <span className="text-[9px] font-semibold text-emerald-400">Acesso rápido</span>
           </div>
-          <button onClick={() => router.push('/abastecimentos')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><PackagePlus size={18} /></div>
-              <ChevronRight size={16} className="text-zinc-700" />
-            </div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Compras</p>
-            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Compras, fornecedores e conferência</p>
-          </button>
-          <button onClick={() => router.push('/estoque')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400"><Boxes size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Estoque</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Saldos, contagens e movimentações</p>
-          </button>
 
-          <button type="button" aria-expanded={showManagement} onClick={toggleManagement} className="col-span-2 mt-1 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-3 text-left">
-            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">Gestão da loja · clientes, equipe e recursos</span>
-            <span className="h-px min-w-2 flex-1 bg-zinc-800/80" />
-            <ChevronDown size={16} className={`shrink-0 text-zinc-500 transition-transform ${showManagement ? 'rotate-180' : ''}`}/>
-          </button>
-          {showManagement && (<>
-
-
-          <button onClick={() => router.push('/equipe')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400"><Users size={18} /></div>
-              <ChevronRight size={16} className="text-zinc-700" />
-            </div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Equipe</p>
-            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Equipe interna e entregadores</p>
-          </button>
-
-          <button onClick={() => router.push('/clientes')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400"><Users size={18} /></div>
-              <ChevronRight size={16} className="text-zinc-700" />
-            </div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Clientes</p>
-            <p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Base, endereços e histórico</p>
-          </button>
-
-          <button onClick={() => router.push('/despesas')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400"><ReceiptText size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Despesas</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Taxas, manutenção, fretes e diárias</p>
-          </button>
-
-          <button onClick={() => router.push('/confirmacoes')} className="group rounded-[18px] border border-zinc-800/80 bg-zinc-900/35 p-2.5 text-left active:scale-[0.97]">
-            <div className="flex items-center justify-between"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-400"><ShieldCheck size={18}/></div><ChevronRight size={16} className="text-zinc-700"/></div>
-            <p className="mt-2 font-heading text-[13px] font-black text-zinc-100">Central iFood</p><p className="mt-0.5 min-h-[1.55rem] text-[9px] leading-[1.2] text-zinc-500">Confirmações e portal externo</p>
-          </button>
-          </>)}
-        </div>
+          <div className="space-y-2">
+            <button type="button" aria-expanded={showManagement} onClick={toggleManagement} className="flex min-h-[54px] w-full items-center justify-between rounded-[17px] border border-zinc-800 bg-zinc-900/30 px-3.5 text-left active:bg-zinc-800/40">
+              <span className="flex items-center gap-2.5"><Users size={18} className="text-violet-300"/><span><strong className="block text-[12px] font-black text-zinc-100">Pessoas e equipe</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Clientes, colaboradores e motoboys</small></span></span>
+              <ChevronDown size={16} className={`shrink-0 text-zinc-500 transition-transform ${showManagement ? 'rotate-180' : ''}`}/>
+            </button>
+            {showManagement && (<>
+              <div className="grid grid-cols-3 gap-2">
+                <button type="button" onClick={() => router.push('/clientes')} className="min-h-[56px] rounded-xl border border-zinc-800 bg-zinc-900/35 px-1 text-[11px] font-black text-zinc-200 active:bg-zinc-800/50">Clientes<ChevronRight size={12} className="ml-1 inline-block text-zinc-600"/></button>
+                <button type="button" onClick={() => router.push('/equipe')} className="min-h-[56px] rounded-xl border border-zinc-800 bg-zinc-900/35 px-1 text-[11px] font-black text-zinc-200 active:bg-zinc-800/50">Equipe<ChevronRight size={12} className="ml-1 inline-block text-zinc-600"/></button>
+                <button type="button" onClick={() => router.push('/motoboys')} className="min-h-[56px] rounded-xl border border-zinc-800 bg-zinc-900/35 px-1 text-[11px] font-black text-zinc-200 active:bg-zinc-800/50">Motoboys<ChevronRight size={12} className="ml-1 inline-block text-zinc-600"/></button>
+              </div>
+            </>)}
+          </div>
+          <details className="group overflow-hidden rounded-[17px] border border-zinc-800 bg-zinc-950/30">
+            <summary className="flex min-h-[52px] cursor-pointer list-none items-center gap-2.5 px-3.5 text-left text-[11px] font-bold text-zinc-300"><ShieldCheck size={17} className="text-sky-300"/><span className="flex-1">Confirmações, histórico e apoio</span><ChevronDown size={16} className="text-zinc-500 transition-transform group-open:rotate-180"/></summary>
+            <nav aria-label="Acesso rápido a confirmações e histórico" className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-2.5">
+              <button type="button" onClick={() => router.push('/confirmacoes')} className="min-h-12 rounded-xl border border-red-500/15 bg-red-500/[.035] p-2 text-[11px] font-bold text-zinc-200">Confirmar iFood</button>
+              <button type="button" onClick={() => router.push('/loja/caixa-de-entrada?aba=site&historico=1')} className="min-h-12 rounded-xl border border-sky-500/15 bg-sky-500/[.035] p-2 text-[11px] font-bold text-zinc-200">Histórico do Site</button>
+              <button type="button" onClick={() => router.push('/mais/preferencias')} className="col-span-2 min-h-12 rounded-xl border border-emerald-500/20 bg-emerald-500/[.04] p-2 text-[11px] font-bold text-emerald-300">Preferências 360 · rotas, parceiros e alertas</button>
+            </nav>
+          </details>
+        </section>
       </section>
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
@@ -639,7 +599,7 @@ export default function LojaPage() {
         </button>
       </section>
 
-      <section className="flex flex-col gap-3">
+      <section id="dfl-loja-expediente" className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Automação</p>
@@ -647,7 +607,7 @@ export default function LojaPage() {
           </div>
           <button
             onClick={() => { setActiveTab('horarios'); setIsScheduleEditorOpen((value) => !value); }}
-            className="text-[10px] font-black text-indigo-400"
+            className="text-[10px] font-black text-emerald-300"
           >
             {isScheduleEditorOpen ? 'Fechar editor' : 'Editar semana'}
           </button>
@@ -700,7 +660,7 @@ export default function LojaPage() {
         {isScheduleEditorOpen && (
           <div className="flex flex-col overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-900/45">
             <div className="flex items-center justify-between border-b border-zinc-800 px-4">
-              <button onClick={() => setActiveTab('horarios')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-wide text-center border-b-2 ${activeTab === 'horarios' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-zinc-500'}`}>Horários</button>
+              <button onClick={() => setActiveTab('horarios')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-wide text-center border-b-2 ${activeTab === 'horarios' ? 'border-emerald-500 text-emerald-300' : 'border-transparent text-zinc-500'}`}>Horários</button>
               <button onClick={() => setActiveTab('pausas')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-wide text-center border-b-2 ${activeTab === 'pausas' ? 'border-amber-500 text-amber-400' : 'border-transparent text-zinc-500'}`}>Pausas</button>
               <button onClick={() => setActiveTab('feriados')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-wide text-center border-b-2 ${activeTab === 'feriados' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500'}`}>Feriados</button>
             </div>
@@ -774,7 +734,7 @@ export default function LojaPage() {
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
+      <section id="dfl-loja-configuracoes" className="flex flex-col gap-3">
         <button
           onClick={() => setIsSettingsOpen((value) => !value)}
           className="flex items-center justify-between rounded-[20px] border border-zinc-800/70 bg-zinc-900/25 px-4 py-3.5 text-left active:scale-[0.99]"
@@ -786,7 +746,11 @@ export default function LojaPage() {
           <ChevronDown size={18} className={`text-zinc-600 transition-transform ${isSettingsOpen ? 'rotate-180' : ''}`} />
         </button>
         <button type="button" onClick={() => router.push('/mais/preferencias')} className="mx-3 flex min-h-11 items-center justify-between gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] px-3 text-left text-xs font-bold text-emerald-300">Central de Preferências 360 · ver tudo <ChevronRight size={16}/></button>
-        {/* R197: leitura do estado real; não dispara escrita nem consulta remota. */}
+        {/* R55: resumo fiel ao store fica disponivel sob demanda. */}
+        <details className="group mx-3 overflow-hidden rounded-[16px] border border-zinc-800/75 bg-zinc-900/25">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 text-[11px] font-bold text-zinc-300">
+            <span>Conferir valores atuais</span><ChevronDown size={15} className="text-zinc-500 transition-transform group-open:rotate-180" />
+          </summary>
         <div aria-label="Resumo das preferências operacionais" className="grid grid-cols-2 gap-2 px-3 pb-3 text-[10px] font-semibold">
           <span className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.045] px-3 py-2 text-emerald-200">Ordem: {routeOrderingMode === 'smart' ? 'inteligente' : 'manual'}</span>
           <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">Rotas: {routeReminderActive ? 'lembretes ativos' : 'lembretes pausados'}</span>
@@ -795,6 +759,7 @@ export default function LojaPage() {
           <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">iFood: {(storeSettings.marketplaceDeliveryModes?.ifood || 'dfl') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
           <span className="col-span-2 rounded-xl border border-violet-500/20 bg-violet-500/[.06] px-3 py-2 text-violet-200">Keeta: {configuredMarketplaceMode(storeSettings.marketplaceDeliveryModes, 'keeta') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
         </div>
+        </details>
         {quickPreferenceBusy && <p role="status" className="px-4 pb-2 text-[11px] text-sky-300">Salvando preferência no sistema…</p>}
 
         {isSettingsOpen && (
@@ -905,7 +870,7 @@ export default function LojaPage() {
 
               </div>
             </details>
-            <button onClick={handleSaveAllSettings} disabled={storeSettingsBusy || storeToggleBusy} aria-busy={storeSettingsBusy} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white active:scale-95"><Check size={16} /> Salvar configurações</button>
+            <button onClick={handleSaveAllSettings} disabled={storeSettingsBusy || storeToggleBusy} aria-busy={storeSettingsBusy} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-4 text-xs font-black uppercase tracking-widest text-zinc-950 active:scale-95"><Check size={16} /> Salvar configurações</button>
           </div>
         )}
       </section>

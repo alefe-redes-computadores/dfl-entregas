@@ -261,21 +261,21 @@ export function OperationalCommandCenter({
   const hiddenActions = visibleActionRows.length - visibleRows.length;
 
   if (visibleRows.length === 0) {
-    if (openRoutes.length === 0 && pending.length === 0) return null;
+    // R55: sem pendencias o dinheiro nas rotas nao pode sumir.
+    // O ramo abaixo e exclusivo: pulso nao aparece duas vezes na tela.
+    if (openRoutes.length === 0 && pending.length === 0 && settlementTasks.length === 0) return null;
 
     return (
-      <section className="rounded-[20px] border border-emerald-500/15 bg-emerald-500/[0.035] px-3.5 py-3">
-        <div className="flex items-center gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400">
-            <CheckCircle2 size={16} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-black text-zinc-200">
-              Operação dentro do padrão
-            </p>
-            <p className="mt-0.5 text-[10px] text-zinc-600">
-              Nenhuma ação operacional importante detectada agora.
-            </p>
+      <section aria-label="Prontidão e dinheiro nas rotas" className="space-y-2.5">
+        <OperationReadiness routes={routes} deliveries={deliveries} pendingSettlements={settlementTasks.length} pendingSiteOrders={siteInbox.total} />
+        <RouteCashPulse routes={cashPulseRoutes} deliveries={deliveries} />
+        <div className="rounded-[18px] border border-emerald-500/15 bg-emerald-500/[0.035] px-3.5 py-3">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400"><CheckCircle2 size={16} /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-black text-zinc-200">Operação dentro do padrão</p>
+              <p className="mt-0.5 text-[10px] text-zinc-500">Nenhuma ação operacional importante detectada agora.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -283,7 +283,7 @@ export function OperationalCommandCenter({
   }
 
   return (
-    <section className="rounded-[22px] border border-amber-500/15 bg-amber-500/[0.035] p-3">
+    <section aria-label="Prioridades e pulso operacional" className="rounded-[22px] border border-amber-500/15 bg-amber-500/[0.035] p-3">
       <div className="mb-2 flex items-center justify-between gap-3 px-1">
         <div>
           <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-400">

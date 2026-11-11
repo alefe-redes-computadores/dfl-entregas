@@ -1,170 +1,135 @@
-// app/mais/page.tsx
 'use client';
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { BellRing,
-  Activity,
-  ChevronRight,
-  LogOut,
-  ShieldCheck,
-  MessageSquareText,
-  SlidersHorizontal,
-  RefreshCw,
-  UsersRound,
+import {
+  Activity, BellRing, ChevronDown, ChevronRight, LogOut, MessageSquareText,
+  RefreshCw, ShieldCheck, SlidersHorizontal, Sparkles, UserRound,
+  UsersRound, WalletCards, type LucideIcon,
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
-import { UserAvatar } from '@/components/UserAvatar';
-import { isSuperadminUid } from '@/lib/access/roles';
 import { OperationalRadar } from '@/components/home/OperationalRadar';
+import { isSuperadminUid } from '@/lib/access/roles';
+
+type Tone = 'emerald' | 'amber' | 'sky' | 'violet' | 'neutral';
+const tones: Record<Tone, { icon: string; frame: string; arrow: string }> = {
+  emerald: { icon: 'bg-emerald-400/10 text-emerald-300', frame: 'border-emerald-500/20', arrow: 'text-emerald-300' },
+  amber: { icon: 'bg-amber-400/10 text-amber-300', frame: 'border-amber-500/20', arrow: 'text-amber-300' },
+  sky: { icon: 'bg-sky-400/10 text-sky-300', frame: 'border-sky-500/20', arrow: 'text-sky-300' },
+  violet: { icon: 'bg-violet-400/10 text-violet-300', frame: 'border-violet-500/20', arrow: 'text-violet-300' },
+  neutral: { icon: 'bg-zinc-800 text-zinc-300', frame: 'border-zinc-800', arrow: 'text-zinc-500' },
+};
+
+function SectionHeading({ eyebrow, title, count }: { eyebrow: string; title: string; count?: string }) {
+  return <div className="flex items-end justify-between gap-3 px-1">
+    <div>
+      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">{eyebrow}</p>
+      <h2 className="mt-1 font-heading text-[15px] font-black text-zinc-100">{title}</h2>
+    </div>
+    {count && <span className="text-[10px] font-bold text-zinc-600">{count}</span>}
+  </div>;
+}
+
+function Destination({ icon: Icon, title, description, tone = 'neutral', onClick, first = false }: {
+  icon: LucideIcon; title: string; description: string; tone?: Tone; onClick: () => void; first?: boolean;
+}) {
+  const style = tones[tone];
+  return <button type="button" onClick={onClick}
+    className={`group flex min-h-[70px] w-full items-center gap-3 px-3.5 py-3 text-left transition-colors active:bg-white/[.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${first ? '' : 'border-t border-zinc-800/75'}`}>
+    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-[13px] ${style.icon}`}><Icon size={19} strokeWidth={2}/></span>
+    <span className="min-w-0 flex-1">
+      <strong className="block text-[13px] font-black text-zinc-100">{title}</strong>
+      <span className="mt-0.5 block text-[11px] leading-[1.45] text-zinc-400">{description}</span>
+    </span>
+    <ChevronRight size={16} className={`shrink-0 transition-transform group-active:translate-x-0.5 ${style.arrow}`} />
+  </button>;
+}
 
 export default function MaisPage() {
   const router = useRouter();
-  const [legacyRadarOpen, setLegacyRadarOpen] = useState(false);
-
-  const user = useAppStore((state) => state.user);
-  const logout = useAppStore((state) => state.logout);
-  const fullName = user?.displayName?.trim() || 'Usuário DFL';
+  const user = useAppStore(state => state.user);
+  const logout = useAppStore(state => state.logout);
   const isDiagnosticsAdmin = isSuperadminUid(user?.uid);
-
+  const [leaving, setLeaving] = useState(false);
+  const [legacyRadarOpen, setLegacyRadarOpen] = useState(false);
   const handleLogout = async () => {
-    try {
-      await logout();
-      toast.success('Sessão encerrada.');
-    } catch {
-      toast.error('Não foi possível sair da conta.');
-    }
+    if (leaving) return;
+    setLeaving(true);
+    try { await logout(); toast.success('Sessão encerrada.'); }
+    catch { toast.error('Não foi possível sair da conta.'); }
+    finally { setLeaving(false); }
   };
 
-  return (
-    <div className="dfl-page relative mx-auto max-w-3xl space-y-4 pb-[calc(env(safe-area-inset-bottom)+88px)] animate-in fade-in duration-300">
-      <header className="px-1 pt-1">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-400">Central de controle · DFL</p>
-        <h1 className="mt-1 font-heading text-[24px] font-black leading-tight tracking-tight text-zinc-50">Mais</h1>
-        <p className="mt-1 text-xs leading-relaxed text-zinc-400">Ajustes, comunicação, inteligência e segurança em um só lugar.</p>
-      </header>
+  return <main className="dfl-page mx-auto max-w-3xl space-y-5 pb-[calc(env(safe-area-inset-bottom)+112px)] animate-in fade-in duration-300">
+    <header className="px-1 pt-1">
+      <div className="mb-1 flex items-center gap-2 text-emerald-300">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        <p className="text-[9px] font-black uppercase tracking-[0.2em]">Seu centro de controle</p>
+      </div>
+      <h1 className="font-heading text-[25px] font-black tracking-tight text-zinc-50">Mais</h1>
+      <p className="mt-1 max-w-md text-[12px] leading-relaxed text-zinc-400">Preferências e ferramentas organizadas para a operação.</p>
+    </header>
 
-      <section aria-label="Preferências 360" className="rounded-[20px] border border-emerald-500/25 bg-gradient-to-r from-emerald-500/[.08] to-zinc-900/50 p-3">
-        <button type="button" onClick={() => router.push('/mais/preferencias')} className="flex min-h-14 w-full items-center gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-300"><SlidersHorizontal size={19}/></span>
-          <span className="min-w-0 flex-1"><strong className="block text-sm font-black text-zinc-100">Preferências 360</strong><small className="block text-[11px] leading-snug text-zinc-400">Rotas, plataformas, expediente, origem e alertas</small></span>
-          <ChevronRight size={17} className="shrink-0 text-emerald-300"/>
-        </button>
-      </section>
-
-      <section aria-label="Conta atual" className="flex items-center gap-3 rounded-[18px] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[.08] via-zinc-900/65 to-zinc-950 p-3.5 shadow-[0_14px_32px_rgba(0,0,0,.14)]">
-        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-[16px] bg-gradient-to-br from-emerald-500 to-emerald-700 ring-2 ring-zinc-800">
-          <UserAvatar photoURL={user?.photoURL} name={user?.displayName} fallbackClassName="text-xl" />
-        </div>
-
-        <div className="min-w-0 flex-1 text-left">
-          <p className="text-[9px] font-black uppercase tracking-[.14em] text-emerald-300">Conta conectada</p>
-          <h2 className="break-words font-heading text-base font-black leading-snug text-zinc-50">
-            {fullName}
-          </h2>
-          <p className="break-all text-[11px] text-zinc-400">
-            {user?.email || 'Administrador Operacional'}
-          </p>
-        </div>
-      </section>
-      {isDiagnosticsAdmin && (
-        <section aria-label="Gestão e integrações" className="space-y-2.5">
-          <div className="flex items-center justify-between gap-2 px-1">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-400">Gestão e integrações</p>
-              <h2 className="mt-0.5 text-sm font-black text-zinc-100">Comunicação e inteligência</h2>
-            </div>
-            <span className="rounded-full border border-zinc-700/70 bg-zinc-900 px-2 py-1 text-[9px] font-bold text-zinc-400">Admin</span>
-          </div>
-          <button type="button" onClick={() => router.push('/mais/comunicacao')}
-            className="group flex min-h-[68px] w-full items-center gap-3 rounded-[20px] border border-amber-400/25 bg-gradient-to-r from-amber-400/[.12] to-zinc-900/70 px-3.5 py-3 text-left transition active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/[.12] text-amber-200"><MessageSquareText size={19}/></span>
-            <span className="min-w-0 flex-1"><strong className="block text-sm font-black text-amber-100">Comunicação 360</strong><small className="mt-0.5 block text-[11px] leading-snug text-zinc-400">Central de Mensageria 360° · acompanhamento privado · modelos e imagens</small></span>
-            <ChevronRight size={17} className="shrink-0 text-amber-300 transition-transform group-active:translate-x-0.5" />
-          </button>
-          <div className="space-y-2">
-            <details className="group rounded-[18px] border border-zinc-800 bg-zinc-950/30">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3.5 text-xs font-bold text-zinc-400">Acessos técnicos diretos <ChevronRight size={15} className="transition-transform group-open:rotate-90"/></summary>
-              <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-2">
-                <button type="button" onClick={() => router.push('/mais/mensageria')} className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900/60 px-2 text-[10px] font-bold text-zinc-300">Mensageria original</button>
-                <button type="button" onClick={() => router.push('/mais/acompanhamento')} className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900/60 px-2 text-[10px] font-bold text-zinc-300">Acompanhamento original</button>
-              </div>
-            </details>
-            <button type="button" onClick={() => router.push('/mais/inteligencia')} className="flex min-h-[66px] w-full items-center gap-3 rounded-[18px] border border-violet-500/20 bg-violet-500/[.045] px-3.5 py-3 text-left transition-colors active:bg-violet-500/10">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-violet-300"><UsersRound size={19}/></span>
-              <span className="min-w-0 flex-1"><strong className="block text-xs font-black text-zinc-100">DFL Intelligence</strong><small className="mt-1 block text-[10px] leading-relaxed text-zinc-400">Inteligência de Clientes · recomendações, bairros, qualidade e operação</small></span><ChevronRight size={16} className="text-violet-300"/>
-            </button>
-          </div>
-        </section>
-      )}
-      <section aria-label="Análises históricas" aria-hidden="true" className="hidden rounded-[22px] border border-zinc-800 bg-zinc-900/30 p-2.5">
-        <button type="button" aria-expanded={legacyRadarOpen} aria-controls="dfl-legacy-radar-mais"
-          onClick={() => setLegacyRadarOpen(open => !open)}
-          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-2.5 text-left text-xs font-black text-zinc-300 active:bg-zinc-800/50">
-          <span className="flex items-center gap-2"><Activity size={16} className="text-sky-300" /> Radar legado · análises avançadas</span>
-          <ChevronRight size={16} className={`shrink-0 transition-transform ${legacyRadarOpen ? 'rotate-90' : ''}`} />
-        </button>
-        {legacyRadarOpen && <div id="dfl-legacy-radar-mais" className="border-t border-zinc-800 pt-3"><OperationalRadar /></div>}
-      </section>
-
-      <section aria-label="Preferências e ferramentas" className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 px-1"><SlidersHorizontal size={15} className="text-zinc-400"/><h2 className="text-xs font-black uppercase tracking-[.12em] text-zinc-400">Preferências e ferramentas</h2></div>
-
-        <div className="flex flex-col overflow-hidden rounded-[20px] border border-zinc-800 bg-zinc-900/40">
-          <button
-            type="button"
-            onClick={() => router.push('/mais/notificacoes')}
-            className="flex min-h-14 w-full items-center gap-3 border-b border-zinc-800/80 px-3.5 py-3 text-left transition-colors active:bg-zinc-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
-              <BellRing size={18} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-zinc-100">Notificações</p>
-              <p className="text-xs text-zinc-500">
-                Expediente, rotas, iFood, estoque e sistema
-              </p>
-            </div>
-            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
-          </button>
-          <button type="button" onClick={() => router.push('/mais/atualizacoes')}
-            className="flex min-h-14 w-full items-center gap-3 border-b border-zinc-800/80 px-3.5 py-3 text-left transition-colors active:bg-zinc-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-300"><RefreshCw size={18}/></div>
-            <div className="min-w-0 flex-1"><p className="font-semibold text-zinc-100">Central de Atualizações</p><p className="text-xs text-zinc-500">Versão do APK/PWA, atualização segura e builds Android</p></div>
-            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
-          </button>
-
-          {isDiagnosticsAdmin && <button
-            type="button"
-            onClick={() => router.push('/mais/acessos')}
-            className="flex min-h-14 w-full items-center gap-3 border-b border-zinc-800/80 px-3.5 py-3 text-left transition-colors active:bg-zinc-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400"><UsersRound size={18}/></div>
-            <div className="min-w-0 flex-1"><p className="font-semibold text-zinc-100">Equipe e permissoes</p><p className="text-xs text-zinc-500">Preparar acessos, funcoes e vinculos de funcionarios</p></div>
-            <ChevronRight size={18} className="shrink-0 text-zinc-600" />
-          </button>}
-
-
-          {isDiagnosticsAdmin && <details className="group border-t border-zinc-800/80">
-            <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 px-3.5 py-2.5 text-left text-xs font-semibold text-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-              <Activity size={17} className="text-sky-400"/><span className="min-w-0 flex-1">Ferramentas e diagnósticos</span><ChevronRight size={16} className="shrink-0 transition-transform group-open:rotate-90"/>
-            </summary>
-            <button type="button" onClick={() => router.push('/mais/diagnostico')} className="flex min-h-12 w-full items-center gap-3 border-t border-zinc-800/70 bg-zinc-950/40 px-4 py-3 text-left text-xs text-zinc-300 active:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-              <Activity size={16} className="text-sky-400"/><span className="min-w-0 flex-1"><strong className="block font-bold text-zinc-100">Diagnóstico local</strong><small className="block text-[10px] leading-tight text-zinc-500">Leituras, duração e notificações agendadas</small></span><ChevronRight size={16}/>
-            </button>
-          </details>}
-        </div>
-      </section>
-
-      <button
-        type="button"
-        onClick={handleLogout}
-        className="mx-auto mb-4 mt-1 flex min-h-11 items-center gap-2 rounded-xl px-4 text-xs font-bold text-red-400 transition active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400"
-      >
-        <LogOut size={16} />
-        Sair da conta
+    <section aria-label="Acessos principais" className="grid grid-cols-2 gap-2.5">
+      <button type="button" onClick={() => router.push('/mais/preferencias')}
+        className="flex min-h-[116px] flex-col justify-between rounded-[20px] border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[.14] to-zinc-900/70 p-3.5 text-left transition active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+        <div className="flex w-full items-start justify-between"><SlidersHorizontal size={21} className="text-emerald-300"/><ChevronRight size={15} className="text-emerald-500"/></div>
+        <div><strong className="block text-[13px] font-black text-zinc-50">Preferências 360</strong><span className="mt-1 block text-[10px] leading-snug text-zinc-400">Rotas, parceiros e expediente</span></div>
       </button>
-    </div>
-  );
+      <button type="button" onClick={() => router.push('/mais/notificacoes')}
+        className="flex min-h-[116px] flex-col justify-between rounded-[20px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.09] to-zinc-900/70 p-3.5 text-left transition active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
+        <div className="flex w-full items-start justify-between"><BellRing size={21} className="text-sky-300"/><ChevronRight size={15} className="text-sky-500"/></div>
+        <div><strong className="block text-[13px] font-black text-zinc-50">Notificações</strong><span className="mt-1 block text-[10px] leading-snug text-zinc-400">Categorias, horários e privacidade</span></div>
+      </button>
+    </section>
+
+    {isDiagnosticsAdmin && <section aria-label="Comunicação e inteligência" className="space-y-2.5">
+      <SectionHeading eyebrow="Gestão e integrações" title="Comunicação e inteligência" />
+      <div className="overflow-hidden rounded-[20px] border border-zinc-800 bg-zinc-900/35">
+        <Destination first tone="amber" icon={MessageSquareText} title="Comunicação 360" description="Central de Mensageria 360° · acompanhamento privado · modelos e imagens" onClick={() => router.push('/mais/comunicacao')}/>
+        <Destination tone="violet" icon={Sparkles} title="DFL Intelligence" description="Inteligência de Clientes · recomendações, bairros, qualidade e operação" onClick={() => router.push('/mais/inteligencia')}/>
+      </div>
+      <details className="group rounded-2xl border border-zinc-800 bg-zinc-950/35">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3.5 text-[11px] font-semibold text-zinc-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+          <Activity size={15} className="text-zinc-500"/><span className="flex-1">Acessos técnicos diretos</span><ChevronDown size={15} className="transition-transform group-open:rotate-180"/>
+        </summary>
+        <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-2.5">
+          <button type="button" onClick={() => router.push('/mais/mensageria')} className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900/70 px-2 text-[10px] font-bold text-zinc-300">Mensageria original</button>
+          <button type="button" onClick={() => router.push('/mais/acompanhamento')} className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900/70 px-2 text-[10px] font-bold text-zinc-300">Acompanhamento original</button>
+        </div>
+      </details>
+    </section>}
+
+    {/* O Radar legado permanece isolado para compatibilidade. Nao compete com a navegacao premium. */}
+    {isDiagnosticsAdmin && <section aria-label="Análises históricas" aria-hidden="true" className="hidden">
+      <button type="button" onClick={() => setLegacyRadarOpen(open => !open)} aria-expanded={legacyRadarOpen}
+        className="min-h-11 text-xs text-zinc-500">Radar legado · análises avançadas</button>
+      {legacyRadarOpen && <OperationalRadar />}
+    </section>}
+
+    <section aria-label="Aplicativo e ferramentas" className="space-y-2.5">
+      <SectionHeading eyebrow="Sistema" title="Aplicativo e ferramentas" />
+      <div className="overflow-hidden rounded-[20px] border border-zinc-800 bg-zinc-900/35">
+        <Destination first tone="sky" icon={RefreshCw} title="Central de Atualizações" description="APK, novas versões e instalação segura" onClick={() => router.push('/mais/atualizacoes')}/>
+        {isDiagnosticsAdmin && <Destination tone="neutral" icon={UsersRound} title="Equipe e permissões" description="Acessos e funções dos colaboradores" onClick={() => router.push('/mais/acessos')}/>}
+        {isDiagnosticsAdmin && <Destination tone="neutral" icon={ShieldCheck} title="Diagnóstico local" description="Verificações técnicas e saúde do dispositivo" onClick={() => router.push('/mais/diagnostico')}/>}
+      </div>
+    </section>
+
+    <section aria-label="Conta e segurança" className="space-y-2.5">
+      <SectionHeading eyebrow="Conta" title="Sua sessão" />
+      <details className="group overflow-hidden rounded-[18px] border border-zinc-800 bg-zinc-900/30">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-3.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-zinc-800 text-zinc-300"><UserRound size={17}/></span>
+          <span className="min-w-0 flex-1"><strong className="block truncate text-xs font-bold text-zinc-100">Conta conectada</strong><small className="block truncate text-[10px] text-zinc-500">{user?.displayName?.trim() || 'Usuário DFL'}</small></span>
+          <ChevronDown size={16} className="text-zinc-500 transition-transform group-open:rotate-180"/>
+        </summary>
+        <div className="break-all border-t border-zinc-800 px-4 py-3 text-[11px] leading-relaxed text-zinc-400">{user?.email || 'Conta operacional'}<p className="mt-1 text-zinc-500">Acesso protegido pelas permissões da operação.</p></div>
+      </details>
+      <button type="button" disabled={leaving} onClick={() => void handleLogout()}
+        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-[15px] border border-rose-500/15 text-xs font-bold text-rose-300 transition active:bg-rose-500/5 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-400"><LogOut size={16}/>{leaving ? 'Encerrando sessão…' : 'Sair da conta'}</button>
+    </section>
+    <p className="px-3 text-center text-[10px] leading-relaxed text-zinc-600"><WalletCards size={12} className="mr-1 inline-block align-[-2px]"/>O dia a dia continua no Início e na Loja. Aqui ficam os ajustes.</p>
+  </main>;
 }
