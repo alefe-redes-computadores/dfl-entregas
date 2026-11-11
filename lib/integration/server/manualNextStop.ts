@@ -11,11 +11,14 @@ const sha = (text:string) => createHash('sha256').update(text).digest('hex');
 const enabled = () =>
   process.env.DFL_MANUAL_NEXT_STOP_ENABLED === 'true' &&
   process.env.DFL_MANUAL_NEXT_STOP_KILL_SWITCH === 'false' &&
-  process.env.DFL_MANUAL_NEXT_STOP_SCOPE === 'canary' &&
   process.env.DFL_MANUAL_MESSAGING_ENABLED === 'true' &&
   process.env.DFL_MANUAL_MESSAGING_KILL_SWITCH !== 'true' &&
-  process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' &&
-  /^55[1-9]\d{9,10}$/.test(process.env.DFL_MESSAGING_PILOT_PHONE_E164 || '');
+  ((process.env.DFL_MANUAL_NEXT_STOP_SCOPE === 'canary' &&
+    process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' &&
+    /^55[1-9]\d{9,10}$/.test(process.env.DFL_MESSAGING_PILOT_PHONE_E164 || '')) ||
+   (process.env.DFL_MANUAL_NEXT_STOP_SCOPE === 'consented_customers' &&
+    process.env.DFL_MANUAL_MESSAGING_SCOPE === 'consented_customers' &&
+    process.env.DFL_MANUAL_MESSAGING_ROLLOUT_APPROVED === 'true'));
 const targetSite = () => {
   const raw = process.env.DFL_SITE_INTEGRATION_URL?.trim();
   const secret = process.env.DFL_INTEGRATION_SIGNING_SECRET?.trim();
@@ -31,14 +34,19 @@ const authorizedCandidate = (d:Delivery, pilot:string) => {
   if (d.fulfillment_mode && d.fulfillment_mode !== 'delivery') return false;
   if (d.completed === true || d.notify_whatsapp !== true || d.manual_messaging_opt_in_v1 !== true) return false;
   const recipient = normalizeManualMessagePhone(d.phone);
-  if (recipient !== pilot) return false;
-  // R52: excecao temporaria EXCLUSIVA para o titular testar a segunda parada.
+  if (!recipient) return false;
+  // R52 exception stays strictly within the original one-phone canary.
   const ownerPilot = process.env.DFL_MANUAL_OWNER_PILOT_ENABLED === 'true' &&
     process.env.DFL_MANUAL_MESSAGING_SCOPE === 'canary' &&
     process.env.DFL_MANUAL_NEXT_STOP_SCOPE === 'canary' &&
+    recipient === pilot &&
     d.owner_order_context === 'owner_test' && d.developer_test === true;
   if ((d.owner_order_context || d.exclude_from_reports === true || d.developer_test === true) && !ownerPilot) return false;
-  return true;
+  if (process.env.DFL_MANUAL_NEXT_STOP_SCOPE === 'consented_customers') {
+    return process.env.DFL_MANUAL_MESSAGING_SCOPE === 'consented_customers' &&
+      process.env.DFL_MANUAL_MESSAGING_ROLLOUT_APPROVED === 'true';
+  }
+  return recipient === pilot;
 };
 
 /** At-most-once queue transition, even if two APKs invoke the same server endpoint.
@@ -69,7 +77,7 @@ export async function notifyManualNextStop(routeId:string):Promise<Outcome> {
     if (phone && !candidateByPhone.has(phone)) candidateByPhone.set(phone,delivery);
   }
   const eligible = [...candidateByPhone.values()];
-  if (!eligible.length) return {status:'skipped',reason:'no_consented_canary_customer',...empty};
+  if (!eligible.length) return {status:'skipped',reason:'no_consented_customer',...empty};
   const previousId = sha(`${routeId}:${plan.previousGroupKey}`).slice(0,40);
   const nextId = sha(`${routeId}:${plan.nextGroupKey}`).slice(0,40);
   const snapshotVersion = (parseInt(sha(JSON.stringify(plan.snapshotParts)).slice(0,7),16) % 1999999999) + 1;
@@ -94,7 +102,7 @@ export async function notifyManualNextStop(routeId:string):Promise<Outcome> {
     const envelope = {
       event_id:id,source:'manual',event_type:'delivery.next_stop',
       order_id:`entregas:${delivery.id}`,occurred_at:plan.completedAt,
-      customer_phone:pilot,customer_name:(delivery.customer_name||'').slice(0,80),payload,
+      customer_phone:normalizeManualMessagePhone(delivery.phone) || '',customer_name:(delivery.customer_name||'').slice(0,80),payload,
     };
     try {
       await ledgerRef.create({event_id:id,route_id:routeId,delivery_id:delivery.id,
