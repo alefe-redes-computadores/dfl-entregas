@@ -785,6 +785,7 @@ export default function LojaPage() {
           </div>
           <ChevronDown size={18} className={`text-zinc-600 transition-transform ${isSettingsOpen ? 'rotate-180' : ''}`} />
         </button>
+        <button type="button" onClick={() => router.push('/mais/preferencias')} className="mx-3 flex min-h-11 items-center justify-between gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] px-3 text-left text-xs font-bold text-emerald-300">Central de Preferências 360 · ver tudo <ChevronRight size={16}/></button>
         {/* R197: leitura do estado real; não dispara escrita nem consulta remota. */}
         <div aria-label="Resumo das preferências operacionais" className="grid grid-cols-2 gap-2 px-3 pb-3 text-[10px] font-semibold">
           <span className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.045] px-3 py-2 text-emerald-200">Ordem: {routeOrderingMode === 'smart' ? 'inteligente' : 'manual'}</span>

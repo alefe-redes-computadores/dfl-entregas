@@ -10,6 +10,7 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { nativeBackTarget } from '@/lib/native/navigation';
 import { deliveryDeepLinkToHref } from '@/lib/native/admin-bridge';
 import { notificationTargetHref } from '@/lib/native/notification-target';
+import { checkAndNotifyApkUpdate } from '@/lib/native/apk-update-alerts';
 // R135_NOTIFICATION_TARGET: toque resolvido em funcao pura.
 
 async function configureStatusBar() {
@@ -68,6 +69,7 @@ export function NativeRuntime() {
     const setup = async () => {
       await configureStatusBar();
       if (disposed) return;
+      void checkAndNotifyApkUpdate();
 
       try {
         const notificationListener = await LocalNotifications.addListener(
@@ -106,6 +108,7 @@ export function NativeRuntime() {
         const stateListener = await App.addListener('appStateChange', ({ isActive }) => {
           if (!isActive || disposed) return;
           window.dispatchEvent(new Event('dfl:app-foreground'));
+          void checkAndNotifyApkUpdate();
           window.setTimeout(() => {
             if (!disposed) void configureStatusBar();
           }, 80);

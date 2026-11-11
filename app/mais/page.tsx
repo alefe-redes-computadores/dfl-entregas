@@ -40,12 +40,20 @@ export default function MaisPage() {
   return (
     <div className="dfl-page relative mx-auto max-w-3xl space-y-4 pb-[calc(env(safe-area-inset-bottom)+88px)] animate-in fade-in duration-300">
       <header className="px-1 pt-1">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-400">R294 · Centro de controle</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-400">Central de controle · DFL</p>
         <h1 className="mt-1 font-heading text-[24px] font-black leading-tight tracking-tight text-zinc-50">Mais</h1>
-        <p className="mt-1 text-xs leading-relaxed text-zinc-400">Sua conta, comunicação e ajustes da operação, sem misturar as tarefas do dia.</p>
+        <p className="mt-1 text-xs leading-relaxed text-zinc-400">Ajustes, comunicação, inteligência e segurança em um só lugar.</p>
       </header>
 
-      <section aria-label="Conta atual" className="flex items-center gap-3 rounded-[22px] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[.08] via-zinc-900/65 to-zinc-950 p-3.5 shadow-[0_14px_32px_rgba(0,0,0,.14)]">
+      <section aria-label="Preferências 360" className="rounded-[20px] border border-emerald-500/25 bg-gradient-to-r from-emerald-500/[.08] to-zinc-900/50 p-3">
+        <button type="button" onClick={() => router.push('/mais/preferencias')} className="flex min-h-14 w-full items-center gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-300"><SlidersHorizontal size={19}/></span>
+          <span className="min-w-0 flex-1"><strong className="block text-sm font-black text-zinc-100">Preferências 360</strong><small className="block text-[11px] leading-snug text-zinc-400">Rotas, plataformas, expediente, origem e alertas</small></span>
+          <ChevronRight size={17} className="shrink-0 text-emerald-300"/>
+        </button>
+      </section>
+
+      <section aria-label="Conta atual" className="flex items-center gap-3 rounded-[18px] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[.08] via-zinc-900/65 to-zinc-950 p-3.5 shadow-[0_14px_32px_rgba(0,0,0,.14)]">
         <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-[16px] bg-gradient-to-br from-emerald-500 to-emerald-700 ring-2 ring-zinc-800">
           <UserAvatar photoURL={user?.photoURL} name={user?.displayName} fallbackClassName="text-xl" />
         </div>
@@ -65,7 +73,7 @@ export default function MaisPage() {
           <div className="flex items-center justify-between gap-2 px-1">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-400">Gestão e integrações</p>
-              <h2 className="mt-0.5 text-sm font-black text-zinc-100">Comunicação e operação</h2>
+              <h2 className="mt-0.5 text-sm font-black text-zinc-100">Comunicação e inteligência</h2>
             </div>
             <span className="rounded-full border border-zinc-700/70 bg-zinc-900 px-2 py-1 text-[9px] font-bold text-zinc-400">Admin</span>
           </div>

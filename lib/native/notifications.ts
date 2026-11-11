@@ -2,6 +2,12 @@
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import {
+  notificationPolicyAllows,
+  notificationTopicCooldownMs,
+  resolveNotificationDeliveryPolicy,
+  type NotificationDeliveryPolicy,
+} from '@/lib/native/notification-delivery-policy';
 import { routeReminderHref, stockThresholdHref } from '@/lib/native/notification-target';
 // R135_NOTIFICATION_TARGET: aviso individual direciona ao item, grupo fica na lista.
 import type {
@@ -73,6 +79,8 @@ export type NotificationPreferences = {
   supplyCheck: boolean;
   closingReview: boolean;
   syncFailure: boolean;
+  /** Entrega silenciosa/ritmo; configuracao ausente preserva o comportamento legado. */
+  deliveryPolicy?: NotificationDeliveryPolicy;
 };
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -107,7 +115,7 @@ export function resolveNotificationPreferences(
 
 export type NotificationPreferenceKey = Exclude<
   keyof NotificationPreferences,
-  'enabled'
+  'enabled' | 'deliveryPolicy'
 >;
 
 function preferenceEnabled(
@@ -262,6 +270,11 @@ export async function notifyOperational(
   }
 
   const now = Date.now();
+  const deliveryPolicy = resolveNotificationDeliveryPolicy(options?.preferences?.deliveryPolicy);
+  if (!notificationPolicyAllows(options?.preferenceKey, new Date(now), deliveryPolicy)) return false;
+  const topicCooldown = notificationTopicCooldownMs(options?.preferenceKey, deliveryPolicy);
+  const topicKey = options?.preferenceKey ? `p360-topic:${options.preferenceKey}` : '';
+  if (topicCooldown && now - persistentLastSent(topicKey) < topicCooldown) return false;
   const cooldown = options?.cooldownMs ?? 60_000;
   if (now - persistentLastSent(key) < cooldown) return false;
   if (notificationsInFlight.has(key)) return false;
@@ -292,6 +305,7 @@ export async function notifyOperational(
     });
 
     rememberSent(key, now);
+    if (topicCooldown) rememberSent(topicKey, now);
     return true;
   } catch (error) {
     console.error('[NOTIFICATIONS] Falha operacional:', error);
@@ -389,6 +403,7 @@ export async function syncShiftNotifications(settings: ScheduleSettings) {
     href = '/loja',
   ) => {
     if (!preferences[preferenceKey]) return;
+    if (!notificationPolicyAllows(preferenceKey, at, preferences.deliveryPolicy)) return;
     if (at.getTime() <= now.getTime() + 5_000) return;
 
     notifications.push({
@@ -527,6 +542,7 @@ export async function syncOpenRouteReminderNotifications(
       : new Date(now.getTime() + 5_000);
 
   if (at.getTime() >= closing.getTime()) return;
+  if (!notificationPolicyAllows('routeOpenReminder', at, settings.notificationPreferences?.deliveryPolicy)) return;
   if (!(await hasPermission())) return;
 
   const count = active.length;
@@ -628,6 +644,7 @@ export async function scheduleRouteDurationReminder(
   if (!(await hasPermission())) return false;
   const expected = new Date(started.getTime() + 60 * 60_000);
   const at = expected.getTime() > Date.now() + 5_000 ? expected : new Date(Date.now() + 5_000);
+  if (!notificationPolicyAllows('routeOpenReminder', at, preferences?.deliveryPolicy)) return false;
   try {
     await LocalNotifications.schedule({ notifications: [{
       id,
@@ -738,6 +755,8 @@ export async function scheduleStockSupplyCheckReminder(
   try {
     if (!(await hasPermission())) return false;
 
+    const at = new Date(Date.now() + SUPPLY_CHECK_DELAY_MINUTES * 60_000);
+    if (!notificationPolicyAllows('supplyCheck', at, preferences?.deliveryPolicy)) return false;
     const detail = supplier?.trim() || 'Compra recebida';
     const countText =
       itemsCount && itemsCount > 0
@@ -752,7 +771,7 @@ export async function scheduleStockSupplyCheckReminder(
           title: 'Compra aguardando conferência',
           body: `${detail}: ${countText} conferência e lançamento no estoque.`,
           schedule: {
-            at: new Date(Date.now() + SUPPLY_CHECK_DELAY_MINUTES * 60_000),
+            at,
             allowWhileIdle: true,
           },
           extra: ownerExtra('stock-supply', {
@@ -780,6 +799,7 @@ export async function cancelAllOperationalNotifications() {
     cancelOwner('immediate'),
     cancelOwner('shift'),
     cancelOwner('route-reminder'),
+    cancelOwner('route-duration'),
     cancelOwner('stock-supply'),
   ]);
 }
@@ -798,15 +818,25 @@ export async function reconcileNotificationPreferences(
   }
 
   const disabled = (Object.keys(after) as Array<keyof NotificationPreferences>)
-    .filter((key) => key !== 'enabled' && before[key] && !after[key]);
-  if (!disabled.length) return;
+    .filter((key) => key !== 'enabled' && key !== 'deliveryPolicy' && before[key] && !after[key]);
+  const beforePolicy = resolveNotificationDeliveryPolicy(before.deliveryPolicy);
+  const afterPolicy = resolveNotificationDeliveryPolicy(after.deliveryPolicy);
+  const policyChanged = JSON.stringify(beforePolicy) !== JSON.stringify(afterPolicy);
+  if (!disabled.length && !policyChanged) return;
 
   try {
     const pending = await LocalNotifications.getPending();
     const disabledSet = new Set(disabled);
     const notifications = pending.notifications.filter((item) => {
-      const extra = item.extra as { dflPreferenceKey?: NotificationPreferenceKey } | undefined;
-      return Boolean(extra?.dflPreferenceKey && disabledSet.has(extra.dflPreferenceKey));
+      const extra = item.extra as { dflPreferenceKey?: NotificationPreferenceKey; dflOwner?: string } | undefined;
+      if (!extra?.dflPreferenceKey) return false;
+      if (disabledSet.has(extra.dflPreferenceKey)) return true;
+      if (!policyChanged || extra.dflOwner === 'immediate') return false;
+      const scheduled = (item as { schedule?: { at?: Date | string } }).schedule?.at;
+      const when = scheduled ? new Date(scheduled) : new Date();
+      // Old pending schedules are canceled if now prohibited; shift/route are
+      // reconstructed from the existing store settings after save in the UI.
+      return !notificationPolicyAllows(extra.dflPreferenceKey, when, afterPolicy);
     });
     if (notifications.length) await LocalNotifications.cancel({ notifications });
   } catch (error) {
@@ -890,6 +920,8 @@ export async function notifyStockThresholdChanges(
       .sort().join('|')}`;
     const sent = await notifyOperational(key, title, body, {
       cooldownMs: 30 * 60_000,
+      preferences,
+      preferenceKey: zero.length ? 'stockZero' : 'stockLow',
       extra: {
         href: stockThresholdHref(alertable.map((item) => item.product)),
         dflGroupedStockAlert: alertable.length > 1,

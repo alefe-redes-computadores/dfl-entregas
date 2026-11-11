@@ -16,10 +16,19 @@ import {
   Smartphone,
   Store,
   WifiOff,
+  Moon,
+  Gauge,
+  Search,
+  Zap,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from '@/lib/operational-toast';
 import { Capacitor } from '@capacitor/core';
+import {
+  DEFAULT_NOTIFICATION_DELIVERY_POLICY,
+  resolveNotificationDeliveryPolicy,
+  type NotificationDeliveryPolicy,
+} from '@/lib/native/notification-delivery-policy';
 
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -31,6 +40,8 @@ import {
   type NotificationPreferenceKey,
   type NotificationPreferences,
   reconcileNotificationPreferences,
+  syncShiftNotifications,
+  syncOpenRouteReminderNotifications,
 } from '@/lib/native/notifications';
 
 type ToggleRowProps = {
@@ -143,6 +154,7 @@ export default function NotificationSettingsPage() {
     string | null
   >(null);
   const [testing, setTesting] = useState(false);
+  const [categorySearch, setCategorySearch] = useState('');
   const [saving, setSaving] = useState(false);
   const saveLock = useRef(false);
   const testLock = useRef(false);
@@ -156,6 +168,12 @@ export default function NotificationSettingsPage() {
   );
 
   const isNative = Capacitor.isNativePlatform();
+  const deliveryPolicy = useMemo(
+    () => resolveNotificationDeliveryPolicy(preferences.deliveryPolicy),
+    [preferences.deliveryPolicy],
+  );
+  const showCategory = (label: string) => !categorySearch.trim() ||
+    label.toLocaleLowerCase('pt-BR').includes(categorySearch.trim().toLocaleLowerCase('pt-BR'));
 
   useEffect(() => {
     let mounted = true;
@@ -186,6 +204,13 @@ export default function NotificationSettingsPage() {
         routeReminderEnabled: next.routeOpenReminder,
       });
       await reconcileNotificationPreferences(previous, next);
+      if (JSON.stringify(resolveNotificationDeliveryPolicy(previous.deliveryPolicy)) !== JSON.stringify(resolveNotificationDeliveryPolicy(next.deliveryPolicy))) {
+        const latest = useAppStore.getState();
+        await Promise.all([
+          syncShiftNotifications({ ...latest.storeSettings, notificationPreferences: next }),
+          syncOpenRouteReminderNotifications(latest.routes, { ...latest.storeSettings, notificationPreferences: next }),
+        ]);
+      }
       return true;
     } catch (error) {
       console.error(error);
@@ -201,6 +226,14 @@ export default function NotificationSettingsPage() {
     void save({
       ...preferences,
       [key]: !preferences[key],
+    }).then((ok) => { if (ok) toast.success('Categoria atualizada.'); });
+  };
+
+  const savePolicy = (patch: Partial<NotificationDeliveryPolicy>) => {
+    if (saveLock.current) return;
+    const next = { ...deliveryPolicy, ...patch };
+    void save({ ...preferences, deliveryPolicy: next }).then((ok) => {
+      if (ok) toast.success('Ritmo e prioridades salvos.');
     });
   };
 
@@ -237,6 +270,7 @@ export default function NotificationSettingsPage() {
   const enableAll = async () => {
     const saved = await save({
       ...DEFAULT_NOTIFICATION_PREFERENCES,
+      deliveryPolicy: preferences.deliveryPolicy,
       enabled: true,
       shiftOpen: true,
       shiftClose: true,
@@ -247,7 +281,7 @@ export default function NotificationSettingsPage() {
   };
 
   const defaults = async () => {
-    if (await save(DEFAULT_NOTIFICATION_PREFERENCES)) toast.success('Preferências recomendadas restauradas.');
+    if (await save({ ...DEFAULT_NOTIFICATION_PREFERENCES, deliveryPolicy: DEFAULT_NOTIFICATION_DELIVERY_POLICY })) toast.success('Preferências recomendadas restauradas.');
   };
 
   const requestPermission = async () => {
@@ -331,6 +365,11 @@ export default function NotificationSettingsPage() {
       </header>
 
       <p className="mb-3 rounded-xl border border-zinc-800 bg-zinc-900/35 px-3 py-2.5 text-[11px] leading-relaxed text-zinc-400">As categorias abaixo já controlam avisos reais. O Android exige autorização explícita. Lembretes de turno/estoque são agendados localmente; ações diretas na notificação ainda não estão disponíveis.</p>
+      <div className="mb-3 rounded-2xl border border-zinc-800 bg-zinc-900/30 p-3">
+        <label htmlFor="dfl-notification-category-search" className="mb-2 flex items-center gap-2 text-xs font-bold text-zinc-300"><Search size={15}/> Encontrar avisos</label>
+        <input id="dfl-notification-category-search" value={categorySearch} onChange={(event)=>setCategorySearch(event.target.value)} placeholder="Expediente, rotas, iFood, estoque, sistema…" className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs text-zinc-100 outline-none focus:border-emerald-400" />
+        <p className="mt-2 text-[10px] text-zinc-500">Filtra os grupos desta página. Preferências salvas não são alteradas pela busca.</p>
+      </div>
       <div aria-label="Estado das notificações" className="mb-3 grid grid-cols-2 gap-2">
         <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3"><p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Preferências</p><p className="mt-1 text-xs font-black text-zinc-100">{preferences.enabled ? `${enabledNotificationGroups} grupos ativos` : 'Avisos pausados'}</p></div>
         <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-3"><p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Permissão do aparelho</p><p className="mt-1 text-[11px] font-bold leading-snug text-zinc-200">{permissionLabel}</p></div>
@@ -406,8 +445,22 @@ export default function NotificationSettingsPage() {
         </div>
       </section>
 
+      <section aria-label="Ritmo e prioridade" className="mb-4 overflow-hidden rounded-[24px] border border-emerald-500/20 bg-gradient-to-b from-emerald-500/[.07] to-zinc-900/40">
+        <div className="flex gap-3 border-b border-zinc-800 p-4"><span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400"><Gauge size={19}/></span><div><h2 className="text-sm font-black text-zinc-100">Ritmo e prioridades</h2><p className="mt-1 text-[11px] text-zinc-400">Controle avisos do APK sem alterar mensagens externas.</p></div></div>
+        <div className="space-y-4 p-4">
+          <div><p className="mb-2 text-xs font-black text-zinc-200">Frequência de alertas repetitivos</p><div role="group" aria-label="Frequência dos alertas" className="grid grid-cols-3 gap-2">{([['immediate','Normal'],['balanced','Moderada'],['minimal','Mínima']] as const).map(([value,label])=><button key={value} type="button" aria-pressed={deliveryPolicy.frequency===value} disabled={saving} onClick={()=>savePolicy({frequency:value})} className={`min-h-12 rounded-xl border px-2 text-[11px] font-bold disabled:opacity-50 ${deliveryPolicy.frequency===value?'border-emerald-400/40 bg-emerald-500/10 text-emerald-200':'border-zinc-700 bg-zinc-950/50 text-zinc-400'}`}>{label}</button>)}</div><p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Moderada agrupa avisos repetidos por tema por 10 min; mínima por 45 min. Novos pedidos do Site e alertas críticos nunca são agrupados.</p></div>
+          <div><p className="mb-2 text-xs font-black text-zinc-200">Nível de prioridade</p><div role="group" aria-label="Nível de prioridade" className="grid grid-cols-2 gap-2"><button type="button" aria-pressed={deliveryPolicy.priority==='all'} disabled={saving} onClick={()=>savePolicy({priority:'all'})} className={`min-h-12 rounded-xl border px-3 text-xs font-bold disabled:opacity-50 ${deliveryPolicy.priority==='all'?'border-sky-400/40 bg-sky-500/10 text-sky-200':'border-zinc-700 text-zinc-400'}`}>Todos os ativos</button><button type="button" aria-pressed={deliveryPolicy.priority==='important'} disabled={saving} onClick={()=>savePolicy({priority:'important'})} className={`min-h-12 rounded-xl border px-3 text-xs font-bold disabled:opacity-50 ${deliveryPolicy.priority==='important'?'border-amber-400/40 bg-amber-500/10 text-amber-200':'border-zinc-700 text-zinc-400'}`}><Zap size={14} className="mr-1 inline"/>Só essenciais</button></div><p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Essenciais: pedido Site, confirmação iFood pendente, estoque zerado, falha de sincronização e rota aberta. Categorias não essenciais ficam silenciadas, mesmo ligadas individualmente.</p></div>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40">
+            <ToggleRow title="Horário de silêncio" description="Desliga avisos locais durante a faixa escolhida, respeitando as exceções abaixo." checked={deliveryPolicy.quietEnabled} onChange={()=>savePolicy({quietEnabled:!deliveryPolicy.quietEnabled})} disabled={saving}/>
+            {deliveryPolicy.quietEnabled && <div className="grid grid-cols-2 gap-2 px-3 pb-2"><label className="text-[10px] font-bold text-zinc-400">De <input type="time" value={deliveryPolicy.quietFrom} disabled={saving} onChange={(event)=>savePolicy({quietFrom:event.target.value})} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100"/></label><label className="text-[10px] font-bold text-zinc-400">Até <input type="time" value={deliveryPolicy.quietUntil} disabled={saving} onChange={(event)=>savePolicy({quietUntil:event.target.value})} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100"/></label></div>}
+            {deliveryPolicy.quietEnabled && <ToggleRow title="Permitir essenciais durante o silêncio" description="Mantém pedidos do Site e alertas críticos. Desative para silêncio total." checked={deliveryPolicy.criticalDuringQuiet} onChange={()=>savePolicy({criticalDuringQuiet:!deliveryPolicy.criticalDuringQuiet})} disabled={saving}/>}
+          </div>
+          <p className="flex items-start gap-2 text-[10px] leading-relaxed text-zinc-500"><Moon size={15} className="mt-0.5 shrink-0 text-emerald-400"/> Avisos silenciados não ficam numa fila de envio tardio. Lembretes locais agendados são recalculados ao salvar. A operação e os registros continuam normalmente.</p>
+        </div>
+      </section>
+
       <div className="space-y-4">
-        <Section
+        {showCategory('expediente abertura fechamento turno anúncios ifood') && <Section
           icon={Clock3}
           title="Expediente"
           subtitle="Baseado nos horários reais configurados em Loja"
@@ -455,9 +508,9 @@ export default function NotificationSettingsPage() {
             disabled={masterDisabled}
           />
           <p className="px-4 py-3 text-xs leading-relaxed text-zinc-400">Os lembretes seguem dias, turnos, pausas e exceções da Loja. Eles não ativam nem pausam anúncios automaticamente.</p>
-        </Section>
+        </Section>}
 
-        <Section
+        {showCategory('pedidos rotas ifood confirmação') && <Section
           icon={Bike}
           title="Pedidos, rotas e iFood"
           subtitle="Avisos que levam direto para a ação necessária"
@@ -497,9 +550,9 @@ export default function NotificationSettingsPage() {
             onChange={() => toggle('ifoodPending')}
             disabled={masterDisabled}
           />
-        </Section>
+        </Section>}
 
-        <Section
+        {showCategory('estoque compras abastecimento reposição') && <Section
           icon={Box}
           title="Estoque e compras"
           subtitle="Alertas baseados em mudança real de saldo ou status"
@@ -553,9 +606,9 @@ export default function NotificationSettingsPage() {
             onChange={() => toggle('supplyCheck')}
             disabled={masterDisabled}
           />
-        </Section>
+        </Section>}
 
-        <Section
+        {showCategory('sistema sincronização falha') && <Section
           icon={ShieldCheck}
           title="Sistema"
           subtitle="Somente problemas que precisam da sua atenção"
@@ -567,7 +620,7 @@ export default function NotificationSettingsPage() {
             onChange={() => toggle('syncFailure')}
             disabled={masterDisabled}
           />
-        </Section>
+        </Section>}
       </div>
 
       <section className="mt-4 grid grid-cols-2 gap-2">

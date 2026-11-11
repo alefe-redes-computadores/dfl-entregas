@@ -15,6 +15,7 @@ import { firstValidTimestamp, saoPauloDateKey } from '@/lib/reports/time';
 import { OperationalAssistant } from '@/components/home/OperationalAssistant';
 import { OperationalDemandCard } from '@/components/home/OperationalDemandCard';
 import { OperationalCommandCenter } from '@/components/home/OperationalCommandCenter';
+import { NativeApkUpdateBanner } from '@/components/updates/NativeApkUpdateBanner';
 import { OperationalDatePicker } from '@/components/home/OperationalDatePicker';
 import { deliveryEconomicValue, deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 import { isSiteOrderAwaitingHomeReview } from '@/lib/integration/site-order';
@@ -365,6 +366,7 @@ export default function HomePage() {
 
   return (
     <div className="dfl-page dfl-r196-home">
+      <NativeApkUpdateBanner />
 
       <OperationalDatePicker
         selectedDate={selectedDate}

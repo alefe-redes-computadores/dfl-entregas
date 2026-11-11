@@ -47,6 +47,7 @@ jobs:
           node scripts/test-v29-admin-bridge-hardening.cjs
           node scripts/test-v29-1-admin-bridge-unified.cjs
           node scripts/audit-pre-apk-firestore.cjs
+          node scripts/test-p360-apk-updater.cjs
           git diff --check
 
       - name: Gerar identidade visual do app
@@ -129,6 +130,14 @@ jobs:
           node scripts/patch-android-admin-bridge.mjs
           grep -F 'android:scheme="dflentregas"' android/app/src/main/AndroidManifest.xml
           grep -F 'android:host="delivery"' android/app/src/main/AndroidManifest.xml
+
+      - name: Instalar atualizador Android P360
+        shell: bash
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          node scripts/patch-android-apk-updater.mjs
+          node scripts/verify-p360-android-generated.mjs
 
       - name: Gerar ícones e splash Android
         run: |
@@ -306,3 +315,53 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+
+  # Permissão de escrita ISOLADA: o build e todos os gates precisam aprovar primeiro.
+  # A primeira ponte P3 chega por instalação manual; a partir da segunda, via app.
+  release-apk:
+    name: Publicar APK verificável em GitHub Releases
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Recuperar APK da Action aprovada
+        uses: actions/download-artifact@v4
+        with:
+          name: DFL-Entregas-${{ github.run_number }}-${{ github.sha }}
+          path: dist
+
+      - name: Certificar arquivo e publicar Release imutável por build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+          BUILD: ${{ github.run_number }}
+        run: |
+          set -Eeuo pipefail
+          test "$REPO" = "alefe-redes-computadores/dfl-entregas"
+          test -n "$COMMIT"
+          test -n "$BUILD"
+          test -s dist/app-debug.apk
+          test ! -e "dist/DFL-Entregas-${BUILD}.apk"
+          mv dist/app-debug.apk "dist/DFL-Entregas-${BUILD}.apk"
+          cd dist
+          sha256sum "DFL-Entregas-${BUILD}.apk" > "DFL-Entregas-${BUILD}.apk.sha256"
+          TAG="entregas-android-${BUILD}"
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "ERRO: release de build já existe. Não sobrescrever APK certificado." >&2
+            exit 1
+          fi
+          gh release create "$TAG" \
+            "DFL-Entregas-${BUILD}.apk" \
+            "DFL-Entregas-${BUILD}.apk.sha256" \
+            --repo "$REPO" \
+            --target "$COMMIT" \
+            --title "DFL Entregas · APK #${BUILD}" \
+            --notes "APK Android DFL Entregas; build #${BUILD}; commit ${COMMIT}. Assinatura Android estável validada no job build. Instalação requer confirmação do usuário." \
+            --latest
+          gh release view "$TAG" --repo "$REPO"

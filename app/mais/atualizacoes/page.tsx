@@ -9,6 +9,7 @@ import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import { readWriteJournal, writeJournalSummary } from '@/lib/operation/operational-write-journal';
 import { mayApplyPwaUpdate } from '@/lib/operation/pwa-reload-guard';
+import { NativeApkUpdateCenter } from '@/components/updates/NativeApkUpdateCenter';
 import { compareReleaseRevisions, shortReleaseRevision, validReleaseRevision, type ReleaseComparison } from '@/lib/operation/release-policy';
 
 const INSTALLED_SHA = process.env.NEXT_PUBLIC_DFL_RELEASE_SHA || '';
@@ -157,11 +158,12 @@ export default function AtualizacoesPage() {
         {workerWaiting && <p className="mt-2 text-[11px] text-sky-300">Uma versão do Service Worker está aguardando ativação.</p>}
       </section>}
 
-      {native && <section className="rounded-[22px] border border-amber-500/20 bg-amber-500/[.045] p-4">
+      {native && <NativeApkUpdateCenter />}
+      {native && <details className="rounded-[18px] border border-zinc-800 bg-zinc-900/20 p-3"><summary className="cursor-pointer text-[11px] font-black text-zinc-500">Recuperação técnica · builds anteriores</summary><section className="mt-2 rounded-[22px] border border-amber-500/20 bg-amber-500/[.045] p-4">
         <div className="flex items-center gap-2"><Info size={18} className="text-amber-300"/><h2 className="text-sm font-black">Atualização do APK</h2></div>
         <p className="mt-2 text-xs leading-relaxed text-zinc-400">Uma versão nova do servidor não comprova que um APK atualizado já foi gerado. A atualização do Android exige um build assinado e instalação. Nenhuma atualização será instalada automaticamente por esta tela.</p>
         <a href={BUILDS_URL} target="_blank" rel="noopener noreferrer" className="mt-3 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-xs font-black text-zinc-200"><ExternalLink size={15}/>Consultar builds Android no GitHub</a>
-      </section>}
+      </section></details>}
 
       {result === 'error' && <p role="status" className="flex items-start gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-xs text-zinc-400"><WifiOff size={16} className="shrink-0"/>A operação continua funcionando; consultar atualizações é opcional.</p>}
       <div className="flex items-start gap-2 px-2 text-[11px] leading-relaxed text-zinc-500"><CheckCircle2 size={17} className="shrink-0 text-emerald-500"/><p>Atualização do aplicativo, entrega concluída e recebimento de mensagens são confirmações diferentes. Esta tela não declara nenhum desses eventos sem evidência.</p></div>

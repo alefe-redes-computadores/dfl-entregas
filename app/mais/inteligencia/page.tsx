@@ -10,7 +10,7 @@ import { customerPaymentGuidance } from '@/lib/operation/customer-payment-guidan
 import type { Delivery } from '@/types';
 
 type Area='resumo'|'clientes'|'dados'|'operacao';
-const tabs:readonly {id:Area;label:string}[]=[{id:'resumo',label:'Geral'},{id:'clientes',label:'Clientes'},{id:'dados',label:'Dados'},{id:'operacao',label:'Operação'}];
+const tabs:readonly {id:Area;label:string}[]=[{id:'resumo',label:'Panorama'},{id:'clientes',label:'Clientes'},{id:'dados',label:'Dados'},{id:'operacao',label:'Operação'}];
 
 export default function IntelligenceHub(){
   const router=useRouter();
