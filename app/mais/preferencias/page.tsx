@@ -125,13 +125,14 @@ export default function Preferencias360() {
     </section>}
 
     {show('ifood 99food keeta marketplaces parceiros plataforma modalidade entrega') && <section aria-label="Modalidades das plataformas" className="space-y-3 rounded-[21px] border border-zinc-800 bg-zinc-900/35 p-3.5">
-      <Heading icon={Store} title="Plataformas parceiras" subtitle="Modo padrão apenas para novos pedidos. Histórico, pagamentos e acertos não mudam." tint="amber"/>
+      <Heading icon={Store} title="Plataformas parceiras" subtitle="Escolha quem entrega cada pedido novo. Histórico, pagamentos e acertos não mudam." tint="amber"/>
       {platforms.map(row => { const current = configuredMarketplaceMode(settings.marketplaceDeliveryModes, row.source); return <div key={row.source} className="space-y-2 rounded-[15px] border border-zinc-800/80 bg-zinc-950/35 p-3">
         <div className="flex items-center justify-between gap-2"><strong className={`text-[12px] ${row.tint}`}>{row.label}</strong><span className="text-[10px] text-zinc-500">{current === 'platform' ? 'Sem rota DFL' : 'Com rota DFL'}</span></div>
         <div className="flex gap-2" role="group" aria-label={`Modo padrão ${row.label}`}>
           <Choice tint="amber" selected={current === 'dfl'} disabled={busy} onClick={() => void save({marketplaceDeliveryModes: mergeMarketplacePreference(settings.marketplaceDeliveryModes, row.source, 'dfl')})}>DFL entrega</Choice>
-          <Choice tint="amber" selected={current === 'platform'} disabled={busy} onClick={() => void save({marketplaceDeliveryModes: mergeMarketplacePreference(settings.marketplaceDeliveryModes, row.source, 'platform')})}>Parceira entrega</Choice>
+          <Choice tint="amber" selected={current === 'platform'} disabled={busy} onClick={() => void save({marketplaceDeliveryModes: mergeMarketplacePreference(settings.marketplaceDeliveryModes, row.source, 'platform')})}>Entrega da plataforma</Choice>
         </div>
+        <p className="text-[10px] leading-snug text-zinc-500">{current === 'platform' ? 'A plataforma envia o próprio entregador. Não entra nas rotas da DFL.' : 'A equipe da DFL faz a entrega. O pedido pode entrar nas nossas rotas.'}</p>
       </div>; })}
     </section>}
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Power, Users, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
+  Power, Users, UsersRound, UserRound, Store, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
   AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft, Crosshair,
   ReceiptText, ShieldCheck, Inbox
 } from 'lucide-react';
@@ -464,9 +464,21 @@ export default function LojaPage() {
             </button>
             {showManagement && (<>
               <div className="grid grid-cols-3 gap-2">
-                <button type="button" onClick={() => router.push('/clientes')} className="min-h-[56px] rounded-xl border border-zinc-800 bg-zinc-900/35 px-1 text-[11px] font-black text-zinc-200 active:bg-zinc-800/50">Clientes<ChevronRight size={12} className="ml-1 inline-block text-zinc-600"/></button>
-                <button type="button" onClick={() => router.push('/equipe')} className="min-h-[56px] rounded-xl border border-zinc-800 bg-zinc-900/35 px-1 text-[11px] font-black text-zinc-200 active:bg-zinc-800/50">Equipe<ChevronRight size={12} className="ml-1 inline-block text-zinc-600"/></button>
-                <button type="button" onClick={() => router.push('/motoboys')} className="min-h-[56px] rounded-xl border border-zinc-800 bg-zinc-900/35 px-1 text-[11px] font-black text-zinc-200 active:bg-zinc-800/50">Motoboys<ChevronRight size={12} className="ml-1 inline-block text-zinc-600"/></button>
+                <button type="button" onClick={() => router.push('/clientes')} className="flex min-h-[84px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[15px] border border-zinc-800 bg-zinc-900/45 px-1.5 py-2.5 text-center transition-colors active:bg-zinc-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400" aria-label="Abrir Clientes">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-sky-500/10 text-sky-300"><UserRound size={18} strokeWidth={2}/></span>
+                  <span className="block text-[11px] font-black leading-tight text-zinc-100">Clientes</span>
+                  <span className="block text-[9px] leading-tight text-zinc-400">Cadastros</span>
+                </button>
+                <button type="button" onClick={() => router.push('/equipe')} className="flex min-h-[84px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[15px] border border-zinc-800 bg-zinc-900/45 px-1.5 py-2.5 text-center transition-colors active:bg-zinc-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400" aria-label="Abrir Equipe">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-violet-500/10 text-violet-300"><UsersRound size={18} strokeWidth={2}/></span>
+                  <span className="block text-[11px] font-black leading-tight text-zinc-100">Equipe</span>
+                  <span className="block text-[9px] leading-tight text-zinc-400">Colaboradores</span>
+                </button>
+                <button type="button" onClick={() => router.push('/motoboys')} className="flex min-h-[84px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[15px] border border-zinc-800 bg-zinc-900/45 px-1.5 py-2.5 text-center transition-colors active:bg-zinc-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400" aria-label="Abrir Motoboys">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-emerald-500/10 text-emerald-300"><Bike size={18} strokeWidth={2}/></span>
+                  <span className="block text-[11px] font-black leading-tight text-zinc-100">Motoboys</span>
+                  <span className="block text-[9px] leading-tight text-zinc-400">Entregadores</span>
+                </button>
               </div>
             </>)}
           </div>
@@ -751,13 +763,38 @@ export default function LojaPage() {
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 text-[11px] font-bold text-zinc-300">
             <span>Conferir valores atuais</span><ChevronDown size={15} className="text-zinc-500 transition-transform group-open:rotate-180" />
           </summary>
-        <div aria-label="Resumo das preferências operacionais" className="grid grid-cols-2 gap-2 px-3 pb-3 text-[10px] font-semibold">
-          <span className="rounded-xl border border-emerald-500/15 bg-emerald-500/[.045] px-3 py-2 text-emerald-200">Ordem: {routeOrderingMode === 'smart' ? 'inteligente' : 'manual'}</span>
-          <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">Rotas: {routeReminderActive ? 'lembretes ativos' : 'lembretes pausados'}</span>
-          <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">Fechamento: {autoCloseActive ? 'automático' : 'manual'}</span>
-          <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">99Food: {(storeSettings.marketplaceDeliveryModes?.food99 || 'platform') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
-          <span className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300">iFood: {(storeSettings.marketplaceDeliveryModes?.ifood || 'dfl') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
-          <span className="col-span-2 rounded-xl border border-violet-500/20 bg-violet-500/[.06] px-3 py-2 text-violet-200">Keeta: {configuredMarketplaceMode(storeSettings.marketplaceDeliveryModes, 'keeta') === 'platform' ? 'pela plataforma' : 'pela DFL'}</span>
+        <div aria-label="Resumo das preferências operacionais" className="space-y-3 border-t border-zinc-800/70 px-3.5 pb-3.5 pt-3 text-[11px]">
+          <p className="text-[11px] leading-relaxed text-zinc-400">Estas são as escolhas em vigor. Para alterar, abra a Central de Preferências 360.</p>
+          <div className="grid gap-2 min-[370px]:grid-cols-3">
+            <div className="rounded-[14px] border border-zinc-800 bg-zinc-950/40 p-2.5">
+              <span className="flex items-center gap-1.5 text-[10px] text-zinc-400"><Bike size={14} className="shrink-0 text-emerald-300"/>Ordem das rotas</span>
+              <strong className="mt-1.5 block text-xs text-emerald-200">{routeOrderingMode === 'smart' ? 'Inteligente' : 'Manual'}</strong>
+            </div>
+            <div className="rounded-[14px] border border-zinc-800 bg-zinc-950/40 p-2.5">
+              <span className="flex items-center gap-1.5 text-[10px] text-zinc-400"><BellRing size={14} className="shrink-0 text-sky-300"/>Avisos de rota</span>
+              <strong className="mt-1.5 block text-xs text-zinc-200">{routeReminderActive ? 'Ativos' : 'Pausados'}</strong>
+            </div>
+            <div className="rounded-[14px] border border-zinc-800 bg-zinc-950/40 p-2.5">
+              <span className="flex items-center gap-1.5 text-[10px] text-zinc-400"><Check size={14} className="shrink-0 text-amber-300"/>Fechar rotas</span>
+              <strong className="mt-1.5 block text-xs text-zinc-200">{autoCloseActive ? 'Automático' : 'Manual'}</strong>
+            </div>
+          </div>
+          <div className="border-t border-zinc-800/80 pt-3">
+            <div className="flex items-center gap-2"><Store size={15} className="text-amber-300"/><h3 className="text-xs font-black text-zinc-100">Quem faz a entrega?</h3></div>
+            <p className="mb-2.5 mt-1.5 text-[10px] leading-relaxed text-zinc-400">A escolha vale para novos pedidos. Entregas feitas pela plataforma não entram nas rotas da DFL; quando a DFL entrega, entram na nossa logística.</p>
+            <div className="space-y-1.5">
+              {([
+                {source:'ifood' as const, label:'iFood', color:'text-red-300'},
+                {source:'food99' as const, label:'99Food', color:'text-amber-300'},
+                {source:'keeta' as const, label:'Keeta', color:'text-violet-300'},
+              ] as const).map(item => {const partner = configuredMarketplaceMode(storeSettings.marketplaceDeliveryModes, item.source) === 'platform'; return (
+                <div key={item.source} className="flex min-h-[57px] items-center justify-between gap-2 rounded-[13px] border border-zinc-800/80 bg-zinc-950/35 px-3 py-2">
+                  <div className="min-w-0 flex-1"><strong className={`block text-[11px] font-black ${item.color}`}>{item.label}</strong><span className="mt-0.5 block text-[10px] leading-snug text-zinc-200">{partner ? 'Entregador da plataforma' : 'Entregador da DFL'}</span></div>
+                  <span className={`max-w-[40%] text-right text-[10px] font-bold leading-snug ${partner ? 'text-zinc-400' : 'text-emerald-300'}`}>{partner ? 'Fora das rotas DFL' : 'Entra nas rotas DFL'}</span>
+                </div>
+              );})}
+            </div>
+          </div>
         </div>
         </details>
         {quickPreferenceBusy && <p role="status" className="px-4 pb-2 text-[11px] text-sky-300">Salvando preferência no sistema…</p>}

@@ -13,6 +13,13 @@
 .dfl-r237-command-sheet input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .dfl-r237-command-sheet button:focus-visible { outline: 2px solid rgba(251,191,36,.85); outline-offset: 2px; }
 .dfl-r237-command-sheet [role="search"]:focus-within { box-shadow: 0 0 0 1px rgba(251,191,36,.18),0 0 24px rgba(251,191,36,.035); }
+/* R56: foco visível no CONTÊINER dourado, não um retângulo verde dentro do input.
+   A exceção é restrita à Busca 360: outras entradas mantêm seu foco acessível. */
+.dfl-r237-command-sheet [role="search"] input[type="search"]:focus-visible {
+  outline: none;
+  outline-offset: 0;
+  box-shadow: none;
+}
 @media (prefers-reduced-motion: reduce) { .dfl-r237-command-sheet { animation: none !important; } }
 
 * {
