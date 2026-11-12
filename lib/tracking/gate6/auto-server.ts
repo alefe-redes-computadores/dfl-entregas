@@ -25,9 +25,13 @@ function privateHash(kind:'recipient'|'provider_event',tenant:string,value:strin
   const hmacKey=secret();if(!hmacKey)return null;
   return createHmac('sha256',hmacKey).update(`dfl360|${kind}|${tenant}|${value}`,'utf8').digest('hex');
 }
-// R311: Site S2S ainda precisa respeitar o unico destinatario do piloto.
- // Falha fechada se a env nao existir. Sem telefone em logs ou resposta.
+// R62: SITE e ENTREGAS exigem seus proprios switches para o rollout.
+// Isso NAO substitui assinatura S2S, consentimento e capability certificada.
 function r311PilotRecipient(phone:string):boolean {
+  if(!/^\+55[1-9][0-9][2-9][0-9]{7,8}$/.test(phone))return false;
+  const scope=(process.env.DFL_TRACKING_AUTO_SCOPE||'canary').trim();
+  if(scope==='consented_customers')return process.env.DFL_TRACKING_AUTO_ROLLOUT_APPROVED==='true';
+  if(scope!=='canary')return false;
   const expected=(process.env.DFL_TRACKING_AUTO_PILOT_PHONE_E164||'').trim();
   return /^\+55[1-9][0-9][2-9][0-9]{7,8}$/.test(expected) && phone===expected;
 }

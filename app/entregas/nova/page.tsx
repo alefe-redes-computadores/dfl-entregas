@@ -158,10 +158,11 @@ const [routeId, setRouteId] = useState('');
   const [sameStopIdentityMode, setSameStopIdentityMode] = useState<'new' | 'same'>('new');
   const [phone, setPhone] = useState('');
   // R310: um unico consentimento por pedido; telefone/preferencia nao substituem autorizacao.
+  const [whatsappNoticeRequested, setWhatsappNoticeRequested] = useState(true);
   const [confirmedWhatsappRecipient, setConfirmedWhatsappRecipient] = useState('');
   const consentPhone = normalizeBrazilPhone(phone);
   const consentRecipientKey = `${consentPhone}|${customerName.trim().toLocaleLowerCase('pt-BR')}`;
-  const notifyWhatsapp = origin === 'loja' && consentPhone.length >= 10 &&
+  const notifyWhatsapp = origin === 'loja' && whatsappNoticeRequested && consentPhone.length >= 10 &&
     confirmedWhatsappRecipient === consentRecipientKey;
   useEffect(() => { setConfirmedWhatsappRecipient(''); }, [origin]);
   const [excludeCustomerMetrics, setExcludeCustomerMetrics] = useState(false);
@@ -1215,21 +1216,41 @@ const [routeId, setRouteId] = useState('');
 
           </div>
           {origin === 'loja' && (
-            <label className={`flex items-start gap-3 rounded-xl border px-3 py-3.5 text-xs leading-relaxed transition-colors ${notifyWhatsapp ? 'border-emerald-500/50 bg-emerald-500/[.1]' : 'border-zinc-700 bg-zinc-900/50'}`}>
-              <input
-                type="checkbox"
-                className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
-                disabled={!consentPhone || !customerName.trim()}
-                checked={notifyWhatsapp}
-                onChange={(event) => setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey : '')}
-              />
-              <span className="flex flex-col gap-1">
-                <strong className="text-sm text-zinc-100">Enviar avisos pelo WhatsApp</strong>
-                <small className="text-[11px] text-zinc-400">Confirmo que este cliente autorizou avisos sobre este pedido no WhatsApp. Sem confirmar, o pedido será salvo sem mensagens.</small>
-              </span>
-            </label>
+            <div className="flex flex-col gap-2" data-dfl-whatsapp-default="checked">
+              <label className={`flex items-start gap-3 rounded-xl border px-3 py-3.5 text-xs leading-relaxed transition-colors ${whatsappNoticeRequested ? 'border-emerald-500/50 bg-emerald-500/[.1]' : 'border-zinc-700 bg-zinc-900/50'}`}>
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
+                  checked={whatsappNoticeRequested}
+                  onChange={(event) => {
+                    setWhatsappNoticeRequested(event.target.checked);
+                    if (!event.target.checked) setConfirmedWhatsappRecipient('');
+                  }}
+                />
+                <span className="flex flex-col gap-1">
+                  <strong className="text-sm text-zinc-100">Avisar pelo WhatsApp</strong>
+                  <small className="text-[11px] text-zinc-400">Pré-marcado para facilitar seu cadastro. Desmarque se não quiser solicitar avisos neste pedido.</small>
+                </span>
+              </label>
+              {whatsappNoticeRequested && (
+                <label className={`flex items-start gap-3 rounded-xl border px-3 py-3 text-xs leading-relaxed ${notifyWhatsapp ? 'border-emerald-500/40 bg-emerald-500/[.08]' : 'border-zinc-700 bg-zinc-900/40'}`}>
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
+                    disabled={!consentPhone || !customerName.trim()}
+                    checked={notifyWhatsapp}
+                    onChange={(event) => setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey : '')}
+                  />
+                  <span className="flex flex-col gap-1">
+                    <strong className="text-xs text-zinc-100">Cliente autorizou os avisos deste pedido</strong>
+                    <small className="text-[11px] text-zinc-400">Confirme somente após obter autorização do cliente. Sem confirmação, nenhum aviso automático será solicitado.</small>
+                  </span>
+                </label>
+              )}
+              {!notifyWhatsapp && whatsappNoticeRequested && <p className="text-[11px] font-semibold text-amber-300" role="status">Aguardando autorização do cliente para enviar mensagens.</p>}
+            </div>
           )}
-          <p className="text-[10px] leading-relaxed text-zinc-500">Uma confirmação por pedido. O número informado não autoriza envios sozinho. Marketplaces seguem suas próprias regras.</p>
+          <p className="text-[10px] leading-relaxed text-zinc-500">Uma autorização por pedido. Preferência pré-marcada não concede consentimento. Marketplaces seguem suas regras.</p>
         </section>
 
         {fulfillmentMode === 'delivery' && (

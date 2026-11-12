@@ -1,0 +1,21 @@
+#!/usr/bin/env node
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+const s=fs.readFileSync('app/entregas/nova/page.tsx','utf8');
+const edit=fs.readFileSync('app/entregas/editar/page.tsx','utf8');
+let n=0;const ok=(x,label)=>{assert.ok(x,'R58 WHATSAPP '+label);n++};
+ok(ts.createSourceFile('nova.tsx',s,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX).parseDiagnostics.length===0,'TSX valido');
+ok(s.includes('const [whatsappNoticeRequested, setWhatsappNoticeRequested] = useState(true);'),'preferencia inicia marcada no formulario novo');
+ok(s.includes('checked={whatsappNoticeRequested}') && s.includes('setWhatsappNoticeRequested(event.target.checked)'),'preferencia pode ser desmarcada');
+ok(s.includes("if (!event.target.checked) setConfirmedWhatsappRecipient('');"),'desmarcar remove autorizacao anterior');
+ok(s.includes("const notifyWhatsapp = origin === 'loja' && whatsappNoticeRequested && consentPhone.length >= 10 &&"),'nenhum envio sem preferencia e telefone');
+ok(s.includes('confirmedWhatsappRecipient === consentRecipientKey;'),'confirmacao individual de identidade permanece');
+ok(s.includes('checked={notifyWhatsapp}') && s.includes('setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey'), 'consentimento exige ato distinto');
+ok(s.includes("disabled={!consentPhone || !customerName.trim()}"),'sem nome ou telefone nao confirma autorizacao');
+ok(s.includes("{whatsappNoticeRequested && ("),'opt-in fica oculto com preferencia desligada');
+ok(s.includes('Aguardando autorização do cliente para enviar mensagens.'),'sem consentimento informa que ainda nao envia');
+ok(s.includes('notify_whatsapp:notifyWhatsapp,manual_order_items:origin'), 'campo enviado depende do opt-in efetivo');
+ok(s.includes("manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja'"),'policy de envio depende de opt-in efetivo');
+ok(edit.includes('setNotifyWhatsapp(delivery.notify_whatsapp || false);'),'edicao preserva escolha gravada no pedido existente');
+ok(s.includes("origin === 'loja' && (") && !s.includes('setNotifyWhatsappPreference'), 'marketplaces nao herdam opt-in presumido');
+console.log(`R58 WHATSAPP DEFAULT OK | ${n} contratos sem enviar mensagens.`);
