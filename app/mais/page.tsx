@@ -95,8 +95,8 @@ export default function MaisPage() {
           <Activity size={15} className="text-zinc-500"/><span className="flex-1">Acessos técnicos diretos</span><ChevronDown size={15} className="transition-transform group-open:rotate-180"/>
         </summary>
         <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-2.5">
-          <button type="button" onClick={() => router.push('/mais/mensageria')} className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900/70 px-2 text-[10px] font-bold text-zinc-300">Mensageria original</button>
-          <button type="button" onClick={() => router.push('/mais/acompanhamento')} className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900/70 px-2 text-[10px] font-bold text-zinc-300">Acompanhamento original</button>
+          <button type="button" onClick={() => router.push('/mais/mensageria')} className="flex min-h-[55px] min-w-0 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-2.5 text-left text-[10px] font-bold text-zinc-300 transition-colors active:bg-zinc-800/60"><MessageSquareText size={17} className="shrink-0 text-amber-300"/><span className="min-w-0 leading-tight">Mensageria original</span></button>
+          <button type="button" onClick={() => router.push('/mais/acompanhamento')} className="flex min-h-[55px] min-w-0 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-2.5 text-left text-[10px] font-bold text-zinc-300 transition-colors active:bg-zinc-800/60"><ShieldCheck size={17} className="shrink-0 text-sky-300"/><span className="min-w-0 leading-tight">Acompanhamento original</span></button>
         </div>
       </details>
     </section>}

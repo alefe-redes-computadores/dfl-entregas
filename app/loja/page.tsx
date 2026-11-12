@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Power, Users, UsersRound, UserRound, Store, BellRing, Bike, TrendingUp, Package, Wallet, PackagePlus, Boxes,
   AlertTriangle, Check, ChevronRight, X, Calendar, Clock, Trash2, Plus, Info, ChevronDown, ChevronLeft, Crosshair,
-  ReceiptText, ShieldCheck, Inbox
+  ReceiptText, ShieldCheck, Inbox, History, SlidersHorizontal
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
@@ -485,9 +485,19 @@ export default function LojaPage() {
           <details className="group overflow-hidden rounded-[17px] border border-zinc-800 bg-zinc-950/30">
             <summary className="flex min-h-[52px] cursor-pointer list-none items-center gap-2.5 px-3.5 text-left text-[11px] font-bold text-zinc-300"><ShieldCheck size={17} className="text-sky-300"/><span className="flex-1">Confirmações, histórico e apoio</span><ChevronDown size={16} className="text-zinc-500 transition-transform group-open:rotate-180"/></summary>
             <nav aria-label="Acesso rápido a confirmações e histórico" className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-2.5">
-              <button type="button" onClick={() => router.push('/confirmacoes')} className="min-h-12 rounded-xl border border-red-500/15 bg-red-500/[.035] p-2 text-[11px] font-bold text-zinc-200">Confirmar iFood</button>
-              <button type="button" onClick={() => router.push('/loja/caixa-de-entrada?aba=site&historico=1')} className="min-h-12 rounded-xl border border-sky-500/15 bg-sky-500/[.035] p-2 text-[11px] font-bold text-zinc-200">Histórico do Site</button>
-              <button type="button" onClick={() => router.push('/mais/preferencias')} className="col-span-2 min-h-12 rounded-xl border border-emerald-500/20 bg-emerald-500/[.04] p-2 text-[11px] font-bold text-emerald-300">Preferências 360 · rotas, parceiros e alertas</button>
+              <button type="button" onClick={() => router.push('/confirmacoes')} className="flex min-h-[94px] min-w-0 flex-col items-start justify-between gap-2 rounded-[15px] border border-red-500/20 bg-gradient-to-br from-red-500/[.07] to-zinc-950/50 p-3 text-left transition-colors active:bg-red-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400" aria-label="Confirmar códigos pendentes do iFood">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-red-500/10 text-red-300"><ShieldCheck size={18} strokeWidth={2}/></span>
+                <span className="min-w-0"><strong className="block text-[11px] font-black leading-tight text-zinc-100">Confirmar iFood</strong><small className="mt-0.5 block text-[10px] leading-snug text-zinc-400">Códigos e pendências</small></span>
+              </button>
+              <button type="button" onClick={() => router.push('/loja/caixa-de-entrada?aba=site&historico=1')} className="flex min-h-[94px] min-w-0 flex-col items-start justify-between gap-2 rounded-[15px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.07] to-zinc-950/50 p-3 text-left transition-colors active:bg-sky-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400" aria-label="Consultar histórico dos pedidos do Site">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-sky-500/10 text-sky-300"><History size={18} strokeWidth={2}/></span>
+                <span className="min-w-0"><strong className="block text-[11px] font-black leading-tight text-zinc-100">Histórico do Site</strong><small className="mt-0.5 block text-[10px] leading-snug text-zinc-400">Pedidos anteriores</small></span>
+              </button>
+              <button type="button" onClick={() => router.push('/mais/preferencias')} className="col-span-2 flex min-h-[68px] w-full items-center gap-3 rounded-[15px] border border-emerald-500/20 bg-emerald-500/[.045] px-3 py-2.5 text-left transition-colors active:bg-emerald-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[12px] bg-emerald-500/10 text-emerald-300"><SlidersHorizontal size={19} strokeWidth={2}/></span>
+                <span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Preferências 360</strong><small className="mt-0.5 block text-[10px] leading-snug text-zinc-400">Rotas, parceiros e alertas</small></span>
+                <ChevronRight size={16} className="shrink-0 text-emerald-300"/>
+              </button>
             </nav>
           </details>
         </section>
@@ -753,15 +763,15 @@ export default function LojaPage() {
         >
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Configurações</p>
-            <p className="mt-1 text-sm font-black text-zinc-200">Logística, plataformas e preferências</p>
+            <p className="mt-1 flex items-center gap-2 text-sm font-black text-zinc-200"><SlidersHorizontal size={16} className="shrink-0 text-emerald-300"/>Logística, plataformas e preferências</p>
           </div>
           <ChevronDown size={18} className={`text-zinc-600 transition-transform ${isSettingsOpen ? 'rotate-180' : ''}`} />
         </button>
-        <button type="button" onClick={() => router.push('/mais/preferencias')} className="mx-3 flex min-h-11 items-center justify-between gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] px-3 text-left text-xs font-bold text-emerald-300">Central de Preferências 360 · ver tudo <ChevronRight size={16}/></button>
+        <button type="button" onClick={() => router.push('/mais/preferencias')} className="mx-3 flex min-h-12 items-center justify-between gap-2.5 rounded-[14px] border border-emerald-500/20 bg-emerald-500/[.05] px-3 text-left text-[11px] font-bold text-emerald-200 transition-colors active:bg-emerald-500/10"><SlidersHorizontal size={17} className="shrink-0 text-emerald-300"/><span className="min-w-0 flex-1">Central de Preferências 360 · ver tudo</span><ChevronRight size={16} className="shrink-0"/></button>
         {/* R55: resumo fiel ao store fica disponivel sob demanda. */}
         <details className="group mx-3 overflow-hidden rounded-[16px] border border-zinc-800/75 bg-zinc-900/25">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 text-[11px] font-bold text-zinc-300">
-            <span>Conferir valores atuais</span><ChevronDown size={15} className="text-zinc-500 transition-transform group-open:rotate-180" />
+            <span className="flex min-w-0 flex-1 items-center gap-2"><Info size={16} className="shrink-0 text-sky-300"/>Conferir valores atuais</span><ChevronDown size={15} className="shrink-0 text-zinc-500 transition-transform group-open:rotate-180" />
           </summary>
         <div aria-label="Resumo das preferências operacionais" className="space-y-3 border-t border-zinc-800/70 px-3.5 pb-3.5 pt-3 text-[11px]">
           <p className="text-[11px] leading-relaxed text-zinc-400">Estas são as escolhas em vigor. Para alterar, abra a Central de Preferências 360.</p>
