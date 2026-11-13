@@ -33,7 +33,9 @@ import { parseKeetaOrdersText, isKeetaCommercialId } from '@/lib/keeta-order';
 import { assessIfoodParseQuality, buildIfoodParseGuide, buildIfoodRecognitionSummary } from '@/lib/ifood-parser-quality';
 import { loadInboxDay, markInboxDraft } from '@/lib/delivery-inbox';
 import { deliverySearchMapLink } from '@/lib/operation/delivery-create-fastlane';
+import { deliveryRegistrationBusinessFeedback } from '@/lib/operation/delivery-registration-feedback';
 import { canonicalizeOperationalAddress } from '@/lib/operational-address';
+import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { customerIdentityEvidence, sameCustomerAddress, sameCustomerIdentityAddress, normalizeCustomerName } from '@/lib/customer-identity';
 import {
   auditOperationalAddress,
@@ -599,6 +601,22 @@ const [routeId, setRouteId] = useState('');
         return;
       }
     }
+    // R68 FIX1: aviso antecipado apenas para identidade forte iFood JA carregada.
+    // Nao inferir duplicidade pelo numero curto, que pode se repetir em outros dias.
+    if (origin === 'ifood') {
+      const knownIfoodIds = new Set(deliveries.filter(item => item.origin === 'ifood')
+        .map(item => String(item.ifood_id || '').replace(/\D/g, ''))
+        .filter(Boolean));
+      const existingIfood = drafts.find(item => {
+        const normalizedId = String(item.ifoodId || '').replace(/\D/g, '');
+        return normalizedId.length === 8 && knownIfoodIds.has(normalizedId);
+      });
+      if (existingIfood) {
+        setActiveDraftId(existingIfood.id);
+        showFormIssue('order', 'Este ID iFood já foi cadastrado. Confira a lista de pedidos e abra o existente.');
+        return;
+      }
+    }
     if(ownerIdentityAmongDrafts&&!ownerOrderContext){toast.error('Classifique este pedido no seu nome.',{description:'Informe se é teste, pedido real provisório ou retirada real na loja.'});return}
     if (submitFlight.current) return;
     submitFlight.current = true;
@@ -634,21 +652,18 @@ const [routeId, setRouteId] = useState('');
             candidate.route_id === routeId &&
             candidate.id !== sameStopSource?.id &&
             !candidate.operational_dismissed_at &&
+            !isCancelledSiteDelivery(candidate) &&
             sameCustomerAddress(candidate.address_string, cleanStreet),
           )
         : undefined;
       // R52: reutilizar grupo fisico SOMENTE se o endereco permaneceu igual.
-      const stopSource = sameStopSource && sameCustomerAddress(sameStopSource.address_string,cleanStreet)
+      const stopSource = sameStopSource && !isCancelledSiteDelivery(sameStopSource) && sameCustomerAddress(sameStopSource.address_string,cleanStreet)
         ? sameStopSource : sameAddressSource;
       const shouldGroupStop = Boolean(stopSource);
       const stopGroupId = stopSource?.stop_group_id ||
         (shouldGroupStop
           ? `stop-${stopSource?.id || Date.now()}-${stopSource ? 'linked' : Math.random().toString(36).slice(2, 7)}`
           : undefined);
-
-      if (stopSource && !stopSource.stop_group_id && stopGroupId) {
-        await updateDelivery(stopSource.id, { stop_group_id: stopGroupId });
-      }
 
       if(origin==='ifood'){
         const deliveriesToCreate:Delivery[]=[];
@@ -658,6 +673,7 @@ const [routeId, setRouteId] = useState('');
           if(ownerOrderContext && hasOwnerIdentity({name:draftName,phone:draftPhone})) Object.assign(deliveriesToCreate[deliveriesToCreate.length-1],ownerContextFlags(ownerOrderContext));
         }
         const r228r3ConfirmAt = Date.now();
+        registrationStage='pedido';
         try {
           await addDeliveries(deliveriesToCreate);
           recordActionLatency('delivery_form_confirm', Date.now() - r228r3ConfirmAt, 'confirmed', deliveriesToCreate.length);
@@ -698,6 +714,15 @@ const [routeId, setRouteId] = useState('');
           }).catch(() => toast.warning('Pedido salvo; status do aviso indisponível.'));
         }
       }
+      // R68 P0: nunca bloquear cadastro confirmado por sincronizacao auxiliar da parada anterior.
+      // A identidade operacional por endereco ja agrupa pedidos na mesma rota (lib/route-stops.ts).
+      if (stopSource && !stopSource.stop_group_id && stopGroupId) {
+        void updateDelivery(stopSource.id, { stop_group_id: stopGroupId }).catch(() => {
+          // Nenhum retry automatico de pedidos; a falha auxiliar nao desfaz a entrega salva.
+          console.warn('R68: entrega confirmada; sincronizacao auxiliar de parada nao confirmada');
+          toast.warning('Entrega salva. Confira o agrupamento da parada na rota.');
+        });
+      }
       if (inboxDraftId && inboxDay) {
         markInboxDraft(inboxDay, inboxDraftId, 'launched');
       }
@@ -725,9 +750,9 @@ const [routeId, setRouteId] = useState('');
         : registrationStage === 'finalizacao'
         ? 'A gravação pode ter ocorrido; houve falha ao concluir a tela. Confira a lista antes de repetir.'
         : 'Falha na preparação do pedido. Não repita antes de conferir a lista.';
-      const knownBusinessError = /^(Este pedido já foi importado|Este pedido ja esta sendo registrado|Pedido cancelado não pode|99Food precisa|Keeta precisa)/.test(rawMessage);
-      const details = knownBusinessError ? rawMessage : `${explanation} Etapa: ${registrationStage}${safeCode ? ` · Código: ${safeCode}` : ' · Sem código Firebase'}.`;
-      toast.error('Não foi possível cadastrar a entrega.',{description:details,duration:9000});
+      const businessFeedback = deliveryRegistrationBusinessFeedback(rawMessage,origin);
+      const details = businessFeedback?.description ?? `${explanation} Etapa: ${registrationStage}${safeCode ? ` · Código: ${safeCode}` : ' · Sem código Firebase'}.`;
+      toast.error(businessFeedback?.title ?? 'Não foi possível cadastrar a entrega.',{description:details,duration:9000});
     }finally{if(deliveryConfirmationTimer.current)clearTimeout(deliveryConfirmationTimer.current);deliveryConfirmationTimer.current=null;setSlowDeliveryConfirmation(false);submitFlight.current=false;setIsSaving(false)}
   };
 
