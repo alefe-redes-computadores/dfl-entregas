@@ -42,7 +42,7 @@ const payload={contract:'dfl.tracking.automatic',version:1,action:'commercial_ac
  consent:{channel:'whatsapp',granted:true,granted_at:at,source:'dfl_site'}};
 const issue={contract:'dfl.tracking.automatic',version:1,action:'issue_initial',canonical_order_key:'site:ABC88',
  acceptance_event_id:payload.event_id,idempotency_key:'issueInitial_abc123456789',
- recipient_e164:'+5534999999999',requested_ttl_minutes:45};
+ recipient_e164:'+5534999999999',requested_ttl_minutes:90};
 const receipt={contract:'dfl.tracking.automatic',version:1,action:'provider_receipt',
  canonical_order_key:'site:ABC88',grant_id:'a'.repeat(64),idempotency_key:'receipt_abcdefgh123456',
  provider_event_id:'provider-event-ABC88',result:'delivery_uncertain'};
@@ -59,6 +59,7 @@ for(const x of [
  {...payload,unknown:true},
 ])equal(policy.parseSiteAcceptance(x,now),null,'aceite ilegal recusado');
 ok(Boolean(policy.parseSiteIssue(issue)),'emissão inicial válida');
+ok(Boolean(policy.parseSiteIssue({...issue,requested_ttl_minutes:45})),'emissão legada de 45 min aceita durante migração');
 for(const x of [{...issue,requested_ttl_minutes:1440},{...issue,action:'issue_return'},
  {...issue,canonical_order_key:'entregas:ABC88'},{...issue,recipient_e164:'+5531999999999'}]){
  if(x.recipient_e164!==issue.recipient_e164)continue;equal(policy.parseSiteIssue(x),null,'issue não certificado recusado');
@@ -105,7 +106,7 @@ const storage={
  resolveCanonicalOrder:async k=> k==='site:ABC88'?'delivery-r299-1':null,
  confirmedDelivery:async id=>{const v=memory.get(`deliveries/${id}`);return v?{data:{...v,id},route:null,routeDeliveries:[]}:null;},
  reconcileConfirmedEvents:async(t,id)=>{reconcileCount++;ok(memory.get(`deliveries/${id}`).site_order_timeline.some(x=>x.status==='Aceito'),'aceite materializado antes da reconciliação');return{found:true,added:1,existing:0};},
- issueGrant:async()=>{issuedCount++;return issuedCount>1?{state:'already_active'}:{state:'issued',grant_id:'a'.repeat(64),token:'s'.repeat(43),expires_at:new Date(now+45*60000).toISOString()};},
+ issueGrant:async()=>{issuedCount++;return issuedCount>1?{state:'already_active'}:{state:'issued',grant_id:'a'.repeat(64),token:'s'.repeat(43),expires_at:new Date(now+90*60000).toISOString()};},
 };
 const serverApi=load(paths.server,{
  'next/server':{NextResponse:{json:(data,options)=>({data,status:options.status,headers:options.headers})}},

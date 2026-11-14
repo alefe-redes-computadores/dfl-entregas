@@ -1,0 +1,15 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+const path='lib/tracking/gate6/auto-policy.ts',source=fs.readFileSync(path,'utf8');
+assert.equal(ts.createSourceFile(path,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS).parseDiagnostics.length,0);
+const out=ts.transpileModule(source,{fileName:path,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const evaluated={};new Function('require','exports',out)(()=>{throw Error('sem dependências')},evaluated);
+assert.equal(evaluated.AUTO_INITIAL_TTL_MINUTES,90);
+const base={contract:'dfl.tracking.automatic',version:1,action:'issue_initial',canonical_order_key:'site:ABCDE1234567',acceptance_event_id:'site-R21-accepted-ABCDE1234567',recipient_e164:'+5534999999999',idempotency_key:'r69_test_key_0001234',requested_ttl_minutes:90};
+assert.ok(evaluated.parseSiteIssue(base),'emissão 90 válida');
+assert.ok(evaluated.parseSiteIssue({...base,requested_ttl_minutes:45}),'legado 45 válido durante transição');
+assert.equal(evaluated.parseSiteIssue({...base,requested_ttl_minutes:91}),null,'91 recusado');
+assert.equal(evaluated.parseSiteIssue({...base,requested_ttl_minutes:1440}),null,'1440 recusado');
+assert.equal(evaluated.parseSiteIssue({...base,recipient_e164:'123'}),null,'telefone ruim recusado');
+assert.equal(evaluated.parseSiteIssue({...base,canonical_order_key:'manual:ABCDE1234567'}),null,'manuais não recebem grant automático sem ponte certificada');
+console.log('R69 ENTREGAS: 8 verificações de 90 min + compatibilidade 45 + segurança OK. Sem rede.');

@@ -1,7 +1,7 @@
 /** R299 P9 — DFL 360 automatic tracking bridge policy. Pure, fail-closed, no I/O. */
 export const AUTO_TRACKING_CONTRACT = 'dfl.tracking.automatic' as const;
 export const AUTO_TRACKING_VERSION = 1 as const;
-export const AUTO_INITIAL_TTL_MINUTES = 45 as const;
+export const AUTO_INITIAL_TTL_MINUTES = 90 as const;
 
 type Dict = Record<string, unknown>;
 const object = (x:unknown):x is Dict => Boolean(x && typeof x==='object' && !Array.isArray(x));
@@ -29,7 +29,7 @@ export type AcceptanceRequest = {
 export type IssueRequest = {
   contract:'dfl.tracking.automatic';version:1;action:'issue_initial';
   canonical_order_key:string;acceptance_event_id:string;recipient_e164:string;
-  idempotency_key:string;requested_ttl_minutes:45;
+  idempotency_key:string;requested_ttl_minutes:45|90;
 };
 export type ReceiptRequest = {
   contract:'dfl.tracking.automatic';version:1;action:'provider_receipt';
@@ -57,7 +57,7 @@ export function parseSiteIssue(input:unknown):IssueRequest|null {
     'contract','version','action','canonical_order_key','acceptance_event_id','recipient_e164','idempotency_key','requested_ttl_minutes'
   ]) ||!order(input.canonical_order_key)||!event(input.acceptance_event_id)||
     !key(input.idempotency_key)|| !canonicalE164(input.recipient_e164) ||
-    input.requested_ttl_minutes!==AUTO_INITIAL_TTL_MINUTES)return null;
+    (input.requested_ttl_minutes!==45 && input.requested_ttl_minutes!==AUTO_INITIAL_TTL_MINUTES))return null;
   return input as IssueRequest;
 }
 export function parseSiteReceipt(input:unknown):ReceiptRequest|null {
