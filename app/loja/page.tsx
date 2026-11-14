@@ -395,7 +395,7 @@ export default function LojaPage() {
         </div>
       </section>
 
-      <section aria-label="Conferência opcional de abertura" className="rounded-2xl border border-zinc-800/80 bg-zinc-900/25 p-2">
+      {!isStoreOpen && scheduledOpenNow && <details className="group rounded-2xl border border-zinc-800/70 bg-zinc-900/20 p-2"><summary className="cursor-pointer list-none px-3 py-2 text-[11px] font-bold text-zinc-500">Conferência de abertura · operação aguardando abertura</summary><section aria-label="Conferência opcional de abertura" className="mt-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/25 p-2">
         <button type="button" aria-expanded={showOpeningReview} aria-controls="dfl-loja-opening-review"
           onClick={() => setShowOpeningReview(open => !open)}
           className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-[11px] font-black text-zinc-300 active:bg-zinc-800/40">
@@ -405,7 +405,7 @@ export default function LojaPage() {
           <ChevronDown size={15} className={`transition-transform ${showOpeningReview ? 'rotate-180' : ''}`} />
         </button>
         {showOpeningReview && <div id="dfl-loja-opening-review" className="mt-2 border-t border-zinc-800/60 pt-3"><ShiftBriefing /></div>}
-      </section>
+      </section></details>}
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
@@ -423,37 +423,31 @@ export default function LojaPage() {
         {/* R54: Loja e autoridade administrativa. Site e operação primeiro; financeiro sempre visível. */}
         <section aria-label="Centro de acessos da Loja" className="space-y-3">
           <div className="flex items-end justify-between gap-3 px-1">
-            <div><p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-400">Seu ponto de comando</p><h3 className="mt-1 font-heading text-[15px] font-black text-zinc-100">Acessos da Loja</h3></div>
+            <div><p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-400">Seu ponto de comando</p><h3 className="mt-1 font-heading text-[15px] font-black text-zinc-100">Operação e gestão</h3></div>
             <span className="text-[10px] font-medium text-zinc-500">Operação e gestão</span>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => router.push('/loja/caixa-de-entrada?aba=site')}
-              className="col-span-2 flex min-h-[72px] items-center gap-3 rounded-[19px] border border-amber-400/25 bg-gradient-to-r from-amber-400/[.10] to-zinc-900/55 px-3.5 py-3 text-left active:scale-[.99]">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[13px] bg-amber-400/10 text-amber-300"><Inbox size={20}/></span>
-              <span className="min-w-0 flex-1"><strong className="block text-[13px] font-black text-amber-100">Pedidos do Site</strong><small className="mt-1 block text-[10px] leading-snug text-zinc-400">Recebimento, pronto para rota e histórico</small></span>
-              <ChevronRight size={17} className="text-amber-300" />
-            </button>
             <button type="button" onClick={() => router.push('/loja/caixa-de-entrada')}
-              className="flex min-h-[70px] items-center gap-2.5 rounded-[18px] border border-zinc-800 bg-zinc-900/40 px-3 text-left active:bg-zinc-800/50">
-              <Inbox size={19} className="shrink-0 text-violet-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Caixa de Entrada</strong><small className="mt-1 block text-[10px] leading-snug text-zinc-500">iFood, texto e balcão</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/>
+              className="flex min-h-[84px] items-center gap-2.5 rounded-[18px] border border-zinc-800 bg-zinc-900/40 px-3 text-left active:bg-zinc-800/50">
+              <Inbox size={19} className="shrink-0 text-violet-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Caixa de Entrada</strong><small className="mt-1 block text-[10px] leading-snug text-zinc-500">Triagem e cadastro · iFood, texto e balcão</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/>
             </button>
             <button type="button" onClick={() => router.push(`/entregas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir entregas: ${dashboardData.totalEntregas} no período`}
-              className="flex min-h-[70px] items-center gap-2.5 rounded-[18px] border border-zinc-800 bg-zinc-900/40 px-3 text-left active:bg-zinc-800/50">
+              className="flex min-h-[84px] items-center gap-2.5 rounded-[18px] border border-zinc-800 bg-zinc-900/40 px-3 text-left active:bg-zinc-800/50">
               <Package size={19} className="shrink-0 text-amber-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Entregas <span className="text-amber-300">{dashboardData.totalEntregas}</span></strong><small className="mt-1 block text-[10px] leading-snug text-zinc-500">{dashboardData.pendingDeliveries} pendente(s)</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/>
             </button>
             <button type="button" onClick={() => router.push(`/rotas?date=${encodeURIComponent(dashboardData.selectedDateKey)}`)} aria-label={`Abrir rotas: ${dashboardData.selectedDateRoutes.length} no período · Acompanhar sequência e motoboys`}
-              className="col-span-2 flex min-h-[65px] items-center gap-3 rounded-[18px] border border-sky-500/20 bg-sky-500/[.045] px-3.5 text-left active:bg-sky-500/[.07]">
+              className="flex min-h-[84px] items-center gap-3 rounded-[18px] border border-sky-500/20 bg-sky-500/[.045] px-3.5 text-left active:bg-sky-500/[.07]">
               <Bike size={19} className="shrink-0 text-sky-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Rotas</strong><small className="mt-0.5 block text-[10px] leading-snug text-zinc-400">Sequência, saídas e motoboys · {dashboardData.selectedDateRoutes.length} no período</small></span><ChevronRight size={15} className="text-sky-300" />
             </button>
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center gap-2 px-1"><span className="text-[10px] font-black uppercase tracking-[.13em] text-zinc-400">Estoque e financeiro</span><span className="h-px flex-1 bg-zinc-800/70"/></div>
+            <div className="flex items-center gap-2 px-1"><span className="text-[10px] font-black uppercase tracking-[.13em] text-zinc-400">Gestão e financeiro</span><span className="h-px flex-1 bg-zinc-800/70"/></div>
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => router.push('/abastecimentos')} className="flex min-h-[69px] items-center gap-2.5 rounded-[17px] border border-amber-500/20 bg-amber-500/[.05] px-3 text-left active:bg-amber-500/10"><PackagePlus size={19} className="shrink-0 text-amber-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Compras</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Fornecedores e custos</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/></button>
-              <button type="button" onClick={() => router.push('/estoque')} className="flex min-h-[69px] items-center gap-2.5 rounded-[17px] border border-emerald-500/20 bg-emerald-500/[.05] px-3 text-left active:bg-emerald-500/10"><Boxes size={19} className="shrink-0 text-emerald-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Estoque</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Saldos e contagens</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/></button>
-              <button type="button" onClick={() => router.push('/despesas')} className="col-span-2 flex min-h-[60px] items-center gap-2.5 rounded-[17px] border border-zinc-800 bg-zinc-900/45 px-3 text-left active:bg-zinc-800/50"><ReceiptText size={19} className="shrink-0 text-amber-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Despesas operacionais</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Taxas, fretes, manutenção e diárias</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/></button>
+              <button type="button" onClick={() => router.push('/abastecimentos')} className="flex min-h-[84px] items-center gap-2.5 rounded-[17px] border border-amber-500/20 bg-amber-500/[.05] px-3 text-left active:bg-amber-500/10"><PackagePlus size={19} className="shrink-0 text-amber-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Compras</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Fornecedores e custos</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/></button>
+              <button type="button" onClick={() => router.push('/estoque')} className="flex min-h-[84px] items-center gap-2.5 rounded-[17px] border border-emerald-500/20 bg-emerald-500/[.05] px-3 text-left active:bg-emerald-500/10"><Boxes size={19} className="shrink-0 text-emerald-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Estoque</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Saldos e contagens</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/></button>
+              <button type="button" onClick={() => router.push('/despesas')} className="flex min-h-[84px] items-center gap-2.5 rounded-[17px] border border-zinc-800 bg-zinc-900/45 px-3 text-left active:bg-zinc-800/50"><ReceiptText size={19} className="shrink-0 text-amber-300"/><span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Despesas operacionais</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Taxas, fretes, manutenção e diárias</small></span><ChevronRight size={14} className="shrink-0 text-zinc-600"/></button>
             </div>
           </div>
 

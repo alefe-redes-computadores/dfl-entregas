@@ -391,7 +391,7 @@ function Content(){
     const settlementDetailHeight=Math.max(235,100+visibleImageRows.reduce((height,item)=>height+(item.type==='header'?61:53),0)+(imageExtraRows?55:0));
     const imageHeight=exportPolicy.detailed?1340+settlementDetailHeight+84:exportPolicy.summaryCanvasHeight;
     const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=imageHeight;
-    const ctx=canvas.getContext('2d');if(!ctx)return void toast.error('Não foi possível gerar a imagem.');
+    const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas indisponível para exportação');
     const round=(x:number,y:number,w:number,h:number,r:number,fill:string,stroke?:string)=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}};
     const gradient=ctx.createLinearGradient(0,0,1080,imageHeight);gradient.addColorStop(0,'#09231f');gradient.addColorStop(.44,'#090e13');gradient.addColorStop(1,'#09090d');ctx.fillStyle=gradient;ctx.fillRect(0,0,1080,1400);if(imageHeight>1400)ctx.fillRect(0,1400,1080,imageHeight-1400);
     ctx.fillStyle='#10b981';ctx.fillRect(0,0,1080,12);
@@ -452,7 +452,9 @@ function Content(){
     }
 
     label('DFL ENTREGAS  •  RESUMO DE CONFERÊNCIA',60,imageHeight-32,'700 21px Arial','#7b919a',930);
-    const dataUrl=canvas.toDataURL('image/png',1);
+    const dataUrl=canvas.toDataURL('image/png');
+    if(!dataUrl.startsWith('data:image/png;base64,') || dataUrl.length<200)throw new Error('Imagem PNG vazia ou inválida');
+    canvas.width=0;canvas.height=0; // liberar buffer de pixels antes da próxima página
     const filePage=imagePages.length>1?`-parte-${String(pageIndex+1).padStart(2,'0')}-de-${String(imagePages.length).padStart(2,'0')}`:'';
     const filename=`acerto-${motoboy.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${date}-${exportPolicy.suffix}${filePage}.png`;
     preparedImages.push({dataUrl,filename});
@@ -464,7 +466,7 @@ function Content(){
         savedUris.push(saved.uri);
       }
       await Share.share({title:`Acerto · ${motoboy.name}`,text:summaryCompact(),files:savedUris,dialogTitle:'Compartilhar comprovantes'});
-      toast.success(`${savedUris.length} imagem(ns) preparada(s). Confira o destinatário; compartilhar não confirma recebimento.`);
+      toast.success(`${savedUris.length} imagem(ns) compartilhada(s) com o Android. Confira o destinatário; o envio não confirma recebimento.`);
       return;
     }
     const files:File[]=[];

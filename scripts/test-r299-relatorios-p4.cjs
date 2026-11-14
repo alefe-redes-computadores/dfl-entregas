@@ -55,9 +55,10 @@ ok(ordersPage.includes('deliveryBelongsToCustomer(delivery, selectedCustomer)'),
 ok(ordersPage.includes('if (allDatesForCustomer) return true;'),'histórico não fica preso ao dia atual');
 ok(ordersPage.includes('if (customerFilterId && (!selectedCustomer'),'filtro não mostra pedidos de terceiros');
 ok(ordersPage.includes('Limpar filtro')&&ordersPage.includes('Todo o período'),'escopo do filtro visível e reversível');
-ok(home.includes('const [storeOrdersOpen, setStoreOrdersOpen] = useState(false);'),'Home inicia recolhida');
-ok(home.includes('storeOrdersOpen && storeOrdersDoDia.slice(0, storeOrdersVisibleLimit)'),'cards secundários não são montados fechados');
-ok(home.includes('storeOrdersDoDia.length > 0 && !globalMotoboy'),'Home preserva acesso por período');
+ok(home.includes('const [storeOrdersOpen, setStoreOrdersOpen] = useState(true);'),'Pendentes começam visíveis com opção de recolher');
+ok(home.includes('storeOrdersOpen && pendingStoreOrders.slice(0, storeOrdersVisibleLimit).map('),'pendentes paginados só montam abertos');
+ok(home.includes('completedStoreOrdersOpen && (')&&home.includes('completedStoreOrders.slice(0, completedStoreOrdersVisibleLimit).map('),'concluídos só montam sob demanda');
+ok(home.includes('pendingStoreOrders.length > 0 && !globalMotoboy')&&home.includes('completedStoreOrders.length > 0 && !globalMotoboy'),'pendentes e concluídos acessíveis por período');
 ok(pre.includes("'scripts/test-r299-relatorios-p4.cjs'"),'regressão P4 integra PRE-APK');
 for(const marker of ['test-r299-core-p1.cjs','test-r299-clientes-p2.cjs','test-r299-parser-p3.cjs'])ok(pre.includes(marker),'P1/P2/P3 preservados: '+marker);
 for(const sourcePath of ['lib/reports/types.ts','lib/reports/report-order-status.ts','lib/reports/buildReportModel.ts','components/reports/Charts/OriginChart.tsx','components/reports/ReportDrilldownSheet.tsx','components/reports/ReportOrderPulse.tsx','app/relatorios/page.tsx','app/clientes/details/page.tsx','app/entregas/page.tsx','app/page.tsx']){

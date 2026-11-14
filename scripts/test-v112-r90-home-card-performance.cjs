@@ -25,9 +25,11 @@ const card=read('components/home/DeliveryCard.tsx');
 const pre=read('scripts/pre-apk.cjs');
 // Paginação limita montagem, jamais a contagem financeira e operacional.
 ok(home.includes('useState(8)'),'Home inicia com oito pedidos comerciais');
-ok(home.includes('storeOrdersDoDia.slice(0, storeOrdersVisibleLimit).map('),'somente oito cards comerciais iniciais são montados');
+ok(home.includes('pendingStoreOrders.slice(0, storeOrdersVisibleLimit).map('),'somente oito pendentes são montados inicialmente');
+ok(home.includes('completedStoreOrdersOpen && (')&&home.includes('completedStoreOrders.slice(0, completedStoreOrdersVisibleLimit).map('),'concluídos só renderizam após expansão, limitados a oito');
 ok(home.includes('setStoreOrdersVisibleLimit((limit) => limit + 12)'),'pedidos restantes são acessíveis progressivamente');
-ok(home.includes('storeOrdersDoDia.length > storeOrdersVisibleLimit'),'botão aparece apenas quando existem pedidos ocultos');
+ok(home.includes('pendingStoreOrders.length > storeOrdersVisibleLimit')&&home.includes('completedStoreOrders.length > completedStoreOrdersVisibleLimit'),'botões só aparecem se houver itens ocultos na respectiva seção');
+ok(home.includes('setCompletedStoreOrdersVisibleLimit((limit) => limit + 12)'),'concluídos restantes também podem ser acessados progressivamente');
 ok(home.includes('[selectedDateKey, globalMotoboy]'),'limite reinicia quando período ou filtro muda');
 ok(home.includes('const faturamentoTotal = ordersDoDia.reduce('),'faturamento inclui a lista total, não a fatia visual');
 ok(home.includes('const pickupCount =')&&home.includes('const counterCount =')&&home.includes('const platformCount ='),'contagem de todas as modalidades preservada');

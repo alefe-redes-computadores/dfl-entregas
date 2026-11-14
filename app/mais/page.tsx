@@ -61,7 +61,7 @@ export default function MaisPage() {
     finally { setLeaving(false); }
   };
 
-  return <main className="dfl-page mx-auto max-w-3xl space-y-5 pb-[calc(env(safe-area-inset-bottom)+112px)] animate-in fade-in duration-300">
+  return <main className="dfl-page mx-auto max-w-3xl space-y-4 pb-[calc(env(safe-area-inset-bottom)+112px)] animate-in fade-in duration-300">
     <header className="px-1 pt-1">
       <div className="mb-1 flex items-center gap-2 text-emerald-300">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -73,22 +73,28 @@ export default function MaisPage() {
 
     <section aria-label="Acessos principais" className="grid grid-cols-2 gap-2.5">
       <button type="button" onClick={() => router.push('/mais/preferencias')}
-        className="flex min-h-[116px] flex-col justify-between rounded-[20px] border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[.14] to-zinc-900/70 p-3.5 text-left transition active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+        className="flex min-h-[94px] flex-col justify-between rounded-[20px] border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[.14] to-zinc-900/70 p-3.5 text-left transition active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
         <div className="flex w-full items-start justify-between"><SlidersHorizontal size={21} className="text-emerald-300"/><ChevronRight size={15} className="text-emerald-500"/></div>
-        <div><strong className="block text-[13px] font-black text-zinc-50">Preferências 360</strong><span className="mt-1 block text-[10px] leading-snug text-zinc-400">Rotas, parceiros e expediente</span></div>
+        <div><strong className="block text-[13px] font-black text-zinc-50">Preferências 360</strong><span className="mt-1 block text-[10px] leading-snug text-zinc-400">Rotas, Site e loja</span></div>
       </button>
       <button type="button" onClick={() => router.push('/mais/notificacoes')}
-        className="flex min-h-[116px] flex-col justify-between rounded-[20px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.09] to-zinc-900/70 p-3.5 text-left transition active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
+        className="flex min-h-[94px] flex-col justify-between rounded-[20px] border border-sky-500/20 bg-gradient-to-br from-sky-500/[.09] to-zinc-900/70 p-3.5 text-left transition active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
         <div className="flex w-full items-start justify-between"><BellRing size={21} className="text-sky-300"/><ChevronRight size={15} className="text-sky-500"/></div>
-        <div><strong className="block text-[13px] font-black text-zinc-50">Notificações</strong><span className="mt-1 block text-[10px] leading-snug text-zinc-400">Categorias, horários e privacidade</span></div>
+        <div><strong className="block text-[13px] font-black text-zinc-50">Notificações</strong><span className="mt-1 block text-[10px] leading-snug text-zinc-400">Alertas e horários</span></div>
       </button>
+      {isDiagnosticsAdmin && <button type="button" onClick={() => router.push('/mais/comunicacao')}
+        className="col-span-2 flex min-h-[78px] items-center gap-3 rounded-[18px] border border-amber-500/20 bg-gradient-to-r from-amber-500/[.09] to-zinc-900/70 px-3.5 py-3 text-left active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[14px] bg-amber-500/10 text-amber-300"><MessageSquareText size={19}/></span>
+        <span className="min-w-0 flex-1"><strong className="block text-[12px] font-black text-zinc-100">Comunicação 360</strong>
+          <span className="mt-1 block text-[10px] leading-snug text-zinc-400">Central de Mensageria 360° · acompanhamento e imagens</span></span>
+        <ChevronRight size={16} className="shrink-0 text-amber-400"/>
+      </button>}
     </section>
 
     {isDiagnosticsAdmin && <section aria-label="Comunicação e inteligência" className="space-y-2.5">
       <SectionHeading eyebrow="Gestão e integrações" title="Comunicação e inteligência" />
       <div className="overflow-hidden rounded-[20px] border border-zinc-800 bg-zinc-900/35">
-        <Destination first tone="amber" icon={MessageSquareText} title="Comunicação 360" description="Central de Mensageria 360° · acompanhamento privado · modelos e imagens" onClick={() => router.push('/mais/comunicacao')}/>
-        <Destination tone="violet" icon={Sparkles} title="DFL Intelligence" description="Inteligência de Clientes · recomendações, bairros, qualidade e operação" onClick={() => router.push('/mais/inteligencia')}/>
+        <Destination first tone="violet" icon={Sparkles} title="DFL Intelligence" description="Inteligência de Clientes · recomendações, bairros, qualidade e operação" onClick={() => router.push('/mais/inteligencia')}/>
       </div>
       <details className="group rounded-2xl border border-zinc-800 bg-zinc-950/35">
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3.5 text-[11px] font-semibold text-zinc-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">

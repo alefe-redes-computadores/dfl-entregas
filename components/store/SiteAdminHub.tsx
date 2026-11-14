@@ -144,7 +144,7 @@ export function SiteAdminHub({
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             <strong className="truncate text-[13px] font-black text-zinc-100">
-              Pedidos do Site
+              Monitor Pedidos Site
             </strong>
             <span className="shrink-0 rounded-md bg-zinc-800/70 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wide text-zinc-500">
               DFL Site
@@ -249,7 +249,7 @@ export function SiteAdminHub({
                 {openingAdmin ? 'Abrindo DFL Admin…' : 'Abrir Admin do Site'}
               </strong>
               <small className="block text-[9px] text-zinc-600">
-                Administração comercial oficial
+                Administração comercial oficial · pedidos e confirmações
               </small>
             </span>
             <ExternalLink size={15} />

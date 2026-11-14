@@ -59,7 +59,10 @@ export default function HomePage() {
   // R90: balcão/retirada/99Food não montam dezenas de cards numa só pintura.
   // Os totais e a contabilidade continuam usando TODOS os pedidos do período.
   const [storeOrdersVisibleLimit, setStoreOrdersVisibleLimit] = useState(8);
-  const [storeOrdersOpen, setStoreOrdersOpen] = useState(false);
+  const [storeOrdersOpen, setStoreOrdersOpen] = useState(true);
+  // Concluídos não disputam a área operacional e não montam cards até abrir.
+  const [completedStoreOrdersOpen, setCompletedStoreOrdersOpen] = useState(false);
+  const [completedStoreOrdersVisibleLimit, setCompletedStoreOrdersVisibleLimit] = useState(8);
 
   const selectedDateKey = saoPauloDateKey(selectedDate);
 
@@ -330,6 +333,19 @@ export default function HomePage() {
     activeMotoboysToday,
   } = homeOperation;
 
+  // A classificação é exclusivamente visual: o fechamento físico não comprova pagamento.
+  const pendingStoreOrders = useMemo(
+    () => storeOrdersDoDia.filter((order) => !order.completed),
+    [storeOrdersDoDia],
+  );
+  const completedStoreOrders = useMemo(
+    () => storeOrdersDoDia.filter((order) => order.completed),
+    [storeOrdersDoDia],
+  );
+  const pendingPickupCount = pendingStoreOrders.filter((order) => getFulfillmentMode(order) === 'pickup').length;
+  const pendingCounterCount = pendingStoreOrders.filter((order) => getFulfillmentMode(order) === 'counter').length;
+  const pendingPlatformCount = pendingStoreOrders.filter((order) => getFulfillmentMode(order) === 'external_delivery').length;
+
   // Ao mudar o dia, não manter filtro invisível de motoboy sem operação.
   useEffect(() => {
     if (globalMotoboy && !activeMotoboysToday.some((motoboy) => motoboy.name === globalMotoboy)) {
@@ -339,6 +355,8 @@ export default function HomePage() {
 
   useEffect(() => {
     setStoreOrdersVisibleLimit(8);
+    setCompletedStoreOrdersVisibleLimit(8);
+    setCompletedStoreOrdersOpen(false);
     setCompactOpenRoutes(false);
   }, [selectedDateKey, globalMotoboy]);
 
@@ -478,33 +496,7 @@ export default function HomePage() {
       )}
 
 
-      {openRoutes.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <div className="flex items-end justify-between gap-3 px-1">
-            <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Execução</p><h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">Rotas em andamento {globalMotoboy && `· ${globalMotoboy}`}</h2></div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-              {openRoutes.length > 3 && (
-                <button type="button" onClick={() => setCompactOpenRoutes((value) => !value)} aria-pressed={compactOpenRoutes} aria-label={compactOpenRoutes ? 'Mostrar todas as rotas abertas' : 'Mostrar apenas tres rotas abertas'} className="min-h-9 rounded-xl border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-[10px] font-bold text-zinc-200 transition active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-                  {compactOpenRoutes ? 'Mostrar todas' : 'Focar em 3'}
-                </button>
-              )}
-              <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[9px] font-black text-emerald-400">{openRoutes.length} {openRoutes.length === 1 ? 'aberta' : 'abertas'}</span>
-            </div>
-          </div>
-          {openRoutes.map((route, index) => (
-            !compactOpenRoutes || index < 3 ? (
-              <RouteAccordion key={route.id} route={route} defaultOpen={false} />
-            ) : null
-          ))}
-          {compactOpenRoutes && openRoutes.length > 3 && (
-            <button type="button" onClick={() => setCompactOpenRoutes(false)} className="min-h-11 rounded-2xl border border-zinc-700 bg-zinc-900/70 px-4 text-xs font-bold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400" aria-label={`Exibir todas as ${openRoutes.length} rotas abertas`}>
-              Exibir mais {openRoutes.length - 3} rotas abertas
-            </button>
-          )}
-        </section>
-      )}
-
-      <section aria-label="Ferramentas de consulta" className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-2">
+      <section aria-label="Ferramentas de consulta" className="rounded-[18px] border border-zinc-700/70 bg-zinc-900/50 p-1.5">
         <button type="button" aria-expanded={homeToolsOpen} aria-controls="dfl-home-tools"
           onClick={() => setHomeToolsOpen(open => !open)}
           className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-2.5 text-left text-xs font-black text-zinc-300 transition-colors active:bg-zinc-800/40">
@@ -519,23 +511,24 @@ export default function HomePage() {
         </div>}
       </section>
 
-      {storeOrdersDoDia.length > 0 && !globalMotoboy && (
-        <section className="flex flex-col gap-3">
+
+      {pendingStoreOrders.length > 0 && !globalMotoboy && (
+        <section className="flex flex-col gap-2 rounded-[20px] border border-amber-500/30 bg-amber-500/[.035] p-3">
           <div className="flex items-center justify-between px-1">
             <div>
-              <h2 className="font-heading text-sm font-bold uppercase tracking-wide text-zinc-500">Pedidos na loja</h2>
+              <h2 className="font-heading text-sm font-bold uppercase tracking-wide text-amber-200">Pedidos na loja</h2>
               <p className="mt-1 text-[11px] text-zinc-600">Fora da logística de rotas</p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-1 text-[10px] font-black">
-              {pickupCount > 0 && <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-violet-400">{pickupCount} retirada{pickupCount === 1 ? '' : 's'}</span>}
-              {counterCount > 0 && <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-amber-400">{counterCount} balcão</span>}
-              {platformCount > 0 && <span className="rounded-full border border-yellow-400/20 bg-yellow-400/10 px-2.5 py-1 text-yellow-300">{platformCount} pela plataforma</span>}
+              {pendingPickupCount > 0 && <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-violet-400">{pendingPickupCount} retirada{pendingPickupCount === 1 ? '' : 's'}</span>}
+              {pendingCounterCount > 0 && <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-amber-400">{pendingCounterCount} balcão</span>}
+              {pendingPlatformCount > 0 && <span className="rounded-full border border-yellow-400/20 bg-yellow-400/10 px-2.5 py-1 text-yellow-300">{pendingPlatformCount} pela plataforma</span>}
               <button type="button" aria-expanded={storeOrdersOpen} aria-controls="dfl-home-store-orders" onClick={() => setStoreOrdersOpen((value) => !value)} className="inline-flex min-h-10 items-center gap-1 rounded-xl border border-zinc-700 bg-zinc-950/65 px-2.5 text-[10px] font-black text-zinc-200">{storeOrdersOpen ? 'Recolher' : 'Ver pedidos'}<ChevronDown size={13} className={storeOrdersOpen ? 'rotate-180' : ''}/></button>
             </div>
           </div>
 
           <div id="dfl-home-store-orders" className="space-y-2">
-            {storeOrdersOpen && storeOrdersDoDia.slice(0, storeOrdersVisibleLimit).map((order) => {
+            {storeOrdersOpen && pendingStoreOrders.slice(0, storeOrdersVisibleLimit).map((order) => {
               const mode = getFulfillmentMode(order);
               const isPickup = mode === 'pickup';
               const isPlatform = mode === 'external_delivery';
@@ -582,16 +575,82 @@ export default function HomePage() {
               );
             })}
           </div>
-          {storeOrdersOpen && storeOrdersDoDia.length > storeOrdersVisibleLimit && (
+          {storeOrdersOpen && pendingStoreOrders.length > storeOrdersVisibleLimit && (
             <button
               type="button"
               onClick={() => setStoreOrdersVisibleLimit((limit) => limit + 12)}
               className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-zinc-700/70 bg-zinc-900/45 px-4 text-xs font-bold text-zinc-300 transition-colors active:bg-zinc-800"
-              aria-label={`Mostrar mais pedidos da loja; ${storeOrdersDoDia.length - storeOrdersVisibleLimit} restantes`}
+              aria-label={`Mostrar mais pedidos da loja; ${pendingStoreOrders.length - storeOrdersVisibleLimit} restantes`}
             >
-              Ver mais {Math.min(12, storeOrdersDoDia.length - storeOrdersVisibleLimit)} pedidos
-              <span className="text-[10px] font-medium text-zinc-500">{Math.min(storeOrdersVisibleLimit, storeOrdersDoDia.length)} de {storeOrdersDoDia.length}</span>
+              Ver mais {Math.min(12, pendingStoreOrders.length - storeOrdersVisibleLimit)} pedidos
+              <span className="text-[10px] font-medium text-zinc-500">{Math.min(storeOrdersVisibleLimit, storeOrdersDoDia.length)} de {pendingStoreOrders.length}</span>
             </button>
+          )}
+        </section>
+      )}
+
+
+      {openRoutes.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-end justify-between gap-3 px-1">
+            <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Execução</p><h2 className="mt-0.5 font-heading text-base font-black text-zinc-100">Rotas em andamento {globalMotoboy && `· ${globalMotoboy}`}</h2></div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              {openRoutes.length > 3 && (
+                <button type="button" onClick={() => setCompactOpenRoutes((value) => !value)} aria-pressed={compactOpenRoutes} aria-label={compactOpenRoutes ? 'Mostrar todas as rotas abertas' : 'Mostrar apenas tres rotas abertas'} className="min-h-9 rounded-xl border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-[10px] font-bold text-zinc-200 transition active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+                  {compactOpenRoutes ? 'Mostrar todas' : 'Focar em 3'}
+                </button>
+              )}
+              <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[9px] font-black text-emerald-400">{openRoutes.length} {openRoutes.length === 1 ? 'aberta' : 'abertas'}</span>
+            </div>
+          </div>
+          {openRoutes.map((route, index) => (
+            !compactOpenRoutes || index < 3 ? (
+              <RouteAccordion key={route.id} route={route} defaultOpen={false} />
+            ) : null
+          ))}
+          {compactOpenRoutes && openRoutes.length > 3 && (
+            <button type="button" onClick={() => setCompactOpenRoutes(false)} className="min-h-11 rounded-2xl border border-zinc-700 bg-zinc-900/70 px-4 text-xs font-bold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400" aria-label={`Exibir todas as ${openRoutes.length} rotas abertas`}>
+              Exibir mais {openRoutes.length - 3} rotas abertas
+            </button>
+          )}
+        </section>
+      )}
+
+      {completedStoreOrders.length > 0 && !globalMotoboy && (
+        <section aria-label="Pedidos da loja concluídos" className="space-y-2 rounded-[20px] border border-zinc-800/80 bg-zinc-900/30 p-3">
+          <button type="button" aria-expanded={completedStoreOrdersOpen} aria-controls="dfl-home-store-completed"
+            onClick={() => setCompletedStoreOrdersOpen((open) => !open)}
+            className="flex min-h-11 w-full items-center gap-2 rounded-xl px-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+            <CheckCircle2 size={17} className="shrink-0 text-emerald-400"/>
+            <span className="min-w-0 flex-1 text-[12px] font-black text-zinc-200">Retiradas e pedidos concluídos</span>
+            <span className="rounded-full bg-zinc-800 px-2 py-1 text-[10px] font-black text-zinc-300">{completedStoreOrders.length}</span>
+            <ChevronDown size={15} className={`text-zinc-400 transition-transform ${completedStoreOrdersOpen ? 'rotate-180' : ''}`}/>
+          </button>
+          {completedStoreOrdersOpen && (
+            <div id="dfl-home-store-completed" className="space-y-2 border-t border-zinc-800/70 pt-2">
+              {completedStoreOrders.slice(0, completedStoreOrdersVisibleLimit).map((order) => {
+                const mode = getFulfillmentMode(order);
+                const paymentConfirmed = deriveDeliveryPaymentState(order) === 'paid';
+                return <button type="button" key={order.id}
+                  onClick={() => router.push(`/entregas/details?id=${order.id}&date=${encodeURIComponent(selectedDateKey)}`)}
+                  className="flex min-h-[64px] w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-3 text-left active:bg-zinc-800/60">
+                  <CheckCircle2 size={18} className="shrink-0 text-emerald-400"/>
+                  <span className="min-w-0 flex-1">
+                    <strong className="block truncate text-xs text-zinc-100">{order.customer_name || `Pedido #${order.order_id || 'sem número'}`}</strong>
+                    <small className="mt-1 block truncate text-[10px] text-zinc-500">{formatOrderTime(order)} · {mode === 'pickup' ? 'Retirada' : mode === 'counter' ? 'Balcão' : 'Entrega da plataforma'} · {paymentConfirmed ? 'Pago' : 'Recebimento a conferir'}</small>
+                  </span>
+                  <span className="shrink-0 text-right text-xs font-black text-zinc-300">
+                    {isPrivacyMode ? 'R$ •••' : `R$ ${(order.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </span>
+                </button>;
+              })}
+              {completedStoreOrders.length > completedStoreOrdersVisibleLimit && (
+                <button type="button" onClick={() => setCompletedStoreOrdersVisibleLimit((limit) => limit + 12)}
+                  className="min-h-11 w-full rounded-xl border border-zinc-700 text-[11px] font-bold text-zinc-300">
+                  Mostrar mais {Math.min(12, completedStoreOrders.length - completedStoreOrdersVisibleLimit)} concluídos
+                </button>
+              )}
+            </div>
           )}
         </section>
       )}

@@ -663,8 +663,12 @@ export async function generateRouteMessages(
             : '';
           const candidateDrinks=candidate.drinks?.trim()?` · 🥤 *${candidate.drinks.trim()}*`:'';
           const amount=deliveryCharge(candidate);
-          const paymentAction=deliveryPaid(candidate)?'':` · cobrar *R$ ${formatMoney(amount)}* · ${(candidate.payment_method||'dinheiro').replace(/_/g,' ')}`;
+          // R59 P2: a forma informada não é prova de pagamento.
+          const paymentAction=` · ${driverCollectionInstruction(candidate)}`;
           msg2.push(`   ↳ *${candidateName}* · ${reference}${codeInfo}${candidateDrinks}${paymentAction}`);
+          // R59 P2: observação pertence à comanda, não à parada inteira.
+          // Não transferir instruções de um cliente para outro no agrupamento.
+          if (candidate.observation?.trim()) msg2.push(`      ⚠️ *Obs. ${candidateName}:* ${candidate.observation.trim()}`);
         });
         const groupedTotal=groupedDeliveries.filter(item=>!deliveryPaid(item)).reduce((sum,item)=>sum+deliveryCharge(item),0);
         if(groupedTotal>0)msg2.push(`   💰 Total da parada a cobrar: *R$ ${formatMoney(groupedTotal)}*`);
@@ -674,6 +678,13 @@ export async function generateRouteMessages(
         msg2.push('   📍 *1 parada física · pedidos e códigos separados*');
       }else{
         msg2.push(`${getNumberEmoji(num)} *${neighborhood}*${streetLabel}${drinkInfo}${flags}${zapWarning}`);
+        // R59 P2: ação financeira e referência visíveis na mensagem principal.
+        // A função canônica distingue 'pago' de meio de pagamento declarado.
+        const operationalSingle = groupedDeliveries[0];
+        if (operationalSingle) {
+          msg2.push(`   ↳ 💰 ${driverCollectionInstruction(operationalSingle)}`);
+          if (operationalSingle.observation?.trim()) msg2.push(`   ↳ ⚠️ *Observação:* ${operationalSingle.observation.trim()}`);
+        }
         const single = groupedDeliveries[0];
         if (driverConfirmsIfood && single?.origin === 'ifood') {
           const code = orderConfirmationCode(single.confirmation_code);
