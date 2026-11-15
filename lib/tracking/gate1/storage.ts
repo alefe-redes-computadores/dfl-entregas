@@ -2,7 +2,7 @@ import 'server-only';
 import { adminDb } from '@/lib/integration/server/admin';
 import { hexSha256, randomSecret, trackingCustomerEnabled, trackingTenant, trackingCodeEnabled } from './security';
 import {
-  canonicalOrderKey, commercialState, iso, mayIssueNewTrackingGrant, projectPublicTracking, sortUniqueEvents,
+  canonicalOrderKey, commercialState, iso, mayIssueNewTrackingGrant, r74MarketplaceConsent, projectPublicTracking, sortUniqueEvents,
   type Raw, type TrackingEvent, type TrackingKind, type PublicProjection,
 } from './core';
 
@@ -33,7 +33,7 @@ export async function capabilities(): Promise<CapabilityState | null> {
         ['allocation_notice','dispatch_notice','next_stop_notice','completion_notice'].includes(event) &&
         typeof mode === 'string' && permittedModes.includes(mode))) as Record<string,string> : {},
     eligible_origins: Array.isArray(raw.eligible_origins) ? raw.eligible_origins.filter(x =>
-      x === 'dfl_site' || x === 'manual' || x === 'whatsapp' || x === 'ifood' || x === 'food99') : [],
+      x === 'dfl_site' || x === 'manual' || x === 'whatsapp' || x === 'ifood' || x === 'food99' || x === 'keeta') : [],
   };
 }
 export function canAccessCustomer(c: CapabilityState | null) {
@@ -48,6 +48,7 @@ function originOf(d: Raw): string {
   if (d.source_system === 'dfl_site') return 'dfl_site';
   if (d.origin === 'ifood') return 'ifood';
   if (d.origin === 'food99') return 'food99';
+  if (d.origin === 'keeta') return 'keeta';
   return 'manual'; // WhatsApp is not currently separately proven by persisted schema.
 }
 function scopeId(tenant: string, key: string) { return hexSha256(`${tenant}|${key}`); }
@@ -355,7 +356,7 @@ export async function querySession(tenant: string, session: string, c: Capabilit
 }
 export async function confirmInternalDelivery(input: {tenant:string; deliveryId:string; actorUid:string; idempotencyKey:string}) {
   const doc = await confirmedDelivery(input.deliveryId);
-  if (!doc || doc.data.source_system === 'dfl_site' || doc.data.origin === 'ifood' || doc.data.origin === 'food99')
+  if (!doc || doc.data.source_system === 'dfl_site' || (['ifood','food99','keeta'].includes(String(doc.data.origin||'')) && !r74MarketplaceConsent(doc.data)))
     return {state:'invalid' as const};
   const key = canonicalOrderKey(doc.data);
   if (!belongsToTenant(doc.data,input.tenant) || !key) return {state:'invalid' as const};
@@ -384,7 +385,7 @@ export async function hasCommercialAcceptance(tenant: string, d: Raw): Promise<b
     });
   }
   const key = canonicalOrderKey(d);
-  if (!key || d.origin === 'ifood' || d.origin === 'food99') return false;
+  if (!key || (['ifood','food99','keeta'].includes(String(d.origin||'')) && !r74MarketplaceConsent(d))) return false;
   const snap = await adminDb.collection('tracking_manual_acceptances_v1').doc(scopeId(tenant,key)).get();
   return Boolean(snap.exists && snap.data()?.tenant_id === tenant && iso(snap.data()?.accepted_at));
 }

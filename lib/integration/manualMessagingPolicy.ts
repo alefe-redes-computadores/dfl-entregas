@@ -5,6 +5,7 @@ export type ManualMessageReason = 'created' | 'route_started' | 'delivery_comple
 export type ManualMessageType = 'order.created' | 'delivery.started' | 'delivery.completed';
 export type ManualDeliveryRecord = {
   id: string;
+  logistics_provider?: unknown; operational_dismissed_at?: unknown; site_order_status?: unknown;
   source_system?: unknown; external_order_id?: unknown; origin?: unknown; notify_whatsapp?: unknown;
   phone?: unknown; customer_name?: unknown; owner_order_context?: unknown; manual_messaging_opt_in_v1?: unknown;
   developer_test?: unknown; exclude_from_reports?: unknown; fulfillment_mode?: unknown;
@@ -36,7 +37,10 @@ export function planManualMessage(input: {
   const { delivery: d, route } = input;
   const now = input.now ?? Date.now();
   if (!/^dfl-[A-Za-z0-9-]{12,120}$/.test(d.id)) return { eligible: false, reason: 'delivery_id_invalid' };
-  if (d.source_system === 'dfl_site' || asText(d.external_order_id) || !['manual', 'loja'].includes(asText(d.origin))) return { eligible: false, reason: 'source_not_manual' };
+  if (d.source_system === 'dfl_site' || asText(d.external_order_id)) return { eligible: false, reason: 'source_not_manual' };
+  const platform=['ifood','food99','keeta'].includes(asText(d.origin));
+  if (!['manual', 'loja'].includes(asText(d.origin)) && !platform) return { eligible: false, reason: 'source_not_manual' };
+  if (platform && !(d.fulfillment_mode==='delivery' && d.logistics_provider==='dfl' && d.notify_whatsapp===true && d.manual_messaging_opt_in_v1===true && (d.source_system===undefined || d.source_system==='manual' || d.source_system==='dfl_entregas') && d.operational_dismissed_at==null && !asText(d.site_order_status).toLowerCase().includes('cancel'))) return { eligible: false, reason: 'source_not_manual' };
   if (d.notify_whatsapp !== true || d.manual_messaging_opt_in_v1 !== true) return { eligible: false, reason: 'no_explicit_opt_in' };
   if (d.developer_test === true || Boolean(d.owner_order_context) || d.exclude_from_reports === true) return { eligible: false, reason: 'test_or_internal_order' };
   if (d.fulfillment_mode !== 'delivery') return { eligible: false, reason: 'not_dfl_delivery' };

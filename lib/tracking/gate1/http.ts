@@ -47,15 +47,16 @@ export async function issue(req: NextRequest) {
       !good(v.order) || !idempotency(v.idempotency_key) ||
       !Number.isInteger(v.requested_ttl_minutes) || Number(v.requested_ttl_minutes) < 5 || Number(v.requested_ttl_minutes) > 1440) return err(422);
     const order = v.order as Record<string,unknown>;
-    if (!exact(order,['canonical_order_key','origin']) || !['site','whatsapp','manual','ifood','food99','other'].includes(String(order.origin)) ||
+    if (!exact(order,['canonical_order_key','origin']) || !['site','whatsapp','manual','ifood','food99','keeta','other'].includes(String(order.origin)) ||
       typeof order.canonical_order_key !== 'string' || !/^(?:site|entregas):[A-Za-z0-9._-]{1,120}$/.test(order.canonical_order_key)) return err(422);
     const deliveryId = await resolveCanonicalOrder(order.canonical_order_key);
     if (!deliveryId) return err();
     const snap = await confirmedDelivery(deliveryId);
     if (!snap || canonicalOrderKey(snap.data) !== order.canonical_order_key ||
       !mayIssueNewTrackingGrant(snap.data) ||
-      (order.origin !== (snap.data.source_system === 'dfl_site' ? 'site' : snap.data.origin === 'ifood' ? 'ifood' : snap.data.origin === 'food99' ? 'food99' : 'manual')) ||
+      (order.origin !== (snap.data.source_system === 'dfl_site' ? 'site' : snap.data.origin === 'ifood' ? 'ifood' : snap.data.origin === 'food99' ? 'food99' : snap.data.origin === 'keeta' ? 'keeta' : 'manual')) ||
       !(await hasCommercialAcceptance(ctx.c.tenant,snap.data))) return err();
+    if (['ifood','food99','keeta'].includes(String(snap.data.origin||'')) && v.requested_ttl_minutes !== 90) return err(422);
     // Materialize only evidence persisted by the existing operational source.
     await reconcileConfirmedEvents(ctx.c.tenant,deliveryId);
     const issued = await issueGrant({tenant:ctx.c.tenant,deliveryId,actorUid:ctx.uid,

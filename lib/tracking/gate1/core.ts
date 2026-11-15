@@ -3,6 +3,15 @@
  * Only CONFIRMED server snapshots may be passed by the server adapter.
  * No client/SDK/service credentials in this module.
  */
+/** R74: explicitly consented marketplace deliveries using the DFL courier only. */
+export function r74MarketplaceConsent(d: Raw): boolean {
+  return ['ifood','food99','keeta'].includes(String(d.origin||'')) && d.completed !== true &&
+    (d.source_system === undefined || d.source_system === 'dfl_entregas' || d.source_system === 'manual') &&
+    !d.external_order_id && d.fulfillment_mode === 'delivery' && d.logistics_provider === 'dfl' &&
+    d.notify_whatsapp === true && d.manual_messaging_opt_in_v1 === true &&
+    d.operational_dismissed_at == null && !String(d.site_order_status||'').toLowerCase().includes('cancel') && d.developer_test !== true &&
+    d.exclude_from_reports !== true && !d.owner_order_context;
+}
 export const TRACKING_PUBLIC_CONTRACT = 'dfl.tracking.public' as const;
 export const TRACKING_PUBLIC_VERSION = 1 as const;
 export const TRACKING_MODES = ['OFF', 'DRY_RUN', 'MANUAL', 'AUTOMATIC_CERTIFIED'] as const;
@@ -69,7 +78,7 @@ export function canonicalOrderKey(d: Raw): string | null {
  */
 export function mayIssueNewTrackingGrant(d: Raw): boolean {
   if (d.completed === true || d.operational_dismissed_at != null || commercialState(d.site_order_status) === 'cancelled') return false;
-  if (d.origin === 'ifood' || d.origin === 'food99') return false;
+  if (['ifood','food99','keeta'].includes(String(d.origin||'')) && !r74MarketplaceConsent(d)) return false;
   if (d.fulfillment_mode != null && !['delivery','pickup'].includes(String(d.fulfillment_mode))) return false;
   return true;
 }

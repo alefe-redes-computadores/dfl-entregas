@@ -1,5 +1,5 @@
 /** DFL R250 — evidence-only owner readiness. No side effects or PII. */
-import { commercialState, iso, type Raw, type TrackingEvent, type PublicProjection, type TrackingStatus } from './core';
+import { commercialState, iso, r74MarketplaceConsent, type Raw, type TrackingEvent, type PublicProjection, type TrackingStatus } from './core';
 
 export type ReadinessLevel = 'ready_for_internal_review' | 'needs_attention' | 'blocked';
 export type ReadinessSignal = { code: string; severity: 'info' | 'warning' | 'blocker'; label: string };
@@ -9,7 +9,7 @@ export type TrackingInspection = {
   delivery: {
     canonical_order_key: string;
     public_label: string;
-    origin: 'site' | 'manual' | 'ifood' | 'food99';
+    origin: 'site' | 'manual' | 'ifood' | 'food99' | 'keeta';
     state: TrackingStatus;
     fulfillment: 'delivery' | 'pickup' | 'counter' | 'external_delivery';
   };
@@ -20,7 +20,7 @@ export type TrackingInspection = {
 };
 const str = (v: unknown, length = 90) => typeof v === 'string' ? v.trim().slice(0,length) : '';
 export function readinessOrigin(d: Raw): TrackingInspection['delivery']['origin'] {
-  return d.source_system === 'dfl_site' ? 'site' : d.origin === 'ifood' ? 'ifood' : d.origin === 'food99' ? 'food99' : 'manual';
+  return d.source_system === 'dfl_site' ? 'site' : d.origin === 'ifood' ? 'ifood' : d.origin === 'food99' ? 'food99' : d.origin === 'keeta' ? 'keeta' : 'manual';
 }
 export function readinessStatus(d: Raw, route: Raw | null, accepted: boolean): TrackingStatus {
   if (commercialState(d.site_order_status) === 'cancelled' || d.operational_dismissed_at != null) return 'cancelled';
@@ -56,7 +56,7 @@ export function inspectReadiness(input: {
   if (!input.codeEnabled || !input.capability || input.capability.mode === 'OFF' || input.capability.kill_switch)
     add('FEATURE_OFF','info','Novo acompanhamento permanece desligado por padrão');
   if (!input.customerCertified) add('CUSTOMER_OFF','info','Links de acompanhamento desativados neste ambiente (independente do piloto WhatsApp)');
-  if (origin === 'ifood' || origin === 'food99') add('MARKETPLACE_POLICY','blocker','Compartilhamento de marketplace depende de autorização específica');
+  if (['ifood','food99','keeta'].includes(origin) && !r74MarketplaceConsent(d)) add('MARKETPLACE_POLICY','blocker','Pedido de plataforma exige entrega DFL e consentimento individual');
   if (input.capability && !input.capability.origin_eligible) add('ORIGIN_DISABLED','blocker','Origem não autorizada nas configurações');
   const hasBlocker = signals.some(signal=>signal.severity==='blocker');
   const hasWarning = signals.some(signal=>signal.severity==='warning');

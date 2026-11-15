@@ -25,7 +25,7 @@ export async function inspectConfirmedOwnerDelivery(deliveryId: string): Promise
   const events = sortUniqueEvents(history.docs.map(doc=>doc.data() as TrackingEvent));
   const lastConfirmed = [snap.data.completed_at,snap.data.site_order_last_event_at,snap.data.created_at,snap.data.createdAt,snap.route?.started_at,snap.route?.updated_at]
     .map(iso).filter((v):v is string=>Boolean(v)).sort().at(-1) || null;
-  const origin = snap.data.source_system==='dfl_site'?'dfl_site':snap.data.origin==='ifood'?'ifood':snap.data.origin==='food99'?'food99':'manual';
+  const origin = snap.data.source_system==='dfl_site'?'dfl_site':snap.data.origin==='ifood'?'ifood':snap.data.origin==='food99'?'food99':snap.data.origin==='keeta'?'keeta':'manual';
   // Only real persisted ledger can generate the public shape. No synthetic events.
   let projection: PublicProjection | null = null;
   if (events.length && lastConfirmed) {

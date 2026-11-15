@@ -19,10 +19,23 @@ check(
   create.includes("setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey : '')") &&
   create.includes("notifyWhatsapp:false") &&
   create.includes("notify_whatsapp:notifyWhatsapp") &&
-  create.includes("notify_whatsapp:draft.notifyWhatsapp"),
+  create.includes("notify_whatsapp:drafts.length===1&&draft.notifyWhatsapp") &&
+  create.includes("manual_messaging_opt_in_v1:drafts.length===1&&draft.notifyWhatsapp&&fulfillmentMode==='delivery'"),
   'R310: consentimento explícito, vinculado ao destinatário e sem herança entre pedidos'
 );
 check(create.includes('draft.notifyWhatsapp')&&create.includes('drinks:draft.drinks'),'Salvar mantém WhatsApp/bebidas por pedido');
+const batchPersist=/notify_whatsapp:([^,]+),manual_messaging_opt_in_v1:([^,]+),observation:/.exec(create);
+check(Boolean(batchPersist),'R48 regras individuais de persistencia localizadas');
+const batchAllowed=new Function('drafts','draft','return Boolean('+batchPersist[1]+')');
+const batchOptIn=new Function('drafts','draft','fulfillmentMode','return Boolean('+batchPersist[2]+')');
+for(const count of [1,2,3,8]){
+  const drafts=Array.from({length:count},(_,i)=>({id:'pedido-'+i,notifyWhatsapp:i===0}));
+  check(batchAllowed(drafts,drafts[0])===(count===1),'R48 contato individual '+count);
+  check(batchOptIn(drafts,drafts[0],'delivery')===(count===1),'R48 optin individual '+count);
+  check(batchAllowed(drafts,{notifyWhatsapp:false})===false,'R48 sem consentimento '+count);
+  check(batchOptIn(drafts,drafts[0],'external_delivery')===false,'R48 entrega plataforma bloqueada '+count);
+}
+check(create.includes("(origin !== 'ifood' || extraIfoodOrders.length === 0)"),'R48 nenhum WhatsApp no lote');
 check(create.includes('hasOwnerIdentity({name:draftName,phone:draftPhone})'),'Pedido de teste não contamina irmãos');
 check(create.includes('stopSource&&sameCustomerAddress(stopSource.address_string,draftAddress)'),'Agrupamento respeita endereço existente');
 check(create.indexOf('const [drinks, setDrinks]') < create.indexOf('const activeDrinks ='),'Estado criado antes de ler campo ativo');

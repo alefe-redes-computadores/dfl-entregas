@@ -45,12 +45,17 @@ export async function sendManualTrackingInitial(deliveryId:string,ownerUid:strin
   const target=siteTarget();
   if(!target)return {status:'off',reason:'site_bridge_not_configured'};
   const c=await capabilities();
-  if(!c||!canAccessCustomer(c)||c.mode!=='AUTOMATIC_CERTIFIED'||!c.eligible_origins.includes('manual'))
+  // The certified capability must explicitly authorize the actual order origin.
+  // A manual grant capability does not silently authorize iFood/99Food/Keeta.
+  const orderOrigin=(snapOrigin:unknown)=>['ifood','food99','keeta'].includes(String(snapOrigin||''))?String(snapOrigin):'manual';
+  if(!c||!canAccessCustomer(c)||c.mode!=='AUTOMATIC_CERTIFIED')
     return {status:'off',reason:'manual_capability_not_certified'};
   const snap=await confirmedDelivery(deliveryId);
   if(!snap||!belongsToTenant(snap.data,c.tenant)||canonicalOrderKey(snap.data)!==`entregas:${deliveryId}`||
     !mayIssueNewTrackingGrant(snap.data))return {status:'skipped',reason:'delivery_not_eligible'};
   const delivery={...snap.data,id:deliveryId} as ManualDeliveryRecord;
+  if(!c.eligible_origins.includes(orderOrigin(delivery.origin)))
+    return {status:'off',reason:'origin_capability_not_certified'};
   const plan=planManualMessage({delivery,reason:'created'});
   if(!plan.eligible)return {status:'skipped',reason:plan.reason};
   const createdAt=Date.parse(String(delivery.created_at||delivery.createdAt||''));
@@ -137,7 +142,7 @@ export async function inspectManualTracking(deliveryId:string):Promise<{status:s
   if(!c)return null;
   const snap=await confirmedDelivery(deliveryId);
   if(!snap||!belongsToTenant(snap.data,c.tenant)||canonicalOrderKey(snap.data)!==`entregas:${deliveryId}`||
-    !['manual','loja'].includes(String(snap.data.origin||''))||snap.data.source_system==='dfl_site')return null;
+    !['manual','loja','ifood','food99','keeta'].includes(String(snap.data.origin||''))||snap.data.source_system==='dfl_site')return null;
   const id=hash(`${c.tenant}|entregas:${deliveryId}|manual-tracking-v1`);
   const row=await adminDb.collection('tracking_manual_auto_handoffs_v1').doc(id).get();
   if(!row.exists)return {status:'not_attempted'};

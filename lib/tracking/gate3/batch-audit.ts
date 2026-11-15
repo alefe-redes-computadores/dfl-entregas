@@ -2,7 +2,7 @@
 import type { TrackingInspection } from '../gate1/readiness';
 import type { Gate2Certificate } from '../gate2/certification';
 
-export type AuditOrigin = 'site' | 'manual' | 'ifood' | 'food99' | 'unknown';
+export type AuditOrigin = 'site' | 'manual' | 'ifood' | 'food99' | 'keeta' | 'unknown';
 export type AuditLevel = 'ready_for_internal_review' | 'needs_attention' | 'blocked' | 'not_found' | 'inspection_failed';
 export type AuditRow = {
   delivery_id: string;
@@ -33,7 +33,7 @@ export type AuditSummary = {
   customer_access_activated_by_audit: false;
   messages_sent_by_audit: false;
 };
-const origins: readonly AuditOrigin[] = ['site','manual','ifood','food99','unknown'];
+const origins: readonly AuditOrigin[] = ['site','manual','ifood','food99','keeta','unknown'];
 const idPattern = /^[A-Za-z0-9_-]{1,120}$/;
 const codePattern = /^[A-Z][A-Z0-9_]{1,63}$/;
 export function validAuditIds(value: unknown): value is string[] {
@@ -66,7 +66,7 @@ export function failedAuditRow(id: string): AuditRow {
 }
 export function summarizeAudit(rows: readonly AuditRow[], reviewedAt = new Date().toISOString()): AuditSummary {
   if (rows.length > 20 || !Number.isFinite(Date.parse(reviewedAt))) throw new Error('audit-limit');
-  const by_origin = {site:0,manual:0,ifood:0,food99:0,unknown:0};
+  const by_origin = {site:0,manual:0,ifood:0,food99:0,keeta:0,unknown:0};
   const codes = new Map<string,number>();
   let recognized=0, internal_reviewable=0, needs_attention=0, blocked=0, unavailable=0, valid=0;
   for(const r of rows){
@@ -91,7 +91,7 @@ export function summarizeAudit(rows: readonly AuditRow[], reviewedAt = new Date(
 /** Safe to paste into another project chat: no ids, client names, addresses, or values. */
 export function auditReportText(s: AuditSummary): string {
   const counts=`${s.sample_size} examinados; ${s.recognized} reconhecidos; ${s.unavailable} indisponíveis.`;
-  const origins=`Site ${s.by_origin.site}, Loja ${s.by_origin.manual}, iFood ${s.by_origin.ifood}, 99Food ${s.by_origin.food99}, não identificados ${s.by_origin.unknown}.`;
+  const origins=`Site ${s.by_origin.site}, Loja ${s.by_origin.manual}, iFood ${s.by_origin.ifood}, 99Food ${s.by_origin.food99}, Keeta ${s.by_origin.keeta}, não identificados ${s.by_origin.unknown}.`;
   const signals=s.top_signals.length?s.top_signals.map(x=>`${x.code}: ${x.count}`).join('; '):'nenhum';
   return [
     'DFL ENTREGAS → DFL SITE | R252 — Amostra administrativa de acompanhamento',
@@ -103,6 +103,6 @@ export function auditReportText(s: AuditSummary): string {
     `Sinais técnicos: ${signals}.`,
     'Amostra limitada à seleção local do operador, sem certificação de acesso público.',
     'Sem IDs, nomes, telefone, endereço, valores, links, tokens ou mensagens reais.',
-    'Links/WhatsApp permanecem OFF; integração com Site exige homologação conjunta.',
+    'Esta auditoria mantém OFF o disparo de links/WhatsApp; acesso e mensagens dependem das permissões por pedido.',
   ].join('\n');
 }

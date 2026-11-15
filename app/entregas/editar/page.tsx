@@ -79,6 +79,9 @@ const [routeId, setRouteId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
+  const [r74ConsentKey,setR74ConsentKey] = useState('');
+  const currentR74ConsentKey = `${deliveryId||''}|${origin}|${orderId.trim()}|${normalizeBrazilPhone(phone)}|${customerName.trim().toLocaleLowerCase('pt-BR')}`;
+  const r74ConsentConfirmed = r74ConsentKey.length>0 && r74ConsentKey === currentR74ConsentKey;
   const [pendingContactCustomer,setPendingContactCustomer]=useState<Customer|null>(null);
   const [temporaryCustomerId,setTemporaryCustomerId]=useState<string|null>(null);
 
@@ -537,6 +540,9 @@ const [routeId, setRouteId] = useState('');
 
       const rawP = delivery.phone || existingCustomer?.phone || '';
       if (rawP) setPhone(formatPhoneInput(rawP));
+      const verifiedRecipient = existingCustomer?.name || (delivery as any).customer_name || '';
+      setR74ConsentKey(delivery.manual_messaging_opt_in_v1 === true && ['ifood','food99','keeta'].includes(delivery.origin)
+        ? `${deliveryId||''}|${delivery.origin}|${String(delivery.order_id||'').trim()}|${normalizeBrazilPhone(rawP)}|${verifiedRecipient.trim().toLocaleLowerCase('pt-BR')}` : '');
     } else {
       toast.error('Entrega não encontrada');
       router.replace(detailsReturn);
@@ -688,10 +694,12 @@ const [routeId, setRouteId] = useState('');
         address_string: customerAddress,
         maps_link: mapsLink.trim() || resolvedMapsLink,
         phone: rawPhone || undefined,
-         notify_whatsapp: notifyWhatsapp,
+         notify_whatsapp: origin === 'loja' ? notifyWhatsapp : fulfillmentMode === 'delivery' && notifyWhatsapp && r74ConsentConfirmed,
          // R301: edição do opt-in é explícita. Plataforma e Site nunca herdam autorização.
          manual_messaging_opt_in_v1: origin === 'loja' && currentDelivery?.source_system !== 'dfl_site' &&
-           (fulfillmentMode === 'delivery' || fulfillmentMode === 'pickup') && notifyWhatsapp,
+           (fulfillmentMode === 'delivery' || fulfillmentMode === 'pickup') && notifyWhatsapp ||
+           ['ifood','food99','keeta'].includes(origin) && currentDelivery?.source_system !== 'dfl_site' &&
+           fulfillmentMode === 'delivery' && notifyWhatsapp && r74ConsentConfirmed,
          manual_order_items: origin === 'loja' ? (manualOrderItems.trim().slice(0,180) || undefined) : currentDelivery?.manual_order_items,
          observation,
         drinks: drinks.trim(),
@@ -1147,6 +1155,10 @@ const [routeId, setRouteId] = useState('');
                 <MessageCircle size={15} /> Avisar no Zap
               </button>
             </div>
+            {origin !== 'loja' && <label className={`mt-2 flex items-start gap-2 rounded-xl border p-3 text-xs ${r74ConsentConfirmed?'border-emerald-500/40 text-emerald-200':'border-zinc-700 text-zinc-400'}`}>
+              <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-500" disabled={!normalizeBrazilPhone(phone)||!customerName.trim()} checked={r74ConsentConfirmed} onChange={e=>setR74ConsentKey(e.target.checked?currentR74ConsentKey:'')}/>
+              <span>Cliente autorizou os avisos DFL por WhatsApp deste pedido, inclusive fora da plataforma. Confirme apenas após receber a autorização.</span>
+            </label>}
           </div>
         </section>
 

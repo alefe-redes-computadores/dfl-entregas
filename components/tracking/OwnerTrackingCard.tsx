@@ -3,16 +3,17 @@ import { Bike, CheckCircle2, ChevronRight, Clock3, Package, ShieldAlert } from '
 import type { Delivery } from '@/types';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 
-type Origin = 'site'|'ifood'|'food99'|'manual';
+type Origin = 'site'|'ifood'|'food99'|'keeta'|'manual';
 const palette:Record<Origin,{label:string;accent:string;tag:string;active:string}>={
   site:{label:'Site',accent:'text-sky-300 bg-sky-500/10',tag:'text-sky-300 border-sky-500/30',active:'border-sky-500/50 bg-sky-500/[.06]'},
   ifood:{label:'iFood',accent:'text-red-300 bg-red-500/10',tag:'text-red-300 border-red-500/30',active:'border-red-500/50 bg-red-500/[.06]'},
   food99:{label:'99Food',accent:'text-amber-300 bg-amber-500/10',tag:'text-amber-300 border-amber-500/30',active:'border-amber-500/50 bg-amber-500/[.06]'},
+  keeta:{label:'Keeta',accent:'text-violet-300 bg-violet-500/10',tag:'text-violet-300 border-violet-500/30',active:'border-violet-500/50 bg-violet-500/[.06]'},
   manual:{label:'Loja',accent:'text-emerald-300 bg-emerald-500/10',tag:'text-emerald-300 border-emerald-500/30',active:'border-emerald-500/50 bg-emerald-500/[.06]'},
 };
 export function OwnerTrackingCard({delivery,active,onClick}:{delivery:Delivery;active:boolean;onClick:()=>void}) {
   const cancelled=isCancelledSiteDelivery(delivery);
-  const origin:Origin=delivery.source_system==='dfl_site'?'site':delivery.origin==='ifood'?'ifood':delivery.origin==='food99'?'food99':'manual';
+  const origin:Origin=delivery.source_system==='dfl_site'?'site':delivery.origin==='ifood'?'ifood':delivery.origin==='food99'?'food99':delivery.origin==='keeta'?'keeta':'manual';
   const theme=palette[origin];
   const ended=delivery.completed===true;
   const StatusIcon=cancelled?ShieldAlert:ended?CheckCircle2:delivery.route_id?Bike:Clock3;

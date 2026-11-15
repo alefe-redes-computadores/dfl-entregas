@@ -164,9 +164,8 @@ const [routeId, setRouteId] = useState('');
   const [whatsappNoticeRequested, setWhatsappNoticeRequested] = useState(true);
   const [confirmedWhatsappRecipient, setConfirmedWhatsappRecipient] = useState('');
   const consentPhone = normalizeBrazilPhone(phone);
-  const consentRecipientKey = `${consentPhone}|${customerName.trim().toLocaleLowerCase('pt-BR')}`;
-  const notifyWhatsapp = origin === 'loja' && whatsappNoticeRequested && consentPhone.length >= 10 &&
-    confirmedWhatsappRecipient === consentRecipientKey;
+  const consentRecipientKey = `${consentPhone}|${customerName.trim().toLocaleLowerCase('pt-BR')}${origin==='loja'?'':`|${origin}:${orderId.trim()}`}`;
+  // R74 notification is derived below, after the iFood draft list is initialized.
   useEffect(() => { setConfirmedWhatsappRecipient(''); }, [origin]);
   const [excludeCustomerMetrics, setExcludeCustomerMetrics] = useState(false);
   const [excludeFromReports, setExcludeFromReports] = useState(false);
@@ -200,6 +199,10 @@ const [routeId, setRouteId] = useState('');
   const [formIssue, setFormIssue] = useState<DeliveryFormIssue | null>(null);
   useEffect(() => { setFormIssue(null); }, [fulfillmentMode, origin]);
   const [extraIfoodOrders, setExtraIfoodOrders] = useState<ExtraIfoodOrderDraft[]>([]);
+  const notifyWhatsapp = origin === 'loja' && whatsappNoticeRequested && consentPhone.length >= 10 &&
+    confirmedWhatsappRecipient === consentRecipientKey ||
+    (origin !== 'loja' && fulfillmentMode === 'delivery' && whatsappNoticeRequested && consentPhone.length >= 10 &&
+    (origin !== 'ifood' || extraIfoodOrders.length === 0) && confirmedWhatsappRecipient === consentRecipientKey);
   const [activeDraftId, setActiveDraftId] = useState('primary');
   const activeExtra = origin === 'ifood' ? extraIfoodOrders.find((draft) => draft.id === activeDraftId) : undefined;
   const isMarketplace = origin === 'ifood' || origin === 'food99' || origin === 'keeta';
@@ -670,7 +673,7 @@ const [routeId, setRouteId] = useState('');
         const deliveriesToCreate:Delivery[]=[];
         const stopGroups=new Map<string,string>();
         for(let index=0;index<drafts.length;index+=1){const draft=drafts[index];const draftName=draft.customerName.trim()||customerName.trim();const charge=Math.max(0,parseMoney(draft.customerCharge||'0'));const subsidy=Math.max(0,parseMoney(draft.subsidy||''));const draftNormalized=fulfillmentMode==='delivery'?canonicalizeOperationalAddress(draft.address||streetAddress):{address:'',phone:undefined};const draftAddress=draftNormalized.address||cleanStreet;const draftPhone=normalizeBrazilPhone(draft.phone)||draftNormalized.phone||'';const draftMaps=(draft.mapsLink||'').trim()||(index===0?resolvedMapsLink:'');const addressKey=canonicalizeOperationalAddress(draftAddress).address.toLocaleLowerCase('pt-BR');let draftStopGroupId=stopSource&&sameCustomerAddress(stopSource.address_string,draftAddress)?stopGroupId:undefined;if(fulfillmentMode==='delivery'&&drafts.length>1){const sameAddressCount=drafts.filter(item=>sameCustomerAddress(item.address||streetAddress,draftAddress)).length;if(sameAddressCount>1){draftStopGroupId=stopGroups.get(addressKey)||draftStopGroupId||`stop-${Date.now()}-${stopGroups.size}-${Math.random().toString(36).slice(2,7)}`;stopGroups.set(addressKey,draftStopGroupId)}}let customerId='';if(draftName){const r228r3CustomerAt = Date.now(); try {customerId=await findOrCreateCustomer(draftName,{address:fulfillmentMode==='delivery'?draftAddress:undefined,phone:draftPhone||undefined,mapsLink:fulfillmentMode==='delivery'?draftMaps:undefined,confirmationCode:draft.confirmationCode||undefined,observation:draft.observation.trim()||cleanObservation||undefined,origin,preferredCustomerId:index===0?selectedCustomerId||undefined:undefined,temporaryCustomerId:index===0&&temporaryCustomerId&&temporaryCustomerId===selectedCustomerId?temporaryCustomerId:undefined}); recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'confirmed'); } catch(customerError) {recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'failed');throw customerError;}}
-          deliveriesToCreate.push({id:createManualDeliveryId(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='external_delivery'?'ifood':'dfl',stop_group_id:draftStopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:splitEnabled?'dinheiro':draft.paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?draftAddress:'',maps_link:fulfillmentMode==='delivery'?draftMaps:'',phone:draftPhone||undefined,notify_whatsapp:draft.notifyWhatsapp,observation:(index===0?cleanObservation:draft.observation.trim()||cleanObservation)||undefined,drinks:draft.drinks,createdAt:now,created_at:now,updated_at:now});
+          deliveriesToCreate.push({id:createManualDeliveryId(),route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='external_delivery'?'ifood':'dfl',stop_group_id:draftStopGroupId,origin,order_id:draft.orderId||undefined,ifood_id:draft.ifoodId||undefined,confirmation_code:draft.confirmationCode||undefined,customer_id:customerId,customer_name:draftName||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!draftName),value:charge+subsidy,customer_charge:charge,ifood_subsidy:subsidy>0?subsidy:undefined,is_paid:draft.isPaid,is_urgent:isUrgent,payment_method:splitEnabled?'dinheiro':draft.paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(draft.paymentMethod,draft.isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:draft.paymentMethod==='dinheiro'&&!draft.isPaid&&draft.changeFor?parseMoney(draft.changeFor):undefined,address_string:fulfillmentMode==='delivery'?draftAddress:'',maps_link:fulfillmentMode==='delivery'?draftMaps:'',phone:draftPhone||undefined,notify_whatsapp:drafts.length===1&&draft.notifyWhatsapp,manual_messaging_opt_in_v1:drafts.length===1&&draft.notifyWhatsapp&&fulfillmentMode==='delivery',observation:(index===0?cleanObservation:draft.observation.trim()||cleanObservation)||undefined,drinks:draft.drinks,createdAt:now,created_at:now,updated_at:now});
           if(ownerOrderContext && hasOwnerIdentity({name:draftName,phone:draftPhone})) Object.assign(deliveriesToCreate[deliveriesToCreate.length-1],ownerContextFlags(ownerOrderContext));
         }
         const r228r3ConfirmAt = Date.now();
@@ -683,11 +686,14 @@ const [routeId, setRouteId] = useState('');
           throw confirmError;
         }
         registrationStage='finalizacao';
+        if(drafts.length===1 && notifyWhatsapp && fulfillmentMode==='delivery') {
+          void kickManualCreated(deliveriesToCreate[0].id).catch(() => toast.warning('Pedido salvo; acompanhamento sem confirmação de envio.'));
+        }
         toast.success(drafts.length>1?`${drafts.length} pedidos cadastrados nos endereços conferidos.`:'Entrega cadastrada com sucesso!');
       }else{
         const customerAddress=fulfillmentMode==='delivery'?cleanStreet:streetAddress.trim();
         let customerId='';if(customerName.trim()){registrationStage='cliente';const r228r3CustomerAt=Date.now();try {customerId=await findOrCreateCustomer(customerName,{address:customerAddress||undefined,phone:rawPhone||undefined,mapsLink:mapsLink.trim()||undefined,observation:cleanObservation||undefined,origin,preferredCustomerId:selectedCustomerId||undefined});recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'confirmed');}catch(customerError){recordActionLatency('delivery_form_customer',Date.now()-r228r3CustomerAt,'failed');throw customerError;}}
-        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();registrationStage='pedido';try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='keeta'?'keeta':origin==='food99'?'food99':'customer',stop_group_id:stopGroupId,origin,order_id:(origin==='food99'||origin==='keeta')?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_order_items:origin==='loja'?(manualOrderItems.trim().slice(0,180)||undefined):undefined,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery' || (notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'pickup'),observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}registrationStage='finalizacao';toast.success(origin==='keeta'?`Pedido Keeta cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:origin==='food99'?`Pedido 99Food cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
+        const cleanValue=parseMoney(value);const subsidy=origin==='food99'&&hasIfoodSubsidy?Math.max(0,parseMoney(ifoodSubsidy)):0;const r228r3ConfirmAt = Date.now();const manualDeliveryId = createManualDeliveryId();registrationStage='pedido';try {await addDelivery({id:manualDeliveryId,route_id:fulfillmentMode==='delivery'?routeId:'',fulfillment_mode:fulfillmentMode,logistics_provider:fulfillmentMode==='delivery'?'dfl':origin==='keeta'?'keeta':origin==='food99'?'food99':'customer',stop_group_id:stopGroupId,origin,order_id:(origin==='food99'||origin==='keeta')?orderId:undefined,customer_id:customerId,customer_name:customerName.trim()||undefined,exclude_from_reports:excludeFromReports,exclude_customer_metrics:excludeCustomerMetrics||fulfillmentMode==='counter'||(fulfillmentMode==='pickup'&&!customerName.trim()),...(ownerOrderContext?ownerContextFlags(ownerOrderContext):{}),value:cleanValue+subsidy,customer_charge:cleanValue,ifood_subsidy:subsidy||undefined,is_paid:isPaid,is_urgent:fulfillmentMode==='delivery'?isUrgent:false,payment_method:splitEnabled?'dinheiro':paymentMethod,payment_splits:splitEnabled?splitParts():undefined,payment_state:paymentStateForInput(paymentMethod,isPaid),...(splitEnabled?{payment_state:'collect_on_delivery' as const}:{}),change_for:splitEnabled?undefined:changeFor?parseMoney(changeFor):undefined,address_string:customerAddress,maps_link:mapsLink.trim()||resolvedMapsLink,phone:rawPhone||undefined,notify_whatsapp:notifyWhatsapp,manual_order_items:origin==='loja'?(manualOrderItems.trim().slice(0,180)||undefined):undefined,manual_messaging_opt_in_v1: notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'delivery' || (notifyWhatsapp && origin === 'loja' && fulfillmentMode === 'pickup') || (notifyWhatsapp && origin !== 'loja' && fulfillmentMode === 'delivery'),observation:cleanObservation||undefined,drinks,createdAt:now,created_at:now,updated_at:now});recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'confirmed');}catch(confirmError){recordActionLatency('delivery_form_confirm',Date.now()-r228r3ConfirmAt,'failed');throw confirmError;}registrationStage='finalizacao';toast.success(origin==='keeta'?`Pedido Keeta cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:origin==='food99'?`Pedido 99Food cadastrado ${fulfillmentMode==='delivery'?'na rota DFL.':'com entrega parceira.'}`:stopGroupId?'Entrega adicionada à parada existente.':'Entrega cadastrada com sucesso!');
         // MSG-M1: o pedido foi confirmado antes de chamar a ponte. Nunca desfazer a venda por falha de WhatsApp.
         if (origin === 'loja' && notifyWhatsapp && fulfillmentMode === 'pickup') {
           // R301: pedido já salvo. Aviso v2 da retirada possui gate canário independente.
@@ -713,6 +719,10 @@ const [routeId, setRouteId] = useState('');
             });
             else if (messaging.status === 'failed') toast.warning('Pedido salvo; aviso não confirmado.', {description:'Confira o diagnóstico antes de reenviar.'});
           }).catch(() => toast.warning('Pedido salvo; status do aviso indisponível.'));
+        }
+        if (origin !== 'loja' && notifyWhatsapp && fulfillmentMode === 'delivery') {
+          void kickManualCreated(manualDeliveryId).catch(() =>
+            toast.warning('Entrega salva; mensageria ou link não confirmado. Consulte a Central de Comunicação.'));
         }
       }
       // R68 P0: nunca bloquear cadastro confirmado por sincronizacao auxiliar da parada anterior.
@@ -1242,7 +1252,7 @@ const [routeId, setRouteId] = useState('');
             </div>
 
           </div>
-          {origin === 'loja' && (
+          {((origin === 'loja' && (fulfillmentMode==='delivery' || fulfillmentMode==='pickup')) || (fulfillmentMode==='delivery' && (origin !== 'ifood' || extraIfoodOrders.length === 0))) && (
             <div className="flex flex-col gap-2" data-dfl-whatsapp-default="checked">
               <label className={`flex items-start gap-3 rounded-xl border px-3 py-3.5 text-xs leading-relaxed transition-colors ${whatsappNoticeRequested ? 'border-emerald-500/50 bg-emerald-500/[.1]' : 'border-zinc-700 bg-zinc-900/50'}`}>
                 <input
@@ -1270,14 +1280,15 @@ const [routeId, setRouteId] = useState('');
                   />
                   <span className="flex flex-col gap-1">
                     <strong className="text-xs text-zinc-100">Cliente autorizou os avisos deste pedido</strong>
-                    <small className="text-[11px] text-zinc-400">Confirme somente após obter autorização do cliente. Sem confirmação, nenhum aviso automático será solicitado.</small>
+                    <small className="text-[11px] text-zinc-400">Confirme somente após obter autorização para avisos externos à plataforma. Sem confirmação, nenhum aviso automático será solicitado.</small>
                   </span>
                 </label>
               )}
               {!notifyWhatsapp && whatsappNoticeRequested && <p className="text-[11px] font-semibold text-amber-300" role="status">Aguardando autorização do cliente para enviar mensagens.</p>}
             </div>
           )}
-          <p className="text-[10px] leading-relaxed text-zinc-500">Uma autorização por pedido. Preferência pré-marcada não concede consentimento. Marketplaces seguem suas regras.</p>
+          {origin === 'ifood' && extraIfoodOrders.length > 0 && <p className="text-xs text-amber-300">Pedidos iFood em lote: mensagens individuais desativadas para não aproveitar a autorização de outro pedido. Para avisar, cadastre cada pedido separadamente.</p>}
+          <p className="text-[10px] leading-relaxed text-zinc-500">Uma autorização por pedido. Preferência pré-marcada não concede consentimento. Envio externo à plataforma exige autorização do cliente e regras aplicáveis.</p>
         </section>
 
         {fulfillmentMode === 'delivery' && (

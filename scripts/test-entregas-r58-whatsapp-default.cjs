@@ -9,7 +9,7 @@ ok(s.includes('const [whatsappNoticeRequested, setWhatsappNoticeRequested] = use
 ok(s.includes('checked={whatsappNoticeRequested}') && s.includes('setWhatsappNoticeRequested(event.target.checked)'),'preferencia pode ser desmarcada');
 ok(s.includes("if (!event.target.checked) setConfirmedWhatsappRecipient('');"),'desmarcar remove autorizacao anterior');
 ok(s.includes("const notifyWhatsapp = origin === 'loja' && whatsappNoticeRequested && consentPhone.length >= 10 &&"),'nenhum envio sem preferencia e telefone');
-ok(s.includes('confirmedWhatsappRecipient === consentRecipientKey;'),'confirmacao individual de identidade permanece');
+ok(s.includes('confirmedWhatsappRecipient === consentRecipientKey);') && s.includes('extraIfoodOrders.length === 0') && s.includes('consentRecipientKey'), 'confirmacao individual e lote marketplace sem heranca');
 ok(s.includes('checked={notifyWhatsapp}') && s.includes('setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey'), 'consentimento exige ato distinto');
 ok(s.includes("disabled={!consentPhone || !customerName.trim()}"),'sem nome ou telefone nao confirma autorizacao');
 ok(s.includes("{whatsappNoticeRequested && ("),'opt-in fica oculto com preferencia desligada');

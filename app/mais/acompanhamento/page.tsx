@@ -24,7 +24,7 @@ const baseUrl=()=>Capacitor.isNativePlatform()?(process.env.NEXT_PUBLIC_DFL_SERV
 const BASE = '/api/integration/tracking/v1';
 // Pinned public host; never accept operator-supplied URLs or forwarded host headers.
 const CUSTOMER_TRACKING_ORIGIN = 'https://dafamilialanches.com.br';
-type Filter = 'todas'|'site'|'manual'|'ifood'|'food99';
+type Filter = 'todas'|'site'|'manual'|'ifood'|'food99'|'keeta';
 type ProtectedAction = 'issue'|'share'|'revoke'|'confirm'|'sync';
 const confirmCopy: Record<ProtectedAction, {title:string;description:string;confirmLabel:string;tone:'safe'|'caution'|'danger'}> = {
   issue:{title:'Emitir link privado',description:'Gerar um acesso de uso único, válido por até 90 minutos. Confira o pedido e envie somente ao cliente correto. Esta ação NÃO dispara WhatsApp.',confirmLabel:'Emitir link',tone:'caution'},
@@ -40,8 +40,9 @@ const filterVisual:Record<Filter,string>={
   manual:'border-emerald-500/45 bg-emerald-500/10 text-emerald-300',
   ifood:'border-red-500/45 bg-red-500/10 text-red-300',
   food99:'border-amber-500/45 bg-amber-500/10 text-amber-300',
+  keeta:'border-violet-500/45 bg-violet-500/10 text-violet-300',
 };
-const deliveryOrigin=(d:{source_system?:string;origin?:string})=>d.source_system==='dfl_site'||d.origin==='site'?'site':d.origin==='ifood'?'ifood':d.origin==='food99'?'food99':'manual';
+const deliveryOrigin=(d:{source_system?:string;origin?:string})=>d.source_system==='dfl_site'||d.origin==='site'?'site':d.origin==='ifood'?'ifood':d.origin==='food99'?'food99':d.origin==='keeta'?'keeta':'manual';
 function ControlPanel(){
   const router=useRouter();
   const params=useSearchParams();
@@ -182,7 +183,7 @@ function ControlPanel(){
     finally{if(certificateRequest===lastCertificateRequest.current)setCertifying(false);}
   };
   const copy=(text:string)=>{void navigator.clipboard.writeText(text).then(()=>toast.success('Prévia copiada, sem dados privados.')).catch(()=>toast.error('Cópia não disponível neste aparelho.'));};
-  const canIssueLink=Boolean(inspection && ['site','manual'].includes(inspection.delivery.origin) &&
+  const canIssueLink=Boolean(inspection && ['site','manual','ifood','food99','keeta'].includes(inspection.delivery.origin) &&
     inspection.delivery.state!=='delivered' && inspection.delivery.state!=='cancelled' &&
     inspection.gate.code_enabled && inspection.gate.customer_access_certified && !inspection.gate.kill_switch &&
     inspection.gate.public_tracking && inspection.gate.origin_eligible && inspection.gate.issue_tracking_link === true &&
@@ -191,7 +192,7 @@ function ControlPanel(){
   const issueBlockReasons=useMemo(()=>{
     if(!inspection)return [] as string[];
     const reasons:string[]=[];
-    if(!['site','manual'].includes(inspection.delivery.origin))reasons.push('Origem não permitida para link nesta fase.');
+    if(!['site','manual','ifood','food99','keeta'].includes(inspection.delivery.origin))reasons.push('Origem desconhecida para emissão de link.');
     if(['delivered','cancelled'].includes(inspection.delivery.state))reasons.push('Pedido concluído ou cancelado: não é possível criar um link novo.');
     if(!inspection.gate.code_enabled)reasons.push('Código de acompanhamento desativado no servidor.');
     if(!inspection.gate.customer_access_certified)reasons.push('Acesso público a links desativado no servidor; o piloto WhatsApp é independente.');
@@ -203,9 +204,9 @@ function ControlPanel(){
     for(const signal of inspection.readiness.signals){if(signal.severity==='blocker')reasons.push(signal.label);}
     return [...new Set(reasons)];
   },[inspection]);
-  // Aceite operacional confirmado pelo servidor, sem autorizar iFood/99Food.
+  // Aceite operacional confirmado no servidor; marketplaces exigem consentimento e logística DFL.
   // A origem manual continua dependente de capability e de comando explicito do owner.
-  const needsManualAcceptance=Boolean(inspection && inspection.delivery.origin==='manual' &&
+  const needsManualAcceptance=Boolean(inspection && ['manual','ifood','food99','keeta'].includes(inspection.delivery.origin) &&
     !['delivered','cancelled'].includes(inspection.delivery.state) &&
     inspection.readiness.signals.some(signal=>signal.code==='NOT_ACCEPTED'));
   const issuePrivateLink=async(confirmed=false)=>{
@@ -320,7 +321,7 @@ function ControlPanel(){
       {dayScope==='day'&&<OperationalDatePicker selectedDate={new Date(`${selectedDay}T12:00:00-03:00`)} selectedDateKey={selectedDay} datesWithOperation={datesWithOperation}
         onPrevious={()=>setSelectedDay(key=>trackingShiftKey(key,-1))} onNext={()=>setSelectedDay(key=>trackingShiftKey(key,1))}
         onSelect={date=>setSelectedDay(trackingTodayKey(date))}/>}
-      <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 focus-within:border-emerald-500/40"><Search size={16} className="text-zinc-500"/><input aria-label="Buscar pedido" value={query} onChange={e=>setQuery(e.target.value.slice(0,100))} placeholder="ID ou cliente" className="min-h-11 w-full min-w-0 appearance-none border-0 bg-transparent text-sm text-zinc-100 outline-none ring-0 focus:outline-none focus:ring-0 placeholder:text-zinc-600"/></div><div className="flex gap-2 overflow-x-auto pb-1" aria-label="Filtrar origem">{([['todas','Todos'],['site','Site'],['manual','Loja'],['ifood','iFood'],['food99','99Food']] as const).map(([key,label])=><button key={key} type="button" aria-pressed={filter===key} onClick={()=>setFilter(key)} className={`min-h-9 shrink-0 rounded-xl border px-3 text-[11px] font-bold transition-colors ${filter===key?filterVisual[key]:'border-zinc-800 bg-zinc-950/40 text-zinc-500'}`}>{label}</button>)}</div><p className="text-[10px] text-zinc-400" role="status">{listed.length} pedidos neste filtro · horário de Brasília. Sem data registrada: visível em Todos.</p><div className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain">{listed.map(d=><OwnerTrackingCard key={d.id} delivery={d} active={selectedId===d.id} onClick={()=>choose(d.id)}/>)}{listed.length===0&&<p className="p-4 text-center text-xs text-zinc-500">Nenhum pedido neste período. Escolha outra data ou toque em Todos.</p>}</div><p className="text-[10px] text-zinc-600">Até 80 pedidos sincronizados no período escolhido. Nenhuma consulta extra ou envio de mensagens.</p></>}
+      <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 focus-within:border-emerald-500/40"><Search size={16} className="text-zinc-500"/><input aria-label="Buscar pedido" value={query} onChange={e=>setQuery(e.target.value.slice(0,100))} placeholder="ID ou cliente" className="min-h-11 w-full min-w-0 appearance-none border-0 bg-transparent text-sm text-zinc-100 outline-none ring-0 focus:outline-none focus:ring-0 placeholder:text-zinc-600"/></div><div className="flex gap-2 overflow-x-auto pb-1" aria-label="Filtrar origem">{([['todas','Todos'],['site','Site'],['manual','Loja'],['ifood','iFood'],['food99','99Food'],['keeta','Keeta']] as const).map(([key,label])=><button key={key} type="button" aria-pressed={filter===key} onClick={()=>setFilter(key)} className={`min-h-9 shrink-0 rounded-xl border px-3 text-[11px] font-bold transition-colors ${filter===key?filterVisual[key]:'border-zinc-800 bg-zinc-950/40 text-zinc-500'}`}>{label}</button>)}</div><p className="text-[10px] text-zinc-400" role="status">{listed.length} pedidos neste filtro · horário de Brasília. Sem data registrada: visível em Todos.</p><div className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain">{listed.map(d=><OwnerTrackingCard key={d.id} delivery={d} active={selectedId===d.id} onClick={()=>choose(d.id)}/>)}{listed.length===0&&<p className="p-4 text-center text-xs text-zinc-500">Nenhum pedido neste período. Escolha outra data ou toque em Todos.</p>}</div><p className="text-[10px] text-zinc-600">Até 80 pedidos sincronizados no período escolhido. Nenhuma consulta extra ou envio de mensagens.</p></>}
     </section>
     {selected&&<section aria-label="Pedido selecionado" className="flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-zinc-900/55 p-3">
       <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[.13em] text-emerald-400">Pedido selecionado</p><p className="mt-1 truncate text-sm font-black text-zinc-100">{deliveryOrigin(selected)==='site'?siteOrderDisplayReference(selected):deliveryOrigin(selected)==='ifood'?'Pedido iFood':deliveryOrigin(selected)==='food99'?'Pedido 99Food':'Pedido da Loja'} · {shortTechnicalReference(selected.id)}</p><div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-zinc-400"><span className="truncate">{selected.customer_name||'Cliente'}</span><span className={`rounded-md border px-1.5 py-0.5 font-bold ${filterVisual[deliveryOrigin(selected)]}`}>{deliveryOrigin(selected)==='site'?'Site':deliveryOrigin(selected)==='ifood'?'iFood':deliveryOrigin(selected)==='food99'?'99Food':'Loja'}</span><span>{selected.completed?'Finalizado':selected.route_id?'Em rota':'Aguardando'}</span><span>{maskedMessagePhone(selected.phone)}</span></div></div>
@@ -338,7 +339,7 @@ function ControlPanel(){
       <div className="flex items-center gap-2 text-sm font-black text-amber-100"><LockKeyhole size={16}/> Acesso privado do cliente</div>
       <p className="text-[11px] leading-relaxed text-zinc-400">Exclusivo do proprietário. Link de uso único, sem WhatsApp automático. Só copie após conferir o pedido correto.</p>
       {needsManualAcceptance&&<div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[.055] p-3">
-        <p className="mb-2 text-[11px] font-bold text-emerald-200">Pedido da Loja: aceite ainda não confirmado no servidor.</p>
+        <p className="mb-2 text-[11px] font-bold text-emerald-200">Aceite operacional ainda não confirmado no servidor.</p>
         <button type="button" disabled={working||loading} onClick={()=>void submit('confirm')}
           className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-3 text-xs font-black text-emerald-200 transition active:scale-[.99] disabled:opacity-40">
           <ClipboardCheck size={16}/>{working?'Confirmando no servidor...':'Confirmar aceite manual deste pedido'}
