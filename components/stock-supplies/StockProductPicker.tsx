@@ -282,7 +282,7 @@ export function StockProductPicker({
           setVisibleLimit(30);
           setOpen(true);
         }}
-        aria-invalid={invalid}
+        data-invalid={invalid ? 'true' : undefined}
         className={`mt-1 flex min-h-14 w-full items-center gap-3 rounded-2xl border bg-zinc-900 px-4 py-3 text-left ${
           invalid
             ? 'border-red-500/70'

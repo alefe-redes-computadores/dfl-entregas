@@ -31,7 +31,7 @@ ok(hub.includes("isSuperadminUid(owner?.uid)")&&hub.includes('if(!allowed) retur
 ok(hub.includes('<MensageriaDiagnosticPage/>')&&hub.includes('<AcompanhamentoAdminPage/>'),'interfaces reais integradas sob demanda');
 ok(hub.includes("section==='mensagens'")&&hub.includes("section==='acompanhamento'"),'não monta as duas telas simultaneamente');
 ok(hub.includes('Materiais da operação')&&hub.includes("router.push('/rotas')")&&hub.includes("router.push('/motoboys')"),'textos e imagens no fluxo original');
-ok(hub.includes('Emissão automática de link permanece OFF'),'não finge integração DFL 360 homologada');
+ok(hub.includes('A emissão automática depende das permissões efetivas')&&hub.includes('do consentimento do pedido')&&hub.includes('O código por si só não comprova o recebimento do WhatsApp.'),'regras reais de ativação sem alegar mensagem entregue');
 ok(!/fetch\(|onSnapshot\(|getDocs\(|runTransaction\(/.test(hub),'hub não cria backend ou leituras extras');
 const settlement=read('app/motoboys/acerto/page.tsx');
 ok(settlement.includes("image('summary')")&&settlement.includes("image('detailed')"),'dois botões reais');

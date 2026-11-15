@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 
 export type PremiumChoice = { value: string; label: string; disabled?: boolean };
@@ -20,6 +20,27 @@ export function PremiumChoicePicker({ label, value, onChange, options, disabled 
   const panelId = id ? `${id}-choices` : `${autoId}-choices`;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open]);
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   const active = options.find(option => option.value === value);
   const visible = useMemo(() => {
     const query = search.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
@@ -27,8 +48,24 @@ export function PremiumChoicePicker({ label, value, onChange, options, disabled 
     return options.filter(option => option.label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').includes(query));
   }, [options, search]);
   return (
-    <div className="min-w-0 w-full" data-dfl-premium-choice={label}>
-      <button id={id} type="button" disabled={disabled} aria-label={label} aria-expanded={open}
+    <div ref={rootRef} className="min-w-0 w-full" data-dfl-premium-choice={label}
+      onBlur={event => {
+        if (open && event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+      onKeyDown={event => {
+        if (!open) {
+          if (event.key === 'ArrowDown') { event.preventDefault(); setOpen(true); }
+          return;
+        }
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        event.preventDefault();
+        const items = Array.from(rootRef.current?.querySelectorAll<HTMLButtonElement>('button[role="option"]:not(:disabled)') || []);
+        if (!items.length) return;
+        const index = items.indexOf(document.activeElement as HTMLButtonElement);
+        const next = event.key === 'ArrowDown' ? (index + 1) % items.length : (index < 0 ? items.length - 1 : (index - 1 + items.length) % items.length);
+        items[next]?.focus();
+      }}>
+      <button ref={triggerRef} id={id} type="button" disabled={disabled} aria-label={label} aria-expanded={open}
         aria-controls={panelId} aria-haspopup="listbox"
         onClick={() => { setOpen(value => !value); setSearch(''); }}
         className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-zinc-700/80 bg-zinc-950/70 px-3 text-left text-xs font-bold text-zinc-100 transition-colors active:bg-zinc-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 disabled:opacity-50">
@@ -44,7 +81,7 @@ export function PremiumChoicePicker({ label, value, onChange, options, disabled 
         </label>}
         <div className="max-h-56 space-y-1 overflow-y-auto overscroll-contain">
           {visible.map(option => <button key={option.value} type="button" role="option" aria-selected={option.value === value}
-            disabled={option.disabled} onClick={() => { onChange(option.value); setOpen(false); setSearch(''); }}
+            disabled={option.disabled} onClick={() => { onChange(option.value); setOpen(false); setSearch(''); triggerRef.current?.focus(); }}
             className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 text-left text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 disabled:opacity-40 ${option.value === value ? 'bg-amber-500/10 text-amber-200' : 'text-zinc-300 active:bg-zinc-800'}`}>
             <span className="min-w-0 break-words">{option.label}</span>
             {option.value === value && <Check size={16} className="shrink-0 text-amber-300" aria-hidden="true" />}

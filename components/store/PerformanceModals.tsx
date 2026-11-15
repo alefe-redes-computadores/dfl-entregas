@@ -30,19 +30,20 @@ const elapsed=(route:{started_at?:string;departure_time?:string;start_time?:stri
 const FulfillmentIcon=({delivery}:{delivery:Delivery})=>{const mode=getFulfillmentMode(delivery);const Icon=mode==='pickup'?ShoppingBag:mode==='counter'?Store:Bike;return <Icon size={18}/>;};
 
 export function PerformanceModals(props:Props){
+  const {isLogisticsOpen,isRevenueOpen,closeRevenue,closeLogistics}=props;
   useEffect(() => {
-    if (!props.isLogisticsOpen && !props.isRevenueOpen) return;
+    if (!isLogisticsOpen && !isRevenueOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      if (props.isRevenueOpen) props.closeRevenue();
-      else props.closeLogistics();
+      if (isRevenueOpen) closeRevenue();
+      else closeLogistics();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => { document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', onKeyDown); };
-  }, [props.isLogisticsOpen, props.isRevenueOpen, props.closeRevenue, props.closeLogistics]);
+  }, [isLogisticsOpen, isRevenueOpen, closeRevenue, closeLogistics]);
   return <>{props.isLogisticsOpen&&<Logistics {...props}/>} {props.isRevenueOpen&&<Revenue {...props}/>}</>;
 }
 
