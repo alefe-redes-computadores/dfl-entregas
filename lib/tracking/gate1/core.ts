@@ -198,7 +198,7 @@ export function projectPublicTracking(s: ConfirmedSnapshot): PublicProjection {
   const fulfillment = s.delivery.fulfillment_mode === 'pickup' ? 'pickup' as const : 'delivery' as const;
   const source = text(s.delivery.source_system);
   const origin = text(s.delivery.origin);
-  const origin_label = source === 'dfl_site' ? 'Site' : origin === 'ifood' ? 'iFood' : origin === 'food99' ? '99Food' : 'Loja';
+  const origin_label = source === 'dfl_site' ? 'Site' : origin === 'ifood' ? 'iFood' : origin === 'food99' ? '99Food' : origin === 'keeta' ? 'Keeta' : 'Loja';
   const id = text(s.delivery.order_id || s.delivery.external_order_id || s.delivery.id, 128).replace(/[^a-zA-Z0-9_-]/g, '');
   const label = source === 'dfl_site' && /^site_[a-f0-9]{40}$/i.test(id)
     ? `#${id.slice(-8).toUpperCase()}`
