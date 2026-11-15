@@ -24,8 +24,20 @@ export function assertRemoteDeliveryTransition(
   if (remote.updated_at && local.updated_at && remote.updated_at !== local.updated_at) {
     throw new Error('Este pedido foi atualizado em outro aparelho. Sincronize antes de salvar.');
   }
+  if (updated.return_to_store === null && local.return_to_store && JSON.stringify(local.return_to_store) !== JSON.stringify(remote.return_to_store || null)) {
+    throw new Error('O retorno mudou em outro aparelho. Sincronize antes de replanejar.');
+  }
   if (requiresRoute && (!route || route.status !== 'aberta')) {
     throw new Error('A rota de destino não está mais aberta no servidor. Atualize a operação.');
+  }
+  if (updated.return_to_store) {
+    const current = updated.return_to_store;
+    if (!route || route.id !== current.route_id || (!route.started_at && !route.departure_time) ||
+        remote.return_to_store || remote.completed === true ||
+        (remote.delivery_attempts || []).length !== (local.delivery_attempts || []).length ||
+        !updated.delivery_attempts?.some(item => item.id === current.attempt_id && item.route_id === current.route_id && item.physical_visit_confirmed === true)) {
+      throw new Error('Retorno fisico nao comprovado no servidor. Sincronize antes de confirmar.');
+    }
   }
   if (updated.completed === true && requiresRoute && route && !route.started_at && !route.departure_time) {
     throw new Error('A rota ainda não foi iniciada no servidor. Aguarde ou sincronize.');
@@ -55,6 +67,7 @@ export function assertRouteClosureStable(
     const previous = byId.get(current.id);
     if (!previous || current.completed !== previous.completed ||
         current.updated_at !== previous.updated_at ||
+        JSON.stringify(current.return_to_store || null) !== JSON.stringify(previous.return_to_store || null) ||
         current.site_order_status !== previous.site_order_status) {
       throw new Error('Uma entrega mudou durante o fechamento. Atualize antes de concluir.');
     }

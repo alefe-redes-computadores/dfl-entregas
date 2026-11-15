@@ -14,6 +14,9 @@ export interface CustomerIntelligence {
   mostCommonHour: number | null;
   lastCompletedAt: string | null;
   verifiedOrders: Delivery[];
+  attemptCount: number;
+  returnCount: number;
+  latestAttempt: {reason: string; at: string} | null;
 }
 
 const hourFormatter = new Intl.DateTimeFormat('pt-BR', {timeZone:'America/Sao_Paulo',hour:'2-digit',hourCycle:'h23'});
@@ -40,12 +43,16 @@ export function buildCustomerIntelligence(customer: Customer, source: readonly D
     if (!last || when > last) last = when;
   }
   const top = <T,>(map: Map<T, number>): T | null => [...map].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? null;
+  const attempts = source.flatMap(d => d.developer_test===true || d.exclude_customer_metrics===true || d.exclude_from_reports===true ? [] : (d.delivery_attempts||[]));
+  const attemptCount = attempts.length;
+  const returnCount = attempts.filter(a=>a.returned_to_store===true).length;
+  const latestAttempt = attempts.filter(a=>Number.isFinite(Date.parse(a.at))).sort((a,b)=>b.at.localeCompare(a.at))[0] || null;
   const eligible = score.completedOrders > 0;
   return {
     customerId: customer.id, completed: orders.length, score: eligible ? score.score : null,
     tier: !eligible ? 'Em formação' : score.tier === 'vip' ? 'VIP por recorrência' : score.tier === 'frequente' ? 'Frequente' : score.tier === 'inativo' ? 'Histórico inativo' : 'Em descoberta',
     totalCharged, averageTicket: orders.length ? totalCharged / orders.length : 0,
     mostUsedPayment: top(payments), mostCommonHour: top(hours), lastCompletedAt: last ? (last as Date).toISOString() : null,
-    verifiedOrders: orders,
+    verifiedOrders: orders, attemptCount, returnCount, latestAttempt:latestAttempt?{reason:latestAttempt.reason,at:latestAttempt.at}:null,
   };
 }

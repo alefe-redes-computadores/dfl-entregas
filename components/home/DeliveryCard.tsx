@@ -26,7 +26,7 @@ import { firstActionableCardIssue } from '@/lib/operation/operational-card-issue
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { dateKey, deliveryDate, routeStartedAt } from '@/lib/operational-time';
+import { dateKey, deliveryDate, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { compactAddressForCard, hasHouseNumber } from "@/lib/operational-address";
 import { auditOperationalAddress } from '@/lib/address-quality';
 import { SiteOrderSnapshot } from '@/components/home/SiteOrderSnapshot';
@@ -140,6 +140,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const [attemptTargetId, setAttemptTargetId] = useState(delivery.id);
   const [attemptNote, setAttemptNote] = useState('');
   const [attemptMoveLast, setAttemptMoveLast] = useState(false);
+  const [attemptReturnToStore,setAttemptReturnToStore] = useState(false);
   const [attemptBusy, setAttemptBusy] = useState(false);
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -697,14 +698,21 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
         reason: attemptReason,
         at: new Date().toISOString(),
         note: attemptNote.trim(),
+        route_id:route.id,
+        motoboy_id:route.motoboy_id,
+        motoboy_name:route.motoboy_name,
+        operational_date:route.operational_date || (routeDate(route) ? dateKey(routeDate(route)!) : undefined),
+        physical_visit_confirmed:true,
+        returned_to_store:attemptReturnToStore,
       };
       await updateDelivery(current.id, {
         delivery_attempts: appendDeliveryAttempt(current.delivery_attempts, attempt),
+        ...(attemptReturnToStore ? {return_to_store:{attempt_id:attempt.id,route_id:route.id,at:attempt.at,reason:attempt.reason,motoboy_id:route.motoboy_id,motoboy_name:route.motoboy_name}} : {}),
       });
       setAttemptOpen(false);
       setAttemptNote('');
-      toast.success('Tentativa registrada; entrega continua pendente.', { description: deliveryAttemptLabel(attemptReason) });
-      if (attemptMoveLast && canReorder && !orderLocked) {
+      toast.success(attemptReturnToStore ? 'Retorno registrado; pedido aguarda reentrega.' : 'Tentativa registrada; entrega continua pendente.', { description: deliveryAttemptLabel(attemptReason) });
+      if (!attemptReturnToStore && attemptMoveLast && canReorder && !orderLocked) {
         try { await moveStop(pendingCount - 1); }
         catch { toast.warning('Tentativa salva; não foi possível mover a parada.'); }
       }
@@ -1294,6 +1302,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     setAttemptTargetId(pendingGroupedDeliveries[0]?.id || delivery.id);
                     setAttemptReason('customer_absent');
                     setAttemptMoveLast(false);
+                    setAttemptReturnToStore(false);
                     setAttemptNote('');
                     setAttemptOpen(true);
                   }} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.07] px-3 text-[11px] font-black text-amber-200 active:bg-amber-500/15">
@@ -1449,7 +1458,8 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                 </button>
               ))}
             </div>
-            {canReorder && !orderLocked && <label className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 text-[11px] text-zinc-300">
+            <label className="mt-3 flex min-h-12 items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[.06] px-3 py-2 text-[11px] font-bold text-amber-100"><input type="checkbox" checked={attemptReturnToStore} onChange={e=>setAttemptReturnToStore(e.target.checked)} className="h-5 w-5 accent-amber-400"/>Motoboy retornou à loja · retirar das pendências desta rota e guardar para nova tentativa</label>
+             {canReorder && !orderLocked && !attemptReturnToStore && <label className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 text-[11px] text-zinc-300">
               <input type="checkbox" checked={attemptMoveLast} onChange={event => setAttemptMoveLast(event.target.checked)} className="h-4 w-4 accent-amber-400" /> Deixar esta parada por último
             </label>}
             <div className="mt-4 grid grid-cols-2 gap-2">

@@ -81,6 +81,7 @@ import { deliveryEconomicValue, deriveDeliveryPaymentState } from '@/lib/deliver
 import { hasPhysicalCashForRoute } from '@/lib/route-cash-flow';
 import { readRememberedRouteId, rememberOpenRouteId } from '@/lib/route-ui-storage';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { isAwaitingRedelivery } from '@/lib/operation/return-to-store';
 
 interface RouteAccordionProps {
   route: Route;
@@ -188,7 +189,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   const isVirtualRoute =
     isRecoveryRoute || isAwaitingRoute || isSiteAwaitingConfirmation;
   const deliveries = useMemo(
-    () => getDeliveriesByRoute(route.id).filter((delivery) => !isCancelledSiteDelivery(delivery)),
+    () => getDeliveriesByRoute(route.id).filter((delivery) => !isCancelledSiteDelivery(delivery) && !isAwaitingRedelivery(delivery)),
     [
       getDeliveriesByRoute,
       route.id,
@@ -199,6 +200,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   );
   // Um único índice para os cards, preview e organizador. Quando um cliente
   // altera endereço/bairro, o snapshot invalida a geografia da rota.
+  const returnedCount = getDeliveriesByRoute(route.id).filter(isAwaitingRedelivery).length;
   const { sortedDeliveries, pendingDeliveries, neighborMeta, stopMeta, allStopGroups, pendingStopGroups } = useOptimizedDeliveries(deliveries, getCustomerById, customers);
   // Derived operational figures share one snapshot instead of regrouping per JSX render.
   const { totalDeliveries, pendingDeliveriesCount, totalStops, pendingStopsCount, progressPercent } = useMemo(() => {
@@ -999,6 +1001,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         </div>
       </button>
 
+      {returnedCount>0 && <div role="status" className="mx-3 mb-2 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 py-2 text-xs text-amber-200">{returnedCount} retorno(s) à loja nesta rota · <button type="button" onClick={()=>router.push('/entregas/retornos')} className="font-black underline">Ver pendências</button></div>}
       {closingRoute && <div role="status" aria-live="polite" className="mx-3 mb-2 rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-[11px] font-semibold text-sky-200">Última entrega salva. Conferindo e fechando a rota no servidor…</div>}
       {isOpen && totalDeliveries > 1 && totalStops !== totalDeliveries && (
         <div className="mx-3 mb-2 flex flex-wrap items-center gap-1.5" aria-label="Resumo operacional da rota">
@@ -1008,10 +1011,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         </div>
       )}
 
-      {isOpen && !isCompleted && !isVirtualRoute && totalDeliveries > 0 && pendingDeliveriesCount === 0 && (
+      {isOpen && !isCompleted && !isVirtualRoute && (totalDeliveries > 0 || returnedCount > 0) && pendingDeliveriesCount === 0 && (
         <div className="mx-3 mb-2 flex min-w-0 items-start gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[.055] px-3 py-2.5 text-[11px] leading-relaxed text-sky-200" role="status" aria-live="polite">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-sky-400" aria-hidden="true" />
-          <span>{storeSettings.autoCloseCompletedRoutes !== false ? 'Todas as entregas concluídas. Aguardando confirmação do fechamento; se necessário, use Finalizar rota.' : 'Todas as entregas concluídas. Fechamento automático desligado: finalize a rota manualmente.'}</span>
+          <span>{storeSettings.autoCloseCompletedRoutes !== false ? 'Sem entregas pendentes na rota; retornos continuam na fila de reentrega. Se necessário, use Finalizar rota.' : 'Sem entregas pendentes na rota. Fechamento automático desligado: finalize a rota manualmente.'}</span>
         </div>
       )}
       {isOpen && !isCompleted && !isVirtualRoute && routePreviewStops.length > 0 && routePreviewStops.length > 1 && (

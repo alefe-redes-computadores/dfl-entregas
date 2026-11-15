@@ -30,6 +30,9 @@ rejects(()=>transition(delivery,{...delivery},{completed:true},null,true),'rota'
 rejects(()=>transition(delivery,{...delivery},{completed:true},{...route,status:'fechada'},true),'rota');
 rejects(()=>transition(delivery,{...delivery},{completed:true},{...route,started_at:undefined},true),'iniciada');
 transition(delivery,{...delivery},{completed:true},null,false);n++;
+const physicalReturn={attempt_id:'attempt-r95',route_id:'r1',at:'2026-10-24T11:10:00.000Z',reason:'customer_absent'};
+rejects(()=>transition(delivery,{...delivery},{return_to_store:physicalReturn},route,true),'Retorno fisico');
+transition(delivery,{...delivery},{return_to_store:physicalReturn,delivery_attempts:[{id:'attempt-r95',route_id:'r1',physical_visit_confirmed:true}]},route,true);n++;
 const current=[{...delivery},{...delivery,id:'d2',completed:true}];
 close('r1',route,current,[route],current);n++;
 rejects(()=>close('r1',route,current,[{...route,status:'fechada'}],current),'rota mudou');
@@ -49,7 +52,8 @@ rejects(()=>adjust(a,undefined),'outro aparelho');
 // Conserva o contrato estrutural com a R94: commits normais continuam batch.
 const store=read('store/useAppStore.ts'),pre=read('scripts/pre-apk.cjs');
 for(const [part,label] of [
- ['if (isCompleting || isReopening || routeChanged)', 'somente transições críticas exigem leitura'],
+ ['if (isCompleting || isReopening || routeChanged || isReturning)', 'conclusao, reabertura, mudanca e retorno exigem leitura remota'],
+ ['const criticalOperation = isCompleting || isReopening || routeChanged || isReturning;', 'retorno integra fronteira critica transacional'],
  ['assertRemoteDeliveryTransition(deliveryToUpdate, remoteDelivery, dataWithTimestamp, remoteRoute, needsRoute)', 'autoridade remota chamada'],
  ["queueDeliveryDocuments(queueEntityWrite, [id], () => batch.commit())", 'fila R94 para demais edições'],
  ["queueDeliveryDocuments(queueEntityWrite, [id], () =>", 'fila R94 para commits críticos'],

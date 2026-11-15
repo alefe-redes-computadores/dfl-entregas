@@ -82,6 +82,23 @@ export default function CustomerDuplicatesPage() {
     setPendingMerge({ source, target, key });
   };
 
+  const mergeDirectGroup = async (group: ReturnType<typeof customerDuplicateGroups>[number], target: Customer) => {
+    if (mergeInFlight.current) return;
+    const sources=group.members.filter(row=>row.customer.id!==target.id && Boolean(directDuplicateEvidence(group,target.id,row.customer.id)));
+    if (sources.length < 2 || sources.length!==group.members.length-1) return;
+    if (!window.confirm(`Consolidar ${sources.length} cadastros em ${target.name}? Todas as pessoas possuem prova direta de mesmo nome e telefone. Verifique os endereços antes de confirmar.`))return;
+    mergeInFlight.current=true; setBusy(group.key);
+    let moved=0,completed=0;
+    try {
+      for (const row of sources) {
+        const result=await mergeCustomers(row.customer.id,target.id);
+        moved+=result.deliveriesMoved; completed++;
+      }
+      toast.success(`${completed} cadastros unificados.`,{description:`${moved} entrega(s) transferida(s), sem apagar endereços.`});
+    }catch(error){toast.error(`Unificação parcial: ${completed}/${sources.length}.`,{description:error instanceof Error?error.message:'Revise o grupo; já unificados permanecem salvos.'});}
+    finally { mergeInFlight.current=false; setBusy(null); }
+  };
+
   const confirmMerge = async () => {
     if (!pendingMerge || mergeInFlight.current) return;
     mergeInFlight.current = true;
@@ -164,7 +181,8 @@ export default function CustomerDuplicatesPage() {
               <div><p className="text-[10px] font-black uppercase tracking-widest text-amber-400">Grupo para revisão</p><h2 className="mt-1 text-base font-black text-zinc-100">{group.name}</h2><p className="mt-1 text-[11px] text-zinc-500">{group.members.length} cadastros · {group.totalOrders} pedidos vinculados</p></div>
               <span className="rounded-lg border border-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-300">Escolha o principal</span>
             </div>
-            <p className="mt-3 text-[11px] leading-relaxed text-zinc-400">Um único grupo pode conter vários endereços. Nenhum pedido será movido até você confirmar a união de cada par. O cadastro escolhido mantém seu endereço principal.</p>
+            <p className="mt-3 text-[11px] leading-relaxed text-zinc-400">Um grupo pode ter vários destinos. Mesclagem em lote somente quando TODOS os pares possuem prova direta de mesmo nome e telefone, com sua confirmação. O cadastro principal mantém seus destinos.</p>
+            {group.members.length>2 && group.members.every(row=>row.customer.id===chosen.customer.id || Boolean(directDuplicateEvidence(group,chosen.customer.id,row.customer.id))) && <button type="button" disabled={Boolean(busy)} onClick={()=>void mergeDirectGroup(group,chosen.customer)} className="mt-3 min-h-11 w-full rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3 text-xs font-black text-emerald-200 disabled:opacity-40">Consolidar {group.members.length-1} duplicados comprovados</button>}
             <div className="mt-3 space-y-2">
               {group.members.map(row=>{
                 const selected=row.customer.id===chosen.customer.id;

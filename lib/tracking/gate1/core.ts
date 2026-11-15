@@ -92,6 +92,11 @@ export function stopGroupKey(d: Raw): string {
   return address ? `a:${address}` : `d:${text(d.id)}`;
 }
 function isCancelled(d: Raw) { return commercialState(d.site_order_status) === 'cancelled' || d.operational_dismissed_at != null; }
+function isReturnedToStore(d: Raw): boolean {
+  const value = d.return_to_store;
+  return d.completed !== true && Boolean(value && typeof value === 'object' && !Array.isArray(value) &&
+    text((value as Raw).route_id) === text(d.route_id) && text((value as Raw).attempt_id));
+}
 export function sortUniqueEvents(events: readonly TrackingEvent[]): TrackingEvent[] {
   const known = new Map<string, TrackingEvent>();
   for (const event of events) {
@@ -148,7 +153,7 @@ export function computeProgress(s: ConfirmedSnapshot, status: TrackingStatus): P
   if (typeof route.route_revision === 'number' && typeof d.route_revision === 'number' &&
       Number.isInteger(route.route_revision) && Number.isInteger(d.route_revision) &&
       route.route_revision !== d.route_revision) return null;
-  const candidates = s.routeDeliveries.filter(x => x.route_id === d.route_id && !isCancelled(x) &&
+  const candidates = s.routeDeliveries.filter(x => x.route_id === d.route_id && !isCancelled(x) && !isReturnedToStore(x) &&
     (x.fulfillment_mode == null || x.fulfillment_mode === 'delivery'));
   if (candidates.length === 0 || candidates.length > 300 || !candidates.some(x => x.id === d.id)) return null;
   // No deterministic order means no trustworthy public position.

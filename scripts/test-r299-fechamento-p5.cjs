@@ -58,10 +58,13 @@ ok(
 );
 ok(!/fetch\(|runTransaction\(|setDoc\(|localStorage/.test(read('lib/customer-relationship-score.ts')),'score puro sem escrita');
 
+const returnRules=load('lib/operation/return-to-store.ts');
+eq(returnRules.confirmedAttemptVisits([],new Set(['r1']),'2026-11-08',{id:'m1',name:'Willian'}).length,0,'sem evidencia fisica nao cria visita');
 const analytics=load('lib/motoboy-analytics.ts',{
  '@/lib/route-stops':{groupDeliveriesByStop:items=>items.map(item=>({representative:item,deliveries:[item]}))},
  '@/lib/route-closure-eligibility':{activeRouteDeliveries:items=>items},
  '@/lib/route-cash-flow':{routeCashFlow:()=>({cashOrders:[],customerCharges:0,tenderedCash:0})},
+ '@/lib/operation/return-to-store':returnRules,
 });
 const driver={id:'m1',name:'Willian',payment_rule:{type:'per_delivery',delivery_fee:5}};
 const route={id:'r1',motoboy_id:'m1',motoboy_name:'Willian',created_at:'2026-11-08T13:00:00-03:00',status:'aberta'};

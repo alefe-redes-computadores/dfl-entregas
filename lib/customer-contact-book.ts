@@ -62,7 +62,7 @@ const addressParts = (item: CustomerAddress) => {
 
   // Se o bairro estiver embutido no texto principal,
   // retira-se apenas esse bairro da chave da rua.
-  let streetKey=normalizeAddressPart(street);
+  let streetKey=normalizeAddressPart(street).replace(/^r\s+/, 'rua ').replace(/^av\s+/, 'avenida ').replace(/^aven\s+/, 'avenida ');
   if(district && streetKey.endsWith(` ${district}`)){
     streetKey=streetKey.slice(0,-district.length-1);
   }
@@ -109,7 +109,7 @@ const mergeAddressEntries = (source: CustomerAddress[]): CustomerAddress[] => {
     const neighborhood=preferredCanonical.neighborhood||otherCanonical.neighborhood||preferred.neighborhood||alternative.neighborhood;
     unique[found]={...preferred,
       address:([preferred,alternative].find(entry =>
-        /(?:CEP\s*:?\s*)?\d{5}\s*(?:-|–|—|\s)?\s*\d{3}/i.test(entry.address)
+        /\b(?:CEP\s*:?\s*)?\d{5}\s*(?:-|–|—|\s)?\s*\d{3}\b/i.test(entry.address)
       ) || preferred).address.trim(),
       neighborhood,
       maps_link:preferred.maps_link||alternative.maps_link,

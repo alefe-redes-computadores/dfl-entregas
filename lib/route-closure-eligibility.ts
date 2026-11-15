@@ -1,6 +1,7 @@
 import type { Delivery, Route } from '@/types';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { routeStartedAt } from '@/lib/operational-time';
+import { isAwaitingRedelivery } from '@/lib/operation/return-to-store';
 
 /**
  * Pedidos cancelados continuam no histórico e na checagem de IDs remotos,
@@ -16,5 +17,5 @@ export const activeRouteDeliveries = (deliveries: Delivery[]): Delivery[] =>
 export const canAutoCloseRoute = (route: Route | undefined, deliveries: Delivery[]): boolean => {
   if (!route || route.status !== 'aberta' || !routeStartedAt(route)) return false;
   const active = activeRouteDeliveries(deliveries);
-  return active.length > 0 && active.every((delivery) => delivery.completed === true);
+  return active.length > 0 && active.every((delivery) => delivery.completed === true || isAwaitingRedelivery(delivery));
 };

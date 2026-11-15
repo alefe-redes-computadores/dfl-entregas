@@ -3,6 +3,7 @@ import type { Delivery, Motoboy, MotoboyPaymentRule, MotoboySettlementAdjustment
 import { groupDeliveriesByStop } from '@/lib/route-stops';
 import { activeRouteDeliveries } from '@/lib/route-closure-eligibility';
 import { routeCashFlow } from '@/lib/route-cash-flow';
+import { confirmedAttemptVisits } from '@/lib/operation/return-to-store';
 
 export type ValeInput = MotoboySettlementAdjustment;
 export const normalizeName=(value?:string)=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLocaleLowerCase('pt-BR');
@@ -61,9 +62,11 @@ export function getMotoboyDayData(
   const completedStops=dayRoutes.flatMap(route=>
     groupDeliveriesByStop(completedByRoute.get(route.id)||[])
   );
-  const physicalDeliveryCount=completedStops.length;
+  const attemptVisits=confirmedAttemptVisits(deliveries,routeIds,date,motoboy);
+  const attemptVisitCount=attemptVisits.length;
+  const physicalDeliveryCount=completedStops.length+attemptVisitCount;
   const orderCount=completedDeliveries.length;
-  const groupedOrderCount=Math.max(0,orderCount-physicalDeliveryCount);
+  const groupedOrderCount=Math.max(0,orderCount-completedStops.length);
   const routeBreakdown=dayRoutes.map((route,index)=>{
     const routeDeliveries=completedByRoute.get(route.id)||[];
     const routeStops=groupDeliveriesByStop(routeDeliveries);
@@ -71,10 +74,11 @@ export function getMotoboyDayData(
       routeId:route.id,
       label:route.name?.trim()||`Rota ${index+1}`,
       orderCount:routeDeliveries.length,
-      physicalDeliveryCount:routeStops.length,
+      physicalDeliveryCount:routeStops.length+attemptVisits.filter(v=>v.routeId===route.id).length,
+      attemptVisitCount:attemptVisits.filter(v=>v.routeId===route.id).length,
       groupedOrderCount:Math.max(0,routeDeliveries.length-routeStops.length),
     };
-  }).filter(item=>item.orderCount>0);
+  }).filter(item=>item.orderCount>0 || item.attemptVisitCount>0);
   const cashDeliveries=completedDeliveries.filter(delivery=>!delivery.is_paid && (delivery.payment_splits?.length ? routeCashFlow([delivery]).cashOrders.length > 0 : delivery.payment_method==='dinheiro'));
   const cashCollected=cashDeliveries.reduce((sum,delivery)=>sum+deliveryCashCollected(delivery),0);
   const cashTendered=cashDeliveries.reduce((sum,delivery)=>{
@@ -108,6 +112,8 @@ export function getMotoboyDayData(
     completedRoutes:dayRoutes.filter(route=>route.status==='fechada').length,
     deliveries:completedDeliveries,
     completedStops,
+    attemptVisits,
+    attemptVisitCount,
     physicalDeliveryCount,
     orderCount,
     groupedOrderCount,

@@ -24,7 +24,7 @@ for (const field of [
 ok(hydrate.indexOf('setOrigin(draftOrigin);')<hydrate.indexOf("setOrderId(parsed.orderId || '');"),'origem escolhida antes dos dados');
 const store=read('store/useAppStore.ts');
 const close=store.slice(store.indexOf('      closeRoute: async'),store.indexOf('      reopenRoute: async'));
-ok(close.includes("delivery.origin === 'ifood' && !isCancelledSiteDelivery(delivery) && !motoboyConfirmsIfood"),'pendencias excluem cancelados e motoboy que confirma');
+ok(close.includes("delivery.origin === 'ifood' && delivery.completed === true && !isCancelledSiteDelivery(delivery) && !motoboyConfirmsIfood"),'pendencias excluem cancelados e motoboy que confirma');
 ok(close.includes('id: `ifood-route-${delivery.id}`'),'fila idempotente por entrega');
 ok(close.includes("item.ifood_confirmation_mode === 'motoboy'"),'politica por entregador');
 ok(close.includes('if (routePendingCount > 0 && !motoboyConfirmsIfood)'),'nenhuma notificacao indevida para motoboy que confirma');

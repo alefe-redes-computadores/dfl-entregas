@@ -31,6 +31,7 @@ export function planManualNextStopTransition(input: {
     item.fulfillment_mode !== 'pickup' && item.fulfillment_mode !== 'counter' &&
     item.fulfillment_mode !== 'external_delivery' &&
     !item.operational_dismissed_at &&
+    !(item.return_to_store?.route_id === route.id && item.completed !== true) &&
     !(item.source_system === 'dfl_site' && /cancel/i.test(String(item.site_order_status || ''))));
   if (members.length < 2 || members.length > 100) return null;
   type Stop = { key: string; members: Delivery[]; orderIndex: number };

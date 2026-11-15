@@ -8,7 +8,7 @@ export const DELIVERY_ATTEMPT_REASONS = [
 ] as const;
 
 export type DeliveryAttemptReason = (typeof DELIVERY_ATTEMPT_REASONS)[number]['value'];
-export type DeliveryAttempt = { id: string; reason: DeliveryAttemptReason; at: string; note?: string };
+export type DeliveryAttempt = { id: string; reason: DeliveryAttemptReason; at: string; note?: string; route_id?: string; motoboy_id?: string; motoboy_name?: string; operational_date?: string; physical_visit_confirmed?: boolean; returned_to_store?: boolean };
 export const deliveryAttemptLabel = (reason: DeliveryAttemptReason): string =>
   DELIVERY_ATTEMPT_REASONS.find(item => item.value === reason)?.label || 'Outra ocorrência';
 

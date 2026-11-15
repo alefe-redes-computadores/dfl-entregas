@@ -421,6 +421,8 @@ export interface Delivery {
   redelivery_visits?: import('@/lib/delivery-return-visits').DeliveryReturnVisit[];
   /** Registro persistido de tentativa, independente de baixa e confirmação externa. */
   delivery_attempts?: import('@/lib/delivery-attempts').DeliveryAttempt[];
+  /** Devolvido fisicamente a loja, sem baixa, venda nova ou cancelamento. */
+  return_to_store?: import('@/lib/operation/return-to-store').DeliveryReturnToStore | null;
   drinks?: string;
   /** A edição humana de Bebidas prevalece sobre projeções posteriores do Site. */
   drinks_manual_override?: boolean;

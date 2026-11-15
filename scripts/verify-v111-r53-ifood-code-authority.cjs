@@ -19,7 +19,7 @@ const pre = source('scripts/pre-apk.cjs');
 const close = store.slice(store.indexOf('      closeRoute: async'), store.indexOf('      reopenRoute: async'));
 ok(close.includes('orderConfirmationCode(delivery.confirmation_code)'), 'post-route code belongs to delivery');
 ok(!close.includes('customer?.last_confirmation_code'), 'post-route cannot reuse customer memory');
-ok(close.includes("delivery.origin === 'ifood' && !isCancelledSiteDelivery(delivery)"), 'cancelled orders excluded');
+ok(close.includes("delivery.origin === 'ifood' && delivery.completed === true && !isCancelledSiteDelivery(delivery) && !motoboyConfirmsIfood"), 'cancelled orders excluded');
 ok(close.includes('id: `ifood-route-${delivery.id}`'), 'idempotent queue ID retained');
 ok(close.includes("status: 'pending'"), 'external queue still pending');
 ok(close.includes('await current.addIfoodPendingConfirmations(confirmationItems)'), 'external queue still persisted');

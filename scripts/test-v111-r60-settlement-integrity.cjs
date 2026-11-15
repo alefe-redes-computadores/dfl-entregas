@@ -16,10 +16,12 @@ const ready=load('lib/motoboy-settlement-tasks.ts',{
  '@/lib/operational-time':{routeOperationalDateKey:dateKey},
  '@/lib/route-closure-eligibility':{activeRouteDeliveries:active},
 }).buildPendingMotoboySettlements;
+const returnRules=load('lib/operation/return-to-store.ts',{});
 const analytics=load('lib/motoboy-analytics.ts',{
  '@/lib/route-cash-flow':{routeCashFlow:(deliveries)=>{const cashOrders=deliveries.filter(d=>d.payment_method==='dinheiro'&&!d.is_paid);const customerCharges=cashOrders.reduce((sum,d)=>sum+Math.max(0,Number(d.customer_charge??d.value)||0),0);const tenderedCash=cashOrders.reduce((sum,d)=>{const charge=Math.max(0,Number(d.customer_charge??d.value)||0);return sum+Math.max(charge,Number(d.change_for)||0)},0);return {cashOrders,customerCharges,tenderedCash}}},
  '@/lib/route-stops':{groupDeliveriesByStop:groups},
  '@/lib/route-closure-eligibility':{activeRouteDeliveries:active},
+ '@/lib/operation/return-to-store':returnRules,
 });
 const make=(id,rid,more={})=>({id,route_id:rid,completed:true,address_string:id,payment_method:'dinheiro',value:25,change_for:30,is_paid:false,...more});
 const route=(id,mid='m1',status='fechada')=>({id,motoboy_id:mid,status,operational_date:'2026-10-21'});
@@ -34,10 +36,18 @@ same(pending([make('x','r1')],[route('r1')],[{source_id:'motoboy:m1:2026-10-21'}
 const setData=(deliveries,routes=[route('r1')])=>analytics.getMotoboyDayData(m,'2026-10-21',routes,deliveries);
 const withCancel=[make('x','r1'),make('c','r1',{source_system:'dfl_site',site_order_status:'cancelado',value:150}),make('z','r1',{completed:false})];
 const got=setData(withCancel);same(got.orderCount,1,'canceled completed ignored for fee');same(got.physicalDeliveryCount,1,'canceled completed ignored for stop');same(got.fee.amount,8,'canceled completed ignored for daily fee');same(got.cashCollected,25,'canceled completed ignored for cash');same(got.cashInHand,30,'canceled completed ignored for cash tendered');
+same(got.attemptVisitCount,0,'historico sem tentativa fisica nao inventa visita');
+const physicalAttempt=make('attempted','r1',{completed:false,delivery_attempts:[{id:'visit1',reason:'no_response',at:'2026-10-21T12:00:00.000Z',route_id:'r1',motoboy_id:'m1',motoboy_name:'Teste',operational_date:'2026-10-21',physical_visit_confirmed:true,returned_to_store:true}]});
+const realVisits=setData([make('x','r1'),physicalAttempt]);
+same(realVisits.orderCount,1,'retorno nao se torna venda concluida');
+same(realVisits.attemptVisitCount,1,'retorno fisico comprovado conta uma visita');
+same(realVisits.physicalDeliveryCount,2,'acerto soma entrega e visita distinta');
+same(realVisits.fee.amount,16,'duas visitas reais remuneradas sem venda ficticia');
+same(realVisits.cashCollected,25,'retorno nao cria dinheiro recebido');
 const double=setData([make('x','r1',{address_string:'Rua A'}),make('y','r1',{address_string:'Rua A'}),make('z','r2',{address_string:'Rua A'})],[route('r1'),route('r2')]);
 same(double.physicalDeliveryCount,2,'same address on two routes counts separately');same(double.orderCount,3,'all valid orders retained');
 let seed=19345;const rand=(n)=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed%n;};
-function legacyDay(motoboy,date,routes,deliveries){const dayRoutes=routes.filter(r=>belongs(r,motoboy)&&dateKey(r)===date);const ids=new Set(dayRoutes.map(r=>r.id));const completed=deliveries.filter(d=>ids.has(d.route_id)&&d.completed);const stops=dayRoutes.flatMap(r=>groups(completed.filter(d=>d.route_id===r.id)));return {orderCount:completed.length,physicalDeliveryCount:stops.length,routeBreakdown:dayRoutes.map((r,i)=>{const ds=completed.filter(d=>d.route_id===r.id);return {routeId:r.id,label:r.name?.trim()||`Rota ${i+1}`,orderCount:ds.length,physicalDeliveryCount:groups(ds).length,groupedOrderCount:Math.max(0,ds.length-groups(ds).length)}}).filter(v=>v.orderCount>0)};}
+function legacyDay(motoboy,date,routes,deliveries){const dayRoutes=routes.filter(r=>belongs(r,motoboy)&&dateKey(r)===date);const ids=new Set(dayRoutes.map(r=>r.id));const completed=deliveries.filter(d=>ids.has(d.route_id)&&d.completed);const stops=dayRoutes.flatMap(r=>groups(completed.filter(d=>d.route_id===r.id)));return {orderCount:completed.length,physicalDeliveryCount:stops.length,routeBreakdown:dayRoutes.map((r,i)=>{const ds=completed.filter(d=>d.route_id===r.id);return {routeId:r.id,label:r.name?.trim()||`Rota ${i+1}`,orderCount:ds.length,physicalDeliveryCount:groups(ds).length,attemptVisitCount:0,groupedOrderCount:Math.max(0,ds.length-groups(ds).length)}}).filter(v=>v.orderCount>0)};}
 for(let i=0;i<220;i++){
  const rs=Array.from({length:rand(32)},(_,j)=>route('r'+j,j%3?'m1':'m2'));
  const ds=Array.from({length:rand(210)},(_,j)=>make('d'+j,'r'+rand(rs.length+4),{address_string:'addr'+rand(35),completed:rand(3)!==0,source_system:'ifood'}));

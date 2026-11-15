@@ -9,7 +9,7 @@ const route = read('components/home/RouteAccordion.tsx');
 const card = read('components/home/DeliveryCard.tsx');
 const close = store.slice(store.indexOf('      closeRoute: async'), store.indexOf('      reopenRoute: async'));
 const check = (ok, label) => { assert.ok(ok, label); console.log('OK:', label); };
-check(helper.includes('active.length > 0 && active.every((delivery) => delivery.completed === true)'), 'somente concluídos ativos permitem autoencerramento');
+check(helper.includes('active.length > 0 && active.every((delivery) => delivery.completed === true || isAwaitingRedelivery(delivery))'), 'concluidos OU retornos comprovados permitem autoencerramento');
 check(helper.includes('!isCancelledSiteDelivery(delivery)'), 'cancelamentos não viram pendências');
 check(ops.includes('void closeRoute(route.id, {') && !ops.includes('void updateRoute(route.id, {'), 'rotas históricas passam pelo fechamento transacional');
 check(ops.includes('effectiveEndTime: route.end_time || end.toISOString()'), 'horário do dia histórico preservado');
@@ -21,7 +21,7 @@ check(close.includes('isCancelledSiteDelivery(remote) !==') && close.includes('i
 check(close.includes('auto_closed_at: options.autoClosedAt') && close.includes('end_time: closedAt'), 'carimbo automático e duração histórica preservados');
 check(close.includes('analytics_sync_requested_at: now'), 'projeção analytics agenda processamento na hora real');
 check(close.includes('addIfoodPendingConfirmations(confirmationItems)'), 'fila pós-rota iFood preservada');
-check(route.includes('getDeliveriesByRoute(route.id).filter((delivery) => !isCancelledSiteDelivery(delivery))'), 'card operacional não conta cancelados');
+check(route.includes('getDeliveriesByRoute(route.id).filter((delivery) => !isCancelledSiteDelivery(delivery) && !isAwaitingRedelivery(delivery))'), 'card operacional nao mostra retornos como pendencias na rota');
 check(card.includes('!isCancelledSiteDelivery(item) && !completedIds.has(item.id)'), 'aviso de última entrega ignora cancelados');
 check(read('scripts/pre-apk.cjs').includes('scripts/verify-v111-r5-route-closure.cjs'), 'suíte incluída no PRE-APK');
 console.log('V111 R5: 15 contratos de fechamento aprovados.');
@@ -54,6 +54,9 @@ assert.equal(canAutoCloseRoute(routeOpen, [active]), true, 'uma entrega concluí
 assert.equal(canAutoCloseRoute(routeOpen, [active, cancelled]), true, 'cancelado não bloqueia fechamento');
 assert.equal(canAutoCloseRoute(routeOpen, [cancelled]), false, 'somente cancelados não encerram automaticamente');
 assert.equal(canAutoCloseRoute(routeOpen, [active, pending]), false, 'pendência ativa impede fechamento');
+const returned={...pending,return_to_store:{attempt_id:'a',route_id:'r',at:'2026-10-18T19:00:00.000Z',reason:'customer_absent'}};
+assert.equal(canAutoCloseRoute(routeOpen,[active,returned]),true,'retorno comprovado libera fechamento sem baixa');
+assert.equal(canAutoCloseRoute(routeOpen,[returned]),true,'rota so com retorno pode ser encerrada');
 assert.equal(canAutoCloseRoute({...routeOpen, status:'fechada'}, [active]), false, 'rota fechada não tenta encerrar de novo');
 assert.equal(canAutoCloseRoute({...routeOpen, started_at:undefined}, [active]), false, 'rota não iniciada não encerra');
 assert.deepEqual(activeRouteDeliveries([active,cancelled,pending]).map(item => item.id), ['a','b']);

@@ -147,8 +147,8 @@ function Content(){
   const carryForward=!cashHandedOver&&data.balance>0;
 
   const groupedExplanation=data.groupedOrderCount>0
-    ? `${data.orderCount} pedidos viraram ${data.physicalDeliveryCount} paradas físicas porque ${data.groupedOrderCount} ${data.groupedOrderCount===1?'pedido compartilhou':'pedidos compartilharam'} endereço com outro pedido.`
-    : `${data.orderCount} pedidos correspondem a ${data.physicalDeliveryCount} paradas físicas.`;
+    ? `${data.orderCount} pedidos concluídos geraram ${data.completedStops.length} paradas físicas, pois ${data.groupedOrderCount} ${data.groupedOrderCount===1?'pedido compartilhou':'pedidos compartilharam'} endereço; além delas há ${data.attemptVisitCount} tentativa(s).`
+    : `${data.orderCount} pedidos concluídos · ${data.completedStops.length} paradas entregues · ${data.attemptVisitCount} tentativas físicas · ${data.physicalDeliveryCount} visitas remuneráveis.`;
   const settlementEquation=data.settlementDirection==='motoboy_credit'
     ? `Diária líquida R$ ${money(data.liquidFee)} − dinheiro retido R$ ${money(data.retainedCash)} = loja paga R$ ${money(data.balance)}.`
     : data.settlementDirection==='store_credit'
@@ -215,7 +215,7 @@ function Content(){
       '──────────────────',
       `📅 *Data:* ${day}/${monthValue}/${year}`,
       '',
-      `📦 *${data.orderCount} pedidos · ${data.physicalDeliveryCount} paradas físicas* · 🔁 *${data.completedRoutes} rotas*`,
+      `📦 *${data.orderCount} pedidos concluídos · ${data.physicalDeliveryCount} visitas remuneráveis* · 🔁 *${data.completedRoutes} rotas*`,
       ...(data.groupedOrderCount>0?[groupedExplanation]:[]),
       '',
       `🛣️ *CONTAGEM POR ROTA*`,
@@ -223,6 +223,7 @@ function Content(){
       ...settlementRouteOrder(data.routeBreakdown).map((item,index)=>`*${String(index+1).padStart(2,'0')} · ${item.label}*  •  ${item.orderCount} pedido${item.orderCount===1?'':'s'}  →  ${item.physicalDeliveryCount} parada${item.physicalDeliveryCount===1?'':'s'}${item.groupedOrderCount>0?`  ·  ${item.groupedOrderCount} agrupado${item.groupedOrderCount===1?'':'s'}`:''}`),
       '',
       '──────────────────',
+      `🔁 *Tentativas físicas remuneráveis: ${data.attemptVisitCount}* · sem baixa de venda`,
       ...(redeliveryCompensationPreview.visits.length ? [
         `↩️ *RETORNOS FÍSICOS · PRÉVIA NÃO LANÇADA*`,
         `${redeliveryCompensationPreview.visits.length} retorno(s) confirmado(s) · tarifa R$ ${money(redeliveryCompensationPreview.rate)}`,
@@ -374,7 +375,9 @@ function Content(){
       {type:'header' as const,line:`ROTAS · ${data.completedRoutes} CONCLUÍDAS`,color:'#93c5fd',amount:''},
       ...settlementRouteRows.map((item,index)=>({type:'route' as const,line:`${index+1}. ${item.label}: ${item.orderCount} pedidos · ${item.physicalDeliveryCount} paradas`,color:'#cbd5e1',amount:''})),
        {type:'header' as const,line:'PEDIDOS CONCLUÍDOS · VALORES REGISTRADOS',color:'#93c5fd',amount:''},
-       ...data.completedStops.flatMap((stop,stopIndex)=>stop.deliveries.map(delivery=>({
+       {type:'header' as const,line:`TENTATIVAS FÍSICAS · ${data.attemptVisitCount} VISITAS`,color:'#fbbf24',amount:''},
+      ...data.attemptVisits.map(visit=>({type:'detail' as const,line:`Tentativa · ${visit.customer} · ${visit.reason} · #${visit.order.slice(-8)}`,color:'#fbbf24',amount:''})),
+      ...data.completedStops.flatMap((stop,stopIndex)=>stop.deliveries.map(delivery=>({
          type:'detail' as const,
          line:`P${stopIndex+1} · ${delivery.customer_name||'Cliente'} · #${String(delivery.external_order_id||delivery.order_id||delivery.id).slice(-8)} · ${delivery.payment_splits?.length?'Dividido':delivery.payment_method||'A conferir'}`,
          color:'#cbd5e1',amount:`R$ ${money(deliveryCustomerCharge(delivery))}`,
@@ -403,7 +406,7 @@ function Content(){
     label(fromKey(date).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}),65,283,'600 25px Arial','#94a3b8',860);
     round(48,321,984,157,27,'#10282b','#1c4141');
     const metric=(x:number,head:string,value:string)=>{label(head,x,369,'800 23px Arial','#94a3b8',280);label(value,x,427,'900 41px Arial','#f8fafc',280);};
-    metric(78,'PEDIDOS',String(data.orderCount));metric(393,'PARADAS',String(data.physicalDeliveryCount));metric(697,'ROTAS',String(data.completedRoutes));
+    metric(78,'PEDIDOS',String(data.orderCount));metric(393,'VISITAS',String(data.physicalDeliveryCount));metric(697,'ROTAS',String(data.completedRoutes));
     round(48,505,984,355,30,'#171b20','#2c3339');
     label('COMPOSIÇÃO DA DIÁRIA',80,565,'900 28px Arial','#d4d4d8',900);
     const financeRow=(name:string,value:string,y:number,color='#f8fafc')=>{

@@ -25,7 +25,7 @@ ok(store.includes('Encerrar a rota não significa que os pedidos já foram confi
   'fechamento mantém separação entrega concluída x confirmação externa');
 ok(store.includes("id: `ifood-route-${delivery.id}`"),
   'pendência pós-rota possui identidade idempotente por entrega');
-ok(store.includes(".filter((delivery) => delivery.origin === 'ifood' && !isCancelledSiteDelivery(delivery) && !motoboyConfirmsIfood)") &&
+ok(store.includes(".filter((delivery) => delivery.origin === 'ifood' && delivery.completed === true && !isCancelledSiteDelivery(delivery) && !motoboyConfirmsIfood)") &&
    store.includes("item.id === routeBeforeClose.motoboy_id && item.ifood_confirmation_mode === 'motoboy'") &&
    store.includes('if (routePendingCount > 0 && !motoboyConfirmsIfood)') &&
    store.includes('addIfoodPendingConfirmations(confirmationItems)'),

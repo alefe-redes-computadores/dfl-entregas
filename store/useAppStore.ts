@@ -67,6 +67,7 @@ import { recordSyncDiagnostic } from '@/lib/sync-diagnostics';
 import { mergeCloudFirstById, mergeDeliveriesPreservingExpansion } from '@/lib/operation/snapshotMerge';
 import { deliveriesForRouteIndexed, findByIdIndexed } from '@/lib/operation/collection-lookup-index';
 import { assertRemoteDeliveryTransition, assertRouteClosureStable, assertRemoteSettlementAdjustment } from '@/lib/operation/remoteOperationGuards';
+import { isAwaitingRedelivery } from '@/lib/operation/return-to-store';
 import { assertRouteStopTransfer, appendRouteTransferAudit, type StopTransferAudit } from '@/lib/operation/route-stop-transfer-policy';
 import { isSuperadminUid } from '@/lib/access/roles';
 import { captureOperationalBaseline, operationalDeliverySignature, operationalRouteSignature, preserveInFlightLocalEdits, trustedIncrementalCheckpoint, syncOwnerStillCurrent } from '@/lib/operation/snapshot-sync-safety';
@@ -2279,6 +2280,15 @@ export const useAppStore = create<AppState>()(
             ? updatedData.route_id
             : deliveryToUpdate.route_id;
         const routeChanged = nextRouteId !== deliveryToUpdate.route_id;
+        const isReturning = Boolean(updatedData.return_to_store && !deliveryToUpdate.return_to_store);
+        if (isReturning) {
+          const currentRoute = state.routes.find(r => r.id === deliveryToUpdate.route_id);
+          const returning = updatedData.return_to_store!;
+          if (deliveryToUpdate.completed || isAwaitingRedelivery(deliveryToUpdate) || !currentRoute || currentRoute.status !== 'aberta' || !routeStartedAt(currentRoute) ||
+              returning.route_id !== deliveryToUpdate.route_id || !updatedData.delivery_attempts?.some(a => a.id === returning.attempt_id)) {
+            throw new Error('Retorno exige tentativa fisica na rota iniciada e ainda pendente.');
+          }
+        }
 
         if (routeChanged && deliveryToUpdate.completed === true) {
           throw new Error(
@@ -2304,9 +2314,8 @@ export const useAppStore = create<AppState>()(
           const deliveryKey = deliveryDate(deliveryToUpdate);
           const targetRouteKey = routeDate(targetRoute);
           if (
-            !deliveryKey ||
             !targetRouteKey ||
-            dateKey(deliveryKey) !== dateKey(targetRouteKey)
+            (!isAwaitingRedelivery(deliveryToUpdate) && (!deliveryKey || dateKey(deliveryKey) !== dateKey(targetRouteKey)))
           ) {
             throw new Error(
               'A rota de destino precisa ser do mesmo dia operacional da entrega.',
@@ -2380,6 +2389,7 @@ export const useAppStore = create<AppState>()(
         const urgentTopIndex = urgentIndices.length ? Math.min(...urgentIndices) - 1 : -1;
         const dataWithTimestamp: Partial<Delivery> = {
           ...updatedData,
+          ...(routeChanged && isAwaitingRedelivery(deliveryToUpdate) ? {return_to_store:null} : {}),
           ...(routeChanged && nextRouteId
             ? {
                 order_index: movedOrderIndex,
@@ -2446,7 +2456,7 @@ export const useAppStore = create<AppState>()(
         }));
 
         let deliveryCommitCompleted = false;
-        const criticalOperation = isCompleting || isReopening || routeChanged;
+        const criticalOperation = isCompleting || isReopening || routeChanged || isReturning;
         const criticalQueuedAt = Date.now();
         let criticalRemoteStartedAt = 0;
         try {
@@ -2457,7 +2467,7 @@ export const useAppStore = create<AppState>()(
           if (updatedCustomerData && customer) {
             batch.update(doc(db, 'customers', customer.id), sanitizeForFirebase(updatedCustomerData));
           }
-          if (isCompleting || isReopening || routeChanged) {
+          if (isCompleting || isReopening || routeChanged || isReturning) {
             // R95: validação REMOTA somente para transições críticas. Edições
             // comuns continuam com batch e SEM leitura Firestore adicional.
             const commitCritical = () => runTransaction(db, async (transaction) => {
@@ -2605,7 +2615,7 @@ export const useAppStore = create<AppState>()(
           }
 
           if (
-            updatedData.completed === true &&
+            (updatedData.completed === true || isReturning) &&
             isDeliveryFulfillment(nextDelivery) &&
             nextDelivery.route_id
           ) {
@@ -2818,7 +2828,7 @@ export const useAppStore = create<AppState>()(
           (delivery) => delivery.route_id === routeId,
         );
 
-        if (activeRouteDeliveries(routeDeliveries).some((delivery) => !delivery.completed)) {
+        if (activeRouteDeliveries(routeDeliveries).some((delivery) => !delivery.completed && !isAwaitingRedelivery(delivery))) {
           throw new Error('Conclua todas as entregas ativas antes de finalizar a rota.');
         }
 
@@ -2864,7 +2874,7 @@ export const useAppStore = create<AppState>()(
             if (
               remote.route_id !== routeId ||
               isCancelledSiteDelivery(remote) !== (local ? isCancelledSiteDelivery(local) : false) ||
-              (!isCancelledSiteDelivery(remote) && remote.completed !== true)
+              (!isCancelledSiteDelivery(remote) && remote.completed !== true && !isAwaitingRedelivery(remote))
             ) {
               throw new Error('Uma entrega foi alterada, cancelada ou ainda está pendente em outro aparelho. Atualize a rota.');
             }
@@ -2908,7 +2918,7 @@ export const useAppStore = create<AppState>()(
           const motoboyConfirmsIfood = current.motoboys.some((item) =>
             item.id === routeBeforeClose.motoboy_id && item.ifood_confirmation_mode === 'motoboy');
           const confirmationItems: IfoodPendingConfirmation[] = routeDeliveries
-            .filter((delivery) => delivery.origin === 'ifood' && !isCancelledSiteDelivery(delivery) && !motoboyConfirmsIfood)
+            .filter((delivery) => delivery.origin === 'ifood' && delivery.completed === true && !isCancelledSiteDelivery(delivery) && !motoboyConfirmsIfood)
             .map((delivery) => {
               const customer = current.customers.find(
                 (item) => item.id === delivery.customer_id,

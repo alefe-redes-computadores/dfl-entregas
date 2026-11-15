@@ -1,6 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
+import { isAwaitingRedelivery } from '@/lib/operation/return-to-store';
 
 import { useEffect, useMemo, useState } from 'react';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
@@ -193,13 +194,10 @@ export default function HomePage() {
     const totalEntregas = deliveriesDoDia.length;
     const pendingDeliveries =
       deliveriesDoDia.filter(
-        (delivery) => !delivery.completed,
+        (delivery) => !delivery.completed && !isAwaitingRedelivery(delivery),
       ).length;
 
-    const completedDeliveries = Math.max(
-      0,
-      totalEntregas - pendingDeliveries,
-    );
+    const completedDeliveries = deliveriesDoDia.filter(delivery => delivery.completed === true).length;
 
     const storeOrdersDoDia = ordersDoDia
       .filter(
@@ -268,7 +266,7 @@ export default function HomePage() {
         linked.length > 0 &&
         linked.every(
           (delivery) =>
-            delivery.completed === true,
+            delivery.completed === true || isAwaitingRedelivery(delivery),
         )
       );
     });
@@ -396,6 +394,7 @@ export default function HomePage() {
       />
 
       <OperationalCommandCenter routes={routesDoDia} deliveries={deliveriesDoDia} />
+      {deliveries.some(isAwaitingRedelivery) && <button type="button" onClick={()=>router.push('/entregas/retornos')} className="mx-1 flex min-h-14 w-[calc(100%-8px)] items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[.07] px-4 text-left text-xs font-black text-amber-200"><span>⚠ Retornos aguardando nova tentativa · {deliveries.filter(isAwaitingRedelivery).length}</span><span className="underline">Abrir fila</span></button>}
       {hasOperationSummary ? (
       <section className="space-y-3">
         <div className="flex items-end justify-between gap-3 px-1">
