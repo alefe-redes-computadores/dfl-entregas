@@ -215,9 +215,31 @@ export async function publicForAuthorizedGrant(grant: Raw, c: CapabilityState): 
   if (!snap) return null;
   const key = canonicalOrderKey(snap.data);
   if (!belongsToTenant(snap.data,c.tenant) || !key || key !== grant.order_key || !c.eligible_origins.includes(originOf(snap.data))) return null;
-  const events = await loadedLedger(c.tenant, key);
+  const ledger = await loadedLedger(c.tenant, key);
   // If there is no confirmed audit evidence, deny rather than manufacture a public history.
-  if (!events.length) return null;
+  if (!ledger.length) return null;
+  // R71: reconcile the public view IN MEMORY from persisted, signed commercial
+  // facts. No Firestore write, provider send, fabricated kitchen or route event.
+  const siteEvidence = snap.data.source_system === 'dfl_site'
+    ? confirmedEventCandidates(snap.data,snap.route).filter(row =>
+        row.source === 'dfl_site' && row.srcId.startsWith('site-event-') &&
+        ['confirmed','preparing','ready'].includes(row.kind))
+    : [];
+  if(snap.data.source_system === 'dfl_site'){
+    const kind=commercialState(snap.data.site_order_status);
+    const at=iso(snap.data.site_order_status_updated_at);
+    const sourceId=txt(snap.data.site_order_last_event_id);
+    if((kind==='preparing'||kind==='ready') && at && sourceId && sourceId.length<=180 &&
+      !siteEvidence.some(row=>row.srcId===`site-event-${sourceId}`))
+      siteEvidence.push({kind,at,source:'dfl_site',srcId:`site-event-${sourceId}`,actor:null});
+  }
+  const observed = siteEvidence.map(row=>{
+    const fingerprint=hexSha256(`${c.tenant}|${key}|${row.kind}|${row.srcId}|${row.at}`);
+    const id=`trv1_${fingerprint.slice(0,48)}`;
+    return {id,event_id:id,kind:row.kind,at:row.at,source:'dfl_site' as const,
+      actor_uid:null,revision:Date.parse(row.at),causation_id:null} as TrackingEvent;
+  });
+  const events=sortUniqueEvents([...ledger,...observed]);
   const serverTimestamps = [snap.data.completed_at, snap.data.site_order_last_event_at, snap.route?.started_at,
     snap.route?.updated_at, snap.data.order_updated_at, snap.data.created_at, snap.data.createdAt]
     .map(iso).filter((date): date is string => Boolean(date));

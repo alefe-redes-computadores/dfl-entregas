@@ -67,6 +67,8 @@ function ControlPanel(){
   // Secret is kept only in transient React memory until the owner copies it.
   // NEVER persist in local/session storage, logs, history or render its value.
   const [issuedLink,setIssuedLink]=useState<{url:string;grantId:string;deliveryId:string;expiresAt:string}|null>(null);
+  const [autoTrackingStatus,setAutoTrackingStatus]=useState('');
+  const [autoTrackingBusy,setAutoTrackingBusy]=useState(false);
   const [lastGrant,setLastGrant]=useState<{grantId:string;deliveryId:string}|null>(null);
   useEffect(()=>{
     const onHidden=()=>{if(document.visibilityState!=='visible')setIssuedLink(null);};
@@ -144,7 +146,29 @@ function ControlPanel(){
   },[allowed,api]);
   useEffect(()=>{if(initialId&&allowed&&selectedId===initialId)void inspect(initialId);},[initialId,allowed,inspect,selectedId]);
   const choose=(id:string)=>{setSelectedId(id);setListOpen(false);setInspection(null);setCertificate(null);setFailure('');
-    setIssuedLink(null);setLastGrant(null);setPendingAction(null);void inspect(id);};
+    setIssuedLink(null);setLastGrant(null);setPendingAction(null);setAutoTrackingStatus('');void inspect(id);};
+  // R70 owner-only, read-only diagnostic. It never sends or regenerates a link.
+  const inspectAutoTracking=async(id:string)=>{
+    const active=auth.currentUser;
+    if(!allowed||!active||!isSuperadminUid(active.uid))return;
+    setAutoTrackingBusy(true);setAutoTrackingStatus('');
+    try{
+      const token=await active.getIdToken();
+      const response=await fetch(`${baseUrl()}/api/integration/manual-tracking?deliveryId=${encodeURIComponent(id)}`,{
+        headers:{authorization:`Bearer ${token}`},cache:'no-store',credentials:'omit'});
+      const info=await response.json() as {ok?:boolean;status?:string};
+      if(!response.ok||info.ok!==true)throw Error('Consulta indisponível.');
+      const messages:Record<string,string>={
+        not_attempted:'Sem tentativa automática registrada para este pedido.',
+        reserved:'Emissão reservada; sem confirmação do WhatsApp.',
+        issued_pending_provider:'Link emitido; aguardando confirmação do provedor.',
+        provider_accepted:'WhatsApp aceitou a mensagem. Recebimento pelo cliente ainda não confirmado.',
+        review_required:'Envio incerto ou bloqueado. Não reenvie automaticamente.',
+      };
+      setAutoTrackingStatus(messages[String(info.status||'')]||'Estado não confirmado. Verifique no servidor.');
+    }catch{setAutoTrackingStatus('Não foi possível consultar o envio automático.');}
+    finally{setAutoTrackingBusy(false);}
+  };
   const certify=async()=>{
     if(!allowed||!selectedId||!inspection||certifying)return;
     const certificateRequest=++lastCertificateRequest.current;
@@ -301,6 +325,12 @@ function ControlPanel(){
     {selected&&<section aria-label="Pedido selecionado" className="flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-zinc-900/55 p-3">
       <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[.13em] text-emerald-400">Pedido selecionado</p><p className="mt-1 truncate text-sm font-black text-zinc-100">{deliveryOrigin(selected)==='site'?siteOrderDisplayReference(selected):deliveryOrigin(selected)==='ifood'?'Pedido iFood':deliveryOrigin(selected)==='food99'?'Pedido 99Food':'Pedido da Loja'} · {shortTechnicalReference(selected.id)}</p><div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-zinc-400"><span className="truncate">{selected.customer_name||'Cliente'}</span><span className={`rounded-md border px-1.5 py-0.5 font-bold ${filterVisual[deliveryOrigin(selected)]}`}>{deliveryOrigin(selected)==='site'?'Site':deliveryOrigin(selected)==='ifood'?'iFood':deliveryOrigin(selected)==='food99'?'99Food':'Loja'}</span><span>{selected.completed?'Finalizado':selected.route_id?'Em rota':'Aguardando'}</span><span>{maskedMessagePhone(selected.phone)}</span></div></div>
       <button type="button" disabled={loading} onClick={()=>void inspect(selectedId)} className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 text-[11px] font-bold text-emerald-200 disabled:opacity-50"><RefreshCw size={14} className={loading?'animate-spin':''}/> Conferir</button>
+    </section>}
+    {selected&&deliveryOrigin(selected)==='manual'&&<section aria-label="Link automático da Loja" className="space-y-2 rounded-2xl border border-emerald-500/20 bg-zinc-900/40 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-black text-emerald-200">Link automático da Loja</p>
+        <button type="button" disabled={autoTrackingBusy} onClick={()=>void inspectAutoTracking(selected.id)} className="min-h-10 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 text-[11px] font-bold text-emerald-200 disabled:opacity-40">{autoTrackingBusy?'Conferindo...':'Conferir envio'}</button></div>
+      {autoTrackingStatus&&<p role="status" className="text-[11px] text-zinc-300">{autoTrackingStatus}</p>}
+      <p className="text-[10px] leading-relaxed text-zinc-500">Para compartilhar outro acesso, confira o link anterior e use a emissão privada acima. Em caso de envio incerto, não repita automaticamente.</p>
     </section>}
     {loading&&<div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 text-xs text-zinc-400"><RefreshCw size={15} className="animate-spin text-emerald-400"/> Conferindo dados confirmados no servidor...</div>}
     {failure&&<div ref={errorAreaRef} role="alert" className="rounded-2xl border border-red-500/40 bg-red-500/[.07] p-4 text-xs text-red-200 ring-1 ring-red-500/15"><div className="flex items-center gap-2 font-bold"><AlertTriangle size={17}/> Não foi possível conferir</div><p className="mt-2 leading-relaxed">{failure}</p><p className="mt-2 text-zinc-400">As operações do aplicativo continuam disponíveis.</p></div>}

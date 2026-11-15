@@ -121,6 +121,8 @@ function statusFromSnapshot(s: ConfirmedSnapshot, events: TrackingEvent[]): Trac
   const pickup = d.fulfillment_mode === 'pickup';
   const started = !pickup && Boolean(iso(s.route?.started_at) || iso(s.route?.departure_time));
   if (started && text(d.route_id) && text(d.route_id) === text(s.route?.id)) return 'out_for_delivery';
+  // Route staging must not conceal a verified kitchen state.
+  if (commercial === 'preparing' || commercial === 'ready') return commercial;
   if (!pickup && text(d.route_id) && s.route) return 'assigned';
   // R299 P9: R21 acceptedAt is distinct from starting preparation. A signed
   // commercial acceptance in the audit ledger supersedes only an old 'received'
