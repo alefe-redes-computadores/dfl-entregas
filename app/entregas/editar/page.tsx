@@ -10,6 +10,7 @@ import {
   Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, UsersRound
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
+import { DeliveryFormPremiumGuide } from '@/components/deliveries/DeliveryFormPremiumGuide';
 import { firstRequiredDeliveryIssue, focusDeliveryIssue, type DeliveryFormIssue, type DeliveryFormField } from '@/lib/operation/delivery-form-feedback';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
@@ -795,6 +796,7 @@ const [routeId, setRouteId] = useState('');
           </p>
         </div>
       </header>
+      <DeliveryFormPremiumGuide mode="edit" origin={origin} fulfillmentMode={fulfillmentMode} notifyWhatsapp={notifyWhatsapp} />
 
       {/* MODALIDADE OPERACIONAL */}
       <section className="rounded-[26px] border border-zinc-800 bg-zinc-900/45 p-4">

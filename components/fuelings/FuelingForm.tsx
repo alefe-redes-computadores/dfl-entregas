@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Calculator, Fuel, Gauge, MapPin, Save, UserRound, Bike } from 'lucide-react';
+import { PremiumDateTimeField } from '@/components/ui/PremiumTemporalFields';
 import type { Fueling, FuelType, Motoboy } from '@/types';
 import { FUEL_LABELS } from '@/lib/fueling-analytics';
 
@@ -138,16 +139,7 @@ export function FuelingForm({
         </div>
       </section>
 
-      <label className="text-xs font-bold text-zinc-400">
-        Data e hora
-        <input
-          type="datetime-local"
-          value={occurredAt}
-          onChange={(event) => setOccurredAt(event.target.value)}
-          className={field}
-          required
-        />
-      </label>
+      <PremiumDateTimeField label="Data e hora do abastecimento" value={occurredAt} onChange={setOccurredAt} required />
 
       <div>
         <p className="mb-2 text-xs font-bold text-zinc-400">Combustível</p>

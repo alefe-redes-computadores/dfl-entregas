@@ -6,6 +6,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { futureRoutePlan } from '@/lib/operation/future-route-planning';
 import { siteOrderDisplayReference } from '@/lib/operation/site-order-presentation';
 import { toast } from '@/lib/operational-toast';
+import { PremiumChoicePicker } from '@/components/ui/PremiumChoicePicker';
 
 /**
  * R299 P10A — Reservas operacionais para pedidos do Site já aprovados.
@@ -76,12 +77,9 @@ export function SiteFutureRoutePlanner({ now }: { now: number }) {
             {plan.issue && <p role="alert" className="rounded-lg bg-amber-500/10 px-2 py-2 text-[10px] font-bold text-amber-200">{plan.issue}. Revise antes de criar uma nova reserva.</p>}
             {!plan.candidates.length && <p className="text-[10px] text-zinc-400">Sem rota aberta e ainda não iniciada para essa data. Crie ou confira a rota antes de planejar.</p>}
             {plan.candidates.length > 0 && !plan.issue && <div className="flex flex-col gap-2 sm:flex-row">
-              <label className="min-w-0 flex-1 text-[10px] font-semibold text-zinc-400">Rota de planejamento
-                <select aria-label={`Selecionar rota futura de ${delivery.customer_name || 'pedido'}`} value={chosen} disabled={locked} onChange={event => setSelected(old => ({ ...old, [delivery.id]: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-2 text-[11px] text-zinc-100">
-                  <option value="">Escolha uma rota</option>
-                  {plan.candidates.map(route => <option value={route.id} key={route.id}>{route.name} · {route.motoboy_name || 'Sem responsável'}</option>)}
-                </select>
-              </label>
+              <div className="min-w-0 flex-1 text-[10px] font-semibold text-zinc-400"><p className="mb-1.5">Rota de planejamento</p>
+                <PremiumChoicePicker label={`Rota futura de ${delivery.customer_name || 'pedido'}`} value={chosen} disabled={locked} onChange={value => setSelected(old => ({...old,[delivery.id]:value}))} options={[{value:'',label:'Escolha uma rota'},...plan.candidates.map(route=>({value:route.id,label:`${route.name} · ${route.motoboy_name || 'Sem responsável'}`}))]} />
+              </div>
               <button type="button" disabled={locked || !chosen || chosen === current} onClick={() => void apply(delivery.id, chosen)} className="min-h-11 self-end rounded-xl border border-sky-500/35 bg-sky-500/15 px-3 text-[11px] font-black text-sky-100 disabled:opacity-35"><RouteIcon size={13} className="mr-1 inline"/>{busy === delivery.id ? 'Salvando...' : 'Reservar'}</button>
             </div>}
             {current && <button type="button" disabled={locked} onClick={() => void apply(delivery.id, null)} className="flex min-h-10 w-full items-center justify-center gap-1 rounded-lg border border-zinc-700/70 text-[10px] font-bold text-zinc-300 disabled:opacity-40"><X size={13}/> Cancelar reserva sem alterar pedido</button>}

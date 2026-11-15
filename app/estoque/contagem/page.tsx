@@ -5,6 +5,7 @@ import { Check, ChevronDown, ClipboardCheck, Save, Search, SkipForward, X } from
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { TeamMemberPicker } from '@/components/team/TeamMemberPicker';
+import { PremiumChoicePicker } from '@/components/ui/PremiumChoicePicker';
 import { useAppStore } from '@/store/useAppStore';
 import { stockProductCategory, stockCategoryOrder } from '@/lib/stock-categories';
 import { formatStockQuantity, normalizeStockQuantityInput } from '@/lib/stock-quantity';
@@ -114,8 +115,8 @@ export default function CountPage() {
     <div className="mb-3"><p className="mb-2 text-xs font-bold text-zinc-400">Responsável <span className="font-normal text-zinc-600">(opcional)</span></p><TeamMemberPicker value={member?.id} onChange={setMember}/></div>
     <div className="relative mb-2"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} inputMode="search" enterKeyHint="next" placeholder="Buscar por produto ou categoria" className="h-12 w-full rounded-2xl border border-zinc-800 bg-zinc-900 pl-12 pr-4 text-zinc-100 outline-none focus:border-sky-500"/></div>
     <div className="mb-2 grid grid-cols-2 gap-2">
-      <label className="relative"><span className="sr-only">Categoria da contagem</span><select value={category} onChange={e=>setCategory(e.target.value)} className="h-12 w-full appearance-none rounded-xl border border-zinc-800 bg-zinc-900 px-3 pr-8 text-xs font-bold text-zinc-200"><option value="todas">Todas categorias</option>{categories.map(c=><option key={c} value={c}>{c}</option>)}</select><ChevronDown className="pointer-events-none absolute right-2 top-4 text-zinc-500" size={14}/></label>
-      <label className="relative"><span className="sr-only">Filtro da contagem</span><select value={quickFilter} onChange={e=>setQuickFilter(e.target.value as QuickStockFilter)} className="h-12 w-full appearance-none rounded-xl border border-zinc-800 bg-zinc-900 px-3 pr-8 text-xs font-bold text-zinc-200"><option value="todos">Todos os saldos</option><option value="zerados">Zerados</option><option value="minimo">No mínimo</option><option value="alto">Estoque alto</option><option value="compra_hoje">Em compras de hoje</option></select><ChevronDown className="pointer-events-none absolute right-2 top-4 text-zinc-500" size={14}/></label>
+      <div className="min-w-0"><PremiumChoicePicker label="Categoria da contagem" value={category} onChange={setCategory} options={[{value:'todas',label:'Todas categorias'},...categories.map(c=>({value:c,label:c}))]} /></div>
+      <div className="min-w-0"><PremiumChoicePicker label="Filtro de saldo" value={quickFilter} onChange={value=>setQuickFilter(value as QuickStockFilter)} options={[{value:'todos',label:'Todos os saldos'},{value:'zerados',label:'Zerados'},{value:'minimo',label:'No mínimo'},{value:'alto',label:'Estoque alto'},{value:'compra_hoje',label:'Em compras de hoje'}]} /></div>
     </div>
     <div className="mb-3 flex items-center justify-between gap-2"><span role="status" className="text-[10px] text-zinc-500">{filtered.length} produto(s) no filtro</span><button type="button" aria-pressed={onlyPending} onClick={()=>setOnlyPending(p=>!p)} className={`min-h-10 rounded-xl border px-3 text-[10px] font-black ${onlyPending?'border-sky-500/40 bg-sky-500/10 text-sky-300':'border-zinc-800 text-zinc-400'}`}>{onlyPending?'Só não conferidos':'Mostrar não conferidos'}</button></div>
     <div className="space-y-3">{groups.map(group=><section key={group.category} aria-label={`Contagem: ${group.category}`} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/35">

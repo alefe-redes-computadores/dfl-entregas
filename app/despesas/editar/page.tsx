@@ -19,6 +19,7 @@ import { toast } from '@/lib/operational-toast';
 import { useAppStore } from '@/store/useAppStore';
 import type { OperationalExpenseType } from '@/types';
 import { PremiumChoicePicker } from '@/components/ui/PremiumChoicePicker';
+import { PremiumDateTimeField } from '@/components/ui/PremiumTemporalFields';
 
 const OPTIONS: Array<{
   value: OperationalExpenseType;
@@ -121,6 +122,7 @@ function Content() {
       return;
     }
 
+    if (!occurredAt || !Number.isFinite(Date.parse(occurredAt))) { toast.error('Informe data e horário válidos.'); return; }
     const selectedMotoboy = motoboys.find((item) => item.id === motoboyId);
 
     setSaving(true);
@@ -200,7 +202,7 @@ function Content() {
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Valor">
             <input
               value={amount}
@@ -212,14 +214,7 @@ function Content() {
             />
           </Field>
 
-          <Field label="Quando">
-            <input
-              type="datetime-local"
-              value={occurredAt}
-              onChange={(event) => setOccurredAt(event.target.value)}
-              className="dfl-search px-2.5 text-[11px]"
-            />
-          </Field>
+          <div className="min-w-0"><PremiumDateTimeField label="Quando" value={occurredAt} onChange={setOccurredAt} required /></div>
         </div>
 
         {(type === 'motoboy' || type === 'frete') && (

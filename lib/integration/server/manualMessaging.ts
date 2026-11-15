@@ -3,6 +3,8 @@ import { createHmac } from 'node:crypto';
 import { adminDb } from './admin';
 import { normalizeManualMessagePhone, planManualMessage, type ManualDeliveryRecord, type ManualMessageReason, type ManualRouteRecord } from '../manualMessagingPolicy';
 import { manualPickupItems } from '../manualPickupPolicy';
+import { manualFirstStopContext, type FirstStopContext } from '../manualFirstStopPolicy';
+import type { Delivery, Route } from '@/types';
 
 export type ManualMessageResult = { status: 'off'|'skipped'|'queued'|'duplicate'|'failed'; reason?: string };
 const off = (): ManualMessageResult => ({status:'off',reason:'manual_messages_disabled'});
@@ -75,7 +77,7 @@ const siteEndpoint = () => {
   return { url: `${url.origin}/api/integration/manual-messaging`, secret };
 };
 
-async function forward(delivery: ManualDeliveryRecord, reason: ManualMessageReason, route?: ManualRouteRecord|null): Promise<ManualMessageResult> {
+async function forward(delivery: ManualDeliveryRecord, reason: ManualMessageReason, route?: ManualRouteRecord|null, firstStop?: FirstStopContext): Promise<ManualMessageResult> {
   if (!enabled()) return off();
   if (!createdAfterActivation(delivery)) return {status:'skipped',reason:'predates_rollout'};
   const plan = plannedManualMessage(delivery,reason,route);
@@ -94,7 +96,7 @@ async function forward(delivery: ManualDeliveryRecord, reason: ManualMessageReas
     event_id: `manual-msg-v1__${plan.eventType}__${delivery.id}`,
     source: 'manual', event_type:plan.eventType, order_id:plan.orderId,
     customer_phone:plan.phone,customer_name:plan.customerName,
-    payload:{...plan.payload,...(items.length?{items}:{}),manual_messaging_opt_in_v1:true},
+    payload:{...plan.payload,...(items.length?{items}:{}),...(firstStop||{}),manual_messaging_opt_in_v1:true},
   };
   // Site reverse-inbound contract (including this manual endpoint): epoch milliseconds
   // and bare 64-character hex HMAC. The Site -> Entregas relay uses a distinct
@@ -143,8 +145,11 @@ export async function notifyManualRoute(input:{routeId:string;reason:string}):Pr
       return plan.eligible && r8Authorized(plan.phone);
     })());
   eligible=candidates.length;
+  const firstStopByDelivery = reason === 'route_started'
+    ? manualFirstStopContext({...routeDoc.data(),id:input.routeId} as Route, snapshot.docs.map(doc=>({...doc.data(),id:doc.id} as Delivery)))
+    : new Map<string,FirstStopContext>();
   for(let offset=0;offset<candidates.length;offset+=6){
-    const outcomes=await Promise.all(candidates.slice(offset,offset+6).map(d=>forward(d,reason,route)));
+    const outcomes=await Promise.all(candidates.slice(offset,offset+6).map(d=>forward(d,reason,route,firstStopByDelivery.get(d.id))));
     for(const outcome of outcomes){
       if(outcome.status==='queued') queued+=1;
       if(outcome.status==='duplicate') duplicates+=1;

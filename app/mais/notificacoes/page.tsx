@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from '@/lib/operational-toast';
+import { PremiumTimeField } from '@/components/ui/PremiumTemporalFields';
 import { Capacitor } from '@capacitor/core';
 import {
   DEFAULT_NOTIFICATION_DELIVERY_POLICY,
@@ -108,13 +109,7 @@ function TimeRow({
         <span className="block text-sm font-bold text-zinc-200">{title}</span>
         <span className="mt-0.5 block text-[10px] leading-relaxed text-zinc-500">{description}</span>
       </span>
-      <input
-        type="time"
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm font-black text-zinc-100 outline-none focus:border-emerald-500 disabled:opacity-40"
-      />
+      <PremiumTimeField label={title} value={value} disabled={disabled} onChange={onChange} />
     </label>
   );
 }
@@ -452,7 +447,7 @@ export default function NotificationSettingsPage() {
           <div><p className="mb-2 text-xs font-black text-zinc-200">Nível de prioridade</p><div role="group" aria-label="Nível de prioridade" className="grid grid-cols-2 gap-2"><button type="button" aria-pressed={deliveryPolicy.priority==='all'} disabled={saving} onClick={()=>savePolicy({priority:'all'})} className={`min-h-12 rounded-xl border px-3 text-xs font-bold disabled:opacity-50 ${deliveryPolicy.priority==='all'?'border-sky-400/40 bg-sky-500/10 text-sky-200':'border-zinc-700 text-zinc-400'}`}>Todos os ativos</button><button type="button" aria-pressed={deliveryPolicy.priority==='important'} disabled={saving} onClick={()=>savePolicy({priority:'important'})} className={`min-h-12 rounded-xl border px-3 text-xs font-bold disabled:opacity-50 ${deliveryPolicy.priority==='important'?'border-amber-400/40 bg-amber-500/10 text-amber-200':'border-zinc-700 text-zinc-400'}`}><Zap size={14} className="mr-1 inline"/>Só essenciais</button></div><p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Essenciais: pedido Site, confirmação iFood pendente, estoque zerado, falha de sincronização e rota aberta. Categorias não essenciais ficam silenciadas, mesmo ligadas individualmente.</p></div>
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40">
             <ToggleRow title="Horário de silêncio" description="Desliga avisos locais durante a faixa escolhida, respeitando as exceções abaixo." checked={deliveryPolicy.quietEnabled} onChange={()=>savePolicy({quietEnabled:!deliveryPolicy.quietEnabled})} disabled={saving}/>
-            {deliveryPolicy.quietEnabled && <div className="grid grid-cols-2 gap-2 px-3 pb-2"><label className="text-[10px] font-bold text-zinc-400">De <input type="time" value={deliveryPolicy.quietFrom} disabled={saving} onChange={(event)=>savePolicy({quietFrom:event.target.value})} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100"/></label><label className="text-[10px] font-bold text-zinc-400">Até <input type="time" value={deliveryPolicy.quietUntil} disabled={saving} onChange={(event)=>savePolicy({quietUntil:event.target.value})} className="mt-1 h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100"/></label></div>}
+            {deliveryPolicy.quietEnabled && <div className="grid grid-cols-2 gap-2 px-3 pb-2"><label className="text-[10px] font-bold text-zinc-400">De <PremiumTimeField label="Início do silêncio" value={deliveryPolicy.quietFrom} disabled={saving} onChange={value=>savePolicy({quietFrom:value})} /></label><label className="text-[10px] font-bold text-zinc-400">Até <PremiumTimeField label="Fim do silêncio" value={deliveryPolicy.quietUntil} disabled={saving} onChange={value=>savePolicy({quietUntil:value})} /></label></div>}
             {deliveryPolicy.quietEnabled && <ToggleRow title="Permitir essenciais durante o silêncio" description="Mantém pedidos do Site e alertas críticos. Desative para silêncio total." checked={deliveryPolicy.criticalDuringQuiet} onChange={()=>savePolicy({criticalDuringQuiet:!deliveryPolicy.criticalDuringQuiet})} disabled={saving}/>}
           </div>
           <p className="flex items-start gap-2 text-[10px] leading-relaxed text-zinc-500"><Moon size={15} className="mt-0.5 shrink-0 text-emerald-400"/> Avisos silenciados não ficam numa fila de envio tardio. Lembretes locais agendados são recalculados ao salvar. A operação e os registros continuam normalmente.</p>

@@ -7,6 +7,7 @@ import { auth } from '@/lib/firebase';
 import { useAppStore } from '@/store/useAppStore';
 import { isSuperadminUid } from '@/lib/access/roles';
 import { MessagingOrderPicker } from '@/components/messaging/MessagingOrderPicker';
+import { MessagingJourneyPanel } from '@/components/messaging/MessagingJourneyPanel';
 
 type Reason = 'delivery_not_found' | string;
 type Diagnostics = {
@@ -97,6 +98,7 @@ export default function MensageriaDiagnosticPage() {
         <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3.5"><ShieldCheck size={16} className="mb-2 text-sky-300"/><strong className="block text-sm font-black">{data?(data.gates.manualEnabled?'Habilitado':'OFF'):'—'}</strong><p className="mt-1 text-[10px] text-zinc-400">Avisos manuais</p></div>
       </section>
 
+      <MessagingJourneyPanel loaded={Boolean(data)} bridgeReady={reverseReady} manualReady={Boolean(data?.gates.manualEnabled)} pending={pending} failures={failures} onTracking={() => router.push('/mais/acompanhamento')} onReturns={() => router.push('/entregas/retornos')} />
       <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/50 p-4">
         <div className="flex items-center justify-between gap-3"><div><h2 className="font-heading text-sm font-black">Saúde da operação</h2><p className="mt-1 text-[11px] text-zinc-500">Visão compacta da fila logística</p></div><span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${data&&reverseReady?'border-emerald-500/25 bg-emerald-500/10 text-emerald-300':'border-amber-400/25 bg-amber-400/10 text-amber-200'}`}>{data&&reverseReady?'Ponte configurada':'Conferir'}</span></div>
         <div className="mt-3 rounded-xl bg-zinc-950/70 p-3 text-[11px] leading-relaxed text-zinc-400">

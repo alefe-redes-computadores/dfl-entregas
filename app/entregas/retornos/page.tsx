@@ -8,6 +8,7 @@ import { isSyntheticOperationalRoute } from '@/lib/operational-time';
 import { isSuperadminUid } from '@/lib/access/roles';
 import { isAwaitingRedelivery } from '@/lib/operation/return-to-store';
 import { deliveryAttemptLabel } from '@/lib/delivery-attempts';
+import { PremiumChoicePicker } from '@/components/ui/PremiumChoicePicker';
 
 /** Owner-controlled retry queue. Moving a delivery never completes it or charges the customer. */
 export default function DeliveryReturnsPage(){
@@ -44,7 +45,10 @@ export default function DeliveryReturnsPage(){
     <section aria-live="polite" className="flex items-center gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4"><AlertTriangle className="text-amber-300" size={24}/><div><b className="text-xl tabular-nums">{pending.length}</b><p className="text-xs text-zinc-400">pendência{pending.length===1?'':'s'} para replanejar; permanecem visíveis após o expediente</p></div></section>
     {pending.map(item=>{const returned=item.return_to_store!;const customer=customers.find(c=>c.id===item.customer_id);const lastRoute=routes.find(r=>r.id===returned.route_id);return <article key={item.id} className="space-y-3 rounded-[22px] border border-zinc-800 bg-zinc-900/50 p-4">
       <div className="flex items-start gap-3"><RotateCcw size={20} className="mt-1 shrink-0 text-amber-300"/><div className="min-w-0"><h2 className="font-black text-zinc-100">{item.customer_name||customer?.name||'Cliente'}</h2><p className="text-xs text-zinc-400">{item.address_string||customer?.address||'Endereço não informado'}</p><p className="mt-1 text-xs text-amber-200">{deliveryAttemptLabel(returned.reason)} · {lastRoute?.name||'Rota de origem'}</p><p className="mt-1 flex items-center gap-1 text-[10px] text-zinc-500"><CalendarClock size={12}/>{new Date(returned.at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})}</p></div></div>
-      <label className="block text-xs font-semibold text-zinc-300">Nova rota para tentativa real<select aria-label="Nova rota para reentrega" value={chosen[item.id]||''} onChange={e=>setChosen(old=>({...old,[item.id]:e.target.value}))} className="mt-2 h-12 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"><option value="">Selecione uma rota aberta</option>{openRoutes.filter(r=>r.id!==item.route_id).map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-zinc-300">Nova rota para tentativa real</p>
+        <PremiumChoicePicker label="Nova rota para reentrega" value={chosen[item.id]||''} disabled={busy!==null} onChange={value=>setChosen(old=>({...old,[item.id]:value}))} options={[{value:'',label:'Selecione uma rota aberta'},...openRoutes.filter(r=>r.id!==item.route_id).map(r=>({value:r.id,label:r.name}))]} />
+      </div>
       <button type="button" disabled={Boolean(busy)||!chosen[item.id]} onClick={()=>void onReinsert(item.id)} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 text-xs font-black text-zinc-950 disabled:opacity-40"><Truck size={17}/>{busy===item.id?'Reinserindo…':'Reinserir na rota selecionada'}</button>
     </article>})}
     {!pending.length&&<div className="flex flex-col items-center gap-2 rounded-2xl border border-zinc-800 p-8 text-center"><CheckCircle2 className="text-emerald-300" size={25}/><p className="font-bold">Nenhum retorno pendente</p><p className="text-xs text-zinc-500">As tentativas antigas permanecem no histórico dos pedidos.</p></div>}

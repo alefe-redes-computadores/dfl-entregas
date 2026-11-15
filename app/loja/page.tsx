@@ -17,6 +17,7 @@ import { useStoreDashboard } from '@/hooks/useStoreDashboard';
 import { PerformanceModals } from '@/components/store/PerformanceModals';
 import { OperationalCalendar } from '@/components/store/OperationalCalendar';
 import { StoreTimePicker } from '@/components/store/StoreTimePicker';
+import { PremiumDateField } from '@/components/ui/PremiumTemporalFields';
 import { useDeliveryIntelligence } from '@/hooks/useDeliveryIntelligence';
 import { isWithinSchedule, validateSchedule } from '@/lib/operational-time';
 import type { DaySchedule, StorePause, Shift, HolidayOverride } from '@/types';
@@ -953,11 +954,11 @@ export default function LojaPage() {
              <div className="flex flex-col gap-4">
                 <input type="text" placeholder="Motivo (Ex: Férias, Reforma...)" onChange={e => setTempPause({...tempPause, reason: e.target.value})} className="h-14 bg-zinc-950 border border-zinc-800 rounded-xl px-4 text-sm text-zinc-200 outline-none focus:border-amber-500 transition-colors" />
                 <div className="flex gap-3">
-                  <div className="flex flex-col gap-1.5 flex-1"><span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider px-1">Início</span><input type="date" onChange={e => setTempPause({...tempPause, start_date: e.target.value})} className="h-14 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-sm text-zinc-200 focus:border-amber-500 outline-none transition-colors" /></div>
-                  <div className="flex flex-col gap-1.5 flex-1"><span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider px-1">Fim</span><input type="date" onChange={e => setTempPause({...tempPause, end_date: e.target.value})} className="h-14 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-sm text-zinc-200 focus:border-amber-500 outline-none transition-colors" /></div>
+                  <div className="flex flex-col gap-1.5 flex-1"><span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider px-1">Início</span><PremiumDateField label="Data inicial" value={tempPause.start_date} onChange={value => setTempPause(current => ({...current,start_date:value}))} required /></div>
+                  <div className="flex flex-col gap-1.5 flex-1"><span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider px-1">Fim</span><PremiumDateField label="Data final" value={tempPause.end_date} onChange={value => setTempPause(current => ({...current,end_date:value}))} required /></div>
                 </div>
              </div>
-             <button onClick={() => { if(Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Medium); setPauses(prev => [...prev, { ...tempPause, id: Date.now().toString() }]); setIsPauseModalOpen(false); }} className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black rounded-xl mt-2 active:scale-95 transition-all text-lg shadow-lg shadow-amber-500/20">Salvar Pausa</button>
+             <button type="button" disabled={!(tempPause.reason ?? "").trim() || !tempPause.start_date || !tempPause.end_date || tempPause.end_date < tempPause.start_date} onClick={() => { if(Capacitor.isNativePlatform()) touchFeedback(ImpactStyle.Medium); setPauses(prev => [...prev, { ...tempPause, id: Date.now().toString() }]); setIsPauseModalOpen(false); }} className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black rounded-xl mt-2 active:scale-95 transition-all text-lg shadow-lg shadow-amber-500/20">Salvar Pausa</button>
            </div>
         </div>
       )}

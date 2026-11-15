@@ -10,6 +10,7 @@ import {
   Info, Sparkles, ClipboardPaste, Bike, ShoppingBag, Plus, Trash2, UsersRound, TicketPercent,
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
+import { DeliveryFormPremiumGuide } from '@/components/deliveries/DeliveryFormPremiumGuide';
 import { firstRequiredDeliveryIssue, focusDeliveryIssue, type DeliveryFormIssue, type DeliveryFormField } from '@/lib/operation/delivery-form-feedback';
 import { dateKey, routeDate, routeStartedAt } from '@/lib/operational-time';
 import { paymentStateForInput } from '@/lib/delivery-finance';
@@ -779,6 +780,7 @@ const [routeId, setRouteId] = useState('');
           </p>
         </div>
       </header>
+      <DeliveryFormPremiumGuide mode="new" origin={origin} fulfillmentMode={fulfillmentMode} notifyWhatsapp={notifyWhatsapp} />
 
       {sameStopSource && (
         <section aria-label="Segundo pedido na mesma parada" className="rounded-[24px] border border-violet-500/35 bg-violet-500/[.07] p-4 shadow-sm">
