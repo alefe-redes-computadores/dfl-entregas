@@ -15,7 +15,6 @@ import {
   PackageOpen,
   ReceiptText,
   Route as RouteIcon,
-  UserRound,
 } from 'lucide-react';
 
 import { useAppStore } from '@/store/useAppStore';
@@ -156,7 +155,7 @@ function Content() {
                 : 'bg-zinc-800 text-zinc-600'
             }`}
           >
-            <UserRound size={23} />
+            <Bike size={23} />
           </span>
 
           <div className="min-w-0 flex-1">

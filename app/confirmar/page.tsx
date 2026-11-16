@@ -43,6 +43,7 @@ function ConfirmarContent() {
   );
   const returnTo = safeInternalReturnTo(searchParams.get('returnTo'));
   const pendingId = searchParams.get('pendingId') || '';
+  const deliveryId = searchParams.get('deliveryId') || '';
 
   const updatePendingConfirmation = useAppStore(
     (state) => state.updateIfoodPendingConfirmation,
@@ -136,6 +137,17 @@ function ConfirmarContent() {
       .sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   };
 
+  const completeLinkedIfoodDelivery = async (id?:string) => {
+    if (!id) return;
+    const current=useAppStore.getState().deliveries.find(item=>item.id===id);
+    if (!current || (current.origin && current.origin!=='ifood')) throw new Error('Pedido iFood vinculado não encontrado.');
+    if (current.completed) return; // idempotente; não baixa duas vezes
+    if (current.fulfillment_mode==='pickup' && !current.pickup_ready_at)
+      throw new Error('Marque a retirada como pronta antes de concluir.');
+    // O store verifica rota real/iniciada, status e estado remoto transacional.
+    await updateDelivery(id,{completed:true});
+  };
+
   const goNextOrLeave = (resolvedId: string, message: string) => {
     const next = readyPending(resolvedId)[0];
     if (!next) {
@@ -158,13 +170,19 @@ function ConfirmarContent() {
   };
 
   const confirmExternalAndLeave = async () => {
-    if (!pendingId) {
+    if (!pendingId && !deliveryId) {
       await leaveConfirmation();
       return;
     }
     if (!beginSubmit()) return;
     try {
       await vibrate(ImpactStyle.Medium);
+      if (!pendingId) {
+        await completeLinkedIfoodDelivery(deliveryId);
+        toast.success('Confirmado no portal e baixa registrada no DFL.');
+        router.replace(returnTo);
+        return;
+      }
       const currentPending = pendingConfirmations.find((item) => item.id === pendingId);
       if (!currentPending || (currentPending.status || 'pending') !== 'pending') {
         toast.error('Pendência já resolvida ou indisponível.');
@@ -177,6 +195,7 @@ function ConfirmarContent() {
         ? customers.find((item) => item.id === delivery.customer_id)
         : undefined;
       const validCode = orderConfirmationCode(currentPending?.confirmation_code || code);
+      await completeLinkedIfoodDelivery(currentPending.delivery_id);
 
       if (customer && validCode.length === 4) {
         const cleanObservation = (customer.observation || '')
@@ -341,7 +360,7 @@ function ConfirmarContent() {
       </div>
 
       <div className="relative flex-1 bg-white">
-        {pendingId && (
+        {(pendingId || deliveryId) && (
         <div className="border-b border-zinc-800 bg-zinc-950 px-4 py-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-[9px] font-black uppercase tracking-[.14em] text-zinc-500">Resultado no portal</p>
@@ -377,6 +396,7 @@ function ConfirmarContent() {
       )}
 
       <iframe
+          key={`${pendingId || deliveryId || 'portal'}-${orderId}-${code}`}
           src={IFOOD_CONFIRMATION_URL}
           className="absolute inset-0 h-full w-full border-none"
           title="Confirmação iFood"

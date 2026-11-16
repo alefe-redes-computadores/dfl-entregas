@@ -349,6 +349,9 @@ export interface Delivery {
   logistics_provider?: LogisticsProvider;
   /** Prontidão real da retirada; não equivale à conclusão. */
   pickup_ready_at?: string | null;
+  /** Etapas de cozinha confirmadas manualmente, nunca deduzidas pela saída da rota. */
+  preparation_started_at?: string | null;
+  preparation_ready_at?: string | null;
   stop_group_id?: string;
   customer_charge?: number;
   ifood_subsidy?: number;

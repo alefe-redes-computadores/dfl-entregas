@@ -99,10 +99,12 @@ function DeliveryDetailsContent() {
   );
   const [isCompleting, setIsCompleting] = useState(false);
   const [isMarkingReady, setIsMarkingReady] = useState(false);
+  const [isMarkingKitchen, setIsMarkingKitchen] = useState(false);
   const [confirmCardPaymentOpen, setConfirmCardPaymentOpen] = useState(false);
   const [confirmCardPaymentBusy, setConfirmCardPaymentBusy] = useState(false);
   const cardPaymentLock = useRef(false);
   const readyLock = useRef(false);
+  const kitchenLock = useRef(false);
   const completionLock = useRef(false);
   const [openingAdmin, setOpeningAdmin] = useState(false);
   const [isIfoodModalOpen, setIsIfoodModalOpen] = useState(false);
@@ -181,7 +183,10 @@ function DeliveryDetailsContent() {
     logistics && (!route || (route.status === 'aberta' && !operationalStartedAt));
   // R303: um CTA contextual, preservando as duas autoridades de prontidão.
   const sitePickup = delivery.source_system === 'dfl_site' && mode === 'pickup';
-  const canSetReady = sitePickup ? canMarkSitePickupReady(delivery) : canMarkManualPickupReady(delivery);
+  const marketplacePickup = mode === 'pickup' && delivery.source_system !== 'dfl_site' && ['ifood','food99','keeta'].includes(String(delivery.origin)) && !delivery.completed && !delivery.pickup_ready_at;
+  const canSetReady = sitePickup ? canMarkSitePickupReady(delivery) : canMarkManualPickupReady(delivery) || marketplacePickup;
+  const canManageKitchen = !cancelled && !delivery.completed && delivery.source_system !== 'dfl_site' &&
+    (mode === 'pickup' || mode === 'delivery') && !operationalStartedAt && !delivery.pickup_ready_at;
   const actionState = detailActionState({
     pickup: mode === 'pickup', completed: delivery.completed === true, cancelled,
     ready: Boolean(delivery.pickup_ready_at), canMarkReady: canSetReady,
@@ -265,14 +270,31 @@ function DeliveryDetailsContent() {
     router.replace(
       `/confirmar?orderId=${encodeURIComponent(normalizedIfoodId)}&code=${encodeURIComponent(
         normalizedConfirmationCode,
-      )}${pendingSuffix}&returnTo=${encodeURIComponent(confirmationReturn)}`,
+      )}${pendingSuffix}&deliveryId=${encodeURIComponent(delivery.id)}&returnTo=${encodeURIComponent(confirmationReturn)}`,
     );
+  };
+
+  const markKitchenStage = async (step:'preparing'|'ready') => {
+    if(!canManageKitchen || kitchenLock.current || isMarkingKitchen) return;
+    if(step==='ready' && (mode!=='delivery' || !delivery.preparation_started_at)) {
+      toast.info('Registre o início do preparo antes de marcar pronto.');return;
+    }
+    if(step==='preparing' && delivery.preparation_started_at || step==='ready' && delivery.preparation_ready_at) return;
+    kitchenLock.current=true;setIsMarkingKitchen(true);
+    try {
+      const now=new Date().toISOString();
+      await updateDelivery(delivery.id,step==='preparing'?{preparation_started_at:now}:{preparation_ready_at:now});
+      toast.success(step==='preparing'?'Início do preparo registrado.':'Pedido pronto registrado no DFL.');
+    }catch(error){toast.error(error instanceof Error?error.message:'Não foi possível registrar a etapa.');}
+    finally{kitchenLock.current=false;setIsMarkingKitchen(false);}
   };
 
   const markPickupReady = async () => {
     if (readyLock.current) return;
     if (delivery.source_system === 'dfl_site') {
       if (!canMarkSitePickupReady(delivery) || isMarkingReady) return;
+    } else if (marketplacePickup) {
+      if (isMarkingReady) return;
     } else if (!canMarkManualPickupReady(delivery) || isMarkingReady) return;
     const manualPickup = canMarkManualPickupReady(delivery);
     readyLock.current = true;
@@ -291,6 +313,8 @@ function DeliveryDetailsContent() {
             else if (messaging.status === 'failed') toast.warning('Prontidão salva; aviso não confirmado.', {description:manualPickupResultDescription(messaging)});
           }).catch(() => toast.warning('Prontidão salva; status do aviso indisponível.'));
         }
+      } else if(marketplacePickup) {
+        toast.success('Retirada pronta no DFL. A plataforma continua responsável por seus próprios avisos.');
       } else {
         toast.success('Prontidão registrada. O aviso ao cliente depende da sincronização com o Site.');
       }
@@ -691,6 +715,14 @@ function DeliveryDetailsContent() {
         </section>
       )}
 
+      {canManageKitchen && <section className="rounded-[24px] border border-amber-500/20 bg-amber-500/[.045] p-4" aria-label="Etapas reais de preparo">
+        <h2 className="text-sm font-black text-zinc-100">Cozinha · etapas confirmadas</h2>
+        <p className="mt-1 text-[11px] text-zinc-400">Somente ações registradas aparecem no acompanhamento. A saída da rota não confirma preparo anterior.</p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" onClick={()=>void markKitchenStage('preparing')} disabled={isMarkingKitchen||Boolean(delivery.preparation_started_at)} className="min-h-12 rounded-xl border border-amber-500/35 bg-amber-500/10 px-2 text-xs font-black text-amber-200 disabled:opacity-50">{delivery.preparation_started_at?'Em preparo confirmado':'Iniciar preparo'}</button>
+          {mode==='delivery' ? <button type="button" onClick={()=>void markKitchenStage('ready')} disabled={isMarkingKitchen||!delivery.preparation_started_at||Boolean(delivery.preparation_ready_at)} className="min-h-12 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-2 text-xs font-black text-emerald-200 disabled:opacity-50">{delivery.preparation_ready_at?'Pronto confirmado':'Marcar pronto'}</button> : <span className="flex items-center justify-center text-center text-[10px] text-zinc-400">Retirada: marque pronto na ação abaixo</span>}
+        </div>
+      </section>}
       <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4" aria-label="Ação operacional do pedido">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">

@@ -421,6 +421,11 @@ export default function ConfirmacoesPage() {
           observation:cleanObservation||undefined,
         }));
       }
+      if(delivery && !delivery.completed) {
+        // 'Confirmado no iFood' é a confirmação HUMANA de entrega. A baixa
+        // usa as mesmas travas de rota/Firestore do card operacional.
+        await updateDelivery(delivery.id,{completed:true});
+      }
       await Promise.all(writes);
       toast.success('Confirmado no iFood.',{description:code.length===4?'Código validado e mantido como referência do cliente.':undefined});
     } catch {
@@ -669,7 +674,7 @@ export default function ConfirmacoesPage() {
     router.replace(
       `/confirmar?orderId=${encodeURIComponent(ifoodId)}&code=${encodeURIComponent(
         code,
-      )}&returnTo=${encodeURIComponent(confirmationReturn)}`,
+      )}&deliveryId=${encodeURIComponent(delivery.id)}&returnTo=${encodeURIComponent(confirmationReturn)}`,
     );
   };
 

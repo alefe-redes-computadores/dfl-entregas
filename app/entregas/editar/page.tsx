@@ -634,7 +634,7 @@ const [routeId, setRouteId] = useState('');
       const cleanValue = Math.max(0, customerCharge) + Math.max(0, subsidy);
       const cleanChangeFor = changeFor ? parseFloat(changeFor.replace(/\./g, '').replace(',', '.')) : undefined;
       const cleanStreet = fulfillmentMode === 'delivery' ? normalizeAddressText(streetAddress) : '';
-      const customerAddress = fulfillmentMode === 'delivery' ? canonicalizeOperationalAddress(cleanStreet,selectedAddressNeighborhood).address : streetAddress.trim();
+      const customerAddress = fulfillmentMode === 'pickup' ? '' : fulfillmentMode === 'delivery' ? canonicalizeOperationalAddress(cleanStreet,selectedAddressNeighborhood).address : streetAddress.trim();
       const rawPhone = normalizeBrazilPhone(phone);
 
       let resolvedMapsLink = mapsLink.trim();
@@ -661,7 +661,7 @@ const [routeId, setRouteId] = useState('');
         customerId = await findOrCreateCustomer(customerName, {
           address: customerAddress || undefined,
           phone: rawPhone || undefined,
-          mapsLink: mapsLink.trim() || resolvedMapsLink || undefined,
+          mapsLink: fulfillmentMode === 'pickup' ? undefined : (mapsLink.trim() || resolvedMapsLink || undefined),
           confirmationCode: origin === 'ifood' ? confirmationCode : undefined,
           observation,
           origin,
@@ -692,7 +692,7 @@ const [routeId, setRouteId] = useState('');
         ...(splitEnabled ? { payment_splits: splitParts() } : { payment_splits: undefined }),
         change_for: splitEnabled ? undefined : cleanChangeFor,
         address_string: customerAddress,
-        maps_link: mapsLink.trim() || resolvedMapsLink,
+        maps_link: fulfillmentMode === 'pickup' ? '' : (mapsLink.trim() || resolvedMapsLink),
         phone: rawPhone || undefined,
          notify_whatsapp: origin === 'loja' ? notifyWhatsapp : fulfillmentMode === 'delivery' && notifyWhatsapp && r74ConsentConfirmed,
          // R301: edição do opt-in é explícita. Plataforma e Site nunca herdam autorização.
@@ -813,10 +813,12 @@ const [routeId, setRouteId] = useState('');
           <p className="mt-1 text-sm font-black text-zinc-200">Como este pedido será atendido?</p>
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">Entrega usa rota e endereço; retirada e balcão permanecem fora da logística.</p>
         </div>
-        {origin === 'keeta' && <p className="mb-3 rounded-xl border border-violet-500/25 bg-violet-500/[.06] p-3 text-xs font-bold text-violet-200">Keeta · {fulfillmentMode==='delivery'?'entrega por motoboy DFL.':'entrega parceira, sem rota DFL.'}</p>}
-        {origin !== 'loja' && <div className="grid grid-cols-2 gap-2" role="group" aria-label="Responsável pela entrega">
+        {origin === 'keeta' && <p className="mb-3 rounded-xl border border-violet-500/25 bg-violet-500/[.06] p-3 text-xs font-bold text-violet-200">Keeta · {fulfillmentMode==='pickup'?'retirada no estabelecimento.':fulfillmentMode==='delivery'?'entrega por motoboy DFL.':'entrega parceira, sem rota DFL.'}</p>}
+        {origin !== 'loja' && <div className="grid grid-cols-3 gap-2" role="group" aria-label="Modalidade do pedido">
           <button type="button" aria-pressed={fulfillmentMode==='delivery'} onClick={()=>{setFulfillmentMode('delivery');setIsRouteDropdownOpen(false)}} className={`min-h-14 rounded-xl border px-2 text-[11px] font-black ${fulfillmentMode==='delivery'?'border-emerald-400/45 bg-emerald-500/10 text-emerald-200':'border-zinc-800 text-zinc-400'}`}><Bike size={16} className="mx-auto mb-1"/>DFL entrega</button>
           <button type="button" aria-pressed={fulfillmentMode==='external_delivery'} onClick={()=>{setFulfillmentMode('external_delivery');setRouteId('');setIsRouteDropdownOpen(false)}} className={`min-h-14 rounded-xl border px-2 text-[11px] font-black ${fulfillmentMode==='external_delivery'?'border-violet-400/45 bg-violet-500/10 text-violet-200':'border-zinc-800 text-zinc-400'}`}><ShoppingBag size={16} className="mx-auto mb-1"/>Parceira entrega</button>
+          <button type="button" aria-pressed={fulfillmentMode==='pickup'} onClick={()=>{setFulfillmentMode('pickup');setRouteId('');setIsRouteDropdownOpen(false)}}
+            className={`min-h-14 rounded-xl border px-2 text-[11px] font-black ${fulfillmentMode==='pickup'?'border-amber-400/45 bg-amber-500/10 text-amber-200':'border-zinc-800 text-zinc-400'}`}><ShoppingBag size={16} className="mx-auto mb-1"/>Retirada</button>
         </div>}
         {origin === 'loja' && <div className="grid grid-cols-3 gap-2">
           {([

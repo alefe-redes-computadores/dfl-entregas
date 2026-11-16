@@ -117,8 +117,8 @@ const mergeAddressEntries = (source: CustomerAddress[]): CustomerAddress[] => {
       label:preferred.label||alternative.label,
     };
   }
-  const primary=unique.find(item=>item.primary)||unique[0];
-  return unique.map(item=>({...item,primary:item.id===primary?.id}));
+  const primaryIndex = Math.max(0,unique.findIndex(item=>item.primary));
+  return unique.map((item,index)=>({...item,primary:index===primaryIndex}));
 };
 
 // Legacy fields are read as a virtual primary, not migrated via writes on mount.
@@ -133,7 +133,19 @@ export function customerAddresses(customer: Pick<Customer, 'address' | 'addresse
   const stored=(customer.addresses||[]).filter(item=>!!item.address.trim());
   const source=stored.length?stored:customer.address?[{id:'legacy-address',address:customer.address,neighborhood:customer.neighborhood,maps_link:customer.maps_link,primary:true,label:'Principal'}]:[];
   // Não grava nem exclui cadastros na montagem da tela; consolidação de leitura.
-  return mergeAddressEntries(source);
+  const merged = mergeAddressEntries(source);
+  // IDs legados repetidos podem pertencer a endereços FÍSICOS diferentes.
+  // Apenas a projeção de leitura recebe chave distinta; nada é migrado no Firestore.
+  const primaryIndex = Math.max(0,merged.findIndex(item=>item.primary));
+  const used = new Set<string>();
+  return merged.map((item,index)=>{
+    const original = item.id || `address-${index}`;
+    let id = original;
+    if(used.has(id)) id = `${original}--destino-${index}`;
+    while(used.has(id)) id += '-novo';
+    used.add(id);
+    return {...item,id,primary:index===primaryIndex};
+  });
 }
 export function customerPhoneMatches(customer: Customer, query: string) {
   const sought=digits(query);return sought.length>=3&&customerPhones(customer).some(item=>digits(item.number).includes(sought) || `55${digits(item.number)}`.includes(sought));

@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bike, ChevronRight, Search, UserCheck, UserRound, UsersRound } from 'lucide-react';
+import { Bike, ChevronRight, Search, UserCheck, UsersRound } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { normalizeName } from '@/lib/motoboy-analytics';
@@ -48,7 +48,7 @@ export default function MotoboysPage() {
       {filtered.map(({motoboy, routeCount, completed}) =>
         <button key={motoboy.id} type="button" onClick={() => router.push(`/motoboys/details?id=${encodeURIComponent(motoboy.id)}`)} className="rounded-[20px] border border-zinc-800/90 bg-zinc-900/50 p-3.5 text-left transition-transform active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
           <div className="flex items-center gap-3">
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${motoboy.active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-500'}`}><UserRound size={19} /></div>
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${motoboy.active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-500'}`}><Bike size={19} /></div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <p className={`max-w-full truncate text-sm font-bold ${motoboy.active ? 'text-zinc-100' : 'text-zinc-400'}`}>{motoboy.name}</p>

@@ -93,6 +93,15 @@ export function confirmedEventCandidates(d: Raw, route: Raw | null, manualAccept
         result.push(localEvent(kind, at, 'dfl_site', `site-event-${sourceId}`, null));
     }
   }
+  // R76: cozinha é evidência persistida; nunca completar eventos intermediários
+  // apenas porque uma rota iniciou ou um pedido foi entregue.
+  if (d.source_system !== 'dfl_site') {
+    const prep = iso(d.preparation_started_at);
+    const ready = iso(d.fulfillment_mode === 'pickup' ? d.pickup_ready_at : d.preparation_ready_at);
+    if (prep) result.push(localEvent('preparing',prep,'dfl_entregas',`preparing-${txt(d.id)}-${prep}`,null));
+    if (ready && (!prep || Date.parse(ready)>=Date.parse(prep)))
+      result.push(localEvent('ready',ready,'dfl_entregas',`ready-${txt(d.id)}-${ready}`,null));
+  }
   if (manualAcceptance?.accepted_at && d.source_system !== 'dfl_site') {
     const at = iso(manualAcceptance.accepted_at);
     if (at) result.push(localEvent('confirmed', at, 'dfl_entregas', `manual-${txt(manualAcceptance.idempotency_key)}`, txt(manualAcceptance.actor_uid) || null));

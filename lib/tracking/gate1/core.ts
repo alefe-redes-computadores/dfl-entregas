@@ -137,6 +137,12 @@ function statusFromSnapshot(s: ConfirmedSnapshot, events: TrackingEvent[]): Trac
   if (started && text(d.route_id) && text(d.route_id) === text(s.route?.id)) return 'out_for_delivery';
   // Route staging must not conceal a verified kitchen state.
   if (commercial === 'preparing' || commercial === 'ready') return commercial;
+  // Cozinha local: estado público somente a partir de carimbos persistidos.
+  if (d.source_system !== 'dfl_site') {
+    const readyAt=iso(pickup ? d.pickup_ready_at : d.preparation_ready_at);
+    if (readyAt) return 'ready';
+    if (iso(d.preparation_started_at)) return 'preparing';
+  }
   if (!pickup && text(d.route_id) && s.route) return 'assigned';
   // R299 P9: R21 acceptedAt is distinct from starting preparation. A signed
   // commercial acceptance in the audit ledger supersedes only an old 'received'
