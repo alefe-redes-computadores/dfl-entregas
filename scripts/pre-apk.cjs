@@ -359,6 +359,7 @@ const tests=[
   'scripts/verify-v66-route-cancellation.cjs',
   'scripts/verify-v66-customer-concurrency.cjs',
   'scripts/verify-v66-balcao-haptics.cjs',
+  'scripts/test-r76-p2-kitchen.cjs',
 ];
 
 const missing = tests.filter(file => !fs.existsSync(file));

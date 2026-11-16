@@ -243,14 +243,21 @@ export async function publicForAuthorizedGrant(grant: Raw, c: CapabilityState): 
       !siteEvidence.some(row=>row.srcId===`site-event-${sourceId}`))
       siteEvidence.push({kind,at,source:'dfl_site',srcId:`site-event-${sourceId}`,actor:null});
   }
-  const observed = siteEvidence.map(row=>{
+  // R76 P2: etapa local verdadeira aparece na linha do tempo imediatamente,
+  // mesmo antes da reconciliação do ledger; não grava evento nem inventa horário.
+  const localKitchenEvidence = snap.data.source_system !== 'dfl_site'
+    ? confirmedEventCandidates(snap.data,snap.route).filter(row =>
+        row.source === 'dfl_entregas' && (row.kind === 'preparing' || row.kind === 'ready'))
+    : [];
+  const observed = [...siteEvidence,...localKitchenEvidence].map(row=>{
     const fingerprint=hexSha256(`${c.tenant}|${key}|${row.kind}|${row.srcId}|${row.at}`);
     const id=`trv1_${fingerprint.slice(0,48)}`;
-    return {id,event_id:id,kind:row.kind,at:row.at,source:'dfl_site' as const,
+    return {id,event_id:id,kind:row.kind,at:row.at,source:row.source,
       actor_uid:null,revision:Date.parse(row.at),causation_id:null} as TrackingEvent;
   });
   const events=sortUniqueEvents([...ledger,...observed]);
-  const serverTimestamps = [snap.data.completed_at, snap.data.site_order_last_event_at, snap.route?.started_at,
+  const serverTimestamps = [snap.data.completed_at, snap.data.preparation_started_at, snap.data.preparation_ready_at,
+    snap.data.pickup_ready_at, snap.data.site_order_last_event_at, snap.route?.started_at,
     snap.route?.updated_at, snap.data.order_updated_at, snap.data.created_at, snap.data.createdAt]
     .map(iso).filter((date): date is string => Boolean(date));
   if (!serverTimestamps.length) return null;

@@ -60,6 +60,8 @@ import { canMarkSitePickupReady, isCancelledSiteDelivery } from '@/lib/integrati
 import { canMarkManualPickupReady } from '@/lib/integration/site-order';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { kickManualPickup, manualPickupResultDescription } from '@/lib/integration/client/manualMessagingKick';
+import { kickR76KitchenStage } from '@/lib/integration/client/r76KitchenKick';
+import { r76KitchenPlan } from '@/lib/integration/r76KitchenPolicy';
 import { detailActionState } from '@/lib/operation/detail-action-state';
 import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 
@@ -285,6 +287,16 @@ function DeliveryDetailsContent() {
       const now=new Date().toISOString();
       await updateDelivery(delivery.id,step==='preparing'?{preparation_started_at:now}:{preparation_ready_at:now});
       toast.success(step==='preparing'?'Início do preparo registrado.':'Pedido pronto registrado no DFL.');
+      // R76 P2: falha/indefinição do aviso nunca desfaz a etapa operacional.
+      // Apenas entrega DFL consentida, com evidência persistida; servidor revalida.
+      if(mode==='delivery' && delivery.notify_whatsapp===true && delivery.manual_messaging_opt_in_v1===true &&
+        r76KitchenPlan({...delivery,id:delivery.id,...(step==='preparing'?{preparation_started_at:now}:{preparation_ready_at:now})},step).eligible){
+        void kickR76KitchenStage(delivery.id,step).then(result=>{
+          if(result.status==='queued')toast.info('Aviso de cozinha na fila. Recebimento não confirmado.');
+          else if(result.status==='review_required')toast.warning('Etapa salva; aviso precisa de auditoria. Não reenviar.');
+          else if(result.status==='duplicate')toast.info('Aviso desta etapa já reservado.');
+        }).catch(()=>toast.warning('Etapa salva; resposta do aviso incerta. Não reenviar.'));
+      }
     }catch(error){toast.error(error instanceof Error?error.message:'Não foi possível registrar a etapa.');}
     finally{kitchenLock.current=false;setIsMarkingKitchen(false);}
   };
