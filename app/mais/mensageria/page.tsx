@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowLeft, CheckCircle2, Clock3, LockKeyhole, RefreshCw, ShieldCheck, MessageSquareText, Settings2, ChevronDown, Truck, AlertTriangle } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -8,6 +8,8 @@ import { useAppStore } from '@/store/useAppStore';
 import { isSuperadminUid } from '@/lib/access/roles';
 import { MessagingOrderPicker } from '@/components/messaging/MessagingOrderPicker';
 import { MessagingJourneyPanel } from '@/components/messaging/MessagingJourneyPanel';
+import { R75ProviderAuditCard } from '@/components/messaging/R75ProviderAuditCard';
+import type { R75AuditView } from '@/lib/integration/messagingAuditPolicyR75';
 
 type Reason = 'delivery_not_found' | string;
 type Diagnostics = {
@@ -22,6 +24,7 @@ type Diagnostics = {
     failure:{code:string;detail:string;retryable:boolean}}>;
   delivery: null | { present: boolean; created: Reason; routeStarted: Reason; completed: Reason; createdAfterActivation: boolean; sendingPermitted: boolean };
   note: string;
+  providerAudit: R75AuditView | null;
 };
 const reasonLabels: Record<string, string> = {
   eligible_by_policy: 'Apto pelas regras', delivery_not_found: 'Pedido não encontrado',
@@ -47,6 +50,7 @@ export default function MensageriaDiagnosticPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState<Diagnostics | null>(null);
+  useEffect(() => { setData(null); }, [deliveryId]);
   const consult = async () => {
     if (!isOwner || busy) return;
     setBusy(true); setError('');
@@ -129,7 +133,7 @@ export default function MensageriaDiagnosticPage() {
             <Gate title="Ponte logística" yes={reverseReady} subtitle="Integração reversa e assinatura do Site."/>
           </div>}
           <label htmlFor="dfl-m4-id" className="block text-xs font-bold text-zinc-200">ID interno (alternativa para pedido não encontrado na lista)</label>
-          <input id="dfl-m4-id" type="text" autoComplete="off" spellCheck={false} value={deliveryId} onChange={event => setDeliveryId(event.target.value.slice(0,128))} placeholder="dfl-..." className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"/>
+          <input id="dfl-m4-id" type="text" autoComplete="off" spellCheck={false} value={deliveryId} onChange={event => {setDeliveryId(event.target.value.slice(0,128));setData(null);}} placeholder="dfl-..." className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"/>
           <button type="button" onClick={() => void consult()} disabled={busy} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 text-xs font-bold text-zinc-100 disabled:opacity-50"><RefreshCw size={15}/>{busy?'Consultando…':'Verificar pontes e pedido'}</button>
           {data?.delivery && <div className="rounded-xl bg-zinc-950 p-3">
             <h3 className="text-xs font-bold text-zinc-100">Elegibilidade do pedido consultado</h3>
@@ -137,6 +141,7 @@ export default function MensageriaDiagnosticPage() {
               <div className="mt-2 space-y-2">{([['Cadastro',data.delivery.created],['Saída da rota',data.delivery.routeStarted],['Conclusão',data.delivery.completed]] as const).map(([title,value])=><div key={title} className="flex justify-between gap-3 rounded-lg bg-zinc-900 p-2.5 text-[11px]"><strong>{title}</strong><span className="text-right text-zinc-400">{reasonLabels[value]||value.replace(/_/g,' ')}</span></div>)}</div>
             </>}
           </div>}
+          {data?.providerAudit && <R75ProviderAuditCard audit={data.providerAudit} />}
           {data && <details className="rounded-xl border border-zinc-800 bg-zinc-950/70"><summary className="min-h-11 cursor-pointer p-3 text-xs font-bold text-zinc-300">Todos os estados da outbox</summary><div className="grid grid-cols-2 gap-2 px-3 pb-3 text-[10px] text-zinc-400">{['pending','processing','failed','dead_letter'].map(key=><div key={key} className="rounded-lg bg-zinc-900 p-2">{key}: {data.reverseOutbox[key]??0}</div>)}</div></details>}
           <button type="button" onClick={() => router.push('/mais/mensageria/homologacao')} className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 text-left text-xs font-bold text-amber-200"><span className="flex items-center gap-2"><ShieldCheck size={16}/> Homologação técnica do bot</span><span>›</span></button>
           <p className="text-[10px] text-zinc-500">Teste protegido, sem envio em massa. Histórico de homologação preservado para auditoria.</p>

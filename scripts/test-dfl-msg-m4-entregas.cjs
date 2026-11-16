@@ -39,6 +39,8 @@ ok(ui.includes('não confirma entrega no WhatsApp') || ui.includes('não equival
    '@/lib/integration/server/reverseConfig':{reverseRelayConfig:()=>({enabled:true,targetUrl:'present',signingSecret:'present'})},
    '@/lib/integration/server/reverseOutboxRepository':{reverseOutboxStats:async()=>{stats++;return {pending:2,processing:0,failed:1,dead_letter:0}},recentReverseOutboxIssues:async()=>[{eventType:'delivery.started',status:'failed',attempts:2,updatedAt:'2026-11-06T00:00:00Z',lastError:'timeout'}]},
    '@/lib/integration/manualMessagingPolicy':{planManualMessage:({reason})=>reason==='created'?{eligible:true,eventType:'order.created',phone:'SECRET',payload:{name:'SECRET'}}:{eligible:false,reason:'route_not_recently_started'}},
+   '@/lib/integration/server/r75MessagingAudit':{readManualProviderAudit:async()=>({status:'ok',checkedAt:'2026-11-15T23:00:00.000Z',records:[],sampleLimited:false,customerDeliveryVerified:false})},
+   '@/lib/integration/messagingAuditPolicyR75':{r75AuditUnavailable:status=>({status,checkedAt:null,records:[],sampleLimited:false,customerDeliveryVerified:false})},
  };
  const exports={};const module={exports};
  vm.runInNewContext(compiled,{module,exports,require:key=>{if(!(key in modules))throw Error('module '+key);return modules[key]},process:{env:{DFL_MANUAL_MESSAGING_ENABLED:'false',DFL_SITE_INTEGRATION_URL:'configured',DFL_INTEGRATION_SIGNING_SECRET:'configured'}},Date,Number,String,console}, {timeout:1500});
@@ -56,6 +58,7 @@ ok(ui.includes('não confirma entrega no WhatsApp') || ui.includes('não equival
  const inspect=await GET(req('owner','dfl-12345678-1234-1234-1234-123456789abc'));
  ok(inspect.body.delivery.created==='eligible_by_policy'&&inspect.body.delivery.sendingPermitted===false,'politica elegivel nao ativa envio quando OFF');
  ok(!JSON.stringify(inspect.body).includes('SECRET'),'dados de contato nunca retornam ao cliente');
+ ok(inspect.body.providerAudit?.status==='ok'&&inspect.body.providerAudit.records.length===0,'R75 audit neutra e somente leitura na suite legada');
  ok(reads===1 && stats===2,'consultas limitadas a 1 pedido e contagens sob demanda');
  console.log(`MSG-M4 ENTREGAS: ${count} contratos aprovados; ZERO rede, Firebase real ou WhatsApp.`);
 })().catch(e=>{console.error(e);process.exit(1)})

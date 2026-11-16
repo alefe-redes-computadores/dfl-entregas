@@ -5,6 +5,8 @@ import { isSuperadminUid } from '@/lib/access/roles';
 import { reverseRelayConfig } from '@/lib/integration/server/reverseConfig';
 import { reverseOutboxStats, recentReverseOutboxIssues } from '@/lib/integration/server/reverseOutboxRepository';
 import { planManualMessage, type ManualDeliveryRecord, type ManualRouteRecord } from '@/lib/integration/manualMessagingPolicy';
+import { readManualProviderAudit } from '@/lib/integration/server/r75MessagingAudit';
+import { r75AuditUnavailable, type R75AuditView } from '@/lib/integration/messagingAuditPolicyR75';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -73,6 +75,7 @@ export async function GET(req: NextRequest) {
       present: false, created: 'delivery_not_found', routeStarted: 'delivery_not_found',
       completed: 'delivery_not_found', createdAfterActivation: false, sendingPermitted: false,
     } : null;
+    let providerAudit: R75AuditView | null = null;
 
     if (rawId && diagnostics) {
       const deliverySnap = await adminDb.collection('deliveries').doc(rawId).get();
@@ -91,6 +94,10 @@ export async function GET(req: NextRequest) {
         diagnostics.completed = reason(planManualMessage({ delivery, reason: 'delivery_completed', route }));
         diagnostics.createdAfterActivation = after;
         diagnostics.sendingPermitted = manualEnabled && after && diagnostics.created === 'eligible_by_policy';
+        // Audit only persisted own manual orders, not third-party orders or customer IDs.
+        const isManual = (delivery.origin === 'loja' || delivery.origin === 'manual') &&
+          (delivery.source_system === undefined || delivery.source_system === 'manual') && !delivery.external_order_id;
+        providerAudit = isManual ? await readManualProviderAudit(rawId) : r75AuditUnavailable('not_applicable');
       }
     }
 
@@ -112,7 +119,7 @@ export async function GET(req: NextRequest) {
         reverseRelayConfigured: Boolean(reverse.targetUrl && reverse.signingSecret),
       },
       reverseOutbox: outbox, issues,
-      delivery: diagnostics,
+      delivery: diagnostics, providerAudit,
       note: 'Consulta somente leitura. Um evento sent na ponte não confirma envio nem entrega no WhatsApp.',
     });
   } catch {
