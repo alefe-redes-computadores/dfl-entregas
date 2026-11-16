@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash, createHmac } from 'node:crypto';
 import { adminDb } from '@/lib/integration/server/admin';
-import { r76KitchenPlan, type KitchenStage } from '@/lib/integration/r76KitchenPolicy';
+import { r76KitchenPlan, r76KitchenAudienceAllowed, type KitchenStage } from '@/lib/integration/r76KitchenPolicy';
 import { confirmedDelivery } from '@/lib/tracking/gate1/storage';
 export type KitchenNotice = {status:'off'|'skipped'|'queued'|'duplicate'|'review_required';reason?:string};
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
@@ -27,6 +27,7 @@ export async function notifyR76KitchenStage(deliveryId:string,stage:KitchenStage
   if(!confirmed)return {status:'skipped',reason:'order_unavailable'};
   const plan=r76KitchenPlan(confirmed.data,stage,Date.now(),confirmed.route);
   if(!plan.eligible)return {status:'skipped',reason:plan.reason};
+  if(!r76KitchenAudienceAllowed(process.env,plan.phone))return {status:'skipped',reason:'r76_pilot_only'};
   const created=Date.parse(String(confirmed.data.created_at||confirmed.data.createdAt||''));
   if(!Number.isFinite(created)||created<activation||Date.parse(plan.at)<activation)return {status:'skipped',reason:'predates_rollout'};
   const transitionKey=hash(`r76-kitchen-v1|${deliveryId}|${stage}|${plan.at}`);

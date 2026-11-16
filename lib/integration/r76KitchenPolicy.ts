@@ -8,6 +8,13 @@ const time=(v:unknown):number|null=>{
   const s=txt(v);if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(s))return null;
   const ms=Date.parse(s);return Number.isFinite(ms)?ms:null;
 };
+/** R76: canario de cozinha por destinatario, sem afetar mensagens anteriores. */
+export function r76KitchenAudienceAllowed(env:Record<string,string|undefined>,phone:string):boolean {
+  if(!/^55[1-9]\d{9,10}$/.test(phone))return false;
+  if(env.DFL_R76_KITCHEN_AUDIENCE_MODE==='general'&&env.DFL_R76_KITCHEN_GENERAL_APPROVED==='true')return true;
+  const pilot=(env.DFL_MESSAGING_PILOT_PHONE_E164||'').trim();
+  return /^55[1-9]\d{9,10}$/.test(pilot)&&phone===pilot;
+}
 export function r76KitchenPlan(d:KitchenRecord,stage:KitchenStage,now=Date.now(),route?:KitchenRecord|null):KitchenPlan {
   const id=txt(d.id), origin=txt(d.origin),source=txt(d.source_system);
   if(!/^dfl-[A-Za-z0-9-]{12,120}$/.test(id))return {eligible:false,reason:'invalid_delivery_id'};

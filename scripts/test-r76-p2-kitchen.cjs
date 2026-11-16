@@ -8,11 +8,17 @@ function load(path){const src=fs.readFileSync(path,'utf8');const js=ts.transpile
   const mod={exports:{}};new Function('require','module','exports',js)((id)=>id==='./manualMessagingPolicy'?{normalizeManualMessagePhone:v=>{
     const d=String(v||'').replace(/\D/g,'');return /^55[1-9]\d{9,10}$/.test(d)?d:null;
   }}:(()=>{throw Error('unexpected require '+id)})(),mod,mod.exports);return mod.exports;}
-const {r76KitchenPlan:plan}=load(files[0]);const now=Date.now(),created=new Date(now-120_000).toISOString(),started=new Date(now-60_000).toISOString(),ready=new Date(now-30_000).toISOString();
+const {r76KitchenPlan:plan,r76KitchenAudienceAllowed:audience}=load(files[0]);const now=Date.now(),created=new Date(now-120_000).toISOString(),started=new Date(now-60_000).toISOString(),ready=new Date(now-30_000).toISOString();
 const base={id:'dfl-12345678-1234-1234-1234-123456789abc',origin:'loja',source_system:'dfl_entregas',logistics_provider:'dfl',
   fulfillment_mode:'delivery',notify_whatsapp:true,manual_messaging_opt_in_v1:true,customer_name:'Teste',phone:'5534999999999',
   created_at:created,preparation_started_at:started,preparation_ready_at:ready};
 const beforeReady={...base,preparation_ready_at:undefined};
+const pilotEnv={DFL_MESSAGING_PILOT_PHONE_E164:'5534999999999',DFL_R76_KITCHEN_AUDIENCE_MODE:'pilot',DFL_R76_KITCHEN_GENERAL_APPROVED:'false'};
+ok(audience(pilotEnv,'5534999999999'),'pilot allowed');
+ok(!audience(pilotEnv,'5534988888888'),'other phone denied');
+ok(!audience({},'5534999999999'),'missing pilot denied');
+ok(!audience({...pilotEnv,DFL_R76_KITCHEN_AUDIENCE_MODE:'general'},'5534988888888'),'general still gated');
+ok(audience({...pilotEnv,DFL_R76_KITCHEN_AUDIENCE_MODE:'general',DFL_R76_KITCHEN_GENERAL_APPROVED:'true'},'5534988888888'),'general approved explicitly');
 ok(plan(beforeReady,'preparing',now).eligible,'manual preparing');ok(plan(base,'ready',now).eligible,'manual ready');
 for(const origin of ['ifood','food99','keeta'])ok(plan({...beforeReady,origin},'preparing',now).eligible,'marketplace DFL '+origin);
 for(const change of [{source_system:'dfl_site'},{source_system:'alien'},{external_order_id:'abc'},{notify_whatsapp:false},
@@ -29,5 +35,6 @@ for(const t of ['ledger.create(','r76KitchenPlan(','confirmedDelivery(','createH
 for(const t of ['verifyIdToken','isSuperadminUid','Object.keys(data).length!==2','notifyR76KitchenStage'])ok(api.includes(t),'superadmin only '+t);
 for(const t of ['kickR76KitchenStage','await updateDelivery(delivery.id','r76KitchenPlan','Início do preparo registrado.'])ok(view.includes(t),'post write UI '+t);
 for(const t of ['localKitchenEvidence','preparation_started_at','preparation_ready_at'])ok(tracking.includes(t),'actual evidence '+t);
+ok(server.includes('r76KitchenAudienceAllowed(process.env,plan.phone)'),'only pilot enters durable ledger');
 ok(!server.includes('sendWhatsApp('),'no second bot');ok(!server.includes('issueGrant('),'no extra tracking token');
 console.log(`R76 P2 ENTREGAS: ${count} verificações herméticas OK; zero rede e zero envio.`);
