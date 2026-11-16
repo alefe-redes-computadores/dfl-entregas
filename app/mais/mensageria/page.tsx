@@ -9,6 +9,7 @@ import { isSuperadminUid } from '@/lib/access/roles';
 import { MessagingOrderPicker } from '@/components/messaging/MessagingOrderPicker';
 import { MessagingJourneyPanel } from '@/components/messaging/MessagingJourneyPanel';
 import { R75ProviderAuditCard } from '@/components/messaging/R75ProviderAuditCard';
+import { R75RecoveryAssistCard } from '@/components/messaging/R75RecoveryAssistCard';
 import type { R75AuditView } from '@/lib/integration/messagingAuditPolicyR75';
 
 type Reason = 'delivery_not_found' | string;
@@ -50,6 +51,7 @@ export default function MensageriaDiagnosticPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState<Diagnostics | null>(null);
+  const [auditedDeliveryId, setAuditedDeliveryId] = useState('');
   useEffect(() => { setData(null); }, [deliveryId]);
   const consult = async () => {
     if (!isOwner || busy) return;
@@ -69,6 +71,7 @@ export default function MensageriaDiagnosticPage() {
       const body = await response.json().catch(() => null) as Diagnostics | null;
       if (!response.ok || !body?.ok || !body.gates) throw new Error('Não foi possível consultar os diagnósticos.');
       setData(body);
+      setAuditedDeliveryId(id);
     } catch (cause) {
       setError(cause instanceof Error && cause.name === 'AbortError'
         ? 'Tempo esgotado. A consulta anterior foi preservada.'
@@ -142,6 +145,9 @@ export default function MensageriaDiagnosticPage() {
             </>}
           </div>}
           {data?.providerAudit && <R75ProviderAuditCard audit={data.providerAudit} />}
+          {data?.providerAudit && <R75RecoveryAssistCard key={deliveryId} audit={data.providerAudit}
+            delivery={deliveries.find(item => item.id === deliveryId)} selectedDeliveryId={deliveryId}
+            auditedDeliveryId={auditedDeliveryId} />}
           {data && <details className="rounded-xl border border-zinc-800 bg-zinc-950/70"><summary className="min-h-11 cursor-pointer p-3 text-xs font-bold text-zinc-300">Todos os estados da outbox</summary><div className="grid grid-cols-2 gap-2 px-3 pb-3 text-[10px] text-zinc-400">{['pending','processing','failed','dead_letter'].map(key=><div key={key} className="rounded-lg bg-zinc-900 p-2">{key}: {data.reverseOutbox[key]??0}</div>)}</div></details>}
           <button type="button" onClick={() => router.push('/mais/mensageria/homologacao')} className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 text-left text-xs font-bold text-amber-200"><span className="flex items-center gap-2"><ShieldCheck size={16}/> Homologação técnica do bot</span><span>›</span></button>
           <p className="text-[10px] text-zinc-500">Teste protegido, sem envio em massa. Histórico de homologação preservado para auditoria.</p>
