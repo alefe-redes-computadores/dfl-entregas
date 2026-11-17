@@ -11,7 +11,7 @@ let n=0;const ok=(name,value)=>{assert(value,`R54 FALHOU: ${name}`);n++;};
 ok('Mais: preferências visíveis',mais.includes('Preferências 360'));
 ok('Mais: notificações e atualizações',mais.includes('/mais/notificacoes')&&mais.includes('/mais/atualizacoes'));
 ok('Mais: comunicação segura a admin',mais.includes('isDiagnosticsAdmin && <section')&&mais.includes('/mais/comunicacao'));
-ok('Mais: acessos legados preservados',mais.includes('Acessos técnicos diretos')&&mais.includes('/mais/mensageria')&&mais.includes('/mais/acompanhamento'));
+ok('Mais: acessos legados preservados',mais.includes('Diagnósticos de comunicação')&&mais.includes('/mais/mensageria')&&mais.includes('/mais/acompanhamento')&&mais.includes('isDiagnosticsAdmin && <section'));
 ok('Mais: acesso e diagnóstico protegidos',mais.includes('/mais/acessos')&&mais.includes('/mais/diagnostico'));
 ok('Mais: logout preservado',mais.includes('await logout()'));
 ok('Mais: radar legado preservado e oculto',mais.includes('legacyRadarOpen && <OperationalRadar />')&&mais.includes('aria-hidden="true" className="hidden"'));
@@ -32,7 +32,7 @@ ok('Loja: expediente editável preservado',loja.includes('id="dfl-loja-expedient
 ok('Loja: configuração avançada preservada',loja.includes('id="dfl-loja-configuracoes"')&&loja.includes('handleSaveAllSettings'));
 ok('Loja: conexão entre páginas sem regravar modo',loja.includes("hash === '#dfl-loja-configuracoes'")&&loja.includes('setIsSettingsOpen(true)'));
 ok('Loja: SiteAdminHub preservado',loja.includes('<SiteAdminHub'));
-ok('Loja: compra, estoque e despesas em primeiro plano',loja.includes('Estoque e financeiro'));
+ok('Loja: compra, estoque e despesas em primeiro plano',loja.includes('id="dfl-loja-acessos"')&&loja.includes("router.push('/abastecimentos')")&&loja.includes("router.push('/estoque')")&&loja.includes("router.push('/despesas')"));
 ok('Mais: links operacionais diretos e protegidos',mais.includes("router.push('/mais/comunicacao')")&&mais.includes("router.push('/mais/atualizacoes')")&&mais.includes('isDiagnosticsAdmin'));
 ok('Loja: atalhos históricos acessíveis',loja.includes('aria-label="Acesso rápido a confirmações e histórico"')&&loja.includes("router.push('/loja/caixa-de-entrada?aba=site&historico=1')"));
 console.log(`R54_PREMIUM360_OK: ${n} garantias + 3 TSX parseados. Gate PRE-APK ainda obrigatório.`);

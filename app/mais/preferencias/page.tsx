@@ -94,13 +94,14 @@ export default function Preferencias360() {
       <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-300">Seu jeito de operar</p><h1 className="mt-0.5 font-heading text-[21px] font-black text-zinc-50">Preferências</h1><p className="mt-0.5 text-[11px] text-zinc-400">Ajustes claros. Uma escolha de cada vez.</p></div>
     </header>
 
-    <section aria-label="Estado atual das preferências" className="rounded-[16px] border border-zinc-800 bg-zinc-900/35 px-3 py-2.5">
-      <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold text-zinc-400">
-        <span className="text-zinc-500">Em vigor</span>
-        <span className="rounded-full border border-zinc-700 px-2.5 py-1 text-emerald-300">Rotas: {mode === 'smart' ? 'inteligente' : 'manual'}</span>
-        <span className="rounded-full border border-zinc-700 px-2.5 py-1 text-sky-300">Site: {prep} min</span>
-        <span className="rounded-full border border-zinc-700 px-2.5 py-1 text-zinc-300">Lembretes: {settings.routeReminderEnabled === false ? 'pausados' : 'ativos'}</span>
+    <section aria-label="Regras em vigor" data-dfl-r79-rules="active" className="rounded-[20px] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[.07] to-zinc-900/45 p-3.5">
+      <div className="mb-2 flex items-center gap-2"><ShieldCheck size={16} className="text-emerald-300"/><h2 className="text-[12px] font-black text-zinc-100">Regras em vigor</h2></div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/55 p-3"><span className="text-[10px] text-zinc-400">Organização de rotas</span><strong className="mt-1 block text-sm font-black text-emerald-300">{mode === 'smart' ? 'Inteligente' : 'Manual'}</strong></div>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/55 p-3"><span className="text-[10px] text-zinc-400">Preparo do Site</span><strong className="mt-1 block text-sm font-black text-sky-300">{prep} min antes</strong></div>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/55 p-3"><span className="text-[10px] text-zinc-400">Lembretes de rota</span><strong className="mt-1 block text-sm font-black text-zinc-100">{settings.routeReminderEnabled === false ? 'Pausados' : 'Ativos'}</strong></div>
       </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Os valores acima são os definidos no aplicativo. A confirmação de gravação depende do servidor e aparece ao salvar cada regra.</p>
     </section>
     <nav aria-label="Categorias de preferências" className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
       {([['rotas','Rotas'],['site','Site'],['plataformas','Plataformas'],['loja','Loja'],['avisos','Avisos']] as const).map(([id,label]) => (

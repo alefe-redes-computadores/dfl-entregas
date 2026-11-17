@@ -1,12 +1,14 @@
 // DFL V111 R51 — cards leves; histórico completo e autoridade de vínculo preservados.
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bike, ChevronRight, Search, UserCheck, UsersRound } from 'lucide-react';
+import { Bike, ChevronRight, Search, UserCheck, UsersRound, Wallet, UserRound } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { normalizeName } from '@/lib/motoboy-analytics';
+import { isSuperadminUid } from '@/lib/access/roles';
+import { saoPauloDateKey } from '@/lib/reports/time';
 import { buildMotoboyOverview } from '@/lib/motoboy-overview';
 
 type Filter = 'ativos' | 'inativos' | 'todos';
@@ -16,8 +18,13 @@ export default function MotoboysPage() {
   const motoboys = useAppStore((state) => state.motoboys);
   const routes = useAppStore((state) => state.routes);
   const deliveries = useAppStore((state) => state.deliveries);
+  const isOwner = useAppStore((state) => isSuperadminUid(state.user?.uid));
+  const dateKey = useAppStore((state) => saoPauloDateKey(state.selectedDate));
   const [filter, setFilter] = useState<Filter>('ativos');
   const [query, setQuery] = useState('');
+  const [viewReady,setViewReady]=useState(false);
+  useEffect(()=>{try{const raw=window.sessionStorage.getItem('dfl:r79:motoboys:consulta');if(raw){const saved=JSON.parse(raw) as {query?:unknown;filter?:unknown};if(typeof saved.query==='string')setQuery(saved.query.slice(0,100));if(['ativos','inativos','todos'].includes(String(saved.filter)))setFilter(saved.filter as Filter);}}catch{}setViewReady(true);},[]);
+  useEffect(()=>{if(!viewReady)return;try{window.sessionStorage.setItem('dfl:r79:motoboys:consulta',JSON.stringify({query,filter}));}catch{}},[viewReady,query,filter]);
 
   const items = useMemo(() => buildMotoboyOverview(motoboys, routes, deliveries), [motoboys, routes, deliveries]);
   const activeCount = useMemo(() => motoboys.reduce((n, item) => n + Number(item.active), 0), [motoboys]);
@@ -46,7 +53,8 @@ export default function MotoboysPage() {
     <p className="px-1 text-[10px] font-medium text-zinc-500" aria-live="polite">{filtered.length} entregador{filtered.length === 1 ? '' : 'es'} encontrado{filtered.length === 1 ? '' : 's'}</p>
     <div className="flex flex-col gap-2.5">
       {filtered.map(({motoboy, routeCount, completed}) =>
-        <button key={motoboy.id} type="button" onClick={() => router.push(`/motoboys/details?id=${encodeURIComponent(motoboy.id)}`)} className="rounded-[20px] border border-zinc-800/90 bg-zinc-900/50 p-3.5 text-left transition-transform active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+        <div key={motoboy.id} className="overflow-hidden rounded-[20px] border border-zinc-800/90 bg-zinc-900/50">
+        <button type="button" onClick={() => router.push(`/motoboys/details?id=${encodeURIComponent(motoboy.id)}`)} className="w-full p-3.5 text-left transition-transform active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
           <div className="flex items-center gap-3">
             <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${motoboy.active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-500'}`}><Bike size={19} /></div>
             <div className="min-w-0 flex-1">
@@ -63,7 +71,12 @@ export default function MotoboysPage() {
             <Small value={String(completed)} label="Concluídas" />
             <Small value={motoboy.payment_rule ? 'Pronta' : 'Pendente'} label="Regra diária" />
           </div>
-        </button>)}
+        </button>
+        {isOwner && <nav aria-label={`Ações de ${motoboy.name}`} className="grid grid-cols-2 gap-2 border-t border-zinc-800/75 p-2">
+          <button type="button" onClick={()=>router.push(`/motoboys/details?id=${encodeURIComponent(motoboy.id)}`)} className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-950/65 text-[11px] font-black text-zinc-200"><UserRound size={15}/> Ver perfil</button>
+          <button type="button" onClick={()=>router.push(`/motoboys/acerto?id=${encodeURIComponent(motoboy.id)}&date=${encodeURIComponent(dateKey)}`)} className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/[.06] text-[11px] font-black text-amber-200"><Wallet size={15}/> Simular acerto</button>
+        </nav>}
+        </div>)}
       {filtered.length === 0 && <div className="dfl-empty"><Bike className="mx-auto text-zinc-700" /><p className="mt-3 text-sm text-zinc-500">Nenhum entregador encontrado.</p></div>}
     </div>
   </div>;

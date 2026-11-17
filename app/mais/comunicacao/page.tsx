@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
@@ -28,6 +28,9 @@ export default function Comunicacao360Page(){
   const router=useRouter();
   const owner=useAppStore(state=>state.user);
   const [section,setSection]=useState<Section>('visao');
+  const [ready,setReady]=useState(false);
+  useEffect(()=>{try{const saved=window.sessionStorage.getItem('dfl:r79:comunicacao:aba');if(['visao','mensagens','acompanhamento','materiais'].includes(saved||''))setSection(saved as Section);}catch{}setReady(true);},[]);
+  useEffect(()=>{if(!ready)return;try{window.sessionStorage.setItem('dfl:r79:comunicacao:aba',section);}catch{}},[ready,section]);
   const allowed=isSuperadminUid(owner?.uid);
   if(!allowed) return <div className="dfl-page mx-auto max-w-3xl pb-28"><div role="alert" className="rounded-[22px] border border-amber-500/25 bg-amber-500/[.05] p-5"><LockKeyhole size={21} className="text-amber-400"/><h1 className="mt-3 font-heading text-lg font-black">Comunicação protegida</h1><p className="mt-2 text-xs leading-relaxed text-zinc-400">A central é exclusiva do proprietário. Nenhuma consulta ou emissão de acesso foi iniciada.</p><button type="button" onClick={()=>router.push('/mais')} className="mt-4 min-h-11 rounded-xl border border-zinc-700 px-4 text-xs font-bold">Voltar para Mais</button></div></div>;
   return <div className="dfl-page mx-auto max-w-3xl space-y-4 pb-[calc(env(safe-area-inset-bottom)+100px)]">

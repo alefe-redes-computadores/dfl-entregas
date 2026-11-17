@@ -601,6 +601,10 @@ export default function ShoppingList() {
         }}
       />
 
+      <nav aria-label="Etapas da compra" className="mb-3 grid grid-cols-2 gap-2 rounded-xl border border-zinc-800 bg-zinc-900/35 p-2">
+        <button type="button" onClick={()=>document.getElementById('dfl-purchase-market')?.scrollIntoView({behavior:'smooth',block:'start'})} className="min-h-11 rounded-lg bg-zinc-950/65 text-[11px] font-bold text-emerald-300">Lista de mercado</button>
+        <button type="button" onClick={()=>document.getElementById('dfl-purchase-review')?.scrollIntoView({behavior:'smooth',block:'start'})} className="min-h-11 rounded-lg bg-zinc-950/65 text-[11px] font-bold text-amber-300">Revisar produtos</button>
+      </nav>
       <div className="mb-3 px-3">
         <ContextualAssistantCard scope="compras" signals={purchaseContextSignals({invalid:invalidSelected.length,selected:selectedProducts.length,suggested:suggested.length,checklistRemaining:Math.max(0,marketPreview.rows.length-marketPurchased)})}
           onAction={target=>{if(target==='selecionados'){setShowOnlySelected(true);setShowAll(true);setQuery('');}else if(target==='checklist'){setMarketExpanded(true);}else if(target==='sugestoes'){setShowAll(false);setShowOnlySelected(false);setQuery('');}}} />
@@ -632,7 +636,7 @@ export default function ShoppingList() {
         </p>
       )}
 
-      <section className="mb-4 overflow-hidden rounded-[24px] border border-emerald-500/25 bg-gradient-to-br from-zinc-900/90 via-zinc-900/75 to-emerald-950/15 p-3.5 shadow-[0_18px_38px_rgba(0,0,0,.15)]" aria-label="Lista de mercado R96">
+      <section className="mb-4 overflow-hidden rounded-[24px] border border-emerald-500/25 bg-gradient-to-br from-zinc-900/90 via-zinc-900/75 to-emerald-950/15 p-3.5 shadow-[0_18px_38px_rgba(0,0,0,.15)]" id="dfl-purchase-market" aria-label="Lista de mercado">
         <div className="flex items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400"><ListChecks size={20} /></span>
           <div className="min-w-0 flex-1">

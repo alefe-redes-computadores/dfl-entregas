@@ -94,11 +94,11 @@ export default function MaisPage() {
     {isDiagnosticsAdmin && <section aria-label="Comunicação e inteligência" className="space-y-2.5">
       <SectionHeading eyebrow="Gestão e integrações" title="Comunicação e inteligência" />
       <div className="overflow-hidden rounded-[20px] border border-zinc-800 bg-zinc-900/35">
-        <Destination first tone="violet" icon={Sparkles} title="DFL Intelligence" description="Inteligência de Clientes · recomendações, bairros, qualidade e operação" onClick={() => router.push('/mais/inteligencia')}/>
+        <Destination first tone="violet" icon={Sparkles} title="Inteligência de clientes" description="Relacionamento, frequência, bairros e histórico para decisões humanas" onClick={() => router.push('/mais/inteligencia')}/>
       </div>
       <details className="group rounded-2xl border border-zinc-800 bg-zinc-950/35">
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3.5 text-[11px] font-semibold text-zinc-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-          <Activity size={15} className="text-zinc-500"/><span className="flex-1">Acessos técnicos diretos</span><ChevronDown size={15} className="transition-transform group-open:rotate-180"/>
+          <Activity size={15} className="text-zinc-500"/><span className="flex-1">Diagnósticos de comunicação</span><ChevronDown size={15} className="transition-transform group-open:rotate-180"/>
         </summary>
         <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-2.5">
           <button type="button" onClick={() => router.push('/mais/mensageria')} className="flex min-h-[55px] min-w-0 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-2.5 text-left text-[10px] font-bold text-zinc-300 transition-colors active:bg-zinc-800/60"><MessageSquareText size={17} className="shrink-0 text-amber-300"/><span className="min-w-0 leading-tight">Central de Mensageria</span></button>
@@ -117,7 +117,7 @@ export default function MaisPage() {
     <section aria-label="Aplicativo e ferramentas" className="space-y-2.5">
       <SectionHeading eyebrow="Sistema" title="Aplicativo e ferramentas" />
       <div className="overflow-hidden rounded-[20px] border border-zinc-800 bg-zinc-900/35">
-        <Destination first tone="sky" icon={RefreshCw} title="Central de Atualizações" description="APK, novas versões e instalação segura" onClick={() => router.push('/mais/atualizacoes')}/>
+        <Destination first tone="sky" icon={RefreshCw} title="Atualizações do aplicativo" description="Versões do APK, instalação e segurança" onClick={() => router.push('/mais/atualizacoes')}/>
         {isDiagnosticsAdmin && <Destination tone="neutral" icon={UsersRound} title="Acessos e segurança" description="Permissões, convites e proteção da equipe" onClick={() => router.push('/mais/acessos')}/>}
         {isDiagnosticsAdmin && <Destination tone="neutral" icon={ShieldCheck} title="Diagnóstico local" description="Verificações técnicas e saúde do dispositivo" onClick={() => router.push('/mais/diagnostico')}/>}
       </div>

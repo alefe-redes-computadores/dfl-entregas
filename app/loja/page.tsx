@@ -348,6 +348,11 @@ export default function LojaPage() {
   return (
     <div className="dfl-page dfl-loja-v7 flex flex-col gap-4 pb-32 animate-in fade-in duration-300 relative">
       <PageHeader title="Minha Loja" subtitle="Pedidos, atendimento e operação" to="/" />
+      <nav aria-label="Ir direto à área da Loja" data-dfl-r79-navigation="loja" className="grid grid-cols-3 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/45 p-2">
+        <button type="button" onClick={() => document.getElementById('dfl-loja-acessos')?.scrollIntoView({behavior:'smooth',block:'start'})} className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-zinc-950/65 text-[11px] font-black text-zinc-200"><Inbox size={15} className="text-violet-300"/> Operação</button>
+        <button type="button" onClick={() => router.push('/motoboys')} className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-zinc-950/65 text-[11px] font-black text-zinc-200"><Bike size={15} className="text-emerald-300"/> Motoboys</button>
+        <button type="button" onClick={() => document.getElementById('dfl-loja-expediente')?.scrollIntoView({behavior:'smooth',block:'start'})} className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-zinc-950/65 text-[11px] font-black text-zinc-200"><Clock size={15} className="text-sky-300"/> Horários</button>
+      </nav>
 
       <SiteAdminHub
         selectedDateOrders={dashboardData.selectedDateOrders}
@@ -422,7 +427,7 @@ export default function LojaPage() {
         <OperationalAttentionQueue orders={dashboardData.selectedDateOrders} selectedDateKey={dashboardData.selectedDateKey} onFinance={()=>setIsRevenueModalOpen(true)}/>
 
         {/* R54: Loja e autoridade administrativa. Site e operação primeiro; financeiro sempre visível. */}
-        <section aria-label="Centro de acessos da Loja" className="space-y-3">
+        <section id="dfl-loja-acessos" aria-label="Centro de acessos da Loja" className="scroll-mt-24 space-y-3">
           <div className="flex items-end justify-between gap-3 px-1">
             <div><p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-400">Seu ponto de comando</p><h3 className="mt-1 font-heading text-[15px] font-black text-zinc-100">Operação e gestão</h3></div>
             <span className="text-[10px] font-medium text-zinc-500">Operação e gestão</span>

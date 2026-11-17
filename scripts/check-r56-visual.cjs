@@ -36,7 +36,7 @@ ok(prefs.includes('Entrega da plataforma') && prefs.includes('A plataforma envia
 ok(prefs.includes('Histórico, pagamentos e acertos não mudam.'), 'consequência histórica preservada');
 ok(comm.includes("isSuperadminUid(owner?.uid)") && comm.includes('if(!allowed) return'), 'Comunicação 360 protegida por proprietário');
 ok(comm.includes("section==='mensagens'") && comm.includes("section==='acompanhamento'"), 'subpáginas não são montadas juntas');
-ok(comm.includes('Emissão automática de link permanece OFF'), 'restrição do link público preservada');
+ok(comm.includes('A emissão automática depende das permissões efetivas')&&comm.includes('do consentimento do pedido')&&comm.includes('controles do Site e Entregas'), 'restrição do link público preservada');
 ok(comm.includes('Acompanhe cada etapa') && comm.includes('Materiais da operação'), 'comunicação com textos claros, sem perder materiais');
 ok(store.includes('onClick={toggleStore}') && store.includes('saveDayEditor') && store.includes('handleSaveAllSettings'), 'abertura, expediente e salvamento canônicos');
 for (const route of ['/abastecimentos','/estoque','/despesas','/confirmacoes','/loja/caixa-de-entrada']) ok(store.includes(route), `Loja: ${route} preservado`);

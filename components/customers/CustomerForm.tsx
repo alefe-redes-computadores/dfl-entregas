@@ -28,6 +28,10 @@ export function CustomerForm({initial,submitLabel,busy,onSubmit}:Props){
   const [excludeRankings,setExcludeRankings]=useState(initial?.exclude_from_rankings===true);
   const [excludeAnalytics,setExcludeAnalytics]=useState(initial?.exclude_from_analytics===true);
   const [invalid,setInvalid]=useState('');
+  // R79 FIX3: <details> possui atributo React `open`, nao `defaultOpen`.
+  // A abertura inicial acompanha opcoes ja configuradas, mas o usuario pode recolher.
+  const [advancedOpen,setAdvancedOpen]=useState(()=>Boolean(initial?.internal_owner_verified||initial?.exclude_from_rankings||initial?.exclude_from_analytics));
+  useEffect(()=>{setAdvancedOpen(Boolean(initial?.internal_owner_verified||initial?.exclude_from_rankings||initial?.exclude_from_analytics));},[initial]);
   useEffect(()=>{if(!initial)return;setName(initial.name);setOrigin(initial.origin||'loja');setPhones(customerPhones(initial));setAddresses(customerAddresses(initial));setObservation(initial.observation||'');setCode(initial.last_confirmation_code||'');setIsInternal(verifiedInternalCustomer(initial));setExcludeRankings(initial.exclude_from_rankings===true);setExcludeAnalytics(initial.exclude_from_analytics===true);},[initial]);
   const updatePhone=(id:string,patch:Partial<CustomerPhone>)=>setPhones(list=>list.map(item=>item.id===id?{...item,...patch}:item));
   const updateAddress=(id:string,patch:Partial<CustomerAddress>)=>setAddresses(list=>list.map(item=>item.id===id?{...item,...patch}:item));
@@ -62,12 +66,17 @@ export function CustomerForm({initial,submitLabel,busy,onSubmit}:Props){
     </section>
     <label className="flex flex-col gap-2"><span className="flex items-center gap-2 text-xs font-bold text-zinc-400"><MessageSquare size={14}/>Observações gerais</span><textarea value={observation} onChange={e=>setObservation(e.target.value)} rows={2} className="field-input min-h-20 resize-y py-3" placeholder="Preferências e detalhes do cliente"/></label>
     {origin==='ifood'&&<label className="flex flex-col gap-2 text-xs font-bold text-zinc-500">Último código (apenas referência)<input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,4))} inputMode="numeric" className="field-input"/></label>}
+    <details open={advancedOpen} onToggle={event=>setAdvancedOpen(event.currentTarget.open)} className="rounded-[20px] border border-zinc-800 bg-zinc-950/40 p-3">
+      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 text-xs font-bold text-zinc-300"><span>Preferências avançadas do cadastro</span><span className="text-[10px] font-normal text-zinc-500">Indicadores e conta interna</span></summary>
+      <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
     <label className="flex items-start gap-3 rounded-xl border border-violet-500/20 bg-violet-500/[.04] p-3 text-xs text-zinc-300"><input type="checkbox" checked={isInternal} onChange={e=>setIsInternal(e.target.checked)} className="mt-0.5 accent-violet-500"/><span><span className="flex items-center gap-1 font-black text-violet-300"><ShieldCheck size={13}/>Cadastro interno DEV verificado</span><span className="mt-1 block text-[11px] leading-relaxed text-zinc-400">Somente para seu cadastro operacional. Não aparece no ranking de clientes; vendas reais continuam nos valores gerais. Não marque homônimos.</span></span></label>
     <section className="rounded-2xl border border-violet-500/25 bg-violet-500/[.035] p-3.5 space-y-3" aria-label="Preferências dos indicadores do cliente">
       <p className="text-xs font-black text-violet-200">Indicadores e relatórios</p>
       <label className="flex items-start gap-3 text-xs text-zinc-200"><input type="checkbox" checked={excludeRankings} onChange={event=>setExcludeRankings(event.target.checked)} className="mt-0.5 accent-violet-500"/><span><b className="block">Não participar de rankings de clientes</b><small className="mt-1 block text-[11px] leading-relaxed text-zinc-500">Oculta este cadastro do Top clientes, recorrência e hábitos. Não remove vendas do financeiro.</small></span></label>
       <label className="flex items-start gap-3 text-xs text-zinc-200"><input type="checkbox" checked={excludeAnalytics} onChange={event=>setExcludeAnalytics(event.target.checked)} className="mt-0.5 accent-violet-500"/><span><b className="block">Não contar pedidos nos indicadores</b><small className="mt-1 block text-[11px] leading-relaxed text-zinc-500">Use apenas para cadastros de testes. Exclui seus pedidos dos gráficos e análises, sem apagar os registros ou alterar o caixa.</small></span></label>
     </section>
+      </div>
+    </details>
     {invalid&&<p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{invalid}</p>}
     <button disabled={busy||!name.trim()} className="h-14 rounded-2xl bg-amber-400 text-sm font-black text-zinc-950 shadow-lg shadow-amber-500/10 disabled:opacity-50">{busy?'Salvando...':submitLabel}</button>
     <style jsx>{`.field-input{min-height:3rem;width:100%;min-width:0;border-radius:.8rem;border:1px solid rgb(39 39 42);background:rgb(24 24 27 / .6);padding:.65rem .8rem;color:rgb(244 244 245);font-size:.8rem;outline:none}.field-input:focus{border-color:rgb(16 185 129)}`}</style>

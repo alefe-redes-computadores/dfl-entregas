@@ -49,6 +49,7 @@ export default function MensageriaDiagnosticPage() {
   const deliveries = useAppStore(s => s.deliveries);
   const [deliveryId, setDeliveryId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [journeyOpen,setJourneyOpen]=useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState<Diagnostics | null>(null);
   const [auditedDeliveryId, setAuditedDeliveryId] = useState('');
@@ -86,7 +87,7 @@ export default function MensageriaDiagnosticPage() {
   return <div className="dfl-page mx-auto max-w-3xl space-y-3 pb-24 text-zinc-100">
     <header className="relative overflow-hidden rounded-[26px] border border-amber-400/20 bg-gradient-to-br from-[#252015] via-[#171a1d] to-zinc-950 px-4 py-5 shadow-[0_18px_40px_rgba(0,0,0,.22)]">
       <button type="button" onClick={() => router.push('/mais')} className="mb-4 flex min-h-10 items-center gap-2 text-xs text-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"><ArrowLeft size={16}/> Voltar</button>
-      <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[.16em] text-amber-300"><MessageSquareText size={16}/> DFL 360 · Operação</div>
+      <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[.16em] text-amber-300"><MessageSquareText size={16}/> Diagnóstico protegido · operação</div>
       <h1 className="font-heading text-[24px] font-black leading-tight tracking-tight">Central de Mensageria</h1>
       <p className="mt-2 max-w-lg text-xs leading-relaxed text-zinc-400">Acompanhe o fluxo das notificações e identifique falhas na ponte logística, sem abrir várias telas técnicas.</p>
       {isOwner && <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -105,7 +106,10 @@ export default function MensageriaDiagnosticPage() {
         <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3.5"><ShieldCheck size={16} className="mb-2 text-sky-300"/><strong className="block text-sm font-black">{data?(data.gates.manualEnabled?'Habilitado':'OFF'):'—'}</strong><p className="mt-1 text-[10px] text-zinc-400">Avisos manuais</p></div>
       </section>
 
-      <MessagingJourneyPanel loaded={Boolean(data)} bridgeReady={reverseReady} manualReady={Boolean(data?.gates.manualEnabled)} pending={pending} failures={failures} onTracking={() => router.push('/mais/acompanhamento')} onReturns={() => router.push('/entregas/retornos')} />
+      <section aria-label="Detalhes da jornada da mensagem" className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-2">
+        <button type="button" aria-expanded={journeyOpen} onClick={()=>setJourneyOpen(v=>!v)} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-2.5 text-left text-xs font-black text-zinc-200"><Truck size={16} className="text-sky-300"/><span className="flex-1">Jornada das mensagens</span><small className="text-[10px] font-medium text-zinc-500">{journeyOpen?'Recolher etapas':'Detalhar etapas'}</small><ChevronDown size={15} className={journeyOpen?'rotate-180':''}/></button>
+        {journeyOpen && <div className="mt-2 border-t border-zinc-800/70 pt-3"><MessagingJourneyPanel loaded={Boolean(data)} bridgeReady={reverseReady} manualReady={Boolean(data?.gates.manualEnabled)} pending={pending} failures={failures} onTracking={() => router.push('/mais/acompanhamento')} onReturns={() => router.push('/entregas/retornos')} /></div>}
+      </section>
       <section className="rounded-[22px] border border-zinc-800 bg-zinc-900/50 p-4">
         <div className="flex items-center justify-between gap-3"><div><h2 className="font-heading text-sm font-black">Saúde da operação</h2><p className="mt-1 text-[11px] text-zinc-500">Visão compacta da fila logística</p></div><span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${data&&reverseReady?'border-emerald-500/25 bg-emerald-500/10 text-emerald-300':'border-amber-400/25 bg-amber-400/10 text-amber-200'}`}>{data&&reverseReady?'Ponte configurada':'Conferir'}</span></div>
         <div className="mt-3 rounded-xl bg-zinc-950/70 p-3 text-[11px] leading-relaxed text-zinc-400">

@@ -25,7 +25,7 @@ const more=read('app/mais/page.tsx');
 ok(more.includes("router.push('/mais/comunicacao')"),'entrada unificada em Mais');
 ok(more.includes('Central de Mensageria 360°')&&more.includes('Gestão e integrações'),'contratos históricos de hierarquia');
 ok(more.includes("router.push('/mais/mensageria')")&&more.includes("router.push('/mais/acompanhamento')"),'rotas diretas de segurança preservadas');
-ok(more.includes('Acessos técnicos diretos')&&!more.includes("router.push('/confirmacoes')"),'sem terceiro portal duplicado no Mais');
+ok(more.includes('Diagnósticos de comunicação')&&more.includes("router.push('/mais/mensageria')")&&more.includes("router.push('/mais/acompanhamento')")&&more.includes('isDiagnosticsAdmin && <section')&&!more.includes("router.push('/confirmacoes')"),'sem terceiro portal duplicado no Mais');
 const hub=read('app/mais/comunicacao/page.tsx');
 ok(hub.includes("isSuperadminUid(owner?.uid)")&&hub.includes('if(!allowed) return'),'barreira admin antes de carregar telas');
 ok(hub.includes('<MensageriaDiagnosticPage/>')&&hub.includes('<AcompanhamentoAdminPage/>'),'interfaces reais integradas sob demanda');

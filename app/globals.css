@@ -490,3 +490,15 @@ html[data-dfl-platform="android"] header.safe-top {
 [data-dfl-r78-form="edit"] > header h1{color:#e0f2fe}
 [data-dfl-r78-form] button:focus-visible{outline:2px solid rgba(250,204,21,.8);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){[data-dfl-r78-form] *{scroll-behavior:auto}}
+
+/* R79 — acabamento de operacao e leitura no Android, sem alterar regras. */
+[data-dfl-r79-navigation="loja"]{position:relative;scroll-margin-top:72px}
+#dfl-loja-acessos,#dfl-loja-expediente,#dfl-loja-configuracoes,#dfl-delivery-route,#dfl-delivery-order,#dfl-delivery-address,#dfl-delivery-value,#dfl-purchase-review,#dfl-purchase-market{scroll-margin-top:calc(var(--dfl-safe-top) + 88px)}
+[data-dfl-r79-form-nav="true"] button:focus-visible,[data-dfl-r79-navigation] button:focus-visible{outline:2px solid rgba(253,224,71,.85);outline-offset:2px}
+[data-dfl-r79-form-nav="true"] button:active{transform:scale(.985)}
+[data-dfl-r79-client-edit="true"] input:focus-visible,[data-dfl-r79-client-edit="true"] textarea:focus-visible{outline-color:rgba(125,211,252,.7)}
+[data-dfl-r79-rules="active"] strong{overflow-wrap:anywhere;line-height:1.25}
+[data-dfl-r79-next-step="true"]{border-left:3px solid rgba(125,211,252,.75)!important;box-shadow:inset 0 0 22px rgba(14,165,233,.035)}
+[data-dfl-op-card-pinned="true"] [data-dfl-r79-next-step="true"]{border-left-color:rgba(251,191,36,.85)!important}
+@media(max-width:380px){[data-dfl-r79-rules="active"] .grid{grid-template-columns:repeat(2,minmax(0,1fr))}[data-dfl-r79-form-nav="true"]{gap:4px}}
+@media(prefers-reduced-motion:reduce){[data-dfl-r79-form-nav="true"] button:active{transform:none}}

@@ -28,7 +28,7 @@ ok(api.includes('no-store')&&api.includes('validReleaseRevision')&&api.includes(
 const config=read('next.config.js');
 ok(config.includes("output: 'export'")&&config.includes('NEXT_PUBLIC_DFL_RELEASE_SHA')&&config.includes('git'),'APK estático permanece suportado com commit de build');
 const nav=read('app/mais/page.tsx');
-ok(nav.includes("router.push('/mais/atualizacoes')")&&nav.includes('Central de Atualizações'),'entrada acessível no menu Mais');
+ok(nav.includes("router.push('/mais/atualizacoes')")&&nav.includes('Atualizações do aplicativo'),'entrada acessível no menu Mais');
 const guard=read('components/auth/AuthGuard.tsx');
 ok(guard.includes('Verificando acesso')&&guard.includes('Preparando dados locais')&&guard.includes('!authLoaded || !hasHydrated'),'boot comunica fase real, sem fingir sincronização');
 const pwa=read('components/pwa/PwaRuntime.tsx');

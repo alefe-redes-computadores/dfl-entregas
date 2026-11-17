@@ -791,6 +791,10 @@ const [routeId, setRouteId] = useState('');
         </div>
       </header>
       <DeliveryFormPremiumGuide mode="new" origin={origin} fulfillmentMode={fulfillmentMode} notifyWhatsapp={notifyWhatsapp} />
+      <nav aria-label="Ir para uma etapa do formulário" data-dfl-r79-form-nav="true" className="grid grid-cols-4 gap-1.5 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-1.5">
+        {([['Rota','dfl-delivery-route'],['Pedido','dfl-delivery-order'],['Endereço','dfl-delivery-address'],['Pagamento','dfl-delivery-value']] as const).map(([label,id])=><button key={id} type="button" onClick={()=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'})} className="min-h-10 rounded-lg border border-zinc-800 bg-zinc-950/60 px-1 text-[10px] font-black text-zinc-300 transition active:bg-zinc-800">{label}</button>)}
+      </nav>
+
 
       {sameStopSource && (
         <section aria-label="Segundo pedido na mesma parada" className="rounded-[24px] border border-violet-500/35 bg-violet-500/[.07] p-4 shadow-sm">

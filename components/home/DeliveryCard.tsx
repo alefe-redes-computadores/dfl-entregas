@@ -1134,7 +1134,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     {stopCompleted ? 'Parada concluída · reordenação indisponível' : 'Rota fechada · ordem preservada'}
                   </div>
                 )}
-                <section className="rounded-xl border border-sky-500/15 bg-sky-500/[.025] px-3 py-2" aria-label="Próxima ação operacional">
+                <section data-dfl-r79-next-step="true" className="rounded-xl border border-sky-500/15 bg-sky-500/[.025] px-3 py-2" aria-label="Próxima ação operacional">
                   <div className="flex items-start gap-2.5">
                     <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-300"><CheckSquare size={16}/></span>
                     <div className="min-w-0 flex-1">

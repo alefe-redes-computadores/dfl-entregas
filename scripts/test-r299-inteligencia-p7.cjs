@@ -71,7 +71,7 @@ ok(page.includes('isSuperadminUid(owner?.uid)')&&page.includes('buildCustomerInt
 ok(!/onSnapshot\(|getDocs\(|fetch\(|runTransaction\(/.test(page),'tela sem listener, rede ou Firestore extra');
 const more=read('app/mais/page.tsx');
 ok(more.includes("router.push('/mais/mensageria')")&&more.includes("router.push('/mais/acompanhamento')"),'Mensageria e tracking permanecem separados');
-ok(more.includes('Inteligência de Clientes')&&!more.includes("router.push('/confirmacoes')"),'Mais sem confirmação iFood duplicada');
+ok(more.includes("router.push('/mais/inteligencia')")&&more.includes('Inteligência de clientes')&&more.includes('isDiagnosticsAdmin && <section')&&!more.includes("router.push('/confirmacoes')"),'Mais preserva Inteligencia com acesso administrativo e nao duplica confirmacao iFood');
 ok(!more.includes('Estado operacional')&&more.includes("router.push('/mais/diagnostico')"),'estado inerte removido, diagnóstico preservado');
 ok(more.includes('<OperationalRadar />')&&more.includes('legacyRadarOpen &&')&&more.includes('Radar legado'),'Radar legado mantido oculto com testes preservados');
 const st=read('store/useAppStore.ts');

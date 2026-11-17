@@ -35,7 +35,7 @@ for (const route of ['/clientes','/equipe','/motoboys','/abastecimentos','/estoq
 ok(store.includes('onClick={toggleStore}') && store.includes('saveDayEditor') && store.includes('handleSaveAllSettings'), 'abertura, expediente e gravação intactos');
 ok(store.includes('configuredMarketplaceMode') && store.includes('mergeMarketplacePreference'), 'modos de entrega usam a autoridade já existente');
 ok(store.includes('Alterar aqui não reclassifica entregas, pagamentos ou acertos anteriores.'), 'regra de histórico e modalidades segue explícita');
-const technical = excerpt(more, 'Acessos técnicos diretos', '      </details>');
+const technical = excerpt(more, 'Diagnósticos de comunicação', '      </details>');
 ok(technical.includes("router.push('/mais/mensageria')") && technical.includes('<MessageSquareText size={17}'), 'Mensageria técnica com ícone e destino');
 ok(technical.includes("router.push('/mais/acompanhamento')") && technical.includes('<ShieldCheck size={17}'), 'Acompanhamento técnico com ícone e destino');
 ok(more.includes('isDiagnosticsAdmin && <section') && more.includes('isSuperadminUid'), 'áreas técnicas continuam protegidas por permissão');

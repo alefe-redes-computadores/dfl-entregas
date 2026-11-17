@@ -52,6 +52,8 @@ export default function StaffAccessPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm());
   const [expanded, setExpanded] = useState<string[]>(['Logistica']);
+  const [advancedOpen,setAdvancedOpen]=useState(false);
+  useEffect(()=>{try{setAdvancedOpen(window.sessionStorage.getItem('dfl:r79:acessos:advanced')==='1');}catch{}},[]);
   const [pendingStatus, setPendingStatus] = useState<StaffAccessDraft|null>(null);
 
   const refresh = useCallback(async () => {
@@ -142,7 +144,7 @@ export default function StaffAccessPage() {
       <div className="px-1"><p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-300">Central de equipe</p><h2 className="mt-1 text-xs font-black uppercase tracking-wide text-zinc-300">Pessoas e acessos</h2><p className="mt-1 text-[11px] text-zinc-500">Cadastros operacionais na Loja; permissões e segurança neste painel.</p></div>
       <StaffNavRow tone="sky" icon={ClipboardList} label="Solicitações da equipe" detail="Revisar pedidos de colaboradores, sem executar silenciosamente" onClick={()=>router.push('/mais/acessos/solicitacoes')}/>
       <StaffNavRow tone="neutral" icon={LockKeyhole} label="Segurança e revogação" detail="Conferir vínculos e suspender contas" onClick={()=>router.push('/mais/acessos/seguranca')}/>
-      <details className="rounded-[18px] border border-zinc-800 bg-zinc-950/40">
+      <details open={advancedOpen} onToggle={event=>{const open=event.currentTarget.open;setAdvancedOpen(open);try{window.sessionStorage.setItem('dfl:r79:acessos:advanced',open?'1':'0');}catch{}}} className="rounded-[18px] border border-zinc-800 bg-zinc-950/40">
         <summary className="flex min-h-12 cursor-pointer items-center justify-between gap-2 px-3.5 text-xs font-black text-zinc-300">Homologação e auditorias avançadas <ChevronDown size={16}/></summary>
         <div className="border-t border-zinc-800 p-2">
           <StaffNavRow tone="green" icon={ShieldCheck} label="Homologar Google e prévia de dados" detail="Verificar UID antes do vínculo" onClick={()=>router.push('/mais/acessos/homologacao')}/>

@@ -61,6 +61,9 @@ export default function TeamPage() {
   const savingRef = useRef(false);
   const [query, setQuery] = useState('');
   const [showInactiveMotoboys, setShowInactiveMotoboys] = useState(false);
+  const [viewReady,setViewReady]=useState(false);
+  useEffect(()=>{try{const raw=window.sessionStorage.getItem('dfl:r79:equipe:consulta');if(raw){const saved=JSON.parse(raw) as {query?:unknown;inactive?:unknown};if(typeof saved.query==='string')setQuery(saved.query.slice(0,100));if(typeof saved.inactive==='boolean')setShowInactiveMotoboys(saved.inactive);}}catch{}setViewReady(true);},[]);
+  useEffect(()=>{if(!viewReady)return;try{window.sessionStorage.setItem('dfl:r79:equipe:consulta',JSON.stringify({query,inactive:showInactiveMotoboys}));}catch{}},[viewReady,query,showInactiveMotoboys]);
 
   useEffect(() => {
     if (searchParams.get('add') === 'interno') {

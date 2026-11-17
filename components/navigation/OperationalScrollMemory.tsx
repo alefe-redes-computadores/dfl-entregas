@@ -25,7 +25,7 @@ export function OperationalScrollMemory() {
       const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
       window.scrollTo({ top: Math.min(target, max), behavior: 'auto' });
       attempts++;
-      if (max >= target - 3 || attempts >= 12) { restoring = false; save(); return; }
+      if (max >= target - 3 || attempts >= 24) { restoring = false; save(); return; }
       retry = window.setTimeout(restore, 160);
     };
     if (restoring) retry = window.setTimeout(restore, 80);

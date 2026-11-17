@@ -141,6 +141,7 @@ export default function ExpensesPage() {
   );
   const [motoboyFilter, setMotoboyFilter] = useState(searchParams.get('motoboy') || 'todos');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [analyticsOpen,setAnalyticsOpen]=useState(false);
   const [pendingDelete, setPendingDelete] = useState<OperationalExpense | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -435,7 +436,8 @@ export default function ExpensesPage() {
         </div>
       </section>
 
-      {analytics.categories.length > 0 && (
+      <button type="button" aria-expanded={analyticsOpen} onClick={()=>setAnalyticsOpen(v=>!v)} className="mb-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/40 px-3.5 text-left text-xs font-black text-zinc-200"><span>Detalhamento do mês · categorias e motoboys</span><span className="text-[10px] text-zinc-500">{analyticsOpen?'Recolher':'Analisar'}</span></button>
+      {analyticsOpen && analytics.categories.length > 0 && (
         <section className="rounded-[22px] border border-zinc-800/70 bg-zinc-900/30 p-3.5">
           <div className="mb-3 flex items-center gap-2">
             <PieChart size={15} className="text-rose-400" />
@@ -476,7 +478,7 @@ export default function ExpensesPage() {
         </section>
       )}
 
-      {analytics.motoboyRanking.length > 0 && (
+      {analyticsOpen && analytics.motoboyRanking.length > 0 && (
         <section className="rounded-[22px] border border-sky-500/10 bg-sky-500/[.025] p-3.5">
           <div className="mb-2 flex items-center gap-2">
             <UserRound size={15} className="text-sky-400" />
