@@ -215,8 +215,10 @@ function ConfirmarContent() {
       });
 
       goNextOrLeave(pendingId, 'Confirmado no iFood. Próximo pedido preparado.');
-    } catch {
-      toast.error('Não foi possível concluir a pendência.');
+    } catch (error) {
+      toast.error('Não foi possível concluir a pendência.', {
+        description: error instanceof Error ? error.message : 'Confira a conexão e tente novamente.',
+      });
     } finally { endSubmit(); }
   };
 
@@ -359,9 +361,9 @@ function ConfirmarContent() {
         </div>
       </div>
 
-      <div className="relative flex-1 bg-white">
+      <div className="relative flex min-h-0 flex-1 flex-col bg-white">
         {(pendingId || deliveryId) && (
-        <div className="border-b border-zinc-800 bg-zinc-950 px-4 py-3">
+        <div className="relative z-10 shrink-0 border-b border-zinc-800 bg-zinc-950 px-4 py-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-[9px] font-black uppercase tracking-[.14em] text-zinc-500">Resultado no portal</p>
             {readyPending(pendingId).length > 0 && (
@@ -378,7 +380,7 @@ function ConfirmarContent() {
               className="flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 text-xs font-black text-zinc-950 active:scale-[0.98]"
             >
               <CheckCircle2 size={15} />
-              Funcionou · próximo
+              {isSubmitting ? 'Registrando...' : 'Funcionou · próximo'}
             </button>
             <button
               type="button"
@@ -398,7 +400,7 @@ function ConfirmarContent() {
       <iframe
           key={`${pendingId || deliveryId || 'portal'}-${orderId}-${code}`}
           src={IFOOD_CONFIRMATION_URL}
-          className="absolute inset-0 h-full w-full border-none"
+          className="min-h-0 w-full flex-1 border-none"
           title="Confirmação iFood"
           sandbox="allow-scripts allow-same-origin allow-forms"
         />

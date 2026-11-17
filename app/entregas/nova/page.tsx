@@ -530,7 +530,7 @@ const [routeId, setRouteId] = useState('');
       !sameCustomerIdentityAddress(chosenAddress?.address || c.address, activeAddress)
     )) {
       toast.warning('Cliente diferente do pedido iFood. Nome e endereço completos devem coincidir.');
-      return;
+      return false;
     }
     previousCustomerDraft.current = {
       name: typedQuery || typedCustomerBeforeSelection.current || activeCustomerName,
@@ -551,6 +551,7 @@ const [routeId, setRouteId] = useState('');
     // Geolocalizacao anterior nao pode ser reutilizada em outro endereco.
     // A confirmação pertence ao pedido, nunca deve vir automaticamente de outro pedido.
     toast.success('Cliente carregado.');
+    return true;
   };
 
   const parseMoney = (input:string) => { const parsed=Number(input.replace(/\./g,'').replace(',','.')); return Number.isFinite(parsed)?parsed:0; };
@@ -1539,7 +1540,7 @@ const [routeId, setRouteId] = useState('');
           {isSaving ? 'Salvando...' : extraIfoodOrders.length ? `Salvar ${extraIfoodOrders.length + 1} pedidos` : 'Salvar entrega'}
         </button>
       </form>
-      {pendingContactCustomer&&<CustomerDestinationSheet customer={pendingContactCustomer} onUseTemporary={origin==='loja'?(chosenPhone,destination)=>{
+      {pendingContactCustomer&&<CustomerDestinationSheet customer={pendingContactCustomer} addressRequired={fulfillmentMode!=='pickup'} onUseTemporary={origin==='loja'?(chosenPhone,destination)=>{
         const selected=pendingContactCustomer;
         if(!selected)return;
         applyCustomerSelection(selected,chosenPhone,{id:'temporary-delivery',address:destination,maps_link:''});
@@ -1548,7 +1549,7 @@ const [routeId, setRouteId] = useState('');
         setTemporaryCustomerId(selected.id);
         setPendingContactCustomer(null);
         toast.info('Destino temporário selecionado. O cadastro do cliente não será alterado.');
-      }:undefined} onClose={()=>setPendingContactCustomer(null)} onConfirm={(phone,address)=>{applyCustomerSelection(pendingContactCustomer,phone,address);setTemporaryCustomerId(null);setPendingContactCustomer(null);}} onAddAddress={origin==='ifood'?undefined:async(address,makePrimary)=>{
+      }:undefined} onClose={()=>setPendingContactCustomer(null)} onConfirm={(phone,address)=>{if(!applyCustomerSelection(pendingContactCustomer,phone,address))return;setTemporaryCustomerId(null);setPendingContactCustomer(null);}} onAddAddress={origin==='ifood'?undefined:async(address,makePrimary)=>{
         const customer=pendingContactCustomer;
         if(!customer)return undefined;
         const existing=customerAddresses(customer);
