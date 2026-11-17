@@ -6,8 +6,9 @@ import { isAwaitingRedelivery } from '@/lib/operation/return-to-store';
 import { useEffect, useMemo, useState } from 'react';
 import { isFutureScheduledDelivery } from "@/lib/scheduled-delivery";
 import { isSyntheticOperationalRoute } from '@/lib/operational-time';
-import { TrendingUp, Package, Eye, EyeOff, Filter, Users, Bike, ShoppingBag, Store, Clock3, CheckCircle2, Search, ChevronDown } from 'lucide-react';
+import { TrendingUp, Package, Eye, EyeOff, Filter, Users, Bike, ShoppingBag, Store, Clock3, CheckCircle2, Search, ChevronDown, UserRound, Wallet, ArrowUpRight } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { isSuperadminUid } from '@/lib/access/roles';
 import { RouteAccordion } from '@/components/home/RouteAccordion';
 import { ClosedRoutesSection } from '@/components/home/ClosedRoutesSection';
 import type { Route } from '@/types';
@@ -45,6 +46,7 @@ export default function HomePage() {
   const routes = useAppStore((state) => state.routes);
   const deliveries = useAppStore((state) => state.deliveries);
   const motoboys = useAppStore((state) => state.motoboys);
+  const isOwner = useAppStore((state) => isSuperadminUid(state.user?.uid));
   const selectedDate = useAppStore((state) => state.selectedDate);
   const goToPreviousDay = useAppStore((state) => state.goToPreviousDay);
   const goToNextDay = useAppStore((state) => state.goToNextDay);
@@ -54,6 +56,9 @@ export default function HomePage() {
   const togglePrivacyMode = useAppStore((state) => state.togglePrivacyMode);
 
   const [globalMotoboy, setGlobalMotoboy] = useState<string | null>(null);
+  const [homeFilterReady,setHomeFilterReady]=useState(false);
+  useEffect(()=>{try{const saved=window.sessionStorage.getItem('dfl:r78:home:motoboy');if(saved)setGlobalMotoboy(saved);}catch{}setHomeFilterReady(true);},[]);
+  useEffect(()=>{if(!homeFilterReady)return;try{if(globalMotoboy)window.sessionStorage.setItem('dfl:r78:home:motoboy',globalMotoboy);else window.sessionStorage.removeItem('dfl:r78:home:motoboy');}catch{}},[homeFilterReady,globalMotoboy]);
   const [homeToolsOpen, setHomeToolsOpen] = useState(false);
   // R154_R2_ROUTE_FOCUS: compactacao voluntaria, nenhuma rota fica oculta sem acao explicita.
   const [compactOpenRoutes, setCompactOpenRoutes] = useState(false);
@@ -494,6 +499,16 @@ export default function HomePage() {
         </div>
       )}
 
+
+      {globalMotoboy && isOwner && (() => {
+        const selected = motoboys.find((motoboy) => motoboy.name === globalMotoboy);
+        if (!selected) return null;
+        return <nav aria-label="Ações do motoboy filtrado" className="flex flex-wrap items-center gap-2 rounded-[17px] border border-emerald-500/20 bg-emerald-500/[.045] p-2.5">
+          <span className="min-w-0 flex-1 text-[11px] font-bold text-zinc-300"><Bike size={14} className="mr-1 inline text-emerald-300"/>{selected.name} <small className="block text-[10px] font-normal text-zinc-500">Filtro mantido · atalhos não alteram a seleção</small></span>
+          <button type="button" onClick={() => router.push(`/motoboys/details?id=${encodeURIComponent(selected.id)}`)} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-black text-zinc-200"><UserRound size={15}/> Perfil <ArrowUpRight size={13}/></button>
+          <button type="button" onClick={() => router.push(`/motoboys/acerto?id=${encodeURIComponent(selected.id)}&date=${encodeURIComponent(selectedDateKey)}`)} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/[.08] px-3 text-[11px] font-black text-amber-200"><Wallet size={15}/> Acerto</button>
+        </nav>;
+      })()}
 
       <section aria-label="Ferramentas de consulta" className="rounded-[18px] border border-zinc-700/70 bg-zinc-900/50 p-1.5">
         <button type="button" aria-expanded={homeToolsOpen} aria-controls="dfl-home-tools"

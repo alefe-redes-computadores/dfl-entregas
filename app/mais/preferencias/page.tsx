@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, BellRing, Bike, CheckCircle2, ChevronRight,
@@ -51,6 +51,15 @@ export default function Preferencias360() {
   const updateSettings = useAppStore(s => s.updateStoreSettings);
   const [search, setSearch] = useState('');
   const [activeGroup, setActiveGroup] = useState<'rotas' | 'site' | 'plataformas' | 'loja' | 'avisos'>('rotas');
+  const [viewRestored,setViewRestored]=useState(false);
+  useEffect(()=>{
+    try{const raw=window.sessionStorage.getItem('dfl:r78:preferences');if(raw){const v=JSON.parse(raw) as {search?:unknown;group?:unknown};
+      if(typeof v.search==='string')setSearch(v.search.slice(0,80));
+      if(['rotas','site','plataformas','loja','avisos'].includes(String(v.group)))setActiveGroup(v.group as typeof activeGroup);
+    }}catch{}
+    setViewRestored(true);
+  },[]);
+  useEffect(()=>{if(!viewRestored)return;try{window.sessionStorage.setItem('dfl:r78:preferences',JSON.stringify({search,group:activeGroup}));}catch{}},[viewRestored,search,activeGroup]);
   const [busy, setBusy] = useState(false);
   const saveBusyRef = useRef(false);
   const mode = settings.routeOrderingMode === 'smart' ? 'smart' : 'manual';
@@ -82,7 +91,7 @@ export default function Preferencias360() {
   return <main className="dfl-page mx-auto max-w-3xl space-y-4 pb-[calc(env(safe-area-inset-bottom)+110px)] animate-in fade-in duration-300">
     <header className="flex items-center gap-3 px-1 pt-1">
       <button type="button" onClick={() => router.push('/mais')} aria-label="Voltar para Mais" className="grid h-11 w-11 shrink-0 place-items-center rounded-[15px] border border-zinc-800 bg-zinc-900/60 text-zinc-200 active:bg-zinc-800"><ArrowLeft size={18}/></button>
-      <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-300">Seu jeito de operar</p><h1 className="mt-0.5 font-heading text-[21px] font-black text-zinc-50">Preferências 360</h1><p className="mt-0.5 text-[11px] text-zinc-400">Ajustes claros. Uma escolha de cada vez.</p></div>
+      <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-300">Seu jeito de operar</p><h1 className="mt-0.5 font-heading text-[21px] font-black text-zinc-50">Preferências</h1><p className="mt-0.5 text-[11px] text-zinc-400">Ajustes claros. Uma escolha de cada vez.</p></div>
     </header>
 
     <section aria-label="Estado atual das preferências" className="rounded-[16px] border border-zinc-800 bg-zinc-900/35 px-3 py-2.5">

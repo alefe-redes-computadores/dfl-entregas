@@ -1,7 +1,7 @@
 // app/clientes/page.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Crown, GitMerge, MapPin, MessageCircle, PackageOpen, Search, ShoppingBag, Smartphone, Store, Trophy, UserRound } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
@@ -24,6 +24,23 @@ export default function CustomersPage(){
   const [showInternals,setShowInternals]=useState(false);
   const [visibleLimit,setVisibleLimit]=useState(OPERATION_FIRST_BATCH);
   const [compactCards,setCompactCards]=useState(true);
+  const [viewRestored,setViewRestored]=useState(false);
+  useEffect(()=>{
+    try {
+      const raw=window.sessionStorage.getItem('dfl:r78:clientes:filters');
+      if(raw){const v=JSON.parse(raw) as {query?:unknown;filter?:unknown;limit?:unknown;compact?:unknown};
+        if(typeof v.query==='string')setQuery(v.query.slice(0,120));
+        if(['todos','com-pedidos','sem-pedidos','ifood','food99','keeta','loja'].includes(String(v.filter)))setFilter(v.filter as Filter);
+        if(typeof v.limit==='number'&&v.limit>=OPERATION_FIRST_BATCH&&v.limit<=500)setVisibleLimit(v.limit);
+        if(typeof v.compact==='boolean')setCompactCards(v.compact);
+      }
+    }catch{/* preferencias visuais opcionais */}
+    setViewRestored(true);
+  },[]);
+  useEffect(()=>{
+    if(!viewRestored)return;
+    try{window.sessionStorage.setItem('dfl:r78:clientes:filters',JSON.stringify({query,filter,limit:visibleLimit,compact:compactCards}));}catch{}
+  },[viewRestored,query,filter,visibleLimit,compactCards]);
 
   const customerStats = useMemo(() => buildCustomerStatsIndex(customers, deliveries), [customers, deliveries]);
   const items=useMemo(()=>customers.map(customer=>({customer,stats:customerStats.get(customer.id)!})),[customers,customerStats]);

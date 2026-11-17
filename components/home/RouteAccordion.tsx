@@ -80,6 +80,8 @@ import { calculateMotoboyFee } from '@/lib/motoboy-analytics';
 import { deliveryEconomicValue, deriveDeliveryPaymentState } from '@/lib/delivery-finance';
 import { hasPhysicalCashForRoute } from '@/lib/route-cash-flow';
 import { readRememberedRouteId, rememberOpenRouteId } from '@/lib/route-ui-storage';
+import { readAccordionFlag, writeAccordionFlag } from '@/lib/operation/visual-session';
+import { isSuperadminUid } from '@/lib/access/roles';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { isAwaitingRedelivery } from '@/lib/operation/return-to-store';
 
@@ -180,6 +182,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
 
   const storeSettings = useAppStore((state) => state.storeSettings);
   const motoboys = useAppStore((state) => state.motoboys);
+  const ownerCanOpenSettlement = useAppStore((state) => isSuperadminUid(state.user?.uid));
   const customers = useAppStore((state) => state.customers);
 
   const isRecoveryRoute = route.id === 'rota-resgate-recuperada';
@@ -238,7 +241,8 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
       return bTime - aTime || b.id.localeCompare(a.id);
     });
     const preferred = assemblingNewest[0]?.id || (rememberedExists ? remembered : null);
-    setIsOpen(defaultOpen || preferred === route.id);
+    const saved = readAccordionFlag(`route:${route.id}`);
+    setIsOpen(saved ?? (defaultOpen || preferred === route.id));
     // Este é o estado inicial. Atualizações da lista durante a operação não
     // devem reabrir um card que o operador recolheu manualmente.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -248,6 +252,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
   useEffect(() => {
     if (previousRouteStatus.current !== 'fechada' && route.status === 'fechada') {
       setIsOpen(false);
+      writeAccordionFlag(`route:${route.id}`, false);
       setSequenceExpanded(false);
       setSequenceShowAll(false);
       setShowPlanning(false);
@@ -266,6 +271,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         setShowPlanning(false);
       }
       if (next && !isVirtualRoute) rememberOpenRouteId(route.id);
+      if (!isVirtualRoute) writeAccordionFlag(`route:${route.id}`, next);
       return next;
     });
   };
@@ -1001,6 +1007,10 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
         </div>
       </button>
 
+      {isOpen && motoboyObj && ownerCanOpenSettlement && <nav aria-label={`Ações do motoboy ${motoboyObj.name}`} className="mx-3 mb-2 flex flex-wrap gap-2">
+        <button type="button" onClick={() => router.push(`/motoboys/details?id=${encodeURIComponent(motoboyObj.id)}`)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/[.07] px-3 text-xs font-black text-emerald-200"><UserRound size={15}/> Ver motoboy</button>
+        <button type="button" onClick={() => router.push(`/motoboys/acerto?id=${encodeURIComponent(motoboyObj.id)}&date=${encodeURIComponent(operationalRouteDateKey)}`)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 text-xs font-black text-amber-200"><Wallet size={15}/> Consultar acerto</button>
+      </nav>}
       {returnedCount>0 && <div role="status" className="mx-3 mb-2 rounded-xl border border-amber-500/25 bg-amber-500/[.06] px-3 py-2 text-xs text-amber-200">{returnedCount} retorno(s) à loja nesta rota · <button type="button" onClick={()=>router.push('/entregas/retornos')} className="font-black underline">Ver pendências</button></div>}
       {closingRoute && <div role="status" aria-live="polite" className="mx-3 mb-2 rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-[11px] font-semibold text-sky-200">Última entrega salva. Conferindo e fechando a rota no servidor…</div>}
       {isOpen && totalDeliveries > 1 && totalStops !== totalDeliveries && (

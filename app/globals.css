@@ -472,3 +472,21 @@ html[data-dfl-platform="android"] header.safe-top {
   .dfl-assistant-contextual::before,
   .dfl-assistant-contextual { animation: none !important; }
 }
+
+/* R78 — formularios operacionais premium, criar e editar com identidade distinta. */
+[data-dfl-op-card-pinned="true"]{border-color:rgba(251,191,36,.5)}
+[data-dfl-r78-expand="true"]{border-top:1px solid rgba(113,113,122,.28);background:linear-gradient(180deg,rgba(9,9,11,.16),rgba(9,9,11,.025))}
+[data-dfl-r78-expand="true"] [aria-label="Próxima ação operacional"]{border-left:3px solid rgba(125,211,252,.75);background:rgba(14,165,233,.055)}
+[data-dfl-r78-expand="true"] details{border-color:rgba(82,82,91,.55)}
+[data-dfl-r78-expand="true"] details>summary{min-height:40px;display:flex;align-items:center;gap:8px;line-height:1.4}
+[data-dfl-r78-expand="true"] :is(button,a,summary){touch-action:manipulation}
+[data-dfl-r78-expand="true"] :is(button,a,summary):focus-visible{outline:2px solid rgba(253,224,71,.85);outline-offset:2px}
+[data-dfl-r78-form]{color:#f4f4f5}
+[data-dfl-r78-form] :is(input,textarea,select){font-size:16px;max-width:100%;scroll-margin-top:90px}
+[data-dfl-r78-form] :is(input,textarea,select):focus-visible{outline:2px solid rgba(52,211,153,.65);outline-offset:1px}
+[data-dfl-r78-form="edit"] :is(input,textarea,select):focus-visible{outline-color:rgba(125,211,252,.8)}
+[data-dfl-r78-form="new"] > header{border-bottom:1px solid rgba(52,211,153,.18);padding-bottom:12px}
+[data-dfl-r78-form="edit"] > header{border-bottom:1px solid rgba(125,211,252,.22);padding-bottom:12px}
+[data-dfl-r78-form="edit"] > header h1{color:#e0f2fe}
+[data-dfl-r78-form] button:focus-visible{outline:2px solid rgba(250,204,21,.8);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){[data-dfl-r78-form] *{scroll-behavior:auto}}

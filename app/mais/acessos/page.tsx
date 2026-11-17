@@ -138,13 +138,18 @@ export default function StaffAccessPage() {
       <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.18em] text-emerald-400">Administração</p><h1 className="font-heading text-xl font-black text-zinc-50">Equipe e permissões</h1></div>
     </div>
 
-    <section className="space-y-2">
-      <div className="px-1"><h2 className="text-xs font-black uppercase tracking-wide text-zinc-300">Central de equipe</h2><p className="mt-1 text-[11px] text-zinc-500">Segurança, identidade e operação em um só lugar.</p></div>
-      <StaffNavRow tone="green" icon={ShieldCheck} label="Homologar Google e prévia de dados" detail="Verificar UID e conferir projeções antes do login" onClick={()=>router.push('/mais/acessos/homologacao')}/>
-      <StaffNavRow tone="sky" icon={ClipboardList} label="Solicitações da equipe" detail="Revisar entregas e compras sem execução silenciosa" onClick={()=>router.push('/mais/acessos/solicitacoes')}/>
-      <StaffNavRow tone="amber" icon={Shield} label="Prontidão da equipe" detail="Auditoria sob demanda, sem alterações" onClick={()=>router.push('/mais/acessos/prontidao')}/>
-      <StaffNavRow tone="sky" icon={ShieldCheck} label="Homologação da produção" detail="Checklist APK, Firebase e concorrência sem liberar acesso" onClick={()=>router.push('/mais/acessos/publicacao')}/>
+    <section className="space-y-2" aria-label="Acessos e administracao da equipe">
+      <div className="px-1"><p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-300">Central de equipe</p><h2 className="mt-1 text-xs font-black uppercase tracking-wide text-zinc-300">Pessoas e acessos</h2><p className="mt-1 text-[11px] text-zinc-500">Cadastros operacionais na Loja; permissões e segurança neste painel.</p></div>
+      <StaffNavRow tone="sky" icon={ClipboardList} label="Solicitações da equipe" detail="Revisar pedidos de colaboradores, sem executar silenciosamente" onClick={()=>router.push('/mais/acessos/solicitacoes')}/>
       <StaffNavRow tone="neutral" icon={LockKeyhole} label="Segurança e revogação" detail="Conferir vínculos e suspender contas" onClick={()=>router.push('/mais/acessos/seguranca')}/>
+      <details className="rounded-[18px] border border-zinc-800 bg-zinc-950/40">
+        <summary className="flex min-h-12 cursor-pointer items-center justify-between gap-2 px-3.5 text-xs font-black text-zinc-300">Homologação e auditorias avançadas <ChevronDown size={16}/></summary>
+        <div className="border-t border-zinc-800 p-2">
+          <StaffNavRow tone="green" icon={ShieldCheck} label="Homologar Google e prévia de dados" detail="Verificar UID antes do vínculo" onClick={()=>router.push('/mais/acessos/homologacao')}/>
+          <StaffNavRow tone="amber" icon={Shield} label="Prontidão da equipe" detail="Auditoria sob demanda" onClick={()=>router.push('/mais/acessos/prontidao')}/>
+          <StaffNavRow tone="sky" icon={ShieldCheck} label="Homologação da produção" detail="APK, Firebase e concorrência" onClick={()=>router.push('/mais/acessos/publicacao')}/>
+        </div>
+      </details>
     </section>
 
     <section className="relative overflow-hidden rounded-[26px] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[.09] via-zinc-900/85 to-zinc-950 p-4">

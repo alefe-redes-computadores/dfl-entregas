@@ -70,6 +70,10 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
   const [search,setSearch]=useState('');
   const deferredSearch = useDeferredValue(search);
   const [historyOpen,setHistoryOpen]=useState(openHistoryOnLoad);
+  useEffect(()=>{if(openHistoryOnLoad){setHistoryOpen(true);return;}
+    try{if(window.sessionStorage.getItem('dfl:r78:site:history')==='1')setHistoryOpen(true);}catch{}
+  },[openHistoryOnLoad]);
+  useEffect(()=>{try{window.sessionStorage.setItem('dfl:r78:site:history',historyOpen?'1':'0');}catch{}},[historyOpen]);
   // R166_HISTORY_FILTER: sem consulta extra ao Firestore.
   const [historySearch,setHistorySearch]=useState('');
   const deferredHistorySearch = useDeferredValue(historySearch);
@@ -252,7 +256,7 @@ export function SiteInboxPanel({focusedId,openHistoryOnLoad=false}:{focusedId?:s
     <div className="flex items-center gap-3 rounded-[20px] border border-emerald-500/15 bg-emerald-500/[.045] px-3.5 py-3">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-300"><Inbox size={18}/></span>
       <div className="min-w-0 flex-1">
-        <h2 className="text-sm font-black text-zinc-100">Pedidos do Site</h2>
+        <h2 className="text-sm font-black text-zinc-100">Pedidos do Site · Ativos</h2>
         <p className="mt-0.5 text-[11px] text-zinc-400">Confira e escolha a rota quando o pedido estiver liberado.</p>
       </div>
       <span aria-label={`${projection.total} pedidos aguardando organização`} className="shrink-0 rounded-xl bg-zinc-950/60 px-3 py-1.5 text-lg font-black tabular-nums text-zinc-100">{projection.total}</span>

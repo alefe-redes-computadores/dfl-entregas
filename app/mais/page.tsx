@@ -68,7 +68,7 @@ export default function MaisPage() {
         <p className="text-[9px] font-black uppercase tracking-[0.2em]">Seu centro de controle</p>
       </div>
       <h1 className="font-heading text-[25px] font-black tracking-tight text-zinc-50">Mais</h1>
-      <p className="mt-1 max-w-md text-[12px] leading-relaxed text-zinc-400">Preferências e ferramentas organizadas para a operação.</p>
+      <p className="mt-1 max-w-md text-[12px] leading-relaxed text-zinc-400">Configurações, comunicação e segurança. Pessoas e entregas ficam na Loja.</p>
     </header>
 
     <section aria-label="Acessos principais" className="grid grid-cols-2 gap-2.5">
@@ -118,7 +118,7 @@ export default function MaisPage() {
       <SectionHeading eyebrow="Sistema" title="Aplicativo e ferramentas" />
       <div className="overflow-hidden rounded-[20px] border border-zinc-800 bg-zinc-900/35">
         <Destination first tone="sky" icon={RefreshCw} title="Central de Atualizações" description="APK, novas versões e instalação segura" onClick={() => router.push('/mais/atualizacoes')}/>
-        {isDiagnosticsAdmin && <Destination tone="neutral" icon={UsersRound} title="Equipe e permissões" description="Acessos e funções dos colaboradores" onClick={() => router.push('/mais/acessos')}/>}
+        {isDiagnosticsAdmin && <Destination tone="neutral" icon={UsersRound} title="Acessos e segurança" description="Permissões, convites e proteção da equipe" onClick={() => router.push('/mais/acessos')}/>}
         {isDiagnosticsAdmin && <Destination tone="neutral" icon={ShieldCheck} title="Diagnóstico local" description="Verificações técnicas e saúde do dispositivo" onClick={() => router.push('/mais/diagnostico')}/>}
       </div>
     </section>

@@ -12,6 +12,7 @@ import { NativeRuntime } from '@/components/NativeRuntime';
 import { PwaRuntime } from '@/components/pwa/PwaRuntime';
 import { SiteOrderNotificationWatcher } from '@/components/SiteOrderNotificationWatcher';
 import { ConnectivityRecovery } from '@/components/operation/ConnectivityRecovery';
+import { OperationalScrollMemory } from '@/components/navigation/OperationalScrollMemory';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -75,6 +76,7 @@ export default function RootLayout({
             <RouteOperations />
             <SiteOrderNotificationWatcher />
             <div className="dfl-shell relative mx-auto flex w-full flex-col overflow-x-hidden bg-zinc-950/95 text-zinc-100">
+              <OperationalScrollMemory />
               <Header />
               <ConnectivityRecovery />
               <main className="dfl-main relative flex-1 px-3.5 pt-3.5 sm:px-4">{children}</main>

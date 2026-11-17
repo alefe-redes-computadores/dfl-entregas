@@ -284,6 +284,8 @@ interface AppState {
   closeRoute: (routeId: string, options?: { effectiveEndTime?: string; autoClosedAt?: string }) => Promise<void>;
   reopenRoute: (routeId: string) => Promise<void>;
   reorderDelivery: (routeId: string, deliveryId: string, direction: 'up' | 'down') => Promise<void>;
+  /** Trava toda a parada fisica em uma transacao; nenhuma confirmacao antes do servidor. */
+  setStopPinned: (routeId: string, deliveryId: string, pinned: boolean) => Promise<void>;
   moveDeliveryToIndex: (routeId: string, deliveryId: string, targetIndex: number) => Promise<void>;
   setDeliveryOrder: (
     routeId: string,
@@ -3035,6 +3037,8 @@ export const useAppStore = create<AppState>()(
         if (currentIndex < 0) return;
         const targetIndex = currentIndex + (direction === 'up' ? -1 : 1);
         if (targetIndex < 0 || targetIndex >= groups.length) return;
+        if (groups[currentIndex].locked || groups[targetIndex].locked)
+          throw new Error('Desfixe a parada para alterar essa posição.');
         const orderedIds = moveStopToIndex(pending, deliveryId, targetIndex);
 
         await get().setDeliveryOrder(
@@ -3043,6 +3047,56 @@ export const useAppStore = create<AppState>()(
           { metadata: { order_source: 'manual', order_updated_at: new Date().toISOString() } },
         );
       },
+
+      setStopPinned: async (routeId, deliveryId, pinned) => withRouteOrderWriteLock(routeId, async () => {
+        const before = get();
+        const route = before.routes.find((item) => item.id === routeId);
+        if (!route || route.status !== 'aberta') throw new Error('A rota precisa estar aberta para alterar a fixação.');
+        const candidates = before.deliveries.filter((item) =>
+          item.route_id === routeId && !item.completed && !isCancelledSiteDelivery(item),
+        );
+        const selected = candidates.find((item) => item.id === deliveryId);
+        if (!selected) throw new Error('Parada indisponível para fixação. Atualize a rota.');
+        const key = deliveryStopKey(selected);
+        const members = candidates.filter((item) => deliveryStopKey(item) === key);
+        if (!members.length || members.length > 400) throw new Error('Grupo de parada inválido para gravação conjunta.');
+        const ids = new Set(members.map((item) => item.id));
+        const refs = members.map((item) => doc(db, 'deliveries', item.id));
+        const routeRef = doc(db, 'routes', routeId);
+        const now = new Date().toISOString();
+        const startedAt = Date.now();
+        try {
+          // Firestore pode repetir o callback. Nenhuma atualizacao local ocorre antes do commit.
+          await queueDeliveryDocuments(queueEntityWrite, members.map((item) => item.id), () =>
+            runTransaction(db, async (transaction) => {
+              const snapshots = await Promise.all([transaction.get(routeRef), ...refs.map((ref) => transaction.get(ref))]);
+              const remoteRoute = snapshots[0];
+              if (!remoteRoute.exists() || (remoteRoute.data() as Route).status !== 'aberta')
+                throw new Error('A rota foi encerrada em outro aparelho. Atualize para continuar.');
+              snapshots.slice(1).forEach((snap, index) => {
+                if (!snap.exists()) throw new Error('Pedido excluído em outro aparelho. Atualize a rota.');
+                const remote = snap.data() as Delivery;
+                if (remote.route_id !== routeId || remote.completed || isCancelledSiteDelivery(remote))
+                  throw new Error('A parada mudou de rota ou situação. Atualize antes de fixar.');
+                if (remote.order_index !== members[index].order_index)
+                  throw new Error('A ordem foi alterada em outro aparelho. Atualize antes de fixar.');
+              });
+              refs.forEach((ref) => transaction.update(ref, {
+                order_locked: pinned, order_source: 'manual', order_updated_at: now, updated_at: now,
+              }));
+            }),
+          );
+          set((state) => ({ deliveries: state.deliveries.map((item) =>
+            ids.has(item.id) && item.route_id === routeId
+              ? { ...item, order_locked: pinned, order_source: 'manual', order_updated_at: now, updated_at: now }
+              : item),
+          }));
+          recordActionLatency('stop_pin_commit', Date.now() - startedAt, 'confirmed', members.length);
+        } catch (error) {
+          recordActionLatency('stop_pin_commit', Date.now() - startedAt, 'failed', members.length);
+          throw error;
+        }
+      }),
 
       moveDeliveryToIndex: async (routeId, deliveryId, targetIndex) => {
         const pending = get().deliveries
@@ -3053,7 +3107,9 @@ export const useAppStore = create<AppState>()(
         const groups = groupDeliveriesByStop(pending);
         const currentIndex = groups.findIndex((group) => group.key === deliveryStopKey(selected));
         if (currentIndex < 0) return;
+        if (groups[currentIndex].locked) throw new Error('Desfixe a parada antes de movê-la.');
         const rawTarget = Math.max(0, Math.min(targetIndex, groups.length - 1));
+        if (groups[rawTarget].locked) throw new Error('A posição de destino está fixada. Escolha outra.');
         if (rawTarget === currentIndex) return;
         const orderedIds = moveStopToIndex(pending, deliveryId, rawTarget);
 
@@ -3094,9 +3150,12 @@ export const useAppStore = create<AppState>()(
         // setas e otimizador não movam a primeira parada travada.
         // O operador decide a ordem explicita. Apenas os automatismos respeitam pins.
         // Isso tambem recupera paradas legadas fixadas indevidamente por urgencia.
-        const protectedIds = options?.manualMoveOverride
-          ? finalPendingIds
-          : keepPinnedStopPositions(pending, finalPendingIds);
+        // Mesmo movimento MANUAL respeita as posicoes fixadas. A escolha de liberar
+        // a trava pertence exclusivamente a setStopPinned, com commit atomico.
+        const protectPositions = options?.manualMoveOverride === true || pending.some((item) => item.order_locked === true);
+        const protectedIds = protectPositions
+          ? keepPinnedStopPositions(pending, finalPendingIds)
+          : finalPendingIds;
         const orderedPending = protectedIds.map((id) => pendingById.get(id)!);
         if (new Set(protectedIds).size !== pending.length) {
           throw new Error('A sequência contém IDs repetidos ou pedidos ausentes.');
@@ -3119,9 +3178,15 @@ export const useAppStore = create<AppState>()(
         }
 
         const now = new Date().toISOString();
-        const metadata = options?.manualMoveOverride
-          ? { ...options.metadata, order_locked: false, order_source: 'manual' as const }
-          : options?.metadata;
+        // Nunca redefinir order_locked num lote de ordenacao. Somente a
+        // transacao explicita de fixacao pode alterar este campo.
+        const metadata: {
+          order_locked?: boolean;
+          order_source?: 'manual' | 'smart';
+          order_updated_at?: string;
+        } | undefined = options?.metadata
+          ? { order_source: options.metadata.order_source, order_updated_at: options.metadata.order_updated_at }
+          : undefined;
         const orderUpdatedAt =
           metadata?.order_updated_at || now;
 

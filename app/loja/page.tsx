@@ -452,9 +452,14 @@ export default function LojaPage() {
             </div>
           </div>
 
+          {!showManagement && <nav aria-label="Pessoas e entregadores · acesso imediato" className="grid grid-cols-3 gap-2 rounded-[18px] border border-violet-500/20 bg-violet-500/[.035] p-2">
+            <button type="button" onClick={() => router.push('/clientes')} className="flex min-h-[65px] flex-col items-center justify-center gap-1 rounded-xl border border-zinc-800 bg-zinc-950/65 text-[11px] font-black text-zinc-100"><UserRound size={18} className="text-sky-300"/> Clientes</button>
+            <button type="button" onClick={() => router.push('/motoboys')} className="flex min-h-[65px] flex-col items-center justify-center gap-1 rounded-xl border border-zinc-800 bg-zinc-950/65 text-[11px] font-black text-zinc-100"><Bike size={18} className="text-emerald-300"/> Motoboys</button>
+            <button type="button" onClick={() => router.push('/equipe')} className="flex min-h-[65px] flex-col items-center justify-center gap-1 rounded-xl border border-zinc-800 bg-zinc-950/65 text-[11px] font-black text-zinc-100"><UsersRound size={18} className="text-violet-300"/> Equipe</button>
+          </nav>}
           <div className="space-y-2">
             <button type="button" aria-expanded={showManagement} onClick={toggleManagement} className="flex min-h-[54px] w-full items-center justify-between rounded-[17px] border border-zinc-800 bg-zinc-900/30 px-3.5 text-left active:bg-zinc-800/40">
-              <span className="flex items-center gap-2.5"><Users size={18} className="text-violet-300"/><span><strong className="block text-[12px] font-black text-zinc-100">Pessoas e equipe</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Clientes, colaboradores e motoboys</small></span></span>
+              <span className="flex items-center gap-2.5"><Users size={18} className="text-violet-300"/><span><strong className="block text-[12px] font-black text-zinc-100">Pessoas e equipe</strong><small className="mt-0.5 block text-[10px] text-zinc-400">Clientes, colaboradores e motoboys · opções detalhadas</small></span></span>
               <ChevronDown size={16} className={`shrink-0 text-zinc-500 transition-transform ${showManagement ? 'rotate-180' : ''}`}/>
             </button>
             {showManagement && (<>

@@ -33,9 +33,9 @@ export default function Comunicacao360Page(){
   return <div className="dfl-page mx-auto max-w-3xl space-y-4 pb-[calc(env(safe-area-inset-bottom)+100px)]">
     <header className="flex items-start gap-3 px-1 pt-1">
       <button type="button" onClick={()=>router.push('/mais')} aria-label="Voltar para Mais" className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-300"><ArrowLeft size={18}/></button>
-      <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-400">DFL 360 · Gestão</p><h1 className="font-heading text-2xl font-black text-zinc-50">Comunicação 360</h1><p className="mt-1 text-xs leading-relaxed text-zinc-400">Mensagens, acompanhamento privado e materiais reunidos em um só lugar.</p></div>
+      <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-400">Gestão de comunicação</p><h1 className="font-heading text-2xl font-black text-zinc-50">Comunicação e avisos</h1><p className="mt-1 text-xs leading-relaxed text-zinc-400">Mensagens, acompanhamento privado e materiais reunidos em um só lugar.</p></div>
     </header>
-    <nav aria-label="Áreas da Comunicação 360" className="grid grid-cols-4 gap-1.5 rounded-[19px] border border-zinc-800 bg-zinc-900/65 p-1.5">
+    <nav aria-label="Áreas de comunicação e avisos" className="grid grid-cols-4 gap-1.5 rounded-[19px] border border-zinc-800 bg-zinc-900/65 p-1.5">
       {sections.map(item=>{const Icon=item.icon;return <button key={item.id} type="button" aria-current={section===item.id?'page':undefined} aria-pressed={section===item.id} onClick={()=>setSection(item.id)} className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-[14px] px-1 py-2 text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${section===item.id?'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200':'border border-transparent text-zinc-400 active:bg-zinc-800'}`}><Icon size={17}/><span className="text-[10px] font-bold leading-tight">{item.label}</span></button>})}
     </nav>
     {section==='visao'&&<div className="space-y-3">

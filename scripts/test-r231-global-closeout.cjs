@@ -71,11 +71,12 @@ check(inbox.includes('},[history,deferredHistorySearch,historyStatus])'),'histó
 check(inbox.includes('siteAllocationPreflight')&&inbox.includes('acknowledgeSiteOrders'),'alocação e recibo Site preservados');
 check(!/\b(?:onSnapshot|getDocs)\s*\(/.test(inbox),'busca não acrescenta consulta Firebase');
 const card=read('components/home/DeliveryCard.tsx');
+const pinStore=read('store/useAppStore.ts');
 check(card.includes("const feedbackId = `dfl-stop-lock-${delivery.id}`"),'fixação tem aviso independente do movimento');
-check(card.includes('let saved = 0;')&&card.includes('groupedDeliveries.length > 1'),'parada multipedido mostra avanço');
-check(card.includes('for (const item of groupedDeliveries) {')&&card.includes('await updateDelivery(item.id, {'),'sequência de escrita não vira lote parcial não tratado');
-check(card.includes('toast.dismiss(feedbackId);')&&card.includes('Parada destravada.'),'feedback termina após confirmação');
-check(card.includes('uma gravação anterior pode ter sido confirmada'),'falha parcial avisa conferência');
+check(card.includes('await setStopPinned(route.id, delivery.id, next)')&&pinStore.includes('const members = candidates.filter((item) => deliveryStopKey(item) === key);'),'parada multipedido fixada como grupo');
+check(pinStore.includes('queueDeliveryDocuments(queueEntityWrite, members.map((item) => item.id)')&&pinStore.includes('refs.forEach((ref) => transaction.update(ref, {')&&pinStore.includes('const snapshots = await Promise.all([transaction.get(routeRef)'),'escrita multipedido usa transacao atomica e lock');
+check(card.includes('toast.success(next ?')&&card.includes('Parada desfixada.')&&card.includes('{ id: feedbackId }'),'feedback termina após confirmação');
+check(card.includes('toast.error(error instanceof Error')&&pinStore.includes("recordActionLatency('stop_pin_commit'")&&pinStore.includes('throw error;'),'falha de fixacao nao simula sucesso nem parcialidade');
 check(card.includes("if (dx < 0 && swipeCanCompleteOrUndo) void handleTriggerAction('complete')"),'gesto baixa/desfazer R229 preservado');
 const pre=read('scripts/pre-apk.cjs');
 for (const file of ['scripts/test-r231-global-closeout.cjs','scripts/test-r230-offline-recovery.cjs','scripts/test-r229-r3-swipe-undo.cjs','scripts/test-r228-r4-regression-compat.cjs'])

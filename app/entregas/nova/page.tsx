@@ -768,7 +768,7 @@ const [routeId, setRouteId] = useState('');
   };
 
   return (
-    <div className="relative flex flex-col gap-5 pb-28 animate-in fade-in duration-300">
+    <div data-dfl-r78-form="new" className="relative flex flex-col gap-4 pb-28 animate-in fade-in duration-300">
       {isSaving && slowDeliveryConfirmation && <p role="status" aria-live="polite" className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-3 text-xs font-semibold text-sky-200">Pedido preparado; aguardando confirmação do servidor. Não toque novamente em salvar. Os tempos de cliente e gravação podem ser vistos em Mais · Diagnóstico.</p>}
       <header className="flex items-center gap-3">
         <button

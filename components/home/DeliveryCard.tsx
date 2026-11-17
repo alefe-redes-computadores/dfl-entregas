@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
-  Smartphone, Store, Globe2, Bike, UtensilsCrossed, Layers3, ArrowUp, ArrowDown, MapPin, ChevronDown, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle
+  Smartphone, Store, Globe2, Bike, UtensilsCrossed, Layers3, ArrowUp, ArrowDown, MapPin, ChevronDown, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle, Pin, PinOff
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import clsx from 'clsx';
@@ -66,6 +66,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const updateDelivery = useAppStore((state) => state.updateDelivery);
   const deleteDelivery = useAppStore((state) => state.deleteDelivery);
   const moveDeliveryToIndex = useAppStore((state) => state.moveDeliveryToIndex);
+  const setStopPinned = useAppStore((state) => state.setStopPinned);
   const toggleDeliveryExpansion = useAppStore((state) => state.toggleDeliveryExpansion);
   const isPrivacyMode = useAppStore((state) => state.isPrivacyMode);
   const getDeliveriesByRoute = useAppStore((state) => state.getDeliveriesByRoute);
@@ -597,36 +598,17 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   const toggleStopLock = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    const feedbackId = `dfl-stop-lock-${delivery.id}`;
     if (reorderBusyRef.current) return;
+    const feedbackId = `dfl-stop-lock-${delivery.id}`;
     reorderBusyRef.current = true;
     setReorderBusy(true);
+    const next = !orderLocked;
+    toast.loading(next ? 'Fixando parada…' : 'Desfixando parada…', { id: feedbackId, duration: Infinity });
     try {
-      const nextLocked = !orderLocked;
-      const changedAt = new Date().toISOString();
-      let saved = 0;
-      toast.loading(nextLocked ? 'Fixando parada…' : 'Destravando parada…', {
-        id: feedbackId, duration: Infinity,
-      });
-      for (const item of groupedDeliveries) {
-        await updateDelivery(item.id, {
-          order_locked: nextLocked,
-          order_source: 'manual',
-          order_updated_at: changedAt,
-        });
-        saved++;
-        if (groupedDeliveries.length > 1) toast.loading(
-          `${nextLocked ? 'Fixando' : 'Destravando'} pedidos ${saved}/${groupedDeliveries.length}…`,
-          { id: feedbackId, duration: Infinity },
-        );
-      }
-      toast.dismiss(feedbackId);
-      toast.success(nextLocked ? 'Parada fixada nesta posição.' : 'Parada destravada.');
+      await setStopPinned(route.id, delivery.id, next);
+      toast.success(next ? 'Parada fixada. A posição está protegida.' : 'Parada desfixada.', { id: feedbackId });
     } catch (error) {
-      toast.dismiss(feedbackId);
-      toast.error(error instanceof Error ? error.message : 'Não foi possível alterar a trava.', {
-        description: groupedDeliveries.length > 1 ? 'Confira os pedidos agrupados: uma gravação anterior pode ter sido confirmada.' : undefined,
-      });
+      toast.error(error instanceof Error ? error.message : 'Não foi possível confirmar a fixação.', { id: feedbackId });
     } finally {
       reorderBusyRef.current = false;
       setReorderBusy(false);
@@ -814,10 +796,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
 
   return (
     <>
-      <div data-dfl-op-card="true" data-dfl-op-card-expanded={isExpanded ? "true" : "false"} data-dfl-op-card-state={stopCompleted ? "concluida" : isUrgent ? "urgente" : "pendente"} data-dfl-route-id={route.id} data-dfl-stop-id={delivery.id} data-dfl-stop-index={canReorder ? position : undefined} className={clsx(
+      <div data-dfl-op-card="true" data-dfl-op-card-expanded={isExpanded ? "true" : "false"} data-dfl-op-card-pinned={orderLocked ? "true" : "false"} data-dfl-op-card-state={stopCompleted ? "concluida" : isUrgent ? "urgente" : "pendente"} data-dfl-route-id={route.id} data-dfl-stop-id={delivery.id} data-dfl-stop-index={canReorder ? position : undefined} className={clsx(
           "relative overflow-hidden rounded-[18px] transition-colors duration-150",
           stopCompleted ? "opacity-80" : "shadow-sm",
           isUrgent && !stopCompleted && "shadow-[0_0_15px_rgba(239,68,68,0.15)] border border-red-500/40",
+          orderLocked && !stopCompleted && "ring-1 ring-amber-400/50",
           isNeighbor && !stopCompleted && "border-amber-500/30",
           isExpanded
             ? "bg-zinc-900 border border-amber-500/35 shadow-[0_14px_34px_rgba(0,0,0,0.32)]"
@@ -877,6 +860,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
               </div>
 
               <div className="flex min-w-0 flex-1 flex-col">
+                {orderLocked && <span className="mb-1 inline-flex w-fit items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-200" aria-label="Parada fixada na ordem"><Pin size={12} aria-hidden="true"/> Posição fixada</span>}
                 <div className="flex justify-between items-start">
                   <div className="flex min-w-0 max-w-[54%] flex-col items-start gap-1">
                     <p className="max-w-full break-words font-heading text-[13px] font-black leading-snug tracking-tight text-zinc-50 [overflow-wrap:anywhere]">
@@ -1055,6 +1039,9 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       {isNeighbor && <span className="ml-auto shrink-0 text-[9px] font-bold text-sky-400">Próxima {neighborPosition || 1}/{neighborTotal || 2}</span>}
                     </div>
                     <div className="flex min-w-0 flex-wrap items-stretch gap-1.5" aria-label="Ações rápidas da parada">
+                      {canManageStop && <button type="button" data-no-card-swipe="true" aria-pressed={orderLocked} aria-busy={reorderBusy} aria-label={orderLocked ? 'Desfixar parada' : 'Fixar parada nesta posição'} title={orderLocked ? 'Desfixar parada' : 'Fixar parada'} disabled={reorderBusy} onClick={(event) => { void toggleStopLock(event); }} className={`grid h-10 min-w-[40px] flex-1 place-items-center rounded-xl border ${orderLocked ? 'border-amber-400/45 bg-amber-400/15 text-amber-200' : 'border-zinc-700 bg-zinc-950/80 text-zinc-300'} disabled:opacity-50`}>
+                        {orderLocked ? <PinOff size={16} aria-hidden="true"/> : <Pin size={16} aria-hidden="true"/>}
+                      </button>}
                       {canManageStop && Boolean(routeStartedAt(route)) ? (
                         <button
                             type="button"
@@ -1126,7 +1113,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                            {/* R124-R5-COMPACT: cosmetic-only; JSX hierarchy and handlers preserved */}
 {/* VISUALIZAÇÃO EXPANDIDA */}
           {isExpanded && (
-            <div className="animate-in slide-in-from-top-2 fade-in duration-200">
+            <div data-dfl-r78-expand="true" className="animate-in slide-in-from-top-2 fade-in duration-200">
               <div className="px-3 pb-2.5 flex flex-col gap-2">
                 <div className="rounded-xl border border-zinc-800/50 bg-zinc-950/20 px-3 py-1.5" aria-label="Resumo da parada">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1223,7 +1210,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   {canManageStop && <details className="mx-3 mb-2 rounded-xl border border-zinc-800/70 bg-zinc-950/25 px-3 py-1.5">
                     <summary className="flex min-h-9 cursor-pointer items-center justify-between gap-2 text-[11px] font-black text-sky-300"><span>Ferramentas · ajustar ordem {position ? `· parada ${position}` : ''}</span><ChevronDown size={15}/></summary>
                     <div className="mt-2 flex flex-wrap items-center gap-2" aria-label="Organizar parada expandida">
-                      {canManageStop && <button type="button" onClick={(event)=>void toggleStopLock(event)} disabled={reorderBusy} className={`rounded-lg border px-2 py-1 text-[10px] font-black ${orderLocked ? 'border-amber-500/35 bg-amber-500/10 text-amber-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}>{orderLocked ? 'Destravar' : 'Fixar'}</button>}
+                      {canManageStop && <button type="button" onClick={(event)=>void toggleStopLock(event)} disabled={reorderBusy} className={`rounded-lg border px-2 py-1 text-[10px] font-black ${orderLocked ? 'border-amber-500/35 bg-amber-500/10 text-amber-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}>{orderLocked ? 'Desfixar' : 'Fixar'}</button>}
                     <span className="mr-auto text-[10px] font-semibold text-zinc-400">{orderLocked ? 'Parada fixada · destrave para mover' : canReorder ? `Parada ${position} de ${pendingCount}` : 'Sequência de parada'}</span>
                     {canReorder && <div className="flex items-center overflow-hidden rounded-xl border border-sky-500/25 bg-sky-500/[.05]" role="group" aria-label="Mover parada expandida">
                       <button type="button" data-no-card-swipe="true" aria-label="Subir parada expandida" title="Subir uma parada" disabled={reorderBusy || (position || 1) <= 1} onClick={(event)=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 w-10 place-items-center text-sky-200 disabled:opacity-35"><ArrowUp size={15}/></button>
