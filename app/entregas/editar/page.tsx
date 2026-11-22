@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
 import { DeliveryFormPremiumGuide } from '@/components/deliveries/DeliveryFormPremiumGuide';
+import { kickManualCreated, kickManualPickup } from '@/lib/integration/client/manualMessagingKick';
 import { firstRequiredDeliveryIssue, focusDeliveryIssue, type DeliveryFormIssue, type DeliveryFormField } from '@/lib/operation/delivery-form-feedback';
 import { useAppStore } from '@/store/useAppStore';
 import { CustomerAutocomplete } from '@/components/deliveries/CustomerAutocomplete';
@@ -542,7 +543,7 @@ const [routeId, setRouteId] = useState('');
       const rawP = delivery.phone || existingCustomer?.phone || '';
       if (rawP) setPhone(formatPhoneInput(rawP));
       const verifiedRecipient = existingCustomer?.name || (delivery as any).customer_name || '';
-      setR74ConsentKey(delivery.manual_messaging_opt_in_v1 === true && ['ifood','food99','keeta'].includes(delivery.origin)
+      setR74ConsentKey(delivery.manual_messaging_opt_in_v1 === true && delivery.notify_whatsapp===true && delivery.source_system!=='dfl_site'
         ? `${deliveryId||''}|${delivery.origin}|${String(delivery.order_id||'').trim()}|${normalizeBrazilPhone(rawP)}|${verifiedRecipient.trim().toLocaleLowerCase('pt-BR')}` : '');
     } else {
       toast.error('Entrega não encontrada');
@@ -695,12 +696,14 @@ const [routeId, setRouteId] = useState('');
         address_string: customerAddress,
         maps_link: fulfillmentMode === 'pickup' ? '' : (mapsLink.trim() || resolvedMapsLink),
         phone: rawPhone || undefined,
-         notify_whatsapp: origin === 'loja' ? notifyWhatsapp : fulfillmentMode === 'delivery' && notifyWhatsapp && r74ConsentConfirmed,
-         // R301: edição do opt-in é explícita. Plataforma e Site nunca herdam autorização.
-         manual_messaging_opt_in_v1: origin === 'loja' && currentDelivery?.source_system !== 'dfl_site' &&
-           (fulfillmentMode === 'delivery' || fulfillmentMode === 'pickup') && notifyWhatsapp ||
-           ['ifood','food99','keeta'].includes(origin) && currentDelivery?.source_system !== 'dfl_site' &&
-           fulfillmentMode === 'delivery' && notifyWhatsapp && r74ConsentConfirmed,
+         notify_whatsapp: currentDelivery?.source_system==='dfl_site' ? currentDelivery.notify_whatsapp===true :
+           normalizeBrazilPhone(phone).length>=10 && notifyWhatsapp && r74ConsentConfirmed,
+         // Um unico consentimento POR pedido, Loja inclusive. Nunca herdar do Site.
+         manual_messaging_opt_in_v1: currentDelivery?.source_system==='dfl_site'
+           ? currentDelivery.manual_messaging_opt_in_v1===true
+           : normalizeBrazilPhone(phone).length>=10 && notifyWhatsapp && r74ConsentConfirmed &&
+             ((origin==='loja' && (fulfillmentMode==='delivery'||fulfillmentMode==='pickup')) ||
+              (['ifood','food99','keeta'].includes(origin) && fulfillmentMode==='delivery')),
          manual_order_items: origin === 'loja' ? (manualOrderItems.trim().slice(0,180) || undefined) : currentDelivery?.manual_order_items,
          observation,
         drinks: drinks.trim(),
@@ -712,10 +715,28 @@ const [routeId, setRouteId] = useState('');
           : {}),
       } as any;
 
+      // Troca de opt-in nao pode criar entrega nova nem repetir mensagens antigas.
+      const previousOptIn = currentDelivery?.notify_whatsapp===true && currentDelivery?.manual_messaging_opt_in_v1===true;
+      const newlyAuthorized = !previousOptIn && selectedData.notify_whatsapp===true && selectedData.manual_messaging_opt_in_v1===true &&
+        currentDelivery?.source_system!=='dfl_site' && currentDelivery?.completed!==true &&
+        (fulfillmentMode==='delivery'||(fulfillmentMode==='pickup'&&origin==='loja')) && !currentDelivery?.operational_dismissed_at;
       if (routeChanged && moveWholeStop && sameStopDeliveries.length > 1) {
         await moveRouteStop(deliveryId, routeId, sameStopDeliveries.map(item=>item.id), selectedData);
       } else {
         await updateDelivery(deliveryId, selectedData);
+      }
+      if(newlyAuthorized) {
+        const originalAt=Date.parse(String(currentDelivery?.created_at || currentDelivery?.createdAt || ''));
+        const recent=Number.isFinite(originalAt)&&Date.now()-originalAt>=0&&Date.now()-originalAt<=15*60_000;
+        if(recent) {
+          void (fulfillmentMode==='pickup' ? kickManualPickup(deliveryId,'created') : kickManualCreated(deliveryId)).then(result=>{
+            if(result.status==='queued')toast.info('Aviso inicial reservado; entrega no WhatsApp ainda não confirmada.');
+            else if(result.status==='duplicate')toast.info('Aviso inicial já reservado. Nenhum reenvio.');
+            else toast.info('Autorização salva; aviso inicial não confirmado.',{description:'Consulte a Central antes de tentar novamente.'});
+          }).catch(()=>toast.warning('Autorização salva; resposta incerta, sem reenvio automático.'));
+        } else {
+          toast.info('Autorização salva para próximos avisos.',{description:'O evento inicial é antigo e não será reenviado sem revisão.'});
+        }
       }
 
       toast.success(
@@ -1134,38 +1155,34 @@ const [routeId, setRouteId] = useState('');
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-400">05 · Cliente</p><p className="mt-1 text-sm font-black text-zinc-200">Contato e identificação</p></div>
           <CustomerAutocomplete value={customerName} onChange={setCustomerName} onSelect={handleCustomerSelect} customers={customers} addressContext={streetAddress} strictMatch={origin === 'ifood'} />
 
-          <div className="grid grid-cols-1 gap-2">
+          <div className="flex flex-col gap-2" data-dfl-whatsapp-compact="true">
             <div className="flex items-center gap-2">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  inputMode="tel"
-                  placeholder="WhatsApp: (34) 99999-9999"
-                  value={phone}
-                  onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
-                  className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setNotifyWhatsapp(!notifyWhatsapp);
+              <input type="text" inputMode="tel" placeholder="WhatsApp: (34) 99999-9999"
+                value={phone} onChange={event=>{
+                  const next=formatPhoneInput(event.target.value);
+                  if(normalizeBrazilPhone(next).length>=10 && normalizeBrazilPhone(phone).length<10)
+                    setNotifyWhatsapp(true);
+                  setPhone(next);
                 }}
-                className={`flex items-center gap-1.5 h-12 px-4 rounded-xl border text-xs font-bold transition-all active:scale-95 shrink-0 ${
-                  notifyWhatsapp
-                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-sm'
-                    : 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                }`}
-              >
-                <MessageCircle size={15} /> Avisar no Zap
-              </button>
+                className="h-12 min-w-0 flex-1 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none" />
+              {currentDelivery?.source_system!=='dfl_site' && normalizeBrazilPhone(phone).length>=10 &&
+                <button type="button" onClick={()=>{
+                    setNotifyWhatsapp(!notifyWhatsapp);
+                    if(notifyWhatsapp)setR74ConsentKey('');
+                  }} aria-pressed={notifyWhatsapp}
+                  className={`flex h-12 shrink-0 items-center gap-1 rounded-xl border px-3 text-[11px] font-black ${notifyWhatsapp?'border-emerald-500/40 bg-emerald-500/10 text-emerald-300':'border-zinc-700 text-zinc-400'}`}>
+                  <MessageCircle size={14}/> Avisar {notifyWhatsapp?'✓':''}
+                </button>}
             </div>
-            {origin !== 'loja' && <label className={`mt-2 flex items-start gap-2 rounded-xl border p-3 text-xs ${r74ConsentConfirmed?'border-emerald-500/40 text-emerald-200':'border-zinc-700 text-zinc-400'}`}>
-              <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-500" disabled={!normalizeBrazilPhone(phone)||!customerName.trim()} checked={r74ConsentConfirmed} onChange={e=>setR74ConsentKey(e.target.checked?currentR74ConsentKey:'')}/>
-              <span>Cliente autorizou os avisos DFL por WhatsApp deste pedido, inclusive fora da plataforma. Confirme apenas após receber a autorização.</span>
-            </label>}
+            {currentDelivery?.source_system==='dfl_site' && normalizeBrazilPhone(phone).length>=10 &&
+              <p className="text-[11px] text-sky-300">Pedido do Site: consentimento e mensagens geridos pelo Site.</p>}
+            {currentDelivery?.source_system!=='dfl_site' && normalizeBrazilPhone(phone).length>=10 && notifyWhatsapp &&
+              <button type="button" onClick={()=>setR74ConsentKey(r74ConsentConfirmed?'':currentR74ConsentKey)}
+                className={`flex min-h-10 items-center gap-2 rounded-xl border px-3 text-left text-[11px] font-bold ${r74ConsentConfirmed?'border-emerald-500/40 bg-emerald-500/[.08] text-emerald-200':'border-amber-500/30 bg-amber-500/[.06] text-amber-200'}`}>
+                <CheckCircle2 size={15}/>{r74ConsentConfirmed?'Autorização deste pedido confirmada ✓':'Confirmar autorização do cliente para WhatsApp'}
+              </button>}
+            {currentDelivery?.source_system!=='dfl_site' && normalizeBrazilPhone(phone).length>=10 && notifyWhatsapp && !r74ConsentConfirmed &&
+              <p className="text-[10px] text-zinc-400">Número informado não significa consentimento. Confirme após autorização do cliente.</p>}
           </div>
         </section>
 

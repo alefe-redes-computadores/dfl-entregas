@@ -106,6 +106,8 @@ function eventOccurredAt(
   }
 
   if (type === 'delivery.pickup_ready') return str(delivery.pickup_ready_at) || occurredAt(delivery, route);
+  if (type === 'delivery.kitchen_preparing') return str(delivery.preparation_started_at) || occurredAt(delivery, route);
+  if (type === 'delivery.kitchen_ready') return str(delivery.preparation_ready_at) || occurredAt(delivery, route);
 
   if (type === 'delivery.completed') {
     return str(delivery.completed_at) || occurredAt(delivery, route);
@@ -354,9 +356,31 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
       previousStopCompleted: started && stopIndex > 0 &&
         stopGroups[stopIndex - 1]?.pending.length === 0,
       completedAt: str(item.data.completed_at) || null,
+      preparationStartedAt: str(item.data.preparation_started_at) || null,
+      preparationReadyAt: str(item.data.preparation_ready_at) || null,
       failedReason: null,
       ...(recoveryReplay ? { recoveryReplay: true } : {}),
     };
+
+    // R82: eventos reais de cozinha independentes da rota e de seus eventos
+    // de posicao. Mesmo id do kick dirigido (deduplicacao por event_id).
+    if (str(item.data.fulfillment_mode) === 'delivery' &&
+        !bool(item.data.completed) && !routeStarted(route) &&
+        !/cancel/i.test(str(item.data.site_order_status))) {
+      const prepAt = str(item.data.preparation_started_at);
+      const readyAt = str(item.data.preparation_ready_at);
+      const kitchenStages: Array<{type:'delivery.kitchen_preparing'|'delivery.kitchen_ready';at:string}> = [];
+      if (Number.isFinite(Date.parse(prepAt))) kitchenStages.push({type:'delivery.kitchen_preparing',at:prepAt});
+      if (Number.isFinite(Date.parse(readyAt))) kitchenStages.push({type:'delivery.kitchen_ready',at:readyAt});
+      for (const stage of kitchenStages) {
+        const eventId = `evt-v1__${stage.type}__${encodeURIComponent(item.id)}__kitchen-${stableHash(stage.at)}`;
+        candidates.push({ eventId, event: buildIntegrationEvent({
+          event_id:eventId,event_type:stage.type,occurred_at:stage.at,
+          source_system:'dfl_entregas',entity_type:'delivery',entity_id:item.id,
+          correlation_id:str(item.data.external_order_id),payload,
+        })});
+      }
+    }
 
     for (const type of types) {
       // delivery.out_for_delivery representa a SAÍDA da rota, não cada

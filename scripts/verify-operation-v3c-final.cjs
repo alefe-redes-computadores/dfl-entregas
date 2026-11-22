@@ -20,7 +20,7 @@ const checks=[
  ['checklist mostra Pix previsto',f.checklist.includes('Pix previsto')],
  ['WhatsApp usa motor único',f.whats.includes('routeCashFlow(deliveries, route.change_money)')],
  ['WhatsApp de trocos mantém dinheiro recebido do cliente',f.whats.includes('tenderedCash') || f.whats.includes('tendered')],
- ['WhatsApp de trocos mantém retorno físico previsto',f.whats.includes('expectedPhysicalReturn') || f.whats.includes('retornoFisico')],
+ ['WhatsApp instrui total bruto a trazer sem abatimentos',f.whats.includes('TOTAL BRUTO A TRAZER PARA A LANCHONETE') && f.whats.includes('changePlan.flow.tenderedCash') && f.cash.includes('expectedPhysicalReturn')],
  ['portal tem sucesso explícito',f.portal.includes('Funcionou · próximo')],
  ['portal tem código errado explícito',f.portal.includes('invalidCodeAndContinue')],
  ['código errado limpa Delivery',f.portal.includes('confirmation_code: undefined')],

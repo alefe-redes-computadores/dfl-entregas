@@ -792,7 +792,8 @@ export async function generateRouteMessages(
       if (changePlan.flow.plannedPixChange > 0) {
         msg3.push(`📱 Troco devolvido via Pix: *R$ ${formatMoney(changePlan.flow.plannedPixChange)}*`);
       }
-      msg3.push(`🏁 *Deve voltar fisicamente na bag: R$ ${formatMoney(changePlan.flow.expectedPhysicalReturn)}*`);
+      msg3.push(`🏁 *TOTAL BRUTO A TRAZER PARA A LANCHONETE: R$ ${formatMoney(changePlan.flow.tenderedCash)}*`);
+      msg3.push(`Total dos valores entregues pelos clientes; troco e fundo inicial tratados separadamente no acerto.`);
     }
 
     // R288: apenas pendencias no segundo envio. Identidade iFood permanece individual.
@@ -870,7 +871,8 @@ export async function generateRouteMessages(
       });
       compactMoney.push(`👜 Troco inicial: R$ ${formatMoney(changePlan.flow.initialCash)}`);
       compactMoney.push(`↩️ Troco em espécie: R$ ${formatMoney(changePlan.flow.plannedCashChange)}${changePlan.flow.plannedPixChange > 0 ? ` · via Pix: R$ ${formatMoney(changePlan.flow.plannedPixChange)}` : ''}`);
-      compactMoney.push(`🏁 *Retorno físico esperado na bag: R$ ${formatMoney(changePlan.flow.expectedPhysicalReturn)}*`);
+      compactMoney.push(`🏁 *TOTAL BRUTO A TRAZER PARA A LANCHONETE: R$ ${formatMoney(changePlan.flow.tenderedCash)}*`);
+      compactMoney.push(`Troco e fundo inicial não são abatidos deste total bruto.`);
     }
 
     return {

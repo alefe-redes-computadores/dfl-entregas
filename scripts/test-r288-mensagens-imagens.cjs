@@ -41,7 +41,7 @@ ok(wa.includes('driverCollectionInstruction(') && wa.includes('Cobrar ${value} n
 ok(wa.includes("messageDetailMode === 'guided'") && wa.includes('Confirme cada ID iFood individualmente no portal:'),'cópia por pedido reduz tutorial para experientes');
 ok(!wa.includes('https://wa.me/55${clientPhone}?text=${gateMsg}') && !wa.includes('https://wa.me/${clientPhone.replace'),'URLs de WhatsApp com texto codificado não poluem entrega');
 ok(wa.includes('stopsNeedingCode.push') && wa.includes('ifoodPortalLines(deliveries, true)'),'códigos por pedido e confirmação no portal preservados');
-ok(wa.includes('buildRouteChangePlan(') && wa.includes('expectedPhysicalReturn'),'caixa e troco seguem cálculo canônico');
+ok(wa.includes('buildRouteChangePlan(') && wa.includes('changePlan.flow.tenderedCash') && wa.includes('TOTAL BRUTO A TRAZER PARA A LANCHONETE') && read('lib/route-cash-flow.ts').includes('expectedPhysicalReturn'),'caixa usa motor canônico; WhatsApp mostra bruto, acerto retém cálculo físico');
 const image=read('lib/route-share-card.ts');
 ok(image.includes('driverStopCollectionLabel(') && image.includes("driverConfirmsIfood && messageDetailMode === 'guided'"),'imagem usa ação de cobrança e instruções só no modo orientado');
 ok(image.includes('ifoodVisibleOrders.forEach')&&image.includes('CODIGO: ${codeLabel}')&&image.includes('ID: ${idLabel}'),'imagem mantém IDs/códigos individuais');

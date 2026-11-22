@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { datedOperationKey, datedOperationHref } from '@/lib/operation/dated-operation-navigation';
 import {
   AlertTriangle,
@@ -493,9 +494,9 @@ export default function DeliveriesPage() {
           const paymentState = deriveDeliveryPaymentState(delivery);
 
           return (
-            <button
+            <Link
               key={delivery.id}
-              onClick={() => router.push(`/entregas/details?id=${delivery.id}&date=${encodeURIComponent(selectedDate)}`)}
+              href={`/entregas/details?id=${encodeURIComponent(delivery.id)}&date=${encodeURIComponent(selectedDate)}`}
               className={`w-full rounded-[18px] border p-3 text-left transition-colors hover:border-zinc-700 active:bg-zinc-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${
                 isCancelledSiteDelivery(delivery)
                   ? 'border-zinc-700/50 bg-zinc-900/25 opacity-70'
@@ -605,7 +606,7 @@ export default function DeliveriesPage() {
                   <ChevronRight size={16} className="ml-auto mt-3 text-zinc-600" />
                 </div>
               </div>
-            </button>
+            </Link>
           );
         })}
 

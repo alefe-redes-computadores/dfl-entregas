@@ -1,5 +1,6 @@
 'use client';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { isCancelledSiteDelivery } from '@/lib/integration/site-order';
 import { isAwaitingRedelivery } from '@/lib/operation/return-to-store';
 
@@ -410,7 +411,7 @@ export default function HomePage() {
           <p className="text-[10px] font-bold text-zinc-500">{pendingDeliveries > 0 ? `${pendingDeliveries} pendentes` : 'Entregas em dia'}</p>
         </div>
         <div className="grid grid-cols-3 overflow-hidden rounded-[22px] border border-zinc-800 bg-zinc-900/40">
-          <a
+          <Link
             href={`/entregas?date=${encodeURIComponent(selectedDateKey)}`}
             className="min-w-0 p-3.5 transition active:bg-zinc-900"
           >
@@ -421,9 +422,9 @@ export default function HomePage() {
             <p className="mt-1 truncate text-[9px] font-bold text-zinc-500">
               Pedidos{pendingDeliveries > 0 ? ` · ${pendingDeliveries} pend.` : ''}
             </p>
-          </a>
+          </Link>
 
-          <a
+          <Link
             href={`/rotas?date=${encodeURIComponent(selectedDateKey)}`}
             className="min-w-0 border-x border-zinc-800 p-3.5 transition active:bg-zinc-900"
           >
@@ -434,7 +435,7 @@ export default function HomePage() {
             <p className="mt-1 truncate text-[9px] font-bold text-zinc-600">
               Rotas abertas
             </p>
-          </a>
+          </Link>
 
           <div className="min-w-0 p-3.5">
             <div className="flex items-center justify-between gap-1">

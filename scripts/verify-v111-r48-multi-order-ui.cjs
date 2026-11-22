@@ -16,7 +16,7 @@ for(const bad of ['multiOrderReviewOpen','setMultiOrderReviewOpen','confirmation
 check(create.includes("confirmationCode:''")&&create.includes("customerCharge:''"),'Novo pedido não herda códigos nem valores');
 check(
   create.includes('confirmedWhatsappRecipient === consentRecipientKey') &&
-  create.includes("setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey : '')") &&
+  create.includes("onClick={()=>setConfirmedWhatsappRecipient(notifyWhatsapp?'':consentRecipientKey)}") &&
   create.includes("notifyWhatsapp:false") &&
   create.includes("notify_whatsapp:notifyWhatsapp") &&
   create.includes("notify_whatsapp:drafts.length===1&&draft.notifyWhatsapp") &&

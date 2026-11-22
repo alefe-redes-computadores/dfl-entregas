@@ -56,7 +56,7 @@ check('modo privacidade cobre valor cobrado',view.includes("isPrivacyMode ? 'R$ 
 check('privacidade continua disponível no checklist',view.includes('isPrivacyMode={isPrivacyMode}'));
 check('detalhes usam agrupamento físico real',view.includes('useMemo(() => groupDeliveriesByStop(deliveries), [deliveries])'));
 check('uma única numeração por parada',view.includes('visibleStopGroups.map((stop, index)'));
-check('pedidos individuais mantêm navegação',view.includes('stop.deliveries.map((delivery)') && view.includes('`/entregas/details?id=${delivery.id}${dateSuffix}`'));
+check('pedidos individuais mantêm navegação',view.includes('stop.deliveries.map((delivery)') && view.includes('`/entregas/details?id=${encodeURIComponent(delivery.id)}${dateSuffix}`'));
 check('progresso considera todos os pedidos',view.includes('pending = deliveries.filter') && view.includes('completed = deliveries.length - pending'));
 check('estado de parada depende dos pendentes',view.includes('const allDone = stop.pending.length === 0'));
 check('ordenamento canônico exclusivo do agrupador', !view.includes('(a.order_index ?? 9999)'));

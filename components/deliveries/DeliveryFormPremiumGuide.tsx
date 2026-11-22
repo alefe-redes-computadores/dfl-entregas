@@ -9,10 +9,10 @@ export function DeliveryFormPremiumGuide({mode,origin,fulfillmentMode,notifyWhat
   const loja=origin==='loja';
   const authorized=loja&&notifyWhatsapp;
   return <details className="group overflow-hidden rounded-[22px] border border-amber-400/20 bg-gradient-to-br from-amber-500/[.08] via-zinc-900/70 to-zinc-950 shadow-sm">
-    <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 [&::-webkit-details-marker]:hidden">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-amber-500/25 bg-amber-400/10"><Sparkles size={19} className="text-amber-300"/></span>
+    <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2.5 px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 [&::-webkit-details-marker]:hidden">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-amber-500/25 bg-amber-400/10"><Sparkles size={16} className="text-amber-300"/></span>
       <span className="min-w-0 flex-1"><strong className="block text-xs font-black text-zinc-100">{mode==='new'?'Novo pedido · conferência inteligente':'Edição · alteração segura'}</strong>
-        <small className="mt-1 block text-[10px] leading-relaxed text-zinc-400">{mode==='new'?'Cadastre com segurança e revise a comunicação antes de salvar.':'Preserve o histórico e revise o que será atualizado.'}</small>
+        <small className="mt-1 block text-[10px] leading-relaxed text-zinc-400">{mode==='new'?'Orientações opcionais e conferência':'Preserve o histórico e revise o que será atualizado.'}</small>
       </span><ChevronDown size={17} className="shrink-0 text-amber-300 transition-transform group-open:rotate-180"/>
     </summary>
     <div className="space-y-2 border-t border-amber-500/10 px-4 pb-4 pt-3">

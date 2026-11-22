@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil,
+  Banknote, CreditCard, QrCode, CupSoda, CheckCircle2, Pencil, Eye,
   Smartphone, Store, Globe2, Bike, UtensilsCrossed, Layers3, ArrowUp, ArrowDown, MapPin, ChevronDown, ShieldCheck, X, Maximize2, Minimize2, Navigation, MessageCircle, AlertTriangle, Copy, Crown, Map as MapIcon, CheckSquare, Trash2, LoaderCircle, Pin, PinOff
 } from 'lucide-react';
 import { toast } from '@/lib/operational-toast';
@@ -159,6 +159,10 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
   const PaymentIcon = payment.icon;
   const paymentState = deriveDeliveryPaymentState(delivery);
   const paymentStateLabel = deliveryPaymentStateLabel(delivery);
+  const cashTendered = Number(delivery.change_for || 0);
+  const cashChange = paymentState === 'collect_on_delivery' && delivery.payment_method === 'dinheiro' &&
+    cashTendered > deliveryCustomerCharge(delivery)
+      ? cashTendered - deliveryCustomerCharge(delivery) : 0;
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const isSiteOrder = delivery.source_system === 'dfl_site';
   const visualOrigin = deliveryChannel(delivery);
@@ -829,8 +833,11 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
           data-dfl-op-surface="true"
           onClick={(event) => {
             const target = event.target as HTMLElement;
-            if (isExpanded || isSwiping || suppressCardClick.current || target.closest('button, a, input, textarea, select, [data-no-card-swipe="true"]')) return;
-            void handleTriggerAction('expand');
+            // Toque normal abre o PEDIDO. Somente o botao dedicado ou swipe abrem a PARADA.
+            // Nunca roubar cliques de botoes, links, checklists e formularios.
+            if (isSwiping || suppressCardClick.current || target.closest('button, a, input, textarea, select, summary, details, [data-no-card-swipe="true"]')) return;
+            impact(ImpactStyle.Light);
+            router.push(`/entregas/details?id=${encodeURIComponent(delivery.id)}${operationalDateQuery}`);
           }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -1035,6 +1042,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                       ) : (
                         <span className={clsx('inline-flex min-w-0 items-center gap-1 truncate rounded-md border px-2 py-0.5 text-[10px] font-bold', payment.className)}><PaymentIcon size={11} className="shrink-0"/>{paymentState === 'pending' ? 'Pix pendente' : payment.label === 'Dinheiro' ? 'Cobrar dinheiro' : 'Cobrar cartão'}</span>
                       )}
+                      {!isGroupedStop && cashChange > 0 && !isPrivacyMode && <span className="shrink-0 rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black text-amber-200">TROCO R$ {cashChange.toFixed(2).replace('.',',')} · recebe R$ {cashTendered.toFixed(2).replace('.',',')}</span>}
                       {!isGroupedStop && delivery.drinks && <span className="truncate text-[10px] text-sky-300"><CupSoda size={11} className="mr-1 inline"/>{delivery.drinks}</span>}
                       {isNeighbor && <span className="ml-auto shrink-0 text-[9px] font-bold text-sky-400">Próxima {neighborPosition || 1}/{neighborTotal || 2}</span>}
                     </div>
@@ -1101,6 +1109,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                         <button type="button" aria-label="Mover uma posição para cima" disabled={reorderBusy || (position || 1) <= 1} onClick={event=>{event.stopPropagation();void moveStop(Math.max(0,(position||1)-2));}} className="grid h-10 min-w-[40px] flex-1 place-items-center text-sky-200 disabled:opacity-30"><ArrowUp size={14}/></button>
                         <button type="button" aria-label="Mover uma posição para baixo" disabled={reorderBusy || (position || 1) >= pendingCount} onClick={event=>{event.stopPropagation();void moveStop(position||1);}} className="grid h-10 min-w-[40px] flex-1 place-items-center text-sky-200 disabled:opacity-30"><ArrowDown size={14}/></button>
                       </div>}
+                      <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();impact(ImpactStyle.Light);router.push(`/entregas/details?id=${encodeURIComponent(delivery.id)}${operationalDateQuery}`);}} title="Abrir ficha do pedido" aria-label="Abrir ficha do pedido" className="grid h-10 min-w-[40px] flex-1 place-items-center rounded-xl border border-sky-500/25 bg-sky-500/[.06] text-sky-300"><Eye size={15}/></button>
                       <button type="button" data-no-card-swipe="true" onClick={event=>{event.stopPropagation();toggleDeliveryExpansion(delivery.id,true);}} aria-label="Expandir detalhes da parada" className="grid h-10 min-w-[40px] flex-1 place-items-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-300"><Maximize2 size={15}/></button>
                     </div>
                   </div>
@@ -1119,6 +1128,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Detalhes da parada</span>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      <button type="button" data-no-card-swipe="true" onClick={(event)=>{event.stopPropagation();impact(ImpactStyle.Light);router.push(`/entregas/details?id=${encodeURIComponent(delivery.id)}${operationalDateQuery}`);}} aria-label="Abrir ficha individual do pedido" className="flex min-h-9 items-center gap-1 rounded-lg border border-sky-500/25 bg-sky-500/[.07] px-2 text-[10px] font-black text-sky-200"><Eye size={13}/>Ver pedido</button>
                       <button type="button" data-no-card-swipe="true" onClick={(event)=>{event.stopPropagation();toggleDeliveryExpansion(delivery.id,false);}} aria-label="Minimizar esta parada" className="flex min-h-9 items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-[10px] font-black text-zinc-200"><Minimize2 size={13}/>Minimizar</button>
                       <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${stopCompleted ? 'bg-emerald-500/10 text-emerald-300' : 'bg-sky-500/10 text-sky-300'}`}>{stopCompleted ? 'Concluída' : isGroupedStop ? `${groupedPending} pedidos pendentes` : 'Pendente'}</span>
                     </div>
@@ -1257,7 +1267,7 @@ export function DeliveryCard({ delivery, customer, route, isNeighbor = false, po
                     <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${payment.className}`}>
                       <PaymentIcon size={14} />
                       {payment.label === 'Dinheiro' && delivery.change_for
-                        ? `Troco p/ R$ ${isPrivacyMode ? '•••••' : delivery.change_for.toFixed(2).replace('.', ',')}`
+                        ? isPrivacyMode ? 'Troco R$ •••' : `Troco R$ ${Math.max(0,delivery.change_for-deliveryCustomerCharge(delivery)).toFixed(2).replace('.', ',')} · recebe R$ ${delivery.change_for.toFixed(2).replace('.', ',')}`
                         : paymentStateLabel}
                     </span>
                   )}

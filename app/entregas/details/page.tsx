@@ -60,7 +60,7 @@ import { canMarkSitePickupReady, isCancelledSiteDelivery } from '@/lib/integrati
 import { canMarkManualPickupReady } from '@/lib/integration/site-order';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { kickManualPickup, manualPickupResultDescription } from '@/lib/integration/client/manualMessagingKick';
-import { kickR76KitchenStage } from '@/lib/integration/client/r76KitchenKick';
+import { kickR76KitchenStage, kickSiteKitchenStage } from '@/lib/integration/client/r76KitchenKick';
 import { r76KitchenPlan } from '@/lib/integration/r76KitchenPolicy';
 import { detailActionState } from '@/lib/operation/detail-action-state';
 import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
@@ -187,8 +187,15 @@ function DeliveryDetailsContent() {
   const sitePickup = delivery.source_system === 'dfl_site' && mode === 'pickup';
   const marketplacePickup = mode === 'pickup' && delivery.source_system !== 'dfl_site' && ['ifood','food99','keeta'].includes(String(delivery.origin)) && !delivery.completed && !delivery.pickup_ready_at;
   const canSetReady = sitePickup ? canMarkSitePickupReady(delivery) : canMarkManualPickupReady(delivery) || marketplacePickup;
-  const canManageKitchen = !cancelled && !delivery.completed && delivery.source_system !== 'dfl_site' &&
-    (mode === 'pickup' || mode === 'delivery') && !operationalStartedAt && !delivery.pickup_ready_at;
+  const siteKitchenStatus = String(delivery.site_order_status || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const siteKitchenPreparing = delivery.source_system === 'dfl_site' &&
+    /producao|pronto|saiu|finaliz/.test(siteKitchenStatus);
+  const siteKitchenReady = delivery.source_system === 'dfl_site' &&
+    /pronto|saiu|finaliz/.test(siteKitchenStatus);
+  const canManageKitchen = !cancelled && !delivery.completed &&
+    (delivery.source_system !== 'dfl_site' || mode === 'delivery') &&
+    (mode === 'pickup' || mode === 'delivery') && !operationalStartedAt && !delivery.pickup_ready_at &&
+    !(delivery.source_system === 'dfl_site' && /cancel|finaliz|saiu/.test(siteKitchenStatus));
   const actionState = detailActionState({
     pickup: mode === 'pickup', completed: delivery.completed === true, cancelled,
     ready: Boolean(delivery.pickup_ready_at), canMarkReady: canSetReady,
@@ -278,15 +285,26 @@ function DeliveryDetailsContent() {
 
   const markKitchenStage = async (step:'preparing'|'ready') => {
     if(!canManageKitchen || kitchenLock.current || isMarkingKitchen) return;
-    if(step==='ready' && (mode!=='delivery' || !delivery.preparation_started_at)) {
+    if(step==='ready' && (mode!=='delivery' || !(delivery.preparation_started_at || siteKitchenPreparing))) {
       toast.info('Registre o início do preparo antes de marcar pronto.');return;
     }
-    if(step==='preparing' && delivery.preparation_started_at || step==='ready' && delivery.preparation_ready_at) return;
+    if ((step==='preparing' && (delivery.preparation_started_at || siteKitchenPreparing)) ||
+        (step==='ready' && (delivery.preparation_ready_at || siteKitchenReady))) return;
     kitchenLock.current=true;setIsMarkingKitchen(true);
     try {
       const now=new Date().toISOString();
       await updateDelivery(delivery.id,step==='preparing'?{preparation_started_at:now}:{preparation_ready_at:now});
       toast.success(step==='preparing'?'Início do preparo registrado.':'Pedido pronto registrado no DFL.');
+      if (delivery.source_system === 'dfl_site') {
+        // O Site e a unica autoridade de estado comercial e de mensagens.
+        // Resposta incerta NUNCA gera um segundo evento automatico.
+        void kickSiteKitchenStage(delivery.id,step).then(result=>{
+          if(result.status==='queued')toast.success('Site recebeu a etapa de cozinha.',{description:'Acompanhe a confirmação da mensagem separadamente.'});
+          else if(result.status==='duplicate')toast.info('Etapa já reconhecida pela integração.');
+          else toast.warning('Etapa salva no Entregas. Sincronização com Site pendente de confirmação.',{description:'Não repita o clique; a reconciliação usa o mesmo identificador.'});
+        }).catch(()=>toast.warning('Etapa salva. Integração com Site sem confirmação.'));
+        return;
+      }
       // R76 P2: falha/indefinição do aviso nunca desfaz a etapa operacional.
       // Apenas entrega DFL consentida, com evidência persistida; servidor revalida.
       if(mode==='delivery' && delivery.notify_whatsapp===true && delivery.manual_messaging_opt_in_v1===true &&
@@ -731,8 +749,8 @@ function DeliveryDetailsContent() {
         <h2 className="text-sm font-black text-zinc-100">Cozinha · etapas confirmadas</h2>
         <p className="mt-1 text-[11px] text-zinc-400">Somente ações registradas aparecem no acompanhamento. A saída da rota não confirma preparo anterior.</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" onClick={()=>void markKitchenStage('preparing')} disabled={isMarkingKitchen||Boolean(delivery.preparation_started_at)} className="min-h-12 rounded-xl border border-amber-500/35 bg-amber-500/10 px-2 text-xs font-black text-amber-200 disabled:opacity-50">{delivery.preparation_started_at?'Em preparo confirmado':'Iniciar preparo'}</button>
-          {mode==='delivery' ? <button type="button" onClick={()=>void markKitchenStage('ready')} disabled={isMarkingKitchen||!delivery.preparation_started_at||Boolean(delivery.preparation_ready_at)} className="min-h-12 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-2 text-xs font-black text-emerald-200 disabled:opacity-50">{delivery.preparation_ready_at?'Pronto confirmado':'Marcar pronto'}</button> : <span className="flex items-center justify-center text-center text-[10px] text-zinc-400">Retirada: marque pronto na ação abaixo</span>}
+          <button type="button" onClick={()=>void markKitchenStage('preparing')} disabled={isMarkingKitchen||Boolean(delivery.preparation_started_at)||siteKitchenPreparing} className="min-h-12 rounded-xl border border-amber-500/35 bg-amber-500/10 px-2 text-xs font-black text-amber-200 disabled:opacity-50">{delivery.preparation_started_at||siteKitchenPreparing?'Em preparo confirmado':'Iniciar preparo'}</button>
+          {mode==='delivery' ? <button type="button" onClick={()=>void markKitchenStage('ready')} disabled={isMarkingKitchen||!(delivery.preparation_started_at||siteKitchenPreparing)||Boolean(delivery.preparation_ready_at)||siteKitchenReady} className="min-h-12 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-2 text-xs font-black text-emerald-200 disabled:opacity-50">{delivery.preparation_ready_at||siteKitchenReady?'Pronto confirmado':'Marcar pronto'}</button> : <span className="flex items-center justify-center text-center text-[10px] text-zinc-400">Retirada: marque pronto na ação abaixo</span>}
         </div>
       </section>}
       <section className="rounded-[24px] border border-zinc-800 bg-zinc-900/45 p-4" aria-label="Ação operacional do pedido">

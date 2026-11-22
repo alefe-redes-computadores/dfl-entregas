@@ -107,7 +107,7 @@ export default function NovaEntregaPage() {
   const isKeeta = origin === 'keeta';
   const [magicText, setMagicText] = useState('');
   const deferredMagicText = useDeferredValue(magicText);
-  const [isParserOpen, setIsParserOpen] = useState(true);  const inboxParsedRef = useRef<ReturnType<typeof parseIfoodOrdersText>[number] | null>(null);
+  const [isParserOpen, setIsParserOpen] = useState(false);  const inboxParsedRef = useRef<ReturnType<typeof parseIfoodOrdersText>[number] | null>(null);
   const liveParsedOrders = useMemo(() => {
     if (deferredMagicText.trim().length < 2) return [];
     if (isKeeta) return parseKeetaOrdersText(deferredMagicText);
@@ -578,6 +578,14 @@ const [routeId, setRouteId] = useState('');
     // A identidade ainda e revalidada em findOrCreateCustomer antes do Firestore.
     const requiredIssue = firstRequiredDeliveryIssue({ fulfillmentMode, routeId, address: activeAddress, value: activeValue });
     if (requiredIssue) { showFormIssue(requiredIssue.field, requiredIssue.message); return; }
+    // Evita o erro silencioso: preferencia ON sem confirmacao nao salva
+    // um pedido que parece autorizado. Desmarque ou confirme explicitamente.
+    if(consentPhone.length>=10 && whatsappNoticeRequested && !notifyWhatsapp &&
+        ((origin==='loja'&&(fulfillmentMode==='delivery'||fulfillmentMode==='pickup')) ||
+        (fulfillmentMode==='delivery'&&(origin!=='ifood'||extraIfoodOrders.length===0)))) {
+      toast.warning('Confirme a autorização do cliente ou desmarque o WhatsApp antes de salvar.');
+      return;
+    }
     setFormIssue(null);
     if (splitEnabled) {
       if (!splitAllowed) { toast.error('Pagamento dividido exige um pedido por vez. Separe os pedidos iFood para cadastrar.'); return; }
@@ -1260,43 +1268,29 @@ const [routeId, setRouteId] = useState('');
             </div>
 
           </div>
-          {((origin === 'loja' && (fulfillmentMode==='delivery' || fulfillmentMode==='pickup')) || (fulfillmentMode==='delivery' && (origin !== 'ifood' || extraIfoodOrders.length === 0))) && (
-            <div className="flex flex-col gap-2" data-dfl-whatsapp-default="checked">
-              <label className={`flex items-start gap-3 rounded-xl border px-3 py-3.5 text-xs leading-relaxed transition-colors ${whatsappNoticeRequested ? 'border-emerald-500/50 bg-emerald-500/[.1]' : 'border-zinc-700 bg-zinc-900/50'}`}>
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
-                  checked={whatsappNoticeRequested}
-                  onChange={(event) => {
-                    setWhatsappNoticeRequested(event.target.checked);
-                    if (!event.target.checked) setConfirmedWhatsappRecipient('');
-                  }}
-                />
-                <span className="flex flex-col gap-1">
-                  <strong className="text-sm text-zinc-100">Avisar pelo WhatsApp</strong>
-                  <small className="text-[11px] text-zinc-400">Pré-marcado para facilitar seu cadastro. Desmarque se não quiser solicitar avisos neste pedido.</small>
-                </span>
-              </label>
-              {whatsappNoticeRequested && (
-                <label className={`flex items-start gap-3 rounded-xl border px-3 py-3 text-xs leading-relaxed ${notifyWhatsapp ? 'border-emerald-500/40 bg-emerald-500/[.08]' : 'border-zinc-700 bg-zinc-900/40'}`}>
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
-                    disabled={!consentPhone || !customerName.trim()}
-                    checked={notifyWhatsapp}
-                    onChange={(event) => setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey : '')}
-                  />
-                  <span className="flex flex-col gap-1">
-                    <strong className="text-xs text-zinc-100">Cliente autorizou os avisos deste pedido</strong>
-                    <small className="text-[11px] text-zinc-400">Confirme somente após obter autorização para avisos externos à plataforma. Sem confirmação, nenhum aviso automático será solicitado.</small>
-                  </span>
+          {consentPhone.length >= 10 &&
+            ((origin === 'loja' && (fulfillmentMode==='delivery' || fulfillmentMode==='pickup')) ||
+              (fulfillmentMode==='delivery' && (origin!=='ifood' || extraIfoodOrders.length===0))) && (
+            <div data-dfl-whatsapp-compact="true" className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[.05] px-3 py-2.5">
+              <div className="flex min-h-11 items-center gap-2.5">
+                <label className="flex flex-1 cursor-pointer items-center gap-2.5 text-xs font-bold text-zinc-100">
+                  <input type="checkbox" className="h-5 w-5 accent-emerald-500" checked={whatsappNoticeRequested}
+                    onChange={event=>{setWhatsappNoticeRequested(event.target.checked);if(!event.target.checked)setConfirmedWhatsappRecipient('');}} />
+                  <span>Avisar pelo WhatsApp</span>
                 </label>
-              )}
-              {!notifyWhatsapp && whatsappNoticeRequested && <p className="text-[11px] font-semibold text-amber-300" role="status">Aguardando autorização do cliente para enviar mensagens.</p>}
+                {whatsappNoticeRequested && <button type="button" disabled={!customerName.trim()}
+                    onClick={()=>setConfirmedWhatsappRecipient(notifyWhatsapp?'':consentRecipientKey)}
+                    className={`min-h-9 rounded-xl border px-2.5 text-[10px] font-black ${notifyWhatsapp?'border-emerald-500/40 bg-emerald-500/15 text-emerald-300':'border-amber-500/35 bg-amber-500/10 text-amber-200'}`}>
+                    {notifyWhatsapp?'Autorizado ✓':'Confirmar autorização'}
+                  </button>}
+              </div>
+              {whatsappNoticeRequested && <p className="mt-1 text-[10px] leading-relaxed text-zinc-400">
+                {notifyWhatsapp?'Cliente autorizou avisos deste pedido.':'Confirme apenas se o cliente autorizou. Ter telefone não é consentimento.'}
+              </p>}
             </div>
           )}
           {origin === 'ifood' && extraIfoodOrders.length > 0 && <p className="text-xs text-amber-300">Pedidos iFood em lote: mensagens individuais desativadas para não aproveitar a autorização de outro pedido. Para avisar, cadastre cada pedido separadamente.</p>}
-          <p className="text-[10px] leading-relaxed text-zinc-500">Uma autorização por pedido. Preferência pré-marcada não concede consentimento. Envio externo à plataforma exige autorização do cliente e regras aplicáveis.</p>
+          {consentPhone.length >= 10 && <p className="text-[10px] leading-relaxed text-zinc-500">WhatsApp somente após autorização confirmada do cliente.</p>}
         </section>
 
         {fulfillmentMode === 'delivery' && (

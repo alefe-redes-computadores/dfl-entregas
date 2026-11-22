@@ -6,5 +6,5 @@ assert(shopping.includes('aria-live="polite"')&&shopping.includes('Ver todos os 
 assert(shopping.includes('sticky bottom-[calc(var(--dfl-safe-bottom)+12px)]'));
 assert(supplier.includes("normalize('NFD')")&&supplier.includes('Nenhum fornecedor encontrado'));
 assert(queue.includes('actionLabels[task.kind]')&&queue.includes('Abrir caixa de entrada'));
-assert(store.includes('Abrir entregas: ${dashboardData.totalEntregas}')&&store.includes('Acompanhar sequência e motoboys'));
+assert(store.includes('Abrir pedidos: ${dashboardData.totalEntregas}')&&store.includes('Todos os pedidos')&&store.includes('Acompanhar sequência e motoboys'));
 console.log('V90: UX mobile, estoque, compras, fornecedor, loja e pendências OK');

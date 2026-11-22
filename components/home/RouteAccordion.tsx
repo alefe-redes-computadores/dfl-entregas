@@ -1229,7 +1229,7 @@ export function RouteAccordion({ route, defaultOpen = false }: RouteAccordionPro
             {!isVirtualRoute && isNotStarted && totalDeliveries > 0 && (
               <section className="space-y-2 rounded-[18px] border border-amber-500/20 bg-amber-500/[.035] p-3">
                 <p className="text-xs font-black text-amber-100">{departureReady ? 'Rota pronta para sair' : departureNeedsReview ? 'Conferência precisa ser refeita' : 'Rota em montagem'}</p>
-                <p className="text-[11px] text-zinc-400">{departureReady ? 'Conferida; falta despachar o motoboy.' : departureNeedsReview ? 'Os pedidos ou a sequência mudaram. Revise antes de sair.' : 'Confira os pedidos e registre a prontidão sem iniciar a rota.'}</p>
+                <p className="text-[11px] text-zinc-400">{departureReady ? 'Conferida; falta despachar o motoboy.' : departureNeedsReview ? 'Os pedidos ou a sequência mudaram. Revise antes de sair.' : 'Confira os pedidos antes da saída. Esta conferência não marca pedidos prontos nem envia WhatsApp.'}</p>
                 <button type="button" disabled={actionBusy} onClick={() => void handleDepartureReady(!departureReady)}
                   className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 text-xs font-black text-amber-100 disabled:opacity-40">
                   <ClipboardCheck size={16}/> {departureReady ? 'Voltar à montagem' : departureNeedsReview ? 'Reconfirmar rota pronta' : 'Marcar rota pronta'}

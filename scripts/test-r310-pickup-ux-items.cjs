@@ -10,8 +10,8 @@ for(const [f,s] of [['nova.tsx',form],['manualPickupPolicy.ts',src]]){
  eq(sf.parseDiagnostics.length,0,`TS parser ${f}`);
 }
 ok(!form.includes('Avisar no Zap'),'botao duplicado retirado no NOVO pedido');
-eq(form.split('checked={notifyWhatsapp}').length-1,1,'uma caixa unica de opt-in no NOVO pedido');
-ok(form.includes('setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey'), 'opt-in individual preservado');
+eq(form.split('data-dfl-whatsapp-compact').length-1,1,'um controle compacto por pedido no NOVO formulario');
+ok(form.includes("onClick={()=>setConfirmedWhatsappRecipient(notifyWhatsapp?'':consentRecipientKey)}"), 'consentimento exige clique explicito');
 ok(!form.includes('setNotifyWhatsappPreference'),'nao existe autorizacao implicita por preferencia');
 ok(form.includes('consentPhone.length >= 10') && form.includes('confirmedWhatsappRecipient === consentRecipientKey'),'telefone e cliente vinculam consentimento');
 ok(form.includes("origin === 'loja'"),'nao enviar por origem marketplace');

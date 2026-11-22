@@ -8,6 +8,8 @@ export type DflSiteReverseEventType =
   | "delivery.position_changed"
   | "delivery.next_stop"
   | "delivery.pickup_ready"
+  | "delivery.kitchen_preparing"
+  | "delivery.kitchen_ready"
   | "delivery.completed"
   | "delivery.failed"
   | "route.started"
@@ -28,6 +30,8 @@ export type DflSiteDeliveryTrackingPayload = {
   totalStops: number | null;
   nextStop: boolean;
   completedAt: string | null;
+  preparationStartedAt?: string | null;
+  preparationReadyAt?: string | null;
   failedReason: string | null;
 };
 
@@ -66,6 +70,8 @@ export function routeTrackingSnapshot(
     totalStops: groups.length || null,
     nextStop: routeStarted && pendingIndex === 0,
     completedAt: delivery.completed_at || null,
+    preparationStartedAt: delivery.preparation_started_at || null,
+    preparationReadyAt: delivery.preparation_ready_at || null,
     failedReason: null,
   };
 }

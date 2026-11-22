@@ -73,7 +73,7 @@ for(const n of [1,2,3,8]){
 }
 check(form.includes("(origin !== 'ifood' || extraIfoodOrders.length === 0)"),'R48 multi iFood cannot request WhatsApp');
 check(form.includes('confirmedWhatsappRecipient === consentRecipientKey'),'R48 exact recipient proof retained');
-check(form.includes("setConfirmedWhatsappRecipient(event.target.checked ? consentRecipientKey : '')"),'R48 consent requires explicit click');
+check(form.includes("onClick={()=>setConfirmedWhatsappRecipient(notifyWhatsapp?'':consentRecipientKey)}"),'R48 consent requires explicit click');
 
 check(form.includes('orderId.trim()') && form.includes('consentRecipientKey'),'new marketplace consent tied to order reference');
 check(form.includes('Pedidos iFood em lote:'),'batch restriction visible');

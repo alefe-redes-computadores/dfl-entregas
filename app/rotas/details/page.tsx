@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   ArrowLeft,
   Bike,
@@ -404,7 +405,14 @@ export default function RouteDetailsPage() {
                     : 'border-zinc-800 bg-zinc-900/45'
                 }`}
               >
-                <div className="flex items-center gap-3 px-3 py-3">
+                <div
+                  role={stop.deliveries.length === 1 ? 'link' : undefined}
+                  tabIndex={stop.deliveries.length === 1 ? 0 : undefined}
+                  aria-label={stop.deliveries.length === 1 ? 'Abrir ficha do pedido desta parada' : undefined}
+                  onClick={() => { if (stop.deliveries.length === 1) router.push(`/entregas/details?id=${encodeURIComponent(main.id)}${dateSuffix}`); }}
+                  onKeyDown={(event) => { if (stop.deliveries.length === 1 && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); router.push(`/entregas/details?id=${encodeURIComponent(main.id)}${dateSuffix}`); } }}
+                  className={`flex items-center gap-3 px-3 py-3 ${stop.deliveries.length === 1 ? 'cursor-pointer active:bg-zinc-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400' : ''}`}
+                >
                   <span
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-black ${
                       allDone ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-200'
@@ -436,11 +444,11 @@ export default function RouteDetailsPage() {
                 </div>
 
                 <div className="border-t border-zinc-800/70 px-2 pb-2">
+                  {stop.deliveries.length > 1 && <p className="px-2 pt-2 text-[10px] font-semibold text-sky-300">Vários pedidos na parada: escolha abaixo qual ficha abrir.</p>}
                   {stop.deliveries.map((delivery) => (
-                    <button
+                    <Link
                       key={delivery.id}
-                      type="button"
-                      onClick={() => router.push(`/entregas/details?id=${delivery.id}${dateSuffix}`)}
+                      href={`/entregas/details?id=${encodeURIComponent(delivery.id)}${dateSuffix}`}
                       className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-2 text-left active:bg-zinc-800/60"
                       aria-label={`Abrir detalhes de ${delivery.customer_name || `pedido ${delivery.order_id || delivery.ifood_id || delivery.external_order_id || delivery.id}`}`}
                     >
@@ -459,7 +467,7 @@ export default function RouteDetailsPage() {
                       ) : (
                         <ChevronRight size={15} className="shrink-0 text-zinc-500" />
                       )}
-                    </button>
+                    </Link>
                   ))}
                 </div>
                 {route.status === 'aberta' && stop.pending.length > 0 && isSuperadminUid(ownerUid) && (
@@ -525,7 +533,7 @@ export default function RouteDetailsPage() {
 
       {route.status === 'aberta' && !routeStartedAt && <section className="space-y-2 rounded-2xl border border-amber-500/25 bg-amber-500/[.045] p-3">
         <div className="flex items-center gap-2 text-sm font-black text-amber-100"><ClipboardCheck size={18}/> Conferência de saída</div>
-        <p className="text-xs text-zinc-400">{departureReady ? 'Rota pronta e conferida. Ainda não foi despachada.' : departureNeedsReview ? 'Houve alteração após a conferência. Revise os pedidos e confirme novamente.' : 'Confira a sequência e os pedidos antes de registrar a rota pronta.'}</p>
+        <p className="text-xs text-zinc-400">{departureReady ? 'Rota pronta e conferida. Ainda não foi despachada.' : departureNeedsReview ? 'Houve alteração após a conferência. Revise os pedidos e confirme novamente.' : 'Confira a sequência e os pedidos antes de registrar a rota pronta. Esta conferência não marca os pedidos prontos nem envia WhatsApp.'}</p>
         <button type="button" disabled={busy || (deliveries.length === 0 && !departureReady)}
           onClick={() => void changeDepartureReady(!departureReady)}
           className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-500/15 text-xs font-black text-amber-100 disabled:opacity-35">

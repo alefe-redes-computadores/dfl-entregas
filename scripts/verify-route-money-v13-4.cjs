@@ -15,7 +15,7 @@ const checks = [
  ['todas as entregas em dinheiro entram no plano',!plan.includes('.filter((item) => item.requestedChange > 0)')],
  ['mensagem distingue valor exato',whatsapp.includes('Valor exato · sem troco')],
  ['mensagem detalha volta física por entrega',whatsapp.includes('formatMoney(line.tendered)')&&whatsapp.indexOf('line.tendered - line.cashChange')<0],
- ['mensagem explica total físico',whatsapp.includes('Deve voltar fisicamente na bag')],
+ ['mensagem instrui total bruto sem abater troco',whatsapp.includes('TOTAL BRUTO A TRAZER PARA A LANCHONETE') && whatsapp.includes('changePlan.flow.tenderedCash')],
  ['contato substitui chamar no portão',whatsapp.includes('*Contato:*')&&!whatsapp.includes('*Chamar no portão*')],
 ];
 let failed=0;for(const [label,pass] of checks){console.log(`${pass?'OK':'ERRO'}: ${label}`);if(!pass)failed++;}

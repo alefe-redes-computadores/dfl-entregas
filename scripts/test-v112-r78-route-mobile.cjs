@@ -15,7 +15,7 @@ ok(card.includes('Mover uma posição para cima')&&card.includes('Mover uma posi
 ok(card.includes('setMoveSheetOpen(true)')&&card.includes('toggleStopLock')&&card.includes('moveSheetOpen'),'move sheet e fixar permanecem');
 ok(!card.includes('toggleDeliveryExpansion(item.id, false)')&&!card.includes('if (delivery.is_expanded) toggleDeliveryExpansion(delivery.id, false)'), 'abrir um cartão não fecha os demais nem reinicializa ao montar');
 ok(card.includes('toggleDeliveryExpansion(delivery.id, !isExpanded)'),'minimizar continua explícito');
-ok(card.includes('aria-label="Minimizar esta parada"')&&card.includes('if (isExpanded || isSwiping'), 'expansao permanece até minimizar por ação dedicada');
+ok(card.includes('aria-label="Minimizar esta parada"') && card.includes('aria-label="Expandir detalhes da parada"') && card.includes('Toque normal abre o PEDIDO') && card.includes('router.push(`/entregas/details?id=${encodeURIComponent(delivery.id)}${operationalDateQuery}`)'), 'expansao dedicada e toque normal navega a ficha do pedido');
 ok(card.includes('channelStyle.rail')&&card.includes('channelStyle.badge')&&card.includes('<ChannelIcon size={19}'),'faixa lateral, badge legivel e icon Lucide');
 for(const label of ["label: 'IFOOD'","label: '99FOOD'","label: 'SITE'","label: 'LOJA'","label: 'MISTO'"])ok(card.includes(label),'origem distinta '+label);
 ok(!card.includes("label: 'WHATSAPP'"),'origem WhatsApp não substitui Loja');
