@@ -9,19 +9,20 @@ export function deliveryChannel(delivery: Pick<Delivery, 'origin' | 'source_syst
   if (delivery.origin === 'ifood' || !delivery.origin) return 'ifood';
   return 'store';
 }
-export function deliveryOrderNumber(delivery: Pick<Delivery, 'source_system' | 'external_order_id' | 'order_id' | 'ifood_id'>) {
+export function deliveryOrderNumber(delivery: Pick<Delivery, 'source_system' | 'external_order_id' | 'order_id' | 'ifood_id'> & { id?: string }) {
   const externalId = delivery.external_order_id?.trim() || '';
   if (delivery.source_system === 'dfl_site' && externalId) {
     // O DFL Site usa os 8 últimos caracteres como referência comercial
     // em WhatsApp, histórico e diagnóstico. O UUID completo fica interno.
     return externalId.slice(-8).toUpperCase();
   }
-  return delivery.order_id?.trim() || delivery.ifood_id?.trim() || (externalId ? externalId.slice(-8).toUpperCase() : '');
+  return delivery.order_id?.trim() || delivery.ifood_id?.trim() || (externalId ? externalId.slice(-8).toUpperCase() : '') || (delivery.id?.trim() || '').slice(-8).toUpperCase();
 }
-export function deliveryReferenceLabel(delivery: Pick<Delivery, 'source_system' | 'origin' | 'order_id' | 'ifood_id' | 'external_order_id'>): string {
+export function deliveryReferenceLabel(delivery: Pick<Delivery, 'source_system' | 'origin' | 'order_id' | 'ifood_id' | 'external_order_id'> & { id?: string }): string {
   const value = deliveryOrderNumber(delivery);
   if (!value) return 'Pedido sem referência comercial';
   if (delivery.source_system === 'dfl_site') return `Pedido do Site #${value}`;
+  if (!delivery.order_id?.trim() && !delivery.ifood_id?.trim() && !delivery.external_order_id?.trim() && delivery.id?.trim()) return `Registro DFL #${value}`;
   if (!delivery.order_id?.trim() && delivery.ifood_id?.trim()) return `ID iFood ${value}`;
   return `Pedido #${value}`;
 }

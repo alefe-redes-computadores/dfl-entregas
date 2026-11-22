@@ -48,7 +48,6 @@ import { openDflAdmin as openDflAdminBridge } from '@/lib/native/admin-bridge';
 import {
   deliveryChannel,
   deliveryChannelLabel,
-  deliveryOrderNumber,
   deliveryReferenceLabel,
   formatBrazilianPhone,
   operationalAddressLabel,
@@ -60,7 +59,7 @@ import { canMarkSitePickupReady, isCancelledSiteDelivery } from '@/lib/integrati
 import { canMarkManualPickupReady } from '@/lib/integration/site-order';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
 import { kickManualPickup, manualPickupResultDescription } from '@/lib/integration/client/manualMessagingKick';
-import { kickR76KitchenStage, kickSiteKitchenStage } from '@/lib/integration/client/r76KitchenKick';
+import { kickR76KitchenStage, kickSiteKitchenStage, kickSitePickupStage } from '@/lib/integration/client/r76KitchenKick';
 import { r76KitchenPlan } from '@/lib/integration/r76KitchenPolicy';
 import { detailActionState } from '@/lib/operation/detail-action-state';
 import { deriveDeliveryPaymentState } from '@/lib/delivery-finance';
@@ -161,7 +160,6 @@ function DeliveryDetailsContent() {
   const PaymentIcon = paymentIcon;
   const isIfood = delivery.origin === 'ifood' || !delivery.origin;
   const channel = deliveryChannel(delivery);
-  const visibleOrderNumber = deliveryOrderNumber(delivery);
   const visibleOrderReference = deliveryReferenceLabel(delivery);
   // O último código do cliente é histórico: nunca preenchê-lo em outra entrega.
   const savedConfirmationCode = orderConfirmationCode(delivery.confirmation_code);
@@ -346,7 +344,11 @@ function DeliveryDetailsContent() {
       } else if(marketplacePickup) {
         toast.success('Retirada pronta no DFL. A plataforma continua responsável por seus próprios avisos.');
       } else {
-        toast.success('Prontidão registrada. O aviso ao cliente depende da sincronização com o Site.');
+        toast.success('Prontidão registrada no DFL. Sincronizando com o Site...');
+        void kickSitePickupStage(delivery.id,'ready').then(result=>{
+          if(result.status==='queued'||result.status==='duplicate')toast.success('Retirada pronta sincronizada com o Site.');
+          else toast.warning('Pronto salvo no DFL; confirmação do Site pendente. Não marque novamente.');
+        }).catch(()=>toast.warning('Pronto salvo; sincronização com o Site ainda não confirmada.'));
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Falha ao registrar prontidão.');
@@ -381,6 +383,14 @@ function DeliveryDetailsContent() {
 
       // R299 P5: conclusão persistida devolve à Home operacional e às rotas.
       // A confirmação financeira e a confirmação iFood seguem independentes.
+      // R83: a baixa operacional e definitiva mesmo se o relay tiver resposta incerta.
+      // A sincronizacao reversa usa identidade estavel; nao reenviar mensagens do Site.
+      if(mode==='pickup' && delivery.source_system==='dfl_site') {
+        void kickSitePickupStage(delivery.id,'completed').then(result=>{
+          if(result.status!=='queued' && result.status!=='duplicate')
+            console.warn('[R83 pickup] conclusão salva; Site aguardando confirmação de ACK',result.reason||result.status);
+        }).catch(()=>console.warn('[R83 pickup] conclusão salva; ACK do Site incerto'));
+      }
       router.replace('/');
     } catch {
       void vibrate(ImpactStyle.Heavy);
@@ -548,8 +558,8 @@ function DeliveryDetailsContent() {
               <p className="text-xs font-bold uppercase text-zinc-500">
                 {deliveryChannelLabel(delivery)}
               </p>
-              <p className="mt-0.5 truncate text-lg font-black text-zinc-100">
-                {visibleOrderNumber ? visibleOrderReference : 'Referência comercial não informada'}
+              <p className="mt-0.5 break-words text-base font-black leading-snug text-zinc-100 sm:text-lg">
+                {visibleOrderReference}
               </p>
             </div>
           </div>

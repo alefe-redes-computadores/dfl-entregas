@@ -14,6 +14,7 @@ export type ReverseReconcileOptions = {
   analytics?: boolean;
   activeLimit?: number;
   routeId?: string;
+  deliveryId?: string;
   statusRecoveryReplay?: boolean;
 };
 
@@ -184,6 +185,10 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
   // A versão anterior lia TODAS as deliveries e TODAS as routes a cada minuto.
   // V42: reconciliation is a bounded recovery path, not a full-history scanner.
   const targetedRouteId = str(options.routeId).trim();
+  const targetedDeliveryId = str(options.deliveryId).trim();
+  // R83: evento por ID persistido para retirada, sem varrer historico concluido.
+  const directedDeliverySnap = trackingEnabled && targetedDeliveryId
+    ? await adminDb.collection('deliveries').doc(targetedDeliveryId).get() : null;
 
   /*
    * Fast lane dirigida:
@@ -195,7 +200,7 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
    * O caminho global limitado continua existindo exclusivamente para
    * o worker periódico de recuperação.
    */
-  const activeSnap = trackingEnabled
+  const activeSnap = trackingEnabled && !targetedDeliveryId
     ? targetedRouteId
       ? await adminDb.collection('deliveries')
         .where('route_id', '==', targetedRouteId)
@@ -266,11 +271,13 @@ export async function reconcileReverseTrackingOutbox(options: ReverseReconcileOp
 
   const byId = new Map<string, Item>();
   for (const doc of [
+    ...(directedDeliverySnap?.exists ? [directedDeliverySnap] : []),
     ...((activeSnap?.docs || []) as QueryDocumentSnapshot[]),
     ...recentCompletedDocs,
     ...statusRecoveryDocs,
   ]) {
     const data = doc.data() as Raw;
+    if(targetedDeliveryId && doc.id !== targetedDeliveryId)continue;
 
     if (
       targetedRouteId &&
