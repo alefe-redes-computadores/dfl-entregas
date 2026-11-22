@@ -16,8 +16,13 @@ export function siteInboxState(delivery: Delivery, now = Date.now()): SiteInboxS
   if (getFulfillmentMode(delivery) !== 'delivery') return 'retirada';
   if (delivery.route_id?.trim()) return 'alocado';
   const status = normalizeSiteOrderStatus(delivery.site_order_status);
-  if (status === 'pendente' || status === 'agendado') return 'confirmar';
-  if (!RELEASED.has(status)) return 'revisar';
+  // R84: aceite comprovado por S2S no Firestore do Entregas libera roteirização,
+  // mas um texto pendente sem prova segue bloqueado. Não deduzir aceite do cliente.
+  const acceptance=String((delivery as Delivery & {site_order_accepted_at?:unknown}).site_order_accepted_at||'');
+  const acceptedAt=Date.parse(acceptance);
+  const acceptedProof=Boolean(acceptance)&&Number.isFinite(acceptedAt)&&acceptedAt<=now+30_000;
+  if((status==='pendente'||status==='agendado')&&!acceptedProof)return 'confirmar';
+  if (!RELEASED.has(status) && !((status==='pendente'||status==='agendado')&&acceptedProof)) return 'revisar';
   if (isFutureScheduledDelivery(delivery, now)) return 'aguardar_agenda';
   return 'pronto';
 }

@@ -17,6 +17,7 @@ import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { useAppStore } from '@/store/useAppStore';
 import { orderConfirmationCode } from '@/lib/operation/ifoodOrderCode';
+import { nextIfoodRouteConfirmation } from '@/lib/operation/ifood-direct-sequence';
 
 const onlyDigits = (value: string, max: number) =>
   value.replace(/\D/g, '').slice(0, max);
@@ -179,8 +180,18 @@ function ConfirmarContent() {
       await vibrate(ImpactStyle.Medium);
       if (!pendingId) {
         await completeLinkedIfoodDelivery(deliveryId);
-        toast.success('Confirmado no portal e baixa registrada no DFL.');
-        router.replace(returnTo);
+        // A entrada direta (sem pendingId) também continua a sequência da rota.
+        // Somente após clique humano "Funcionou" e baixa persistida no Firestore.
+        const next=nextIfoodRouteConfirmation(useAppStore.getState().deliveries,deliveryId);
+        if(next){
+          const nextId=String(next.ifood_id||'').replace(/\D/g,'');
+          const nextCode=orderConfirmationCode(next.confirmation_code);
+          toast.success('Baixa confirmada. Próximo iFood da mesma rota preparado.');
+          router.replace(`/confirmar?orderId=${encodeURIComponent(nextId)}&code=${encodeURIComponent(nextCode)}&deliveryId=${encodeURIComponent(next.id)}&returnTo=${encodeURIComponent(returnTo)}`);
+        }else{
+          toast.success('Confirmado no portal e baixa registrada no DFL.');
+          router.replace(returnTo);
+        }
         return;
       }
       const currentPending = pendingConfirmations.find((item) => item.id === pendingId);

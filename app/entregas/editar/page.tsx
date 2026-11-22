@@ -120,6 +120,9 @@ const [routeId, setRouteId] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moveWholeStop, setMoveWholeStop] = useState(true);
+  const [confirmMoveStopOpen,setConfirmMoveStopOpen]=useState(false);
+  const moveStopApproved=useRef(false);
+  const editFormRef=useRef<HTMLFormElement>(null);
   const hydratedDeliveryId = useRef<string | null>(null);
 
   const currentDelivery = useMemo(
@@ -561,6 +564,9 @@ const [routeId, setRouteId] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // A autorização é de USO ÚNICO, mesmo se validação/salvamento falhar.
+    const moveApprovedForSubmission=moveStopApproved.current;
+    moveStopApproved.current=false;
     if (currentDelivery && isCancelledSiteDelivery(currentDelivery)) {
       toast.error('Pedido cancelado: edição bloqueada.');
       return;
@@ -628,7 +634,10 @@ const [routeId, setRouteId] = useState('');
       return;
     }
 
-    if (routeChanged && moveWholeStop && sameStopDeliveries.length > 1 && !window.confirm(`Mover os ${sameStopDeliveries.length} pedidos desta parada em uma única transação?`)) return;
+    // R84: confirmação premium explícita, nunca window.confirm branco do navegador.
+    if(routeChanged && moveWholeStop && sameStopDeliveries.length > 1 && !moveApprovedForSubmission){
+      setConfirmMoveStopOpen(true);return;
+    }
     setIsSaving(true);
     try {
       const customerCharge = parseFloat(value.replace(/\./g, '').replace(',', '.'));
@@ -958,7 +967,7 @@ const [routeId, setRouteId] = useState('');
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+      <form ref={editFormRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
         {formIssue && (
           <div role="alert" aria-live="assertive" className="flex items-start gap-3 rounded-2xl border border-red-500/55 bg-red-500/[.105] p-3.5 shadow-[0_8px_26px_rgba(127,29,29,0.14)]">
             <AlertTriangle size={19} className="mt-0.5 shrink-0 text-red-400" />
@@ -1448,6 +1457,19 @@ const [routeId, setRouteId] = useState('');
         </div>
       </form>
 
+      {confirmMoveStopOpen && (
+        <div className="fixed inset-0 z-[129] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center" onClick={()=>{moveStopApproved.current=false;setConfirmMoveStopOpen(false);}}>
+          <section role="dialog" aria-modal="true" aria-labelledby="r84-confirm-route-stop" className="w-full max-w-sm rounded-[28px] border border-violet-500/30 bg-zinc-950 p-5 shadow-2xl" onClick={event=>event.stopPropagation()}>
+            <p className="text-[10px] font-black uppercase tracking-widest text-violet-300">Conferência de transferência</p>
+            <h2 id="r84-confirm-route-stop" className="mt-2 text-lg font-black leading-snug text-zinc-50">Mover {sameStopDeliveries.length} pedidos da mesma parada?</h2>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-400">Todos serão movidos juntos para a rota escolhida. Nenhuma baixa, mensagem ou pagamento é alterado por esta confirmação.</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" className="min-h-12 rounded-xl border border-zinc-700 text-xs font-bold text-zinc-200" onClick={()=>{moveStopApproved.current=false;setConfirmMoveStopOpen(false);}}>Cancelar</button>
+              <button type="button" className="min-h-12 rounded-xl bg-violet-500 text-xs font-black text-zinc-950" onClick={()=>{moveStopApproved.current=true;setConfirmMoveStopOpen(false);editFormRef.current?.requestSubmit();}}>Confirmar transferência</button>
+            </div>
+          </section>
+        </div>
+      )}
       {deleteConfirmOpen && (
         <div
           className="fixed inset-0 z-[130] flex items-end bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:justify-center"

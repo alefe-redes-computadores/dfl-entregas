@@ -10,7 +10,7 @@ export type ManualDeliveryRecord = {
   phone?: unknown; customer_name?: unknown; owner_order_context?: unknown; manual_messaging_opt_in_v1?: unknown;
   developer_test?: unknown; exclude_from_reports?: unknown; fulfillment_mode?: unknown;
   completed?: unknown; completed_at?: unknown; created_at?: unknown; createdAt?: unknown;
-  address_string?: unknown; manual_order_items?: unknown; customer_charge?: unknown; value?: unknown;
+  address_string?: unknown; manual_order_items?: unknown; observation?: unknown; customer_charge?: unknown; value?: unknown;
   payment_method?: unknown; payment_state?: unknown; is_paid?: unknown;
 };
 export type ManualRouteRecord = { started_at?: unknown; departure_time?: unknown; status?: unknown };
@@ -62,6 +62,10 @@ export function planManualMessage(input: {
   if (Number.isFinite(total) && total >= 0 && total < 100_000) payload.total = Math.round(total*100)/100;
   if (asText(d.address_string)) payload.address = asText(d.address_string).slice(0,180);
   if (asText(d.manual_order_items)) payload.order_description = asText(d.manual_order_items).slice(0,180);
+  // Observacao especifica do PEDIDO. Somente entrega manual consentida,
+  // no recibo inicial; nunca observacao historica do cadastro de cliente.
+  if (input.reason === 'created' && asText(d.observation))
+    payload.observation = asText(d.observation).replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,260);
   if (asText(d.payment_method)) payload.payment_method = asText(d.payment_method).slice(0,28);
   if (asText(d.payment_state)) payload.payment_state = asText(d.payment_state).slice(0,32);
   if (d.is_paid === true) payload.is_paid = true;

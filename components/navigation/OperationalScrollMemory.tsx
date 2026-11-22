@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { useEffect, Suspense } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 /** R78: restaura o ponto anterior ao voltar de outra pagina, sem historico remoto. */
-export function OperationalScrollMemory() {
+function OperationalScrollMemoryContent() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // R84: data/aba fazem parte da identidade de rolagem, nao apenas pathname.
+  const searchKey = searchParams.toString();
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const key = 'dfl:r78:scroll:' + pathname + window.location.search;
+    const key = 'dfl:r78:scroll:' + pathname + (searchKey ? `?${searchKey}` : '');
     let value = 0;
     try { value = Number(window.sessionStorage.getItem(key) || 0); } catch { /* storage opcional */ }
     const target = Number.isFinite(value) && value > 0 ? Math.min(value, 100000) : 0;
@@ -44,6 +47,8 @@ export function OperationalScrollMemory() {
       window.removeEventListener('touchstart', interrupted);
       window.removeEventListener('wheel', interrupted);
     };
-  }, [pathname]);
+  }, [pathname, searchKey]);
   return null;
 }
+// Suspense local evita bloquear build Next.js ao consultar a query no App Router.
+export function OperationalScrollMemory() { return <Suspense fallback={null}><OperationalScrollMemoryContent /></Suspense>; }
